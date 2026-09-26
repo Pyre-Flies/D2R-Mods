@@ -9,6 +9,7 @@
 #include "belt_actions.h"
 #include "materials_actions.h"
 #include "custom_page_actions.h"
+#include "identify_action.h"
 #include "materials_policy.h"
 #include "shared_owner_compatibility.h"
 #include "shared_item_policy.h"
@@ -122,7 +123,7 @@ static constexpr D2RL::PluginInfo ControllerQoLPluginInfo {
     .abiVersion  = D2RL_PLUGIN_ABI_VERSION,
     .id          = "controller-qol-updates",
     .name        = "Controller QOL Updates",
-    .version     = "1.3.1+rev.10",
+    .version     = "1.3.1+rev.11",
     .author      = "PyreFly",
     .description = "Direct controller looting with filtered labels, inventory shortcuts, and stash navigation.",
     .flags       = D2RL::PluginFlags::Shared | D2RL::PluginFlags::NativeHooks,
@@ -228,314 +229,31 @@ static void LoadConfiguration(const D2RL::PluginContext* context) noexcept {
     ControllerQoL::SetActiveModifier(g_Settings.modifier, g_Settings.triggerThreshold);
 }
 
-struct IdentifyContext {
-    D2RL::ItemHandle tomeHandle = D2RL::InvalidItemHandle;
-    D2RL::ItemHandle scrollHandle = D2RL::InvalidItemHandle;
-};
-
-static auto __cdecl FindIdentifyItemCallback(
-    const D2RL::PluginContext* context,
-    const D2RL::Items::ItemInfo* item,
-    void* userData
-) noexcept -> D2RL::Inventory::IterationAction {
-    (void)context;
-    if (!item || !userData) {
-        return D2RL::Inventory::IterationAction::Continue;
-    }
-
-    auto* idCtx = static_cast<IdentifyContext*>(userData);
-
-    // Tome of Identify has code "ibk "
-    constexpr uint32_t TomeCode = D2RL::Items::MakeItemCode("ibk ");
-    // Scroll of Identify has code "isc "
-    constexpr uint32_t ScrollCode = D2RL::Items::MakeItemCode("isc ");
-
-    if (item->code == TomeCode && item->quantity > 0) {
-        idCtx->tomeHandle = item->handle;
-        return D2RL::Inventory::IterationAction::Stop;
-    }
-
-    if (item->code == ScrollCode && idCtx->scrollHandle == D2RL::InvalidItemHandle) {
-        idCtx->scrollHandle = item->handle;
-    }
-
-    return D2RL::Inventory::IterationAction::Continue;
-}
-
 struct IdentifyRequest {
-    D2RL::PlayerHandle         player;
-    D2RL::ItemHandle           targetItem;
-    uint32_t                   targetCode;
-    int32_t                    cellX;
-    int32_t                    cellY;
-    D2RL::Items::ItemContainer container;
-    bool                       consumeScroll;
+    QolIdentify::Request action{};
+    ULONGLONG queuedAt{};
 };
-
-static void __cdecl ExecuteIdentifyTask(const D2RL::PluginContext* context, void* userData) noexcept {
-    auto* req = static_cast<IdentifyRequest*>(userData);
-    if (!req) return;
-
-    if (!context || !g_Items) {
-        delete req;
-        return;
-    }
-
-    D2RL::PlayerHandle player = D2RL::InvalidPlayerHandle;
-    if (g_Inventory && g_Inventory->getLocalPlayer(context, &player) == D2RL::Inventory::Result::Success && player != D2RL::InvalidPlayerHandle) {
-        // Authoritative player on game thread
-    } else {
-        player = req->player;
-    }
-
-    char taskLog[256];
-    std::snprintf(taskLog, sizeof(taskLog),
-        "[ControllerQoL] ExecuteIdentifyTask: player=%llu, initialTarget=%llu, cell=(%d,%d), code=0x%08X",
-        static_cast<unsigned long long>(player),
-        static_cast<unsigned long long>(req->targetItem),
-        req->cellX, req->cellY, req->targetCode);
-    context->LogInfo(taskLog);
-
-    D2RL::ItemHandle activeTarget = D2RL::InvalidItemHandle;
-
-    // 1. Check if the original handle is still valid on the game thread
-    D2RL::Items::ItemInfo checkInfo{ .structSize = D2RL::Items::ItemInfoSize };
-    if (g_Items->getItemInfo(context, req->targetItem, &checkInfo) == D2RL::Items::Result::Success) {
-        activeTarget = req->targetItem;
-        context->LogInfo("[ControllerQoL] Original target handle is still valid on game thread.");
-    } else {
-        char warnBuf[128];
-        std::snprintf(warnBuf, sizeof(warnBuf),
-            "[ControllerQoL] Target handle %llu is stale on game thread; resolving live handle...",
-            static_cast<unsigned long long>(req->targetItem));
-        context->LogInfo(warnBuf);
-    }
-
-    // 2. Check if the item is currently on the cursor
-    if (activeTarget == D2RL::InvalidItemHandle && g_Inventory) {
-        D2RL::ItemHandle cursorHandle = D2RL::InvalidItemHandle;
-        if (g_Inventory->getCursorItem(context, player, &cursorHandle) == D2RL::Inventory::Result::Success && cursorHandle != D2RL::InvalidItemHandle) {
-            D2RL::Items::ItemInfo cursorInfo{ .structSize = D2RL::Items::ItemInfoSize };
-            if (g_Items->getItemInfo(context, cursorHandle, &cursorInfo) == D2RL::Items::Result::Success) {
-                const bool cursorUnident = (cursorInfo.stateFlags & D2RL::Items::ItemStateIdentified) == 0;
-                char cMsg[160];
-                std::snprintf(cMsg, sizeof(cMsg),
-                    "[ControllerQoL] Cursor item: handle=%llu code=0x%08X unident=%d",
-                    static_cast<unsigned long long>(cursorHandle), cursorInfo.code, cursorUnident ? 1 : 0);
-                context->LogInfo(cMsg);
-                if (cursorUnident) {
-                    activeTarget = cursorHandle;
-                    context->LogInfo("[ControllerQoL] Resolved target item on cursor!");
-                }
-            }
+static std::atomic<bool> s_IdentifyPending{false};
+static void __cdecl ExecuteIdentifyTask(const D2RL::PluginContext* context,void* userData) noexcept {
+    auto* req=static_cast<IdentifyRequest*>(userData);
+    if(!req) {s_IdentifyPending.store(false);return;}
+    const auto started=GetTickCount64();
+    if(context && g_Settings.enabled && started-req->queuedAt<=2000) {
+        const auto result=QolIdentify::Execute(context,g_Items,g_Inventory,req->action);
+        const auto elapsed=GetTickCount64()-started;
+        // One bounded summary, never a synchronous per-item log dump. Failures
+        // remain diagnosable with debug_logging=false; timings precede log I/O.
+        if(result.status!=QolIdentify::Status::Success || g_Settings.debugLogging || elapsed>=50) {
+            char message[384];
+            std::snprintf(message,sizeof(message),
+                "[QOL/Identify] result=%s scan=%u operation=%u scanned=%u tomes=%u scrolls=%u maxTomeQty=%d consumed=%u queueMs=%llu workMs=%llu runtimeId=%u.",
+                QolIdentify::Name(result.status),static_cast<unsigned>(result.scan),static_cast<unsigned>(result.operation),
+                result.scanned,result.tomes,result.scrolls,result.maxTomeQuantity,result.consumed?1u:0u,
+                static_cast<unsigned long long>(started-req->queuedAt),static_cast<unsigned long long>(elapsed),req->action.target.runtimeId);
+            if(result.status==QolIdentify::Status::Success)context->LogInfo(message);else context->LogWarn(message);
         }
     }
-
-    // 3. Search inventory for the live item matching coordinates or code
-    if (activeTarget == D2RL::InvalidItemHandle && g_Inventory) {
-        struct InvSearchContext {
-            const IdentifyRequest* req;
-            const D2RL::PluginContext* ctx;
-            D2RL::ItemHandle posMatch = D2RL::InvalidItemHandle;
-            D2RL::ItemHandle codeMatch = D2RL::InvalidItemHandle;
-        } search{ req, context };
-
-        uint32_t cMask = D2RL::Items::ContainerBit(req->container);
-        if (cMask == 0) {
-            cMask = D2RL::Items::ContainerBit(D2RL::Items::ItemContainer::Inventory);
-        }
-        cMask |= D2RL::Items::ContainerBit(D2RL::Items::ItemContainer::Inventory) |
-                 D2RL::Items::ContainerBit(D2RL::Items::ItemContainer::Cube) |
-                 D2RL::Items::ContainerBit(D2RL::Items::ItemContainer::PersonalStash) |
-                 D2RL::Items::ContainerBit(D2RL::Items::ItemContainer::SharedStash);
-
-        D2RL::Inventory::ItemFilter filter{
-            .structSize    = D2RL::Inventory::ItemFilterSize,
-            .flags         = 0,
-            .containerMask = cMask,
-            .reserved      = 0,
-        };
-
-        g_Inventory->forEachInventoryItem(context, player, &filter, [](const D2RL::PluginContext* c, const D2RL::Items::ItemInfo* item, void* u) noexcept -> D2RL::Inventory::IterationAction {
-            auto* s = static_cast<InvSearchContext*>(u);
-            const bool unident = (item->stateFlags & D2RL::Items::ItemStateIdentified) == 0;
-            char itemLog[160];
-            std::snprintf(itemLog, sizeof(itemLog),
-                "[ControllerQoL] Live inventory item: handle=%llu code=0x%08X cell=(%d,%d) unident=%d",
-                static_cast<unsigned long long>(item->handle), item->code, item->x, item->y, unident ? 1 : 0);
-            c->LogInfo(itemLog);
-
-            if (item->x == s->req->cellX && item->y == s->req->cellY && unident) {
-                s->posMatch = item->handle;
-                return D2RL::Inventory::IterationAction::Stop;
-            }
-            if (item->code == s->req->targetCode && unident && s->codeMatch == D2RL::InvalidItemHandle) {
-                s->codeMatch = item->handle;
-            }
-            return D2RL::Inventory::IterationAction::Continue;
-        }, &search);
-
-        if (search.posMatch != D2RL::InvalidItemHandle) {
-            activeTarget = search.posMatch;
-            context->LogInfo("[ControllerQoL] Resolved target item by coordinates in inventory!");
-        } else if (search.codeMatch != D2RL::InvalidItemHandle) {
-            activeTarget = search.codeMatch;
-            context->LogInfo("[ControllerQoL] Resolved target item by code in inventory!");
-        }
-    }
-
-    if (activeTarget == D2RL::InvalidItemHandle) {
-        context->LogWarn("[ControllerQoL] Could not resolve live handle for target item on game thread!");
-        delete req;
-        return;
-    }
-
-    // 4. Resolve fresh handle for Tome of Identify or Scroll of Identify on game thread
-    D2RL::ItemHandle freshTome = D2RL::InvalidItemHandle;
-    D2RL::ItemHandle freshScroll = D2RL::InvalidItemHandle;
-    if (g_Inventory) {
-        struct ScrollSearchContext {
-            D2RL::ItemHandle tome = D2RL::InvalidItemHandle;
-            D2RL::ItemHandle scroll = D2RL::InvalidItemHandle;
-        } scrollSearch{};
-
-        constexpr uint32_t TomeCode = D2RL::Items::MakeItemCode("ibk ");
-        constexpr uint32_t ScrollCode = D2RL::Items::MakeItemCode("isc ");
-
-        D2RL::Inventory::ItemFilter scrollFilter{
-            .structSize    = D2RL::Inventory::ItemFilterSize,
-            .flags         = 0,
-            .containerMask = D2RL::Items::ContainerBit(D2RL::Items::ItemContainer::Inventory) |
-                             D2RL::Items::ContainerBit(D2RL::Items::ItemContainer::Cube),
-            .reserved      = 0,
-        };
-
-        g_Inventory->forEachInventoryItem(context, player, &scrollFilter, [](const D2RL::PluginContext*, const D2RL::Items::ItemInfo* item, void* u) noexcept -> D2RL::Inventory::IterationAction {
-            auto* s = static_cast<ScrollSearchContext*>(u);
-            if (item->code == TomeCode && item->quantity > 0) {
-                s->tome = item->handle;
-                return D2RL::Inventory::IterationAction::Stop;
-            }
-            if (item->code == ScrollCode && s->scroll == D2RL::InvalidItemHandle) {
-                s->scroll = item->handle;
-            }
-            return D2RL::Inventory::IterationAction::Continue;
-        }, &scrollSearch);
-
-        freshTome = scrollSearch.tome;
-        freshScroll = scrollSearch.scroll;
-    }
-
-    bool identified = false;
-
-    // Method 1: editItem
-    D2RL::Items::ItemEdit edit{
-        .structSize  = D2RL::Items::ItemEditSize,
-        .flags       = 0,
-        .fields      = D2RL::Items::EditFieldBit(D2RL::Items::EditField::Identified),
-        .stateFlags  = D2RL::Items::ItemStateIdentified,
-        .quantity    = 0,
-        .durability  = 0,
-        .itemLevel   = 0,
-        .socketCount = 0,
-    };
-
-    auto editRes = g_Items->editItem(context, player, activeTarget, &edit);
-    if (editRes == D2RL::Items::Result::Success) {
-        context->LogInfo("[ControllerQoL] Successfully identified item via editItem!");
-        identified = true;
-    } else {
-        char editErr[128];
-        std::snprintf(editErr, sizeof(editErr),
-            "[ControllerQoL] editItem returned code %u, trying executeExistingItemTransaction...",
-            static_cast<uint32_t>(editRes));
-        context->LogWarn(editErr);
-
-        // Method 2: executeExistingItemTransaction
-        D2RL::Items::ExistingItemOperation op{};
-        op.structSize = D2RL::Items::ExistingItemOperationSize;
-        op.kind = D2RL::Items::ExistingItemOperationKind::Edit;
-        op.item = activeTarget;
-        op.edit.fields = D2RL::Items::EditFieldBit(D2RL::Items::EditField::Identified);
-        op.edit.stateFlags = D2RL::Items::ItemStateIdentified;
-
-        const D2RL::Items::ExistingItemTransaction txn{
-            .structSize     = D2RL::Items::ExistingItemTransactionSize,
-            .player         = player,
-            .operationCount = 1,
-            .operations     = &op,
-        };
-
-        D2RL::Items::ExistingItemTransactionResult res{
-            .structSize = D2RL::Items::ExistingItemTransactionResultSize,
-        };
-
-        auto txnRes = g_Items->executeExistingItemTransaction(context, &txn, &res);
-        if (txnRes == D2RL::Items::Result::Success) {
-            context->LogInfo("[ControllerQoL] Successfully identified item via executeExistingItemTransaction!");
-            identified = true;
-        } else {
-            char msg[128];
-            std::snprintf(msg, sizeof(msg),
-                "[ControllerQoL] Transaction failed with code %u (failIndex=%u), trying editNativeItem...",
-                static_cast<uint32_t>(txnRes), res.failureIndex);
-            context->LogWarn(msg);
-        }
-    }
-
-    // Method 3: editNativeItem callback with native pointer
-    if (!identified && g_Items->editNativeItem) {
-        auto nativeRes = g_Items->editNativeItem(context, activeTarget, [](const D2RL::PluginContext* ctx, void* nativeItem, void*) noexcept {
-            if (!nativeItem) return;
-            auto* unit = static_cast<D2R::UnitAny*>(nativeItem);
-            if (unit->pItemData) {
-                unit->pItemData->itemFlags |= D2R::ITEMFLAG_IDENTIFIED;
-                ctx->LogInfo("[ControllerQoL] Native unit identified flag set successfully in editNativeItem callback!");
-            }
-        }, nullptr);
-
-        if (nativeRes == D2RL::Items::Result::Success) {
-            context->LogInfo("[ControllerQoL] editNativeItem succeeded!");
-            identified = true;
-        } else {
-            char msg[128];
-            std::snprintf(msg, sizeof(msg),
-                "[ControllerQoL] editNativeItem failed with code %u",
-                static_cast<uint32_t>(nativeRes));
-            context->LogWarn(msg);
-        }
-    }
-
-    // Consume tome charge or scroll if requested
-    if (identified && req->consumeScroll) {
-        if (freshTome != D2RL::InvalidItemHandle) {
-            D2RL::Items::ExistingItemOperation debitOp{};
-            debitOp.structSize = D2RL::Items::ExistingItemOperationSize;
-            debitOp.kind = D2RL::Items::ExistingItemOperationKind::Debit;
-            debitOp.item = freshTome;
-            debitOp.debit.quantity = 1;
-
-            const D2RL::Items::ExistingItemTransaction debitTxn{
-                .structSize     = D2RL::Items::ExistingItemTransactionSize,
-                .player         = player,
-                .operationCount = 1,
-                .operations     = &debitOp,
-            };
-            D2RL::Items::ExistingItemTransactionResult debitRes{
-                .structSize = D2RL::Items::ExistingItemTransactionResultSize,
-            };
-            if (g_Items->executeExistingItemTransaction(context, &debitTxn, &debitRes) == D2RL::Items::Result::Success) {
-                context->LogInfo("[ControllerQoL] Consumed 1 Tome of Identify charge.");
-            } else {
-                context->LogWarn("[ControllerQoL] Could not debit Tome charge via transaction.");
-            }
-        } else if (freshScroll != D2RL::InvalidItemHandle) {
-            g_Items->destroyItem(context, player, freshScroll, D2RL::Items::SocketedItemPolicy::RejectIfNotEmpty);
-            context->LogInfo("[ControllerQoL] Consumed 1 Scroll of Identify.");
-        }
-    }
-
-    delete req;
+    delete req;s_IdentifyPending.store(false);
 }
 
 enum D2RUiMode : int {
@@ -1485,42 +1203,13 @@ static auto __cdecl OnItemInteraction(
     g_LastInventoryInteractionTick.store(GetTickCount64());
 
     if (isUnidentified && g_Settings.quickIdentify && modifierActive) {
-        context->LogInfo("[ControllerQoL] Unidentified item selected with modifier active. Initiating identify...");
-
-        IdentifyContext idCtx{};
-        if (g_Inventory) {
-            D2RL::Inventory::ItemFilter filter{
-                .structSize    = D2RL::Inventory::ItemFilterSize,
-                .flags         = 0,
-                .containerMask = D2RL::Items::ContainerBit(D2RL::Items::ItemContainer::Inventory) |
-                                 D2RL::Items::ContainerBit(D2RL::Items::ItemContainer::Cube),
-                .reserved      = 0,
-            };
-            g_Inventory->forEachInventoryItem(context, event->player, &filter, FindIdentifyItemCallback, &idCtx);
-        }
-
-        const bool hasTome = (idCtx.tomeHandle != D2RL::InvalidItemHandle);
-        const bool hasScroll = (idCtx.scrollHandle != D2RL::InvalidItemHandle);
-
-        if (g_Settings.requireTomeOrScroll && !hasTome && !hasScroll) {
-            context->LogWarn("[ControllerQoL] Cannot identify: No Identify Tome or Scroll in inventory.");
-            return D2RL::ItemInteractions::Decision::Continue;
-        }
-
-        if (hasTome) {
-            context->LogInfo("[ControllerQoL] Found Tome of Identify with charges.");
-        } else if (hasScroll) {
-            context->LogInfo("[ControllerQoL] Found Scroll of Identify.");
-        }
-
-        auto* req = new IdentifyRequest{
-            .player        = event->player,
-            .targetItem    = event->item,
-            .targetCode    = itemInfo.code,
-            .cellX         = event->cellX,
-            .cellY         = event->cellY,
-            .container     = event->container,
-            .consumeScroll = g_Settings.consumeTomeOrScroll && (hasTome || hasScroll),
+        // UI events expose a copied/client-side item. Do not scan consumables
+        // here: authoritative enumeration and quantity validation happen once
+        // in the game-thread task, using this item's exact identity.
+        if(s_IdentifyPending.exchange(true))return D2RL::ItemInteractions::Decision::Consume;
+        auto* req=new IdentifyRequest{
+            .action={event->player,itemInfo,g_Settings.requireTomeOrScroll,g_Settings.consumeTomeOrScroll},
+            .queuedAt=GetTickCount64(),
         };
 
         const auto scheduleResult = g_Threads->runOnGameThread(context, ExecuteIdentifyTask, req);
@@ -1528,6 +1217,7 @@ static auto __cdecl OnItemInteraction(
             return D2RL::ItemInteractions::Decision::Consume;
         } else {
             delete req;
+            s_IdentifyPending.store(false);
             return D2RL::ItemInteractions::Decision::Continue;
         }
     }
@@ -3426,7 +3116,7 @@ D2RL_PLUGIN_EXPORT auto D2RLoaderLoadPlugin(const D2RL::PluginContext* context) 
     }
     QolPortal::Initialize(context, g_Settings.enabled && g_Settings.groundPickup && g_Settings.prioritizePortals,
         g_Settings.debugLogging || g_Settings.portalDiagnostics, g_Settings.groundPickupButton, g_Settings.portalPriorityDistance);
-    context->LogInfo("[QOL] QOL v1.3.1+rev.10 loaded: controller item features and integrated v0.6 navigation/label hooks.");
+    context->LogInfo("[QOL] QOL v1.3.1+rev.11 loaded: controller item features and integrated v0.6 navigation/label hooks.");
     return true;
 }
 

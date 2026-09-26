@@ -3,6 +3,15 @@
 All notable changes to Controller QOL Updates are recorded here. Versions before
 the GitHub migration are reconstructed from release and validation records.
 
+## [1.3.1+rev.11] - 2026-09-26
+
+- Remove unconditional per-item identification logging and the duplicate UI-thread consumable scan.
+- Resolve the exact target and consumables in one authoritative SDK inventory walk.
+- Distinguish unavailable enumeration, empty tomes, missing supply and mutation failures in a bounded diagnostic summary.
+- Combine identify and charge debit where supported; handle final-charge boundaries with checked SDK operations and compensating edits.
+- Remove unsafe same-code target fallback and raw native flag mutation fallback.
+- Fifteen automated suites pass; live FPS, charge-boundary and reporter-mod validation pending. See docs/IDENTIFY-REV11.md.
+
 ## [1.3.1+rev.10] - 2026-09-26
 
 - Hide controller item shortcuts while the game is in keyboard/mouse mode.

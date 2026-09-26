@@ -1,36 +1,28 @@
-## Controller QOL Updates 1.3.1+rev.10
+## Controller QOL Updates 1.3.1+rev.11
 
-- Fix controller menu remapping with Charm Inventory.
-- Support LB+X transfers between inventory and the visible registered custom
-  page, using D2RCore's transfer policy and placement handling.
-- Show controller item shortcuts only while in controller mode.
-- Retain the scoped portal/ground-label interception that leaves shared
-  function entries available to other plugins.
+- Remove synchronous per-item identification logging and duplicate UI-side
+  inventory scanning, a significant source of identification stalls.
+- Resolve the exact item and consumables in one authoritative game-thread scan.
+- Distinguish unavailable inventory, empty tomes, missing supplies and failed
+  operations with concise diagnostics even when debug logging is off.
+- Combine identification and charge debit where supported; check final-charge
+  operations and attempt compensation on failure.
+- Preserve rev.10 controller-mode hints and Charm Inventory compatibility.
 
-## Item Roll Ranges 1.3.1+rev.13
+Fifteen QOL test suites pass. The external reporter's mod-specific tome failure
+and quantified live performance improvement remain unverified. No new native
+hooks or RVAs were added for identification.
 
-- Use compact [P]/[S] source labels with affix names; label inherent properties [Base].
-- Improve poison and composite elemental-damage attribution and stacked-source rows.
-- Correct signed range formatting and omit incomplete provider intervals.
-- Resolve stacked fire/lightning/cold contributions only when the loaded
-  definitions and combined total prove one unique in-range solution; ambiguous
-  contributions retain gray question marks.
+## Included unchanged
 
-## Map Assistance 1.3.1+rev.1
+- Item Roll Ranges 1.3.1+rev.13
+- Map Assistance 1.3.1+rev.1
 
-Included unchanged: configurable Keys-tooltip navigation tips for 127 non-town
-LoD areas, with credit to Kryszard's PD2 Loot Filter.
-
-## Installation and compatibility
+## Installation
 
 Close the game and loader, back up existing DLLs, and extract the desired ZIPs
-into the game folder for global installation. Preserve your existing configuration;
-configuration files in the archives are reference defaults. Keep one active copy
-of each plugin. Item Roll Ranges requires `d2rcore.items.item_stat_ranges = true`.
-Diagnostic logging remains off by default.
-
-These builds target D2RLoader 1.3.1 / ABI4. QOL and Item Roll Ranges use guarded,
-build-specific native contracts; see the bundled compatibility records. Map
-Assistance uses public SDK services. User confirmed Charm Inventory menu/transfer
-behavior and the latest tooltip display. Automated tests do not establish full
-multiplayer, persistence, controller or other-plugin compatibility.
+into the game directory for a global installation. Preserve existing configuration
+and keep only one active copy of each plugin. Debug logging defaults remain off.
+Item Roll Ranges requires `d2rcore.items.item_stat_ranges = true`.
+Target: Windows x64, D2RLoader 1.3.1 / ABI4. See bundled compatibility records
+for build-specific native guards and validation limits.

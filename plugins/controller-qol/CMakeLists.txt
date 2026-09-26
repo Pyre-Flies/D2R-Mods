@@ -131,3 +131,7 @@ add_test(NAME qol-custom-page COMMAND qol-custom-page-tests)
 add_executable(qol-menu-route-tests tests/menu_route_tests.cpp)
 target_include_directories(qol-menu-route-tests PRIVATE src)
 add_test(NAME qol-menu-route COMMAND qol-menu-route-tests)
+
+add_executable(qol-identify-tests tests/identify_tests.cpp)
+target_include_directories(qol-identify-tests PRIVATE src "${PLUGIN_SDK}/include")
+add_test(NAME qol-identify COMMAND qol-identify-tests)
