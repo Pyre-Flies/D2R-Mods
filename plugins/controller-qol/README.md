@@ -60,7 +60,7 @@ Requires D2RLoader. Earlier gameplay features were developed and manually qualif
 
 All 12 automated suites passed. The user confirmed Chronicle Ground Flag coexistence in rev.6 and portal behavior in rev.7. Earlier native-controller validation covered Battle.net DualShock without Steam and Steam Controller/DualShock on Steam, with Stash Search and Potion Auto Pickup. See `docs/PRODUCTION-1.3.1-rev.7.md` for precise validation scope. `SHA256SUMS` lists package hashes.
 
-The monorepo references a shared, pinned SDK submodule and includes tests and patch-recovery documents. See `docs/PORTAL-PRIORITY.md` for the new hook and patch recovery, and `docs/PACKAGING.md` for naming evidence and migration, and the feature-specific documents for native contracts. Historical documents retain their original filenames and version-specific observations. The 1.5.13 and 1.5.19 golden checkpoints remain separate.
+The monorepo references a shared, pinned SDK submodule and includes tests and patch-recovery documents. Start with `docs/README.md` for the research map. See `docs/PORTAL-PRIORITY.md` for the new hook and patch recovery, `docs/PACKAGING.md` for naming evidence, and the feature-specific documents for native contracts. `docs/LEGACY-REIMAGINED-MIGRATION.md` records the extraction from the former Reimagined working tree and the evidence distilled from excluded local logs. Historical documents retain their original filenames and version-specific observations. The 1.5.13 and 1.5.19 golden checkpoints remain separate.
 
 ## Build from source
 

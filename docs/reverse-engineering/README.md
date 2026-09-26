@@ -8,6 +8,11 @@ See [Finding RVAs and interception points](RVA-AND-INTERCEPTION-WORKFLOW.md) for
 the static-analysis, live-observation, byte-guard, validation, and publication
 workflow used to produce these records.
 
+Cross-project summaries:
+
+- [Autosort transaction research](autosort-transactions.md)
+- [Controller QOL native-contract registry](controller-qol-native-contracts.md)
+
 ## Tested compatibility profiles
 
 | Consumer | Module | Required SHA-256 / profile | Evidence |
@@ -52,6 +57,10 @@ alongside it. Never assume ASLR-stable process addresses.
 | D2R.exe | `0x1FAE90` | Label setter | Controller probe build only; exact-byte guarded |
 | D2R.exe | `0xCE450` | Label refresh | Controller probe build only; exact-byte guarded |
 | Installed provider ABI | operation `64` bytes, page `+56`; destination `40` bytes, page `+32` | Explicit Shared Stash transaction page | Additive ABI observed in tested provider; legacy non-shared layouts remain 56/32 bytes |
+| D2R.exe | `0x15F660` | Stored-item belt placement action | Controller QOL tested profile; native asynchronous submission requires SDK observation |
+| D2R.exe | `0x159B30` / `0x2CF680` | Advanced-stash withdrawal sender / widget wrapper | Reimagined Materials/Gems/Runes surfaces; UI-thread and layout-qualified |
+| D2R.exe | `0x23FED0` | Native VendorPanel quick-sell wrapper | Caller-derived six-argument contract; invocation is not sale confirmation |
+| D2R.exe | `0x23AD80` | Selected Shared-owner record resolver | Convert record to unit through ID getter/client lookup; category index is not storage page |
 
 Feature documents contain the authoritative signatures and surrounding context.
 This table is an index, not sufficient justification for an unguarded hook.

@@ -1,0 +1,769 @@
+# Map Assistance 1.3.1+rev.1 default configuration
+# D2RLoader creates d2rloader/config/map-assistance.toml from this embedded default.
+# Restart D2RLoader after editing. Unknown and mod-added map IDs are allowed.
+
+[map-assistance]
+enabled = true
+
+[[zones]]
+map_id = 2
+name = "Blood Moor"
+layout = "Semi-static"
+lines = ["The Den often branches near town or the main road.", "Drop a portal at the fork, then find the Cold Plains waypoint."]
+
+[[zones]]
+map_id = 3
+name = "Cold Plains"
+layout = "Semi-static"
+lines = ["The waypoint is near the Blood Moor entrance corner.", "Burial Grounds is road-connected at a far corner; Stony Field is on an edge."]
+
+[[zones]]
+map_id = 4
+name = "Stony Field"
+layout = "Semi-static"
+lines = ["Follow the road to Underground Passage.", "The Cairn Stones and Rakanishu are always beside the road."]
+
+[[zones]]
+map_id = 5
+name = "Dark Wood"
+layout = "Semi-static"
+lines = ["Black Marsh is road-connected on an outer edge.", "The waypoint and Tree of Inifuss are placed independently."]
+
+[[zones]]
+map_id = 6
+name = "Black Marsh"
+layout = "Semi-static"
+lines = ["Follow the road toward Tamoe Highland.", "The Forgotten Tower and waypoint are placed away from the required route."]
+
+[[zones]]
+map_id = 7
+name = "Tamoe Highland"
+layout = "Semi-static"
+lines = ["Follow the road to the Monastery Gate.", "A road branch leads into the Pit."]
+
+[[zones]]
+map_id = 8
+name = "Den of Evil"
+layout = "Static"
+lines = ["Static cave layout; clear every branch to complete the quest."]
+
+[[zones]]
+map_id = 9
+name = "Cave Level 1"
+layout = "Tile-based"
+lines = ["From entrance: left leads to Level 2; straight leads to Coldcrow."]
+
+[[zones]]
+map_id = 10
+name = "Underground Passage Level 1"
+layout = "Tile-based"
+lines = ["From entrance: left leads to Level 2; straight leads to Dark Wood."]
+
+[[zones]]
+map_id = 11
+name = "Hole Level 1"
+layout = "Tile-based"
+lines = ["From entrance: turn left for Level 2."]
+
+[[zones]]
+map_id = 12
+name = "Pit Level 1"
+layout = "Tile-based"
+lines = ["From entrance: turn left for Level 2."]
+
+[[zones]]
+map_id = 13
+name = "Cave Level 2"
+layout = "Static"
+lines = ["Static final level; the golden chest is on the fixed end branch."]
+
+[[zones]]
+map_id = 14
+name = "Underground Passage Level 2"
+layout = "Static"
+lines = ["Static optional level; follow the fixed route to the golden chest."]
+
+[[zones]]
+map_id = 15
+name = "Hole Level 2"
+layout = "Static"
+lines = ["Static final level; follow the fixed route to the golden chest."]
+
+[[zones]]
+map_id = 16
+name = "Pit Level 2"
+layout = "Static"
+lines = ["Static final level; follow the fixed route to the golden chest."]
+
+[[zones]]
+map_id = 17
+name = "Burial Grounds"
+layout = "Static"
+lines = ["Blood Raven occupies the central graveyard.", "The Crypt and Mausoleum entrances are on opposite sides."]
+
+[[zones]]
+map_id = 18
+name = "Crypt"
+layout = "Tile-based"
+lines = ["From entrance: turn left for the golden chest and Bonebreaker."]
+
+[[zones]]
+map_id = 19
+name = "Mausoleum"
+layout = "Tile-based"
+lines = ["From entrance: turn left for the golden chest."]
+
+[[zones]]
+map_id = 20
+name = "Forgotten Tower"
+layout = "Static"
+lines = ["Static entrance level; descend into Tower Cellar Level 1."]
+
+[[zones]]
+map_id = 21
+name = "Tower Cellar Level 1"
+layout = "Tile-based"
+lines = ["From entrance: turn left for the next level."]
+
+[[zones]]
+map_id = 22
+name = "Tower Cellar Level 2"
+layout = "Tile-based"
+lines = ["From entrance: turn left for the next level."]
+
+[[zones]]
+map_id = 23
+name = "Tower Cellar Level 3"
+layout = "Tile-based"
+lines = ["From entrance: turn left for the next level."]
+
+[[zones]]
+map_id = 24
+name = "Tower Cellar Level 4"
+layout = "Tile-based"
+lines = ["From entrance: turn left for the next level."]
+
+[[zones]]
+map_id = 25
+name = "Tower Cellar Level 5"
+layout = "Static"
+lines = ["Static final level; the Countess room is at the end of the fixed route."]
+
+[[zones]]
+map_id = 26
+name = "Monastery Gate"
+layout = "Static"
+lines = ["Static transition area; continue through the gate to the Outer Cloister."]
+
+[[zones]]
+map_id = 27
+name = "Outer Cloister"
+layout = "Semi-static"
+lines = ["Read the central courtyard landmark to locate the waypoint and Barracks exits."]
+
+[[zones]]
+map_id = 28
+name = "Barracks"
+layout = "Tile-based"
+lines = ["From entrance: the Jail and Horadric Malus occupy the left and straight branches in either order."]
+
+[[zones]]
+map_id = 29
+name = "Jail Level 1"
+layout = "Tile-based"
+lines = ["From entrance: left finds the waypoint; straight finds Level 2.", "From the waypoint: turn left for Level 2."]
+
+[[zones]]
+map_id = 30
+name = "Jail Level 2"
+layout = "Tile-based"
+lines = ["From entrance: continue straight for Level 3; left leads toward Pitspawn Fouldog."]
+
+[[zones]]
+map_id = 31
+name = "Jail Level 3"
+layout = "Tile-based"
+lines = ["From entrance: turn left for the Inner Cloister."]
+
+[[zones]]
+map_id = 32
+name = "Inner Cloister"
+layout = "Static"
+lines = ["Static area; the waypoint is by the entrance and the Cathedral is straight ahead."]
+
+[[zones]]
+map_id = 33
+name = "Cathedral"
+layout = "Static"
+lines = ["Static area; continue through the Cathedral to Catacombs Level 1."]
+
+[[zones]]
+map_id = 34
+name = "Catacombs Level 1"
+layout = "Random"
+lines = ["No reliable direction pattern; follow unexplored outer rooms."]
+
+[[zones]]
+map_id = 35
+name = "Catacombs Level 2"
+layout = "Mixed"
+lines = ["The entrance route is random.", "From the waypoint: search to its right for Level 3."]
+
+[[zones]]
+map_id = 36
+name = "Catacombs Level 3"
+layout = "Random"
+lines = ["No reliable direction pattern; follow unexplored outer rooms."]
+
+[[zones]]
+map_id = 37
+name = "Catacombs Level 4"
+layout = "Static"
+lines = ["Static final level; follow the fixed route toward Andariel."]
+
+[[zones]]
+map_id = 38
+name = "Tristram"
+layout = "Static"
+lines = ["Static area; Cain's gibbet is near the center and Griswold patrols nearby."]
+
+[[zones]]
+map_id = 39
+name = "Secret Cow Level"
+layout = "Semi-static"
+lines = ["The Cow King's fort is a fixed landmark, but its placement varies with the map."]
+
+[[zones]]
+map_id = 41
+name = "Rocky Waste"
+layout = "Semi-static"
+lines = ["Exits appear at complete outer corners; Dry Hills may share Lut Gholein's corner.", "Stony Tomb is placed independently."]
+
+[[zones]]
+map_id = 42
+name = "Dry Hills"
+layout = "Semi-static"
+lines = ["Exits appear at complete outer corners; Far Oasis may share Rocky Waste's corner.", "The waypoint and Halls of the Dead are independent."]
+
+[[zones]]
+map_id = 43
+name = "Far Oasis"
+layout = "Semi-static"
+lines = ["Exits appear at complete outer corners; Lost City may share Dry Hills' corner.", "The waypoint and Maggot Lair are independent."]
+
+[[zones]]
+map_id = 44
+name = "Lost City"
+layout = "Semi-static"
+lines = ["Exits appear at complete outer corners; Valley of Snakes may share Far Oasis' corner.", "The waypoint and Ancient Tunnels are independent."]
+
+[[zones]]
+map_id = 45
+name = "Valley of Snakes"
+layout = "Static"
+lines = ["Static area; the Claw Viper Temple entrance is in the central structure."]
+
+[[zones]]
+map_id = 46
+name = "Canyon of the Magi"
+layout = "Static"
+lines = ["Tomb symbols left to right: circle, crescent, square, X, V, triangle, circle/crescent."]
+
+[[zones]]
+map_id = 47
+name = "Sewers Level 1"
+layout = "Semi-static"
+lines = ["Level 2 is random, but often lies near the entrance from the docks."]
+
+[[zones]]
+map_id = 48
+name = "Sewers Level 2"
+layout = "Tile-based"
+lines = ["From entrance: left finds the waypoint; straight finds Level 3.", "From the waypoint: turn left for Level 3."]
+
+[[zones]]
+map_id = 49
+name = "Sewers Level 3"
+layout = "Tile-based"
+lines = ["From entrance: turn left for Radament."]
+
+[[zones]]
+map_id = 50
+name = "Harem Level 1"
+layout = "Static"
+lines = ["Static palace route; stay along the outer edge and continue downstairs."]
+
+[[zones]]
+map_id = 51
+name = "Harem Level 2"
+layout = "Static"
+lines = ["Stay on an outer edge rather than crossing diagonally."]
+
+[[zones]]
+map_id = 52
+name = "Palace Cellar Level 1"
+layout = "Static"
+lines = ["Stay on an outer edge.", "The waypoint sits just above the bottom corner."]
+
+[[zones]]
+map_id = 53
+name = "Palace Cellar Level 2"
+layout = "Static"
+lines = ["Stay on an outer edge rather than crossing diagonally."]
+
+[[zones]]
+map_id = 54
+name = "Palace Cellar Level 3"
+layout = "Static"
+lines = ["The Arcane Sanctuary portal is in the center of the map."]
+
+[[zones]]
+map_id = 55
+name = "Stony Tomb Level 1"
+layout = "Tile-based"
+lines = ["From entrance: turn left for Level 2."]
+
+[[zones]]
+map_id = 56
+name = "Halls of the Dead Level 1"
+layout = "Tile-based"
+lines = ["From entrance: turn left for Level 2."]
+
+[[zones]]
+map_id = 57
+name = "Halls of the Dead Level 2"
+layout = "Tile-based"
+lines = ["From the waypoint: right leads to Level 3; straight returns to Level 1."]
+
+[[zones]]
+map_id = 58
+name = "Claw Viper Temple Level 1"
+layout = "Tile-based"
+lines = ["From entrance: turn left for Level 2."]
+
+[[zones]]
+map_id = 59
+name = "Stony Tomb Level 2"
+layout = "Tile-based"
+lines = ["From entrance: left finds the golden chest; straight finds Creeping Feature."]
+
+[[zones]]
+map_id = 60
+name = "Halls of the Dead Level 3"
+layout = "Tile-based"
+lines = ["From entrance: turn left for the Horadric Cube and Bloodwitch."]
+
+[[zones]]
+map_id = 61
+name = "Claw Viper Temple Level 2"
+layout = "Static"
+lines = ["Static final level; the altar is in the central chamber."]
+
+[[zones]]
+map_id = 62
+name = "Maggot Lair Level 1"
+layout = "Tile-based"
+lines = ["From entrance: turn right for Level 2."]
+
+[[zones]]
+map_id = 63
+name = "Maggot Lair Level 2"
+layout = "Tile-based"
+lines = ["From entrance: turn right for Level 3."]
+
+[[zones]]
+map_id = 64
+name = "Maggot Lair Level 3"
+layout = "Tile-based"
+lines = ["From entrance: continue straight for the Staff of Kings chamber."]
+
+[[zones]]
+map_id = 65
+name = "Ancient Tunnels"
+layout = "Tile-based"
+lines = ["From entrance: turn left for the golden chest."]
+
+[[zones]]
+map_id = 66
+name = "Tal Rasha's Tomb (X)"
+layout = "Tile-based"
+lines = ["From entrance: turn left for the orifice or golden chest."]
+
+[[zones]]
+map_id = 67
+name = "Tal Rasha's Tomb (square)"
+layout = "Tile-based"
+lines = ["From entrance: turn left for the orifice or golden chest."]
+
+[[zones]]
+map_id = 68
+name = "Tal Rasha's Tomb (crescent)"
+layout = "Tile-based"
+lines = ["From entrance: turn left for the orifice or golden chest."]
+
+[[zones]]
+map_id = 69
+name = "Tal Rasha's Tomb (circle)"
+layout = "Tile-based"
+lines = ["From entrance: turn left for the orifice or golden chest."]
+
+[[zones]]
+map_id = 70
+name = "Tal Rasha's Tomb (V)"
+layout = "Tile-based"
+lines = ["From entrance: turn left for the orifice or golden chest."]
+
+[[zones]]
+map_id = 71
+name = "Tal Rasha's Tomb (triangle)"
+layout = "Tile-based"
+lines = ["From entrance: turn left for the orifice or golden chest."]
+
+[[zones]]
+map_id = 72
+name = "Tal Rasha's Tomb (circle/crescent)"
+layout = "Tile-based"
+lines = ["From entrance: turn left for the orifice or golden chest."]
+
+[[zones]]
+map_id = 73
+name = "Tal Rasha's Chamber"
+layout = "Static"
+lines = ["Static boss chamber; follow the fixed route to Duriel."]
+
+[[zones]]
+map_id = 74
+name = "Arcane Sanctuary"
+layout = "Four branches"
+lines = ["The Summoner branch is random.", "The missing wall symbol at the Summoner identifies the true tomb."]
+
+[[zones]]
+map_id = 76
+name = "Spider Forest"
+layout = "Semi-static"
+lines = ["Side pockets form near river forks, bends, and dead ends.", "The jungle may connect through Great Marsh, directly to Flayer Jungle, or both."]
+
+[[zones]]
+map_id = 77
+name = "Great Marsh"
+layout = "Semi-static"
+lines = ["Side pockets form near river forks, bends, and dead ends.", "This zone may connect Spider Forest and Flayer Jungle, but can be optional."]
+
+[[zones]]
+map_id = 78
+name = "Flayer Jungle"
+layout = "Semi-static"
+lines = ["Quest dungeons and the waypoint occupy side pockets near the river.", "Portal the quest pocket, then keep following the river to reduce backtracking."]
+
+[[zones]]
+map_id = 79
+name = "Lower Kurast"
+layout = "Semi-static"
+lines = ["Flayer Jungle enters at the lower-left edge.", "Kurast Bazaar exits at the top or right corner; the waypoint is random."]
+
+[[zones]]
+map_id = 80
+name = "Kurast Bazaar"
+layout = "Semi-static"
+lines = ["Lower Kurast enters from the bottom or left; Upper Kurast exits at the top or right.", "The two sewer entrances use fixed positions."]
+
+[[zones]]
+map_id = 81
+name = "Upper Kurast"
+layout = "Semi-static"
+lines = ["Kurast Bazaar enters from the bottom or left.", "Travincal exits at the upper-right edge; the two sewer entrances are fixed."]
+
+[[zones]]
+map_id = 82
+name = "Kurast Causeway"
+layout = "Static"
+lines = ["Travincal is at the upper-right exit.", "Disused Reliquary is left; Ruined Fane is right."]
+
+[[zones]]
+map_id = 83
+name = "Travincal"
+layout = "Static"
+lines = ["The waypoint is near the upper-left edge; the Council and Durance entrance are upper-right."]
+
+[[zones]]
+map_id = 84
+name = "Arachnid Lair"
+layout = "Semi-static"
+lines = ["The golden chest is on the lower-left edge."]
+
+[[zones]]
+map_id = 85
+name = "Spider Cavern"
+layout = "Semi-static"
+lines = ["The Khalim's Eye chest is on the lower-left edge."]
+
+[[zones]]
+map_id = 86
+name = "Swampy Pit Level 1"
+layout = "Tile-based"
+lines = ["From entrance: turn left for Level 2."]
+
+[[zones]]
+map_id = 87
+name = "Swampy Pit Level 2"
+layout = "Tile-based"
+lines = ["From entrance: turn left for Level 3."]
+
+[[zones]]
+map_id = 88
+name = "Flayer Dungeon Level 1"
+layout = "Tile-based"
+lines = ["From entrance: turn left for Level 2."]
+
+[[zones]]
+map_id = 89
+name = "Flayer Dungeon Level 2"
+layout = "Tile-based"
+lines = ["From entrance: turn left for Level 3."]
+
+[[zones]]
+map_id = 90
+name = "Swampy Pit Level 3"
+layout = "Semi-static"
+lines = ["Final level; search the fixed end sections for the golden chest."]
+
+[[zones]]
+map_id = 91
+name = "Flayer Dungeon Level 3"
+layout = "Semi-static"
+lines = ["The quest chest occupies a far corner or center endpoint based on the entrance layout."]
+
+[[zones]]
+map_id = 92
+name = "Sewers Level 1 (Act III)"
+layout = "Mixed"
+lines = ["The route is mostly random.", "After finding the golden chest, search to its right for Level 2."]
+
+[[zones]]
+map_id = 93
+name = "Sewers Level 2 (Act III)"
+layout = "Static"
+lines = ["Static final level; Khalim's Heart is in the central quest chest."]
+
+[[zones]]
+map_id = 94
+name = "Ruined Temple"
+layout = "Semi-static"
+lines = ["Small temple layout; search the fixed end rooms for Lam Esen's Tome."]
+
+[[zones]]
+map_id = 95
+name = "Disused Fane"
+layout = "Semi-static"
+lines = ["Small optional temple with a short semi-static route."]
+
+[[zones]]
+map_id = 96
+name = "Forgotten Reliquary"
+layout = "Static"
+lines = ["Small optional temple with a fixed route."]
+
+[[zones]]
+map_id = 97
+name = "Forgotten Temple"
+layout = "Static"
+lines = ["Small optional temple with a fixed route."]
+
+[[zones]]
+map_id = 98
+name = "Ruined Fane"
+layout = "Static"
+lines = ["Small optional temple with a fixed route."]
+
+[[zones]]
+map_id = 99
+name = "Disused Reliquary"
+layout = "Static"
+lines = ["Small optional temple with a fixed route."]
+
+[[zones]]
+map_id = 100
+name = "Durance of Hate Level 1"
+layout = "Tile-based"
+lines = ["From entrance: turn left for Level 2."]
+
+[[zones]]
+map_id = 101
+name = "Durance of Hate Level 2"
+layout = "Tile-based"
+lines = ["From entrance: straight finds Level 3; left finds the waypoint.", "From the waypoint: turn left for Level 3."]
+
+[[zones]]
+map_id = 102
+name = "Durance of Hate Level 3"
+layout = "Static"
+lines = ["Static final level; Mephisto is across the central moat."]
+
+[[zones]]
+map_id = 104
+name = "Outer Steppes"
+layout = "Semi-static"
+lines = ["Town enters on the upper-left edge.", "Check the left corner first for Plains of Despair, then the right corner."]
+
+[[zones]]
+map_id = 105
+name = "Plains of Despair"
+layout = "Semi-static"
+lines = ["The entrance and City of the Damned exit occupy different random edges.", "Izual is placed independently."]
+
+[[zones]]
+map_id = 106
+name = "City of the Damned"
+layout = "Semi-static"
+lines = ["The waypoint and River of Flame stairs are together at a random edge location."]
+
+[[zones]]
+map_id = 107
+name = "River of Flame"
+layout = "Semi-static"
+lines = ["From the waypoint, stay straight toward Chaos.", "At the main fork: H-shaped upper lava suggests right; otherwise try left."]
+
+[[zones]]
+map_id = 108
+name = "Chaos Sanctuary"
+layout = "Static"
+lines = ["Static layout; activate the five seals across the left, upper, and right wings."]
+
+[[zones]]
+map_id = 110
+name = "Bloody Foothills"
+layout = "Static"
+lines = ["Keep moving upper-left.", "Shenk is just before the stairs to Frigid Highlands."]
+
+[[zones]]
+map_id = 111
+name = "Frigid Highlands"
+layout = "Semi-static"
+lines = ["The waypoint and Eldritch are near the entrance.", "Cross three wall rows; Arreat Plateau exits at the far edge."]
+
+[[zones]]
+map_id = 112
+name = "Arreat Plateau"
+layout = "Semi-static"
+lines = ["Cross three wall rows.", "Crystalline Passage is centered on the far short edge; waypoint and red portal are in the open sections."]
+
+[[zones]]
+map_id = 113
+name = "Crystalline Passage"
+layout = "Tile-based"
+lines = ["From entrance: left finds Glacial Trail; straight finds Frozen River; right finds the waypoint.", "From waypoint: straight finds Glacial Trail; right finds Frozen River."]
+
+[[zones]]
+map_id = 114
+name = "Frozen River"
+layout = "Semi-static"
+lines = ["One of four fixed layouts; Anya occupies the far endpoint."]
+
+[[zones]]
+map_id = 115
+name = "Glacial Trail"
+layout = "Tile-based"
+lines = ["From entrance or waypoint: left finds Frozen Tundra; straight finds Drifter Cavern; right finds the golden chest."]
+
+[[zones]]
+map_id = 116
+name = "Drifter Cavern"
+layout = "Semi-static"
+lines = ["Optional cave with a small set of repeatable layouts."]
+
+[[zones]]
+map_id = 117
+name = "Frozen Tundra"
+layout = "Semi-static"
+lines = ["Cross three wall rows.", "The Ancients' Way is centered on the far short edge; waypoint and red portal are in the open sections."]
+
+[[zones]]
+map_id = 118
+name = "The Ancients' Way"
+layout = "Tile-based"
+lines = ["From entrance: left finds Arreat Summit; straight finds Icy Cellar; right finds the waypoint.", "From waypoint: straight finds Arreat Summit; right finds Icy Cellar."]
+
+[[zones]]
+map_id = 119
+name = "Icy Cellar"
+layout = "Semi-static"
+lines = ["Optional cave with a small set of repeatable layouts."]
+
+[[zones]]
+map_id = 120
+name = "Arreat Summit"
+layout = "Static"
+lines = ["Static arena; the Worldstone Keep entrance opens after defeating the Ancients."]
+
+[[zones]]
+map_id = 121
+name = "Nihlathak's Temple"
+layout = "Static"
+lines = ["Static entrance level; descend through the central passage to Halls of Anguish."]
+
+[[zones]]
+map_id = 122
+name = "Halls of Anguish"
+layout = "Semi-static"
+lines = ["Three layouts: Halls of Pain exits at the left corner, lower-left edge, or upper-right edge.", "The Temple return is always central."]
+
+[[zones]]
+map_id = 123
+name = "Halls of Pain"
+layout = "Semi-static"
+lines = ["The waypoint position identifies one of three layouts; Halls of Vaught is at the corresponding outer endpoint.", "Halls of Anguish is always central."]
+
+[[zones]]
+map_id = 124
+name = "Halls of Vaught"
+layout = "Static"
+lines = ["Inspect the red-eye wall paintings at the four center corridors.", "The marked direction leads to Nihlathak."]
+
+[[zones]]
+map_id = 125
+name = "Abaddon"
+layout = "Semi-static"
+lines = ["Optional red-portal dungeon with a small set of repeatable layouts."]
+
+[[zones]]
+map_id = 126
+name = "Pit of Acheron"
+layout = "Semi-static"
+lines = ["Optional red-portal dungeon with a small set of repeatable layouts."]
+
+[[zones]]
+map_id = 127
+name = "Infernal Pit"
+layout = "Semi-static"
+lines = ["Optional red-portal dungeon with a small set of repeatable layouts."]
+
+[[zones]]
+map_id = 128
+name = "Worldstone Keep Level 1"
+layout = "Random"
+lines = ["No reliable direction pattern; clear unexplored outer branches."]
+
+[[zones]]
+map_id = 129
+name = "Worldstone Keep Level 2"
+layout = "Mixed"
+lines = ["The entrance route is random.", "From the waypoint: search to its right for Level 3."]
+
+[[zones]]
+map_id = 130
+name = "Worldstone Keep Level 3"
+layout = "Random"
+lines = ["No reliable direction pattern; clear unexplored outer branches."]
+
+[[zones]]
+map_id = 131
+name = "Throne of Destruction"
+layout = "Static"
+lines = ["Static layout; Baal and the Worldstone Chamber entrance are centered on the upper-right edge."]
+
+[[zones]]
+map_id = 132
+name = "Worldstone Chamber"
+layout = "Static"
+lines = ["Static boss arena; follow the fixed bridge to Baal."]
+

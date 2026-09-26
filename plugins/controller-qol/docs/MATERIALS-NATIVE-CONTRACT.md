@@ -4,7 +4,7 @@ Reviewed 2026-09-23. This extends the 1.5.1 potion work with **LB+X to withdraw 
 
 ## 1.5.2 failure and 1.5.3 correction
 
-The user tested Chipped Emerald, full rejuvenation and Um rune; none withdrew. `1.5.2-runtime-failure.log` confirms native profile admission at 18:15:22, legacy LB+X fallthrough at 18:15:42/48 and 18:16:01, and refill cancellation at 18:16:03. No advanced withdrawal was submitted. Earlier unit tests checked policy/call arguments, but did not validate the UI lookup against the actual layout.
+The user tested Chipped Emerald, full rejuvenation and Um rune; none withdrew. The retained 1.5.2 evidence confirms native profile admission at 18:15:22, legacy LB+X fallthrough at 18:15:42/48 and 18:16:01, and refill cancellation at 18:16:03. No advanced withdrawal was submitted. The source-log hash and migration provenance are in [LEGACY-REIMAGINED-MIGRATION.md](LEGACY-REIMAGINED-MIGRATION.md). Earlier unit tests checked policy/call arguments, but did not validate the UI lookup against the actual layout.
 
 **The resolver confused a widget type with its name.** Both installed controller and mouse layouts begin with type `BankPanel`, name `BankExpansionLayout`. At RVA 0x846170 the native helper passes the requested string in RDX to 0x89F760 with the UI manager from global RVA 0x3440170. At 0x89F810..0x89F821 the manager loop compares the requested string with the widget name pointer at widget+0x08, through 0x12277A0. It does not search by widget type. `panel-name-lookup-disassembly.txt` preserves that evidence from the same decrypted image as the prior audit. These are analysis witnesses, not new hooks or new calls.
 
@@ -16,7 +16,7 @@ The live user's config was backed up and debug_logging set to true for diagnosis
 
 ## Established runtime baseline
 
-The user reports 1.5.1 mostly works. The saved `1.5.1-runtime-excerpt.log` independently shows inventory belt requests followed by SDK confirmation (for example runtime ID 38 into slot 6 at 17:52:58, IDs 37/39 at 17:53:20, and full rejuvenations 51/52 at 17:53:33). This establishes the inventory stored-item fix in the user's session; it does not establish Materials withdrawal.
+The user reports 1.5.1 mostly works. The retained 1.5.1 evidence independently shows inventory belt requests followed by SDK confirmation (for example runtime ID 38 into slot 6 at 17:52:58, IDs 37/39 at 17:53:20, and full rejuvenations 51/52 at 17:53:33). This establishes the inventory stored-item fix in the user's session; it does not establish Materials withdrawal. See [LEGACY-REIMAGINED-MIGRATION.md](LEGACY-REIMAGINED-MIGRATION.md) for the source-log hash.
 
 At 17:53:09 and 17:53:26, Materials rejuvenation LB+X arrives with SDK container 2 (Cursor) and a UI handle that cannot be resolved on the game thread. At 17:55:20 and 17:56:43, rune/gem actions arrive as container 8 (SharedStash); the legacy code resolves a same-code/position item and reports a normal transfer, but the user observes no withdrawal. The Materials/runes/gems grids are native `AdvancedStashSlotWidget` controls representing counters, not ordinary stash-grid items. The source container enum alone cannot distinguish them reliably.
 

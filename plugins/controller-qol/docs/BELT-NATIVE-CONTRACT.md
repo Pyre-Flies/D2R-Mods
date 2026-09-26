@@ -197,5 +197,5 @@ Look for `[QOL/Belt] Native contract admitted`, `Submitted ... awaiting SDK conf
 
 ## 1.5.2 Materials follow-up
 
-The user's 1.5.1 runtime log confirms ordinary belt moves (see 1.5.1-runtime-excerpt.log). Advanced stash counters require a separate native widget withdrawal route, documented in [MATERIALS-NATIVE-CONTRACT.md](MATERIALS-NATIVE-CONTRACT.md). The new route remains pending live qualification.
+The user's 1.5.1 runtime evidence confirms ordinary belt moves; the retained timestamps and source-log hash are recorded in [LEGACY-REIMAGINED-MIGRATION.md](LEGACY-REIMAGINED-MIGRATION.md). Advanced stash counters require a separate native widget withdrawal route, documented in [MATERIALS-NATIVE-CONTRACT.md](MATERIALS-NATIVE-CONTRACT.md). The new route remains pending live qualification.
 

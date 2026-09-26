@@ -9,6 +9,7 @@ D2RLoader plugins for Diablo II: Resurrected.
 |---|---:|---|
 | [Controller QOL Updates](plugins/controller-qol/README.md) | 1.3.1+rev.7 | Production candidate; build-specific native hooks |
 | [Item Roll Ranges](plugins/item-roll-ranges/README.md) | 1.3.1+rev.1 | Experimental; build-specific formatter/table integration |
+| [Map Assistance](plugins/map-assistance/README.md) | 1.3.1+rev.1 | Configurable non-town campaign coverage |
 
 Each plugin is independently buildable and keeps its own README, changelog,
 tests, configuration, and detailed compatibility evidence. The D2RLoader SDK is
@@ -21,6 +22,7 @@ same reviewed upstream interface without copying that project into this history.
 plugins/
   controller-qol/       Controller QOL Updates source, tests, and docs
   item-roll-ranges/     Item Roll Ranges source, tests, and docs
+  map-assistance/       Keys-tooltip pathfinding tips
 third_party/
   D2RLoader-PluginSDK/  Pinned upstream build-time SDK submodule
 docs/
@@ -49,6 +51,10 @@ ctest --test-dir build/controller-qol -C Release --output-on-failure
 cmake -S plugins/item-roll-ranges -B build/item-roll-ranges -A x64
 cmake --build build/item-roll-ranges --config Release
 ctest --test-dir build/item-roll-ranges -C Release --output-on-failure
+
+cmake -S plugins/map-assistance -B build/map-assistance -A x64
+cmake --build build/map-assistance --config Release
+ctest --test-dir build/map-assistance -C Release --output-on-failure
 ```
 
 Native offsets, byte signatures, structures, hashes, and live-validation claims
@@ -66,8 +72,9 @@ qualified and recorded.
   hash, or native call contract is discovered or changed.
 - Do not commit game binaries, crash dumps, local logs, build products, or
   extracted proprietary assets.
-- Release tags should be plugin-scoped: `controller-qol/vX.Y.Z` and
-  `item-roll-ranges/vX.Y.Z` (including `+rev.N` where required).
+- Release tags should be plugin-scoped: `controller-qol/vX.Y.Z`,
+  `item-roll-ranges/vX.Y.Z`, and `map-assistance/vX.Y.Z` (including `+rev.N`
+  where required).
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the validation and release checklist.
 Production DLLs are distributed as versioned GitHub Release ZIP assets. See
