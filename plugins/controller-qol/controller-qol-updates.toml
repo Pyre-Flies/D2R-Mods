@@ -1,0 +1,18 @@
+[qol]
+enabled = true
+quick_identify = true
+quick_move = true
+require_tome_or_scroll = true
+consume_tome_or_scroll = true
+require_modifier = true
+modifier = "bumper"
+trigger_threshold = 30
+ground_pickup = true
+ground_pickup_button = "bumper"
+ground_pickup_distance = 6
+debug_logging = false
+block_filtered_pickup = true
+prioritize_portals = true
+portal_priority_distance = 10
+# Targeted, throttled portal selection diagnostics; separate from general debug.
+portal_diagnostics = false

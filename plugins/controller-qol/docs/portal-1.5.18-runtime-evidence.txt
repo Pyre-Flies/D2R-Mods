@@ -1,0 +1,15 @@
+[2026-09-23 23:42:28.691] [INFO] [Plugin:controller-qol-updates] [QOL/Portal] Portal candidate scoring and Interact range enabled within 20 native units; diagnostics=1.
+[2026-09-23 23:43:08.311] [INFO] [Plugin:controller-qol-updates] [QOL/Portal] Candidate score: distance=0 configured=20 profile=8 native=0.769 result=0.769 retry=0 centerLimit=0.00->0.00.
+[2026-09-23 23:43:08.327] [INFO] [Plugin:controller-qol-updates] [QOL/Portal] Interact comparison: distance=0 configured=20 accepted=1 boosted=0.
+[2026-09-23 23:43:09.315] [INFO] [Plugin:controller-qol-updates] [QOL/Portal] Interact comparison: distance=2 configured=20 accepted=1 boosted=0.
+[2026-09-23 23:43:10.311] [INFO] [Plugin:controller-qol-updates] [QOL/Portal] Candidate score: distance=2 configured=20 profile=8 native=-1.000 result=0.300 retry=1 centerLimit=5.20->6.95.
+[2026-09-23 23:43:10.326] [INFO] [Plugin:controller-qol-updates] [QOL/Portal] Interact comparison: distance=2 configured=20 accepted=1 boosted=0.
+[2026-09-23 23:43:11.317] [INFO] [Plugin:controller-qol-updates] [QOL/Portal] Interact comparison: distance=2 configured=20 accepted=1 boosted=0.
+[2026-09-23 23:43:12.311] [INFO] [Plugin:controller-qol-updates] [QOL/Portal] Candidate score: distance=6 configured=20 profile=8 native=-1.000 result=0.292 retry=1 centerLimit=5.20->7.32.
+[2026-09-23 23:43:12.673] [INFO] [Plugin:controller-qol-updates] [QOL/Portal] Interact comparison: distance=2 configured=20 accepted=1 boosted=0.
+[2026-09-23 23:43:14.310] [INFO] [Plugin:controller-qol-updates] [QOL/Portal] Candidate score: distance=4 configured=20 profile=8 native=-1.000 result=0.271 retry=1 centerLimit=5.20->6.59.
+[2026-09-23 23:43:15.647] [INFO] [Plugin:controller-qol-updates] [QOL/Portal] Interact comparison: distance=2 configured=20 accepted=1 boosted=0.
+[2026-09-23 23:43:16.310] [INFO] [Plugin:controller-qol-updates] [QOL/Portal] Candidate score: distance=5 configured=20 profile=8 native=-1.000 result=0.234 retry=1 centerLimit=5.20->7.87.
+[2026-09-23 23:43:17.397] [INFO] [Plugin:controller-qol-updates] [QOL/Portal] Interact comparison: distance=2 configured=20 accepted=1 boosted=0.
+[2026-09-23 23:43:18.816] [INFO] [Plugin:controller-qol-updates] [QOL/Portal] Candidate score: distance=6 configured=20 profile=8 native=-1.000 result=0.213 retry=1 centerLimit=5.20->8.38.
+[2026-09-23 23:43:20.812] [INFO] [Plugin:controller-qol-updates] [QOL/Portal] Candidate score: distance=6 configured=20 profile=8 native=-1.000 result=0.204 retry=1 centerLimit=5.20->8.78.

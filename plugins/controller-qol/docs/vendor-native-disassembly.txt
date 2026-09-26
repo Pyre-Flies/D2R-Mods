@@ -1,0 +1,878 @@
+Microsoft (R) COFF/PE Dumper Version 14.44.35220.0
+Copyright (C) Microsoft Corporation.  All rights reserved.
+
+
+Dump of file <private-workspace>\work\runtime-game.exe
+
+File Type: EXECUTABLE IMAGE
+
+  00000001402AA588: B9 0B 00 00 00     mov         ecx,0Bh
+  00000001402AA58D: E8 6E 3F E2 FF     call        00000001400CE500
+  00000001402AA592: 84 C0              test        al,al
+  00000001402AA594: 0F 84 D2 00 00 00  je          00000001402AA66C
+  00000001402AA59A: 48 8B CE           mov         rcx,rsi
+  00000001402AA59D: E8 CE 9D 0C 00     call        0000000140374370
+  00000001402AA5A2: 85 C0              test        eax,eax
+  00000001402AA5A4: 74 68              je          00000001402AA60E
+  00000001402AA5A6: 48 8B CE           mov         rcx,rsi
+  00000001402AA5A9: E8 B2 05 0A 00     call        000000014034AB60
+  00000001402AA5AE: 83 F8 02           cmp         eax,2
+  00000001402AA5B1: 74 5B              je          00000001402AA60E
+  00000001402AA5B3: E8 08 BC 59 00     call        00000001408461C0
+  00000001402AA5B8: 4C 8D 44 24 60     lea         r8,[rsp+60h]
+  00000001402AA5BD: C7 44 24 60 02 00  mov         dword ptr [rsp+60h],2
+                    00 00
+  00000001402AA5C5: 48 BA 32 91 67 2C  mov         rdx,838E27F92C679132h
+                    F9 27 8E 83
+  00000001402AA5CF: 48 8B C8           mov         rcx,rax
+  00000001402AA5D2: E8 59 F4 E5 FF     call        0000000140109A30
+  00000001402AA5D7: B9 0B 00 00 00     mov         ecx,0Bh
+  00000001402AA5DC: E8 AF BB 59 00     call        0000000140846190
+  00000001402AA5E1: 48 8B F8           mov         rdi,rax
+  00000001402AA5E4: 48 85 C0           test        rax,rax
+  00000001402AA5E7: 74 25              je          00000001402AA60E
+  00000001402AA5E9: E8 02 58 F9 FF     call        000000014023FDF0
+  00000001402AA5EE: 48 8B 17           mov         rdx,qword ptr [rdi]
+  00000001402AA5F1: 48 8B CF           mov         rcx,rdi
+  00000001402AA5F4: 48 8B D8           mov         rbx,rax
+  00000001402AA5F7: FF 52 58           call        qword ptr [rdx+58h]
+  00000001402AA5FA: 48 85 C0           test        rax,rax
+  00000001402AA5FD: 74 0F              je          00000001402AA60E
+  00000001402AA5FF: 90                 nop
+  00000001402AA600: 48 3B C3           cmp         rax,rbx
+  00000001402AA603: 74 2F              je          00000001402AA634
+  00000001402AA605: 48 8B 40 10        mov         rax,qword ptr [rax+10h]
+  00000001402AA609: 48 85 C0           test        rax,rax
+  00000001402AA60C: 75 F2              jne         00000001402AA600
+  00000001402AA60E: 33 D2              xor         edx,edx
+  00000001402AA610: C6 44 24 20 00     mov         byte ptr [rsp+20h],0
+  00000001402AA615: 45 33 C9           xor         r9d,r9d
+  00000001402AA618: 45 33 C0           xor         r8d,r8d
+  00000001402AA61B: 8D 4A 03           lea         ecx,[rdx+3]
+  00000001402AA61E: E8 5D 61 EF FF     call        00000001401A0780
+  00000001402AA623: 48 8B 5C 24 70     mov         rbx,qword ptr [rsp+70h]
+  00000001402AA628: 48 83 C4 30        add         rsp,30h
+  00000001402AA62C: 41 5F              pop         r15
+  00000001402AA62E: 41 5E              pop         r14
+  00000001402AA630: 5F                 pop         rdi
+  00000001402AA631: 5E                 pop         rsi
+  00000001402AA632: 5D                 pop         rbp
+  00000001402AA633: C3                 ret
+  00000001402AA634: E8 97 0C DE FF     call        000000014008B2D0
+  00000001402AA639: 8B C8              mov         ecx,eax
+  00000001402AA63B: E8 40 FE DE FF     call        000000014009A480
+  00000001402AA640: 48 8B D0           mov         rdx,rax
+  00000001402AA643: C6 44 24 28 00     mov         byte ptr [rsp+28h],0
+  00000001402AA648: 41 B1 01           mov         r9b,1
+  00000001402AA64B: C6 44 24 20 01     mov         byte ptr [rsp+20h],1
+  00000001402AA650: 4C 8B C6           mov         r8,rsi
+  00000001402AA653: 48 8B CF           mov         rcx,rdi
+  00000001402AA656: E8 75 58 F9 FF     call        000000014023FED0
+  00000001402AA65B: 48 8B 5C 24 70     mov         rbx,qword ptr [rsp+70h]
+  00000001402AA660: 48 83 C4 30        add         rsp,30h
+  00000001402AA664: 41 5F              pop         r15
+  00000001402AA666: 41 5E              pop         r14
+  00000001402AA668: 5F                 pop         rdi
+  00000001402AA669: 5E                 pop         rsi
+  00000001402AA66A: 5D                 pop         rbp
+  00000001402AA66B: C3                 ret
+  00000001402AA66C: B9
+
+  Summary
+
+     1CAF000 .text
+
+Microsoft (R) COFF/PE Dumper Version 14.44.35220.0
+Copyright (C) Microsoft Corporation.  All rights reserved.
+
+
+Dump of file <private-workspace>\work\runtime-game.exe
+
+File Type: EXECUTABLE IMAGE
+
+  000000014023FED0: 4D 85 C0           test        r8,r8
+  000000014023FED3: 0F 84 B2 00 00 00  je          000000014023FF8B
+  000000014023FED9: 48 89 6C 24 10     mov         qword ptr [rsp+10h],rbp
+  000000014023FEDE: 48 89 74 24 20     mov         qword ptr [rsp+20h],rsi
+  000000014023FEE3: 57                 push        rdi
+  000000014023FEE4: 48 83 EC 30        sub         rsp,30h
+  000000014023FEE8: 4C 89 74 24 40     mov         qword ptr [rsp+40h],r14
+  000000014023FEED: B9 10 00 00 00     mov         ecx,10h
+  000000014023FEF2: 44 0F B6 74 24 60  movzx       r14d,byte ptr [rsp+60h]
+  000000014023FEF8: 49 8B F8           mov         rdi,r8
+  000000014023FEFB: 41 0F B6 F1        movzx       esi,r9b
+  000000014023FEFF: 48 8B EA           mov         rbp,rdx
+  000000014023FF02: E8 F9 A1 FC 00     call        000000014120A100
+  000000014023FF07: 85 C0              test        eax,eax
+  000000014023FF09: 75 0B              jne         000000014023FF16
+  000000014023FF0B: 38 44 24 68        cmp         byte ptr [rsp+68h],al
+  000000014023FF0F: 75 05              jne         000000014023FF16
+  000000014023FF11: 45 33 C9           xor         r9d,r9d
+  000000014023FF14: EB 03              jmp         000000014023FF19
+  000000014023FF16: 41 B1 01           mov         r9b,1
+  000000014023FF19: 44 8B C6           mov         r8d,esi
+  000000014023FF1C: C6 44 24 28 00     mov         byte ptr [rsp+28h],0
+  000000014023FF21: 48 8B D7           mov         rdx,rdi
+  000000014023FF24: 44 89 74 24 20     mov         dword ptr [rsp+20h],r14d
+  000000014023FF29: 48 8B CD           mov         rcx,rbp
+  000000014023FF2C: E8 2F D2 EC FF     call        000000014010D160
+  000000014023FF31: 4C 8B 74 24 40     mov         r14,qword ptr [rsp+40h]
+  000000014023FF36: 85 C0              test        eax,eax
+  000000014023FF38: 74 42              je          000000014023FF7C
+  000000014023FF3A: 80 7C 24 60 00     cmp         byte ptr [rsp+60h],0
+  000000014023FF3F: 75 24              jne         000000014023FF65
+  000000014023FF41: E8 7A 62 60 00     call        00000001408461C0
+  000000014023FF46: 4C 8D 44 24 50     lea         r8,[rsp+50h]
+  000000014023FF4B: C7 44 24 50 04 00  mov         dword ptr [rsp+50h],4
+                    00 00
+  000000014023FF53: 48 BA 32 91 67 2C  mov         rdx,838E27F92C679132h
+                    F9 27 8E 83
+  000000014023FF5D: 48 8B C8           mov         rcx,rax
+  000000014023FF60: E8 CB 9A EC FF     call        0000000140109A30
+  000000014023FF65: E8 A6 7E E3 FF     call        0000000140077E10
+  000000014023FF6A: 84 C0              test        al,al
+  000000014023FF6C: 74 07              je          000000014023FF75
+  000000014023FF6E: 33 C9              xor         ecx,ecx
+  000000014023FF70: E8 9B F5 F0 FF     call        000000014014F510
+  000000014023FF75: 33 C9              xor         ecx,ecx
+  000000014023FF77: E8 D4 F5 F0 FF     call        000000014014F550
+  000000014023FF7C: 48 8B 6C 24 48     mov         rbp,qword ptr [rsp+48h]
+  000000014023FF81: 48 8B 74 24 58     mov         rsi,qword ptr [rsp+58h]
+  000000014023FF86: 48 83 C4 30        add         rsp,30h
+  000000014023FF8A: 5F                 pop         rdi
+  000000014023FF8B: C3                 ret
+  000000014023FF8C: CC                 int         3
+
+  Summary
+
+     1CAF000 .text
+
+Microsoft (R) COFF/PE Dumper Version 14.44.35220.0
+Copyright (C) Microsoft Corporation.  All rights reserved.
+
+
+Dump of file <private-workspace>\work\runtime-game.exe
+
+File Type: EXECUTABLE IMAGE
+
+  000000014010D160: 48 89 5C 24 18     mov         qword ptr [rsp+18h],rbx
+  000000014010D165: 48 89 6C 24 20     mov         qword ptr [rsp+20h],rbp
+  000000014010D16A: 56                 push        rsi
+  000000014010D16B: 57                 push        rdi
+  000000014010D16C: 41 55              push        r13
+  000000014010D16E: 41 56              push        r14
+  000000014010D170: 41 57              push        r15
+  000000014010D172: 48 81 EC 80 00 00  sub         rsp,80h
+                    00
+  000000014010D179: 48 8B 05 48 E1 8B  mov         rax,qword ptr [00000001429CB2C8h]
+                    02
+  000000014010D180: 48 33 C4           xor         rax,rsp
+  000000014010D183: 48 89 44 24 70     mov         qword ptr [rsp+70h],rax
+  000000014010D188: 45 0F B6 E9        movzx       r13d,r9b
+  000000014010D18C: 48 89 4C 24 38     mov         qword ptr [rsp+38h],rcx
+  000000014010D191: 41 8B F8           mov         edi,r8d
+  000000014010D194: 48 8B F2           mov         rsi,rdx
+  000000014010D197: E8 34 E1 F7 FF     call        000000014008B2D0
+  000000014010D19C: 83 3D BD B5 93 02  cmp         dword ptr [0000000142A48760h],0
+                    00
+  000000014010D1A3: 89 44 24 34        mov         dword ptr [rsp+34h],eax
+  000000014010D1A7: 0F 84 91 03 00 00  je          000000014010D53E
+  000000014010D1AD: 8B 0D A9 B5 93 02  mov         ecx,dword ptr [0000000142A4875Ch]
+  000000014010D1B3: BA 01 00 00 00     mov         edx,1
+  000000014010D1B8: E8 13 D4 F8 FF     call        000000014009A5D0
+  000000014010D1BD: 48 8B D8           mov         rbx,rax
+  000000014010D1C0: 48 85 C0           test        rax,rax
+  000000014010D1C3: 0F 84 75 03 00 00  je          000000014010D53E
+  000000014010D1C9: 44 8B B4 24 D0 00  mov         r14d,dword ptr [rsp+00000000000000D0h]
+                    00 00
+  000000014010D1D1: 45 85 F6           test        r14d,r14d
+  000000014010D1D4: 74 16              je          000000014010D1EC
+  000000014010D1D6: E8 25 05 10 01     call        000000014120D700
+  000000014010D1DB: 2B 05 B3 B6 93 02  sub         eax,dword ptr [0000000142A48894h]
+  000000014010D1E1: 3D F4 01 00 00     cmp         eax,1F4h
+  000000014010D1E6: 0F 82 52 03 00 00  jb          000000014010D53E
+  000000014010D1EC: E8 8F E1 F7 FF     call        000000014008B380
+  000000014010D1F1: 41 B8 6D 0E 00 00  mov         r8d,0E6Dh
+  000000014010D1F7: 88 44 24 30        mov         byte ptr [rsp+30h],al
+  000000014010D1FB: 48 8D 15 9E A6 BB  lea         rdx,[0000000141CC78A0h]
+                    01
+  000000014010D202: 48 8B CB           mov         rcx,rbx
+  000000014010D205: E8 56 C6 23 00     call        0000000140349860
+  000000014010D20A: 80 BC 24 D8 00 00  cmp         byte ptr [rsp+00000000000000D8h],0
+                    00 00
+  000000014010D212: 44 8B F8           mov         r15d,eax
+  000000014010D215: 0F 84 31 02 00 00  je          000000014010D44C
+  000000014010D21B: 41 0F BF FF        movsx       edi,r15w
+  000000014010D21F: 44 8B CF           mov         r9d,edi
+  000000014010D222: 41 81 E9 9A 00 00  sub         r9d,9Ah
+                    00
+  000000014010D229: 74 1F              je          000000014010D24A
+  000000014010D22B: 41 83 E9 18        sub         r9d,18h
+  000000014010D22F: 74 19              je          000000014010D24A
+  000000014010D231: 41 83 E9 4B        sub         r9d,4Bh
+  000000014010D235: 74 13              je          000000014010D24A
+  000000014010D237: 41 83 E9 04        sub         r9d,4
+  000000014010D23B: 74 0D              je          000000014010D24A
+  000000014010D23D: 41 81 F9 FE 00 00  cmp         r9d,0FEh
+                    00
+  000000014010D244: 0F 85 F4 02 00 00  jne         000000014010D53E
+  000000014010D24A: 48 8B 1D 27 B5 93  mov         rbx,qword ptr [0000000142A48778h]
+                    02
+  000000014010D251: E8 EA DC F7 FF     call        000000014008AF40
+  000000014010D256: 48 8B 54 24 38     mov         rdx,qword ptr [rsp+38h]
+  000000014010D25B: 33 ED              xor         ebp,ebp
+  000000014010D25D: 48 89 6C 24 28     mov         qword ptr [rsp+28h],rbp
+  000000014010D262: 44 8B C7           mov         r8d,edi
+  000000014010D265: 44 0F B6 C8        movzx       r9d,al
+  000000014010D269: 33 C9              xor         ecx,ecx
+  000000014010D26B: 48 89 5C 24 20     mov         qword ptr [rsp+20h],rbx
+  000000014010D270: E8 BB 80 26 00     call        0000000140375330
+  000000014010D275: 89 05 5D B5 93 02  mov         dword ptr [0000000142A487D8h],eax
+  000000014010D27B: C7 05 E3 B4 93 02  mov         dword ptr [0000000142A48768h],3
+                    03 00 00 00
+  000000014010D285: C6 05 F4 B5 93 02  mov         byte ptr [0000000142A48880h],1
+                    01
+  000000014010D28C: 89 2D F6 B5 93 02  mov         dword ptr [0000000142A48888h],ebp
+  000000014010D292: 45 85 F6           test        r14d,r14d
+  000000014010D295: 74 2C              je          000000014010D2C3
+  000000014010D297: 8B 4C 24 34        mov         ecx,dword ptr [rsp+34h]
+  000000014010D29B: 33 D2              xor         edx,edx
+  000000014010D29D: E8 BE 47 FE FF     call        00000001400F1A60
+  000000014010D2A2: 44 0F B6 8C 24 D8  movzx       r9d,byte ptr [rsp+00000000000000D8h]
+                    00 00 00
+  000000014010D2AB: 45 0F B6 C5        movzx       r8d,r13b
+  000000014010D2AF: 0F B6 4C 24 30     movzx       ecx,byte ptr [rsp+30h]
+  000000014010D2B4: B2 01              mov         dl,1
+  000000014010D2B6: E8 05 42 00 00     call        00000001401114C0
+  000000014010D2BB: 8D 45 01           lea         eax,[rbp+1]
+  000000014010D2BE: E9 7D 02 00 00     jmp         000000014010D540
+  000000014010D2C3: 48 39 2D CE B4 93  cmp         qword ptr [0000000142A48798h],rbp
+                    02
+  000000014010D2CA: 0F 85 48 04 00 00  jne         000000014010D718
+  000000014010D2D0: 33 D2              xor         edx,edx
+  000000014010D2D2: 40 88 6C 24 20     mov         byte ptr [rsp+20h],bpl
+  000000014010D2D7: 45 33 C9           xor         r9d,r9d
+  000000014010D2DA: 45 33 C0           xor         r8d,r8d
+  000000014010D2DD: 8D 4A 01           lea         ecx,[rdx+1]
+  000000014010D2E0: E8 9B 34 09 00     call        00000001401A0780
+  000000014010D2E5: C7 05 B5 B3 93 02  mov         dword ptr [0000000142A486A4h],3
+                    03 00 00 00
+  000000014010D2EF: E8 1C AB F6 FF     call        0000000140077E10
+  000000014010D2F4: 33 D2              xor         edx,edx
+  000000014010D2F6: 48 8D 3D 43 34 00  lea         rdi,[0000000140110740h]
+                    00
+  000000014010D2FD: 48 8B CF           mov         rcx,rdi
+  000000014010D300: 44 8D 42 01        lea         r8d,[rdx+1]
+  000000014010D304: 84 C0              test        al,al
+  000000014010D306: 74 07              je          000000014010D30F
+  000000014010D308: E8 13 C0 0D 00     call        00000001401E9320
+  000000014010D30D: EB 05              jmp         000000014010D314
+  000000014010D30F: E8 EC BE 0D 00     call        00000001401E9200
+  000000014010D314: 48 89 05 7D B4 93  mov         qword ptr [0000000142A48798h],rax
+                    02
+  000000014010D31B: 48 8D 15 E2 4E BB  lea         rdx,[0000000141CC2204h]
+                    01
+  000000014010D322: C6 40 08 01        mov         byte ptr [rax+8],1
+  000000014010D326: 48 8D 0D 6B B5 93  lea         rcx,[0000000142A48898h]
+                    02
+  000000014010D32D: 8B 1D A5 B4 93 02  mov         ebx,dword ptr [0000000142A487D8h]
+  000000014010D333: 44 8B C3           mov         r8d,ebx
+  000000014010D336: E8 85 C9 FF FF     call        0000000140109CC0
+  000000014010D33B: 48 8D 44 24 60     lea         rax,[rsp+60h]
+  000000014010D340: 48 89 6C 24 50     mov         qword ptr [rsp+50h],rbp
+  000000014010D345: 48 89 44 24 48     mov         qword ptr [rsp+48h],rax
+  000000014010D34A: 48 8D 4C 24 38     lea         rcx,[rsp+38h]
+  000000014010D34F: 48 B8 0F 00 00 00  mov         rax,800000000000000Fh
+                    00 00 00 80
+  000000014010D359: 40 88 6C 24 60     mov         byte ptr [rsp+60h],bpl
+  000000014010D35E: 48 89 44 24 58     mov         qword ptr [rsp+58h],rax
+  000000014010D363: 48 8D 05 9E A9 BB  lea         rax,[0000000141CC7D08h]
+                    01
+  000000014010D36A: 48 89 44 24 38     mov         qword ptr [rsp+38h],rax
+  000000014010D36F: 48 C7 44 24 40 15  mov         qword ptr [rsp+40h],15h
+                    00 00 00
+  000000014010D378: E8 E5 E2 D1 03     call        0000000143E2B662
+  000000014010D37D: 48 8B D0           mov         rdx,rax
+  000000014010D380: 48 8D 4C 24 48     lea         rcx,[rsp+48h]
+  000000014010D385: 44 8B C3           mov         r8d,ebx
+  000000014010D388: E8 83 11 FC FF     call        00000001400CE510
+  000000014010D38D: 48 8B 54 24 48     mov         rdx,qword ptr [rsp+48h]
+  000000014010D392: 41 B9 01 00 00 00  mov         r9d,1
+  000000014010D398: 48 8B 0D F9 B3 93  mov         rcx,qword ptr [0000000142A48798h]
+                    02
+  000000014010D39F: 89 6C 24 28        mov         dword ptr [rsp+28h],ebp
+  000000014010D3A3: 48 89 6C 24 20     mov         qword ptr [rsp+20h],rbp
+  000000014010D3A8: 45 8D 41 03        lea         r8d,[r9+3]
+  000000014010D3AC: E8 7F BC 0D 00     call        00000001401E9030
+  000000014010D3B1: B9 10 0D 00 00     mov         ecx,0D10h
+  000000014010D3B6: E8 A1 E2 D1 03     call        0000000143E2B65C
+  000000014010D3BB: 48 8D 0D AE 3C 00  lea         rcx,[0000000140111070h]
+                    00
+  000000014010D3C2: C7 44 24 28 01 00  mov         dword ptr [rsp+28h],1
+                    00 00
+  000000014010D3CA: 48 89 4C 24 20     mov         qword ptr [rsp+20h],rcx
+  000000014010D3CF: 41 B9 01 00 00 00  mov         r9d,1
+  000000014010D3D5: 48 8B 0D BC B3 93  mov         rcx,qword ptr [0000000142A48798h]
+                    02
+  000000014010D3DC: 45 33 C0           xor         r8d,r8d
+  000000014010D3DF: 48 8B D0           mov         rdx,rax
+  000000014010D3E2: E8 49 BC 0D 00     call        00000001401E9030
+  000000014010D3E7: B9 11 0D 00 00     mov         ecx,0D11h
+  000000014010D3EC: E8 6B E2 D1 03     call        0000000143E2B65C
+  000000014010D3F1: 48 8B 0D A0 B3 93  mov         rcx,qword ptr [0000000142A48798h]
+                    02
+  000000014010D3F8: 41 B9 01 00 00 00  mov         r9d,1
+  000000014010D3FE: 45 33 C0           xor         r8d,r8d
+  000000014010D401: C7 44 24 28 01 00  mov         dword ptr [rsp+28h],1
+                    00 00
+  000000014010D409: 48 8B D0           mov         rdx,rax
+  000000014010D40C: 48 89 7C 24 20     mov         qword ptr [rsp+20h],rdi
+  000000014010D411: E8 1A BC 0D 00     call        00000001401E9030
+  000000014010D416: 48 B8 00 00 00 00  mov         rax,8000000000000000h
+                    00 00 00 80
+  000000014010D420: 48 85 44 24 58     test        qword ptr [rsp+58h],rax
+  000000014010D425: 0F 85 ED 02 00 00  jne         000000014010D718
+  000000014010D42B: 48 8B 5C 24 48     mov         rbx,qword ptr [rsp+48h]
+  000000014010D430: E8 8B 8F 0F 01     call        00000001412063C0
+  000000014010D435: 48 8B D3           mov         rdx,rbx
+  000000014010D438: 48 8B C8           mov         rcx,rax
+  000000014010D43B: 4C 8B 00           mov         r8,qword ptr [rax]
+  000000014010D43E: 41 FF 50 20        call        qword ptr [r8+20h]
+  000000014010D442: B8 01 00 00 00     mov         eax,1
+  000000014010D447: E9 F4 00 00 00     jmp         000000014010D540
+  000000014010D44C: 48 8B CE           mov         rcx,rsi
+  000000014010D44F: E8 3C 58 26 00     call        0000000140372C90
+  000000014010D454: 83 F8 04           cmp         eax,4
+  000000014010D457: 0F 84 E1 00 00 00  je          000000014010D53E
+  000000014010D45D: 83 FF 01           cmp         edi,1
+  000000014010D460: 0F 85 AC 01 00 00  jne         000000014010D612
+  000000014010D466: 41 0F BF EF        movsx       ebp,r15w
+  000000014010D46A: 8B CD              mov         ecx,ebp
+  000000014010D46C: 81 FD 95 01 00 00  cmp         ebp,195h
+  000000014010D472: 7F 2F              jg          000000014010D4A3
+  000000014010D474: 74 7A              je          000000014010D4F0
+  000000014010D476: 81 E9 93 00 00 00  sub         ecx,93h
+  000000014010D47C: 83 F9 76           cmp         ecx,76h
+  000000014010D47F: 0F 87 B9 00 00 00  ja          000000014010D53E
+  000000014010D485: 48 63 C1           movsxd      rax,ecx
+  000000014010D488: 48 8D 15 71 2B EF  lea         rdx,[0000000140000000h]
+                    FF
+  000000014010D48F: 0F B6 84 02 5C D7  movzx       eax,byte ptr [rdx+rax+000000000010D75Ch]
+                    10 00
+  000000014010D497: 8B 8C 82 4C D7 10  mov         ecx,dword ptr [rdx+rax*4+000000000010D74Ch]
+                    00
+  000000014010D49E: 48 03 CA           add         rcx,rdx
+  000000014010D4A1: FF E1              jmp         rcx
+  000000014010D4A3: 81 E9 FF 01 00 00  sub         ecx,1FFh
+  000000014010D4A9: 0F 84 BA 00 00 00  je          000000014010D569
+  000000014010D4AF: 83 E9 01           sub         ecx,1
+  000000014010D4B2: 74 3C              je          000000014010D4F0
+  000000014010D4B4: 83 E9 01           sub         ecx,1
+  000000014010D4B7: 74 37              je          000000014010D4F0
+  000000014010D4B9: 83 E9 01           sub         ecx,1
+  000000014010D4BC: 74 32              je          000000014010D4F0
+  000000014010D4BE: 83 F9 06           cmp         ecx,6
+  000000014010D4C1: 75 7B              jne         000000014010D53E
+  000000014010D4C3: 4C 8D 0D D6 A3 BB  lea         r9,[0000000141CC78A0h]
+                    01
+  000000014010D4CA: BA 10 00 00 00     mov         edx,10h
+  000000014010D4CF: 41 B8 C4 0E 00 00  mov         r8d,0EC4h
+  000000014010D4D5: 48 8B CE           mov         rcx,rsi
+  000000014010D4D8: E8 F3 0D 26 00     call        000000014036E2D0
+  000000014010D4DD: 85 C0              test        eax,eax
+  000000014010D4DF: 75 5D              jne         000000014010D53E
+  000000014010D4E1: C7 05 7D B2 93 02  mov         dword ptr [0000000142A48768h],4
+                    04 00 00 00
+  000000014010D4EB: E9 AC 01 00 00     jmp         000000014010D69C
+  000000014010D4F0: 48 8B 3D 81 B2 93  mov         rdi,qword ptr [0000000142A48778h]
+                    02
+  000000014010D4F7: E8 44 DA F7 FF     call        000000014008AF40
+  000000014010D4FC: 0F B6 D8           movzx       ebx,al
+  000000014010D4FF: E8 CC DD F7 FF     call        000000014008B2D0
+  000000014010D504: 8B C8              mov         ecx,eax
+  000000014010D506: E8 75 CF F8 FF     call        000000014009A480
+  000000014010D50B: 4C 8B CF           mov         r9,rdi
+  000000014010D50E: C7 44 24 28 01 00  mov         dword ptr [rsp+28h],1
+                    00 00
+  000000014010D516: 44 8B C3           mov         r8d,ebx
+  000000014010D519: 89 6C 24 20        mov         dword ptr [rsp+20h],ebp
+  000000014010D51D: 48 8B D6           mov         rdx,rsi
+  000000014010D520: 48 8B C8           mov         rcx,rax
+  000000014010D523: E8 88 1B 26 00     call        000000014036F0B0
+  000000014010D528: 48 8B CE           mov         rcx,rsi
+  000000014010D52B: 89 05 A7 B2 93 02  mov         dword ptr [0000000142A487D8h],eax
+  000000014010D531: E8 3A 6E 26 00     call        0000000140374370
+  000000014010D536: 85 C0              test        eax,eax
+  000000014010D538: 0F 85 C4 00 00 00  jne         000000014010D602
+  000000014010D53E: 33 C0              xor         eax,eax
+  000000014010D540: 48 8B 4C 24 70     mov         rcx,qword ptr [rsp+70h]
+  000000014010D545: 48 33 CC           xor         rcx,rsp
+  000000014010D548: E8 03 3C 1C 01     call        00000001412D1150
+  000000014010D54D: 4C 8D 9C 24 80 00  lea         r11,[rsp+0000000000000080h]
+                    00 00
+  000000014010D555: 49 8B 5B 40        mov         rbx,qword ptr [r11+40h]
+  000000014010D559: 49 8B 6B 48        mov         rbp,qword ptr [r11+48h]
+  000000014010D55D: 49 8B E3           mov         rsp,r11
+  000000014010D560: 41 5F              pop         r15
+  000000014010D562: 41 5E              pop         r14
+  000000014010D564: 41 5D              pop         r13
+  000000014010D566: 5F                 pop         rdi
+  000000014010D567: 5E                 pop         rsi
+  000000014010D568: C3                 ret
+  000000014010D569: E8 F2 2F 00 00     call        0000000140110560
+  000000014010D56E: 85 C0              test        eax,eax
+  000000014010D570: 74 42              je          000000014010D5B4
+  000000014010D572: 48 8B CE           mov         rcx,rsi
+  000000014010D575: E8 36 30 00 00     call        00000001401105B0
+  000000014010D57A: 84 C0              test        al,al
+  000000014010D57C: 74 C0              je          000000014010D53E
+  000000014010D57E: 48 8B 3D F3 B1 93  mov         rdi,qword ptr [0000000142A48778h]
+                    02
+  000000014010D585: C7 05 D9 B1 93 02  mov         dword ptr [0000000142A48768h],3
+                    03 00 00 00
+  000000014010D58F: E8 AC D9 F7 FF     call        000000014008AF40
+  000000014010D594: 0F B6 D8           movzx       ebx,al
+  000000014010D597: E8 34 DD F7 FF     call        000000014008B2D0
+  000000014010D59C: 8B C8              mov         ecx,eax
+  000000014010D59E: E8 DD CE F8 FF     call        000000014009A480
+  000000014010D5A3: C7 44 24 28 03 00  mov         dword ptr [rsp+28h],3
+                    00 00
+  000000014010D5AB: 89 6C 24 20        mov         dword ptr [rsp+20h],ebp
+  000000014010D5AF: E9 D1 00 00 00     jmp         000000014010D685
+  000000014010D5B4: 48 8B 3D BD B1 93  mov         rdi,qword ptr [0000000142A48778h]
+                    02
+  000000014010D5BB: E8 80 D9 F7 FF     call        000000014008AF40
+  000000014010D5C0: 0F B6 D8           movzx       ebx,al
+  000000014010D5C3: E8 08 DD F7 FF     call        000000014008B2D0
+  000000014010D5C8: 8B C8              mov         ecx,eax
+  000000014010D5CA: E8 B1 CE F8 FF     call        000000014009A480
+  000000014010D5CF: 4C 8B CF           mov         r9,rdi
+  000000014010D5D2: C7 44 24 28 01 00  mov         dword ptr [rsp+28h],1
+                    00 00
+  000000014010D5DA: 44 8B C3           mov         r8d,ebx
+  000000014010D5DD: 89 6C 24 20        mov         dword ptr [rsp+20h],ebp
+  000000014010D5E1: 48 8B D6           mov         rdx,rsi
+  000000014010D5E4: 48 8B C8           mov         rcx,rax
+  000000014010D5E7: E8 C4 1A 26 00     call        000000014036F0B0
+  000000014010D5EC: 48 8B CE           mov         rcx,rsi
+  000000014010D5EF: 89 05 E3 B1 93 02  mov         dword ptr [0000000142A487D8h],eax
+  000000014010D5F5: E8 76 6D 26 00     call        0000000140374370
+  000000014010D5FA: 85 C0              test        eax,eax
+  000000014010D5FC: 0F 84 3C FF FF FF  je          000000014010D53E
+  000000014010D602: B8 02 00 00 00     mov         eax,2
+  000000014010D607: 89 05 5B B1 93 02  mov         dword ptr [0000000142A48768h],eax
+  000000014010D60D: E9 8A 00 00 00     jmp         000000014010D69C
+  000000014010D612: E8 B9 DC F7 FF     call        000000014008B2D0
+  000000014010D617: 8B C8              mov         ecx,eax
+  000000014010D619: E8 62 CE F8 FF     call        000000014009A480
+  000000014010D61E: 48 8B C8           mov         rcx,rax
+  000000014010D621: 48 8D 15 78 A2 BB  lea         rdx,[0000000141CC78A0h]
+                    01
+  000000014010D628: 41 B8 D2 0E 00 00  mov         r8d,0ED2h
+  000000014010D62E: E8 2D CD 23 00     call        000000014034A360
+  000000014010D633: 48 8B C8           mov         rcx,rax
+  000000014010D636: E8 35 B4 27 00     call        0000000140388A70
+  000000014010D63B: 48 85 C0           test        rax,rax
+  000000014010D63E: 0F 85 FA FE FF FF  jne         000000014010D53E
+  000000014010D644: 48 8B 3D 2D B1 93  mov         rdi,qword ptr [0000000142A48778h]
+                    02
+  000000014010D64B: 33 ED              xor         ebp,ebp
+  000000014010D64D: 39 2D B5 B1 93 02  cmp         dword ptr [0000000142A48808h],ebp
+  000000014010D653: B8 02 00 00 00     mov         eax,2
+  000000014010D658: C7 05 06 B1 93 02  mov         dword ptr [0000000142A48768h],1
+                    01 00 00 00
+  000000014010D662: 0F 45 E8           cmovne      ebp,eax
+  000000014010D665: E8 D6 D8 F7 FF     call        000000014008AF40
+  000000014010D66A: 0F B6 D8           movzx       ebx,al
+  000000014010D66D: E8 5E DC F7 FF     call        000000014008B2D0
+  000000014010D672: 8B C8              mov         ecx,eax
+  000000014010D674: E8 07 CE F8 FF     call        000000014009A480
+  000000014010D679: 41 0F BF CF        movsx       ecx,r15w
+  000000014010D67D: 89 6C 24 28        mov         dword ptr [rsp+28h],ebp
+  000000014010D681: 89 4C 24 20        mov         dword ptr [rsp+20h],ecx
+  000000014010D685: 4C 8B CF           mov         r9,rdi
+  000000014010D688: 44 8B C3           mov         r8d,ebx
+  000000014010D68B: 48 8B D6           mov         rdx,rsi
+  000000014010D68E: 48 8B C8           mov         rcx,rax
+  000000014010D691: E8 1A 1A 26 00     call        000000014036F0B0
+  000000014010D696: 89 05 3C B1 93 02  mov         dword ptr [0000000142A487D8h],eax
+  000000014010D69C: 41 B8 E3 0E 00 00  mov         r8d,0EE3h
+  000000014010D6A2: C6 05 D7 B1 93 02  mov         byte ptr [0000000142A48880h],1
+                    01
+  000000014010D6A9: 48 8D 15 F0 A1 BB  lea         rdx,[0000000141CC78A0h]
+                    01
+  000000014010D6B0: 48 8B CE           mov         rcx,rsi
+  000000014010D6B3: E8 78 CC 23 00     call        000000014034A330
+  000000014010D6B8: 41 B8 E4 0E 00 00  mov         r8d,0EE4h
+  000000014010D6BE: 89 05 C4 B1 93 02  mov         dword ptr [0000000142A48888h],eax
+  000000014010D6C4: 48 8D 15 D5 A1 BB  lea         rdx,[0000000141CC78A0h]
+                    01
+  000000014010D6CB: 48 8B CE           mov         rcx,rsi
+  000000014010D6CE: E8 8D C1 23 00     call        0000000140349860
+  000000014010D6D3: 8B 4C 24 34        mov         ecx,dword ptr [rsp+34h]
+  000000014010D6D7: 33 D2              xor         edx,edx
+  000000014010D6D9: 89 05 A5 B1 93 02  mov         dword ptr [0000000142A48884h],eax
+  000000014010D6DF: E8 7C 43 FE FF     call        00000001400F1A60
+  000000014010D6E4: 8B 05 7E B0 93 02  mov         eax,dword ptr [0000000142A48768h]
+  000000014010D6EA: 83 F8 02           cmp         eax,2
+  000000014010D6ED: 75 33              jne         000000014010D722
+  000000014010D6EF: 45 85 F6           test        r14d,r14d
+  000000014010D6F2: 75 38              jne         000000014010D72C
+  000000014010D6F4: 33 D2              xor         edx,edx
+  000000014010D6F6: C6 44 24 20 00     mov         byte ptr [rsp+20h],0
+  000000014010D6FB: 45 33 C9           xor         r9d,r9d
+  000000014010D6FE: 45 33 C0           xor         r8d,r8d
+  000000014010D701: 8D 4A 01           lea         ecx,[rdx+1]
+  000000014010D704: E8 77 30 09 00     call        00000001401A0780
+  000000014010D709: C7 05 91 AF 93 02  mov         dword ptr [0000000142A486A4h],3
+                    03 00 00 00
+  000000014010D713: E8 48 34 00 00     call        0000000140110B60
+  000000014010D718: B8 01 00 00 00     mov         eax,1
+  000000014010D71D: E9 1E FE FF FF     jmp         000000014010D540
+  000000014010D722: 83 F8 01           cmp         eax,1
+  000000014010D725: 75 CD              jne         000000014010D6F4
+  000000014010D727: 45 85 F6           test        r14d,r14d
+  000000014010D72A: 74 C8              je          000000014010D6F4
+  000000014010D72C: 0F B6 4C 24 30     movzx       ecx,byte ptr [rsp+30h]
+  000000014010D731: 45 33 C9           xor         r9d,r9d
+  000000014010D734: 45 0F B6 C5        movzx       r8d,r13b
+  000000014010D738: B2 01              mov         dl,1
+  000000014010D73A: E8 81 3D 00 00     call        00000001401114C0
+  000000014010D73F: B8 01 00 00 00     mov         eax,1
+  000000014010D744: E9 F7 FD FF FF     jmp         000000014010D540
+  000000014010D749: 0F 1F 00           nop         dword ptr [rax]
+  000000014010D74C: F0
+  000000014010D74D: D4
+  000000014010D74E: 10 00              adc         byte ptr [rax],al
+  000000014010D750: 69 D5 10 00 C3 D4  imul        edx,ebp,0D4C30010h
+  000000014010D756: 10 00              adc         byte ptr [rax],al
+  000000014010D758: 3E
+  000000014010D759: D5
+  000000014010D75A: 10 00              adc         byte ptr [rax],al
+  000000014010D75C: 00 00              add         byte ptr [rax],al
+  000000014010D75E: 03 03              add         eax,dword ptr [rbx]
+  000000014010D760: 03 03              add         eax,dword ptr [rbx]
+  000000014010D762: 03 01              add         eax,dword ptr [rcx]
+  000000014010D764: 03 03              add         eax,dword ptr [rbx]
+  000000014010D766: 03 03              add         eax,dword ptr [rbx]
+  000000014010D768: 03 03              add         eax,dword ptr [rbx]
+  000000014010D76A: 03 03              add         eax,dword ptr [rbx]
+  000000014010D76C: 03 03              add         eax,dword ptr [rbx]
+  000000014010D76E: 03 03              add         eax,dword ptr [rbx]
+  000000014010D770: 03 03              add         eax,dword ptr [rbx]
+  000000014010D772: 03 03              add         eax,dword ptr [rbx]
+  000000014010D774: 03 03              add         eax,dword ptr [rbx]
+  000000014010D776: 03 03              add         eax,dword ptr [rbx]
+  000000014010D778: 03 03              add         eax,dword ptr [rbx]
+  000000014010D77A: 00 01              add         byte ptr [rcx],al
+  000000014010D77C: 03 03              add         eax,dword ptr [rbx]
+  000000014010D77E: 03 03              add         eax,dword ptr [rbx]
+  000000014010D780: 03 03              add         eax,dword ptr [rbx]
+  000000014010D782: 03 03              add         eax,dword ptr [rbx]
+  000000014010D784: 03 03              add         eax,dword ptr [rbx]
+  000000014010D786: 03 03              add         eax,dword ptr [rbx]
+  000000014010D788: 03 03              add         eax,dword ptr [rbx]
+  000000014010D78A: 03 03              add         eax,dword ptr [rbx]
+  000000014010D78C: 03 03              add         eax,dword ptr [rbx]
+  000000014010D78E: 03 03              add         eax,dword ptr [rbx]
+  000000014010D790: 00 03              add         byte ptr [rbx],al
+  000000014010D792: 03 00              add         eax,dword ptr [rax]
+  000000014010D794: 03 03              add         eax,dword ptr [rbx]
+  000000014010D796: 03 03              add         eax,dword ptr [rbx]
+  000000014010D798: 03 03              add         eax,dword ptr [rbx]
+  000000014010D79A: 03 03              add         eax,dword ptr [rbx]
+  000000014010D79C: 03 03              add         eax,dword ptr [rbx]
+  000000014010D79E: 03 03              add         eax,dword ptr [rbx]
+  000000014010D7A0: 03 03              add         eax,dword ptr [rbx]
+  000000014010D7A2: 03 03              add         eax,dword ptr [rbx]
+  000000014010D7A4: 03 03              add         eax,dword ptr [rbx]
+  000000014010D7A6: 03 03              add         eax,dword ptr [rbx]
+  000000014010D7A8: 03 03              add         eax,dword ptr [rbx]
+  000000014010D7AA: 03 03              add         eax,dword ptr [rbx]
+  000000014010D7AC: 03 03              add         eax,dword ptr [rbx]
+  000000014010D7AE: 03 03              add         eax,dword ptr [rbx]
+  000000014010D7B0: 03 03              add         eax,dword ptr [rbx]
+  000000014010D7B2: 03 03              add         eax,dword ptr [rbx]
+  000000014010D7B4: 03 03              add         eax,dword ptr [rbx]
+  000000014010D7B6: 03 03              add         eax,dword ptr [rbx]
+  000000014010D7B8: 03 03              add         eax,dword ptr [rbx]
+  000000014010D7BA: 03 03              add         eax,dword ptr [rbx]
+  000000014010D7BC: 03 02              add         eax,dword ptr [rdx]
+  000000014010D7BE: 02 02              add         al,byte ptr [rdx]
+  000000014010D7C0: 03 03              add         eax,dword ptr [rbx]
+  000000014010D7C2: 03 03              add         eax,dword ptr [rbx]
+  000000014010D7C4: 03 00              add         eax,dword ptr [rax]
+  000000014010D7C6: 01 00              add         dword ptr [rax],eax
+  000000014010D7C8: 00 03              add         byte ptr [rbx],al
+  000000014010D7CA: 01 03              add         dword ptr [rbx],eax
+  000000014010D7CC: 03 03              add         eax,dword ptr [rbx]
+  000000014010D7CE: 03 03              add         eax,dword ptr [rbx]
+  000000014010D7D0: 03 03              add         eax,dword ptr [rbx]
+  000000014010D7D2: 02 CC              add         cl,ah
+
+  Summary
+
+     1CAF000 .text
+
+Microsoft (R) COFF/PE Dumper Version 14.44.35220.0
+Copyright (C) Microsoft Corporation.  All rights reserved.
+
+
+Dump of file <private-workspace>\work\runtime-game.exe
+
+File Type: EXECUTABLE IMAGE
+
+  0000000140111D3B: 8B 0D 47 6B 93 02  mov         ecx,dword ptr [0000000142A48888h]
+  0000000140111D41: BF 04 00 00 00     mov         edi,4
+  0000000140111D46: 8B D7              mov         edx,edi
+  0000000140111D48: 41 B5 33           mov         r13b,33h
+  0000000140111D4B: E8 80 88 F8 FF     call        000000014009A5D0
+  0000000140111D50: 33 D2              xor         edx,edx
+  0000000140111D52: 48 8D 8D 40 01 00  lea         rcx,[rbp+0000000000000140h]
+                    00
+  0000000140111D59: 41 B8 00 04 00 00  mov         r8d,400h
+  0000000140111D5F: 4C 8B F0           mov         r14,rax
+  0000000140111D62: E8 A9 1F 1C 01     call        00000001412D3D10
+  0000000140111D67: 4C 8D 8D 40 01 00  lea         r9,[rbp+0000000000000140h]
+                    00
+  0000000140111D6E: C6 44 24 20 00     mov         byte ptr [rsp+20h],0
+  0000000140111D73: 4C 8D 44 24 44     lea         r8,[rsp+44h]
+  0000000140111D78: 49 8B CE           mov         rcx,r14
+  0000000140111D7B: 8D 57 FD           lea         edx,[rdi-3]
+  0000000140111D7E: E8 4D AD FF FF     call        000000014010CAD0
+  0000000140111D83: E8 68 96 33 01     call        000000014144B3F0
+  0000000140111D88: 48 8D 88 38 16 00  lea         rcx,[rax+0000000000001638h]
+                    00
+  0000000140111D8F: E8 8C 8E FF FF     call        000000014010AC20
+  0000000140111D94: 48 8B D8           mov         rbx,rax
+  0000000140111D97: E8 34 95 F7 FF     call        000000014008B2D0
+  0000000140111D9C: 8B C8              mov         ecx,eax
+  0000000140111D9E: E8 DD 86 F8 FF     call        000000014009A480
+  0000000140111DA3: 83 4B 10 02        or          dword ptr [rbx+10h],2
+  0000000140111DA7: 4C 8B E0           mov         r12,rax
+  0000000140111DAA: 48 8B 43 20        mov         rax,qword ptr [rbx+20h]
+  0000000140111DAE: 45 33 FF           xor         r15d,r15d
+  0000000140111DB1: 48 85 C0           test        rax,rax
+  0000000140111DB4: 75 20              jne         0000000140111DD6
+  0000000140111DB6: B9 98 00 00 00     mov         ecx,98h
+  0000000140111DBB: E8 10 92 12 01     call        000000014123AFD0
+  0000000140111DC0: 48 85 C0           test        rax,rax
+  0000000140111DC3: 74 0A              je          0000000140111DCF
+  0000000140111DC5: 48 8B C8           mov         rcx,rax
+  0000000140111DC8: E8 F3 EE 23 01     call        0000000141350CC0
+  0000000140111DCD: EB 03              jmp         0000000140111DD2
+  0000000140111DCF: 49 8B C7           mov         rax,r15
+  0000000140111DD2: 48 89 43 20        mov         qword ptr [rbx+20h],rax
+  0000000140111DD6: 4D 8B C6           mov         r8,r14
+  0000000140111DD9: 49 8B D4           mov         rdx,r12
+  0000000140111DDC: 48 8B C8           mov         rcx,rax
+  0000000140111DDF: E8 BC 15 34 01     call        00000001414533A0
+  0000000140111DE4: 8B 44 24 44        mov         eax,dword ptr [rsp+44h]
+  0000000140111DE8: 83 4B 10 08        or          dword ptr [rbx+10h],8
+  0000000140111DEC: 48 89 43 30        mov         qword ptr [rbx+30h],rax
+  0000000140111DF0: E9 C6 00 00 00     jmp         0000000140111EBB
+  0000000140111DF5: 8B
+
+  Summary
+
+     1CAF000 .text
+
+Microsoft (R) COFF/PE Dumper Version 14.44.35220.0
+Copyright (C) Microsoft Corporation.  All rights reserved.
+
+
+Dump of file <private-workspace>\work\runtime-game.exe
+
+File Type: EXECUTABLE IMAGE
+
+  000000014009A5D0: 4C 63 CA           movsxd      r9,edx
+  000000014009A5D3: 48 8D 05 36 93 98  lea         rax,[0000000142A23910h]
+                    02
+  000000014009A5DA: 8B D1              mov         edx,ecx
+  000000014009A5DC: 44 8B C1           mov         r8d,ecx
+  000000014009A5DF: 49 8B C9           mov         rcx,r9
+  000000014009A5E2: 83 E2 7F           and         edx,7Fh
+  000000014009A5E5: 48 C1 E1 0A        shl         rcx,0Ah
+  000000014009A5E9: 48 03 C8           add         rcx,rax
+  000000014009A5EC: E9 7F 4C 00 00     jmp         000000014009F270
+  000000014009A5F1: CC                 int         3
+
+  Summary
+
+     1CAF000 .text
+
+Microsoft (R) COFF/PE Dumper Version 14.44.35220.0
+Copyright (C) Microsoft Corporation.  All rights reserved.
+
+
+Dump of file <private-workspace>\work\runtime-game.exe
+
+File Type: EXECUTABLE IMAGE
+
+  000000014036CFE0: 40 53              push        rbx
+  000000014036CFE2: 48 83 EC 20        sub         rsp,20h
+  000000014036CFE6: 48 8B D9           mov         rbx,rcx
+  000000014036CFE9: 48 85 C9           test        rcx,rcx
+  000000014036CFEC: 74 0A              je          000000014036CFF8
+  000000014036CFEE: E8 DD E9 FD FF     call        000000014034B9D0
+  000000014036CFF3: 83 F8 04           cmp         eax,4
+  000000014036CFF6: 74 19              je          000000014036D011
+  000000014036CFF8: 48 8D 4C 24 30     lea         rcx,[rsp+30h]
+  000000014036CFFD: C6 44 24 30 00     mov         byte ptr [rsp+30h],0
+  000000014036D002: E8 19 AF FF FF     call        0000000140367F20
+  000000014036D007: 84 C0              test        al,al
+  000000014036D009: 74 01              je          000000014036D00C
+  000000014036D00B: CC                 int         3
+  000000014036D00C: 48 85 DB           test        rbx,rbx
+  000000014036D00F: 74 2D              je          000000014036D03E
+
+  Summary
+
+     1CAF000 .text
+
+Microsoft (R) COFF/PE Dumper Version 14.44.35220.0
+Copyright (C) Microsoft Corporation.  All rights reserved.
+
+
+Dump of file <private-workspace>\work\runtime-game.exe
+
+File Type: EXECUTABLE IMAGE
+
+  000000014036EF50: 48 89 5C 24 10     mov         qword ptr [rsp+10h],rbx
+  000000014036EF55: 57                 push        rdi
+  000000014036EF56: 48 83 EC 20        sub         rsp,20h
+  000000014036EF5A: 48 8B F9           mov         rdi,rcx
+  000000014036EF5D: 48 85 C9           test        rcx,rcx
+  000000014036EF60: 75 13              jne         000000014036EF75
+  000000014036EF62: 88 4C 24 30        mov         byte ptr [rsp+30h],cl
+  000000014036EF66: 48 8D 4C 24 30     lea         rcx,[rsp+30h]
+  000000014036EF6B: E8 80 83 FF FF     call        00000001403672F0
+  000000014036EF70: 84 C0              test        al,al
+  000000014036EF72: 74 01              je          000000014036EF75
+  000000014036EF74: CC                 int         3
+  000000014036EF75: 48 8B CF           mov         rcx,rdi
+  000000014036EF78: E8 53 CA FD FF     call        000000014034B9D0
+  000000014036EF7D: 83 F8 04           cmp         eax,4
+  000000014036EF80: 74
+
+  Summary
+
+     1CAF000 .text
+
+Microsoft (R) COFF/PE Dumper Version 14.44.35220.0
+Copyright (C) Microsoft Corporation.  All rights reserved.
+
+
+Dump of file <private-workspace>\work\runtime-game.exe
+
+File Type: EXECUTABLE IMAGE
+
+  0000000140374370: 40 57              push        rdi
+  0000000140374372: 48 83 EC 20        sub         rsp,20h
+  0000000140374376: 48 8B F9           mov         rdi,rcx
+  0000000140374379: 48 85 C9           test        rcx,rcx
+  000000014037437C: 74 0A              je          0000000140374388
+  000000014037437E: E8 4D 76 FD FF     call        000000014034B9D0
+  0000000140374383: 83 F8 04           cmp         eax,4
+  0000000140374386: 74 19              je          00000001403743A1
+  0000000140374388: 48 8D 4C 24 30     lea         rcx,[rsp+30h]
+  000000014037438D: C6 44 24 30 00     mov         byte ptr [rsp+30h],0
+  0000000140374392: E8 A9 33 FF FF     call        0000000140367740
+  0000000140374397: 84 C0              test        al,al
+  0000000140374399: 74 01              je          000000014037439C
+  000000014037439B: CC                 int         3
+  000000014037439C: 48 85 FF           test        rdi,rdi
+  000000014037439F: 74 39              je          00000001403743DA
+  00000001403743A1: 48 8B CF           mov         rcx,rdi
+  00000001403743A4: E8 27 76 FD FF     call        000000014034B9D0
+  00000001403743A9: 83 F8 04           cmp         eax,4
+  00000001403743AC: 75 2C              jne         00000001403743DA
+  00000001403743AE: 48 8B CF           mov         rcx,rdi
+  00000001403743B1: E8 4A 61 FD FF     call        000000014034A500
+  00000001403743B6: 48 85 C0           test        rax,rax
+  00000001403743B9: 75 15              jne         00000001403743D0
+  00000001403743BB: 48 8D 4C 24 30     lea         rcx,[rsp+30h]
+  00000001403743C0: 88 44 24 30        mov         byte ptr [rsp+30h],al
+  00000001403743C4: E8 E7 5A FF FF     call        0000000140369EB0
+  00000001403743C9: 84 C0              test        al,al
+  00000001403743CB: 74 0D              je          00000001403743DA
+  00000001403743CD: CC                 int         3
+  00000001403743CE: EB 0A              jmp         00000001403743DA
+  00000001403743D0: 8B 40 18           mov         eax,dword ptr [rax+18h]
+  00000001403743D3: 25 00 10 00 00     and         eax,1000h
+  00000001403743D8: 75 4B              jne         0000000140374425
+  00000001403743DA: 41 B8 D4 13 00 00  mov         r8d,13D4h
+  00000001403743E0: 48 89 5C 24 38     mov         qword ptr [rsp+38h],rbx
+  00000001403743E5: 48 8D 15 A4 FF 98  lea         rdx,[0000000141D04390h]
+                    01
+  00000001403743EC: 48 8B CF           mov         rcx,rdi
+  00000001403743EF: E8
+  00000001403743F0: 6C                 ins         byte ptr [rdi],dx
+
+  Summary
+
+     1CAF000 .text
+
+Microsoft (R) COFF/PE Dumper Version 14.44.35220.0
+Copyright (C) Microsoft Corporation.  All rights reserved.
+
+
+Dump of file <private-workspace>\work\runtime-game.exe
+
+File Type: EXECUTABLE IMAGE
+
+  000000014034AB60: 48 83 EC 28        sub         rsp,28h
+  000000014034AB64: 48 85 C9           test        rcx,rcx
+  000000014034AB67: 75 1A              jne         000000014034AB83
+  000000014034AB69: 88 4C 24 30        mov         byte ptr [rsp+30h],cl
+  000000014034AB6D: 48 8D 4C 24 30     lea         rcx,[rsp+30h]
+  000000014034AB72: E8 F9 A3 FF FF     call        0000000140344F70
+  000000014034AB77: 84 C0              test        al,al
+  000000014034AB79: 74 01              je          000000014034AB7C
+  000000014034AB7B: CC                 int         3
+  000000014034AB7C: 33 C0              xor         eax,eax
+  000000014034AB7E: 48 83 C4 28        add         rsp,28h
+  000000014034AB82: C3                 ret
+  000000014034AB83: 8B 41 0C           mov         eax,dword ptr [rcx+0Ch]
+  000000014034AB86: 48 83 C4 28        add         rsp,28h
+  000000014034AB8A: C3                 ret
+  000000014034AB8B: CC                 int         3
+  000000014034AB8C: CC                 int         3
+  000000014034AB8D: CC                 int         3
+  000000014034AB8E: CC                 int         3
+  000000014034AB8F: CC                 int         3
+  000000014034AB90: 40
+
+  Summary
+
+     1CAF000 .text
+
+Microsoft (R) COFF/PE Dumper Version 14.44.35220.0
+Copyright (C) Microsoft Corporation.  All rights reserved.
+
+
+Dump of file <private-workspace>\work\runtime-game.exe
+
+File Type: EXECUTABLE IMAGE
+
+  0000000140846190: 48 83 EC 28        sub         rsp,28h
+  0000000140846194: 48 83 3D D4 9F BF  cmp         qword ptr [0000000143440170h],0
+                    02 00
+  000000014084619C: 74 18              je          00000001408461B6
+  000000014084619E: E8 FD 18 88 FF     call        00000001400C7AA0
+  00000001408461A3: 48 8B 0D C6 9F BF  mov         rcx,qword ptr [0000000143440170h]
+                    02
+  00000001408461AA: 48 8B D0           mov         rdx,rax
+  00000001408461AD: 48 83 C4 28        add         rsp,28h
+  00000001408461B1: E9 AA 95 05 00     jmp         000000014089F760
+  00000001408461B6: 33 C0              xor         eax,eax
+  00000001408461B8: 48 83 C4 28        add         rsp,28h
+  00000001408461BC: C3                 ret
+  00000001408461BD: CC                 int         3
+  00000001408461BE: CC                 int         3
+  00000001408461BF: CC                 int         3
+  00000001408461C0: 48
+
+  Summary
+
+     1CAF000 .text

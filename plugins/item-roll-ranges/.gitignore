@@ -1,0 +1,4 @@
+build/
+tools/python-libs/
+__pycache__/
+*.exe

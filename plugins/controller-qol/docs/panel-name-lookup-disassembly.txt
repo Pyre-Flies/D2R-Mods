@@ -1,0 +1,118 @@
+Microsoft (R) COFF/PE Dumper Version 14.44.35220.0
+Copyright (C) Microsoft Corporation.  All rights reserved.
+
+
+Dump of file <private-workspace>\work\runtime-game.exe
+
+File Type: EXECUTABLE IMAGE
+
+  000000014089F760: 40 53              push        rbx
+  000000014089F762: 55                 push        rbp
+  000000014089F763: 56                 push        rsi
+  000000014089F764: 57                 push        rdi
+  000000014089F765: 41 54              push        r12
+  000000014089F767: 48 83 EC 20        sub         rsp,20h
+  000000014089F76B: 4C 89 74 24 58     mov         qword ptr [rsp+58h],r14
+  000000014089F770: 48 8B F2           mov         rsi,rdx
+  000000014089F773: 4C 89 7C 24 60     mov         qword ptr [rsp+60h],r15
+  000000014089F778: 4C 8B F1           mov         r14,rcx
+  000000014089F77B: E8 A0 62 A0 00     call        00000001412A5A20
+  000000014089F780: 44 0F B6 80 18 01  movzx       r8d,byte ptr [rax+0000000000000118h]
+                    00 00
+  000000014089F788: 45 84 C0           test        r8b,r8b
+  000000014089F78B: 74 5B              je          000000014089F7E8
+  000000014089F78D: 41 B7 01           mov         r15b,1
+  000000014089F790: E8 8B 62 A0 00     call        00000001412A5A20
+  000000014089F795: 4C 8B A0 20 01 00  mov         r12,qword ptr [rax+0000000000000120h]
+                    00
+  000000014089F79C: E8 8F 65 A0 00     call        00000001412A5D30
+  000000014089F7A1: 48 8B F8           mov         rdi,rax
+  000000014089F7A4: 48 8B 68 28        mov         rbp,qword ptr [rax+28h]
+  000000014089F7A8: 48 8B DD           mov         rbx,rbp
+  000000014089F7AB: 83 E3 7F           and         ebx,7Fh
+  000000014089F7AE: 75 0B              jne         000000014089F7BB
+  000000014089F7B0: 48 8B D5           mov         rdx,rbp
+  000000014089F7B3: 48 8B C8           mov         rcx,rax
+  000000014089F7B6: E8 D5 8C 7D FF     call        0000000140078490
+  000000014089F7BB: 48 C1 E3 05        shl         rbx,5
+  000000014089F7BF: 48 03 5F 48        add         rbx,qword ptr [rdi+48h]
+  000000014089F7C3: C6 03 0D           mov         byte ptr [rbx],0Dh
+  000000014089F7C6: 0F 31              rdtsc
+  000000014089F7C8: 48 C1 E2 20        shl         rdx,20h
+  000000014089F7CC: 48 0B C2           or          rax,rdx
+  000000014089F7CF: 48 89 43 01        mov         qword ptr [rbx+1],rax
+  000000014089F7D3: 48 8D 05 46 AF 4D  lea         rax,[0000000141D7A720h]
+                    01
+  000000014089F7DA: 48 89 43 09        mov         qword ptr [rbx+9],rax
+  000000014089F7DE: 48 8D 45 01        lea         rax,[rbp+1]
+  000000014089F7E2: 48 89 47 28        mov         qword ptr [rdi+28h],rax
+  000000014089F7E6: EB 08              jmp         000000014089F7F0
+  000000014089F7E8: 4C 8B 64 24 50     mov         r12,qword ptr [rsp+50h]
+  000000014089F7ED: 45 32 FF           xor         r15b,r15b
+  000000014089F7F0: 49 8B 9E 88 00 00  mov         rbx,qword ptr [r14+0000000000000088h]
+                    00
+  000000014089F7F7: 49 8B 86 90 00 00  mov         rax,qword ptr [r14+0000000000000090h]
+                    00
+  000000014089F7FE: 48 8D 2C C3        lea         rbp,[rbx+rax*8]
+  000000014089F802: 48 3B DD           cmp         rbx,rbp
+  000000014089F805: 74 29              je          000000014089F830
+  000000014089F807: 66 0F 1F 84 00 00  nop         word ptr [rax+rax+0000000000000000h]
+                    00 00 00
+  000000014089F810: 48 8B 3B           mov         rdi,qword ptr [rbx]
+  000000014089F813: 48 8B D6           mov         rdx,rsi
+  000000014089F816: 48 8B 4F 08        mov         rcx,qword ptr [rdi+8]
+  000000014089F81A: E8 81 7F 98 00     call        00000001412277A0
+  000000014089F81F: 85 C0              test        eax,eax
+  000000014089F821: 0F 84 7E 00 00 00  je          000000014089F8A5
+  000000014089F827: 48 83 C3 08        add         rbx,8
+  000000014089F82B: 48 3B DD           cmp         rbx,rbp
+  000000014089F82E: 75 E0              jne         000000014089F810
+  000000014089F830: 49 8B 9E A0 00 00  mov         rbx,qword ptr [r14+00000000000000A0h]
+                    00
+  000000014089F837: 49 8B 86 A8 00 00  mov         rax,qword ptr [r14+00000000000000A8h]
+                    00
+  000000014089F83E: 48 8D 3C C3        lea         rdi,[rbx+rax*8]
+  000000014089F842: 48 3B DF           cmp         rbx,rdi
+  000000014089F845: 74 25              je          000000014089F86C
+  000000014089F847: 66 0F 1F 84 00 00  nop         word ptr [rax+rax+0000000000000000h]
+                    00 00 00
+  000000014089F850: 48 8B 0B           mov         rcx,qword ptr [rbx]
+  000000014089F853: 48 8B D6           mov         rdx,rsi
+  000000014089F856: 48 8B 49 08        mov         rcx,qword ptr [rcx+8]
+  000000014089F85A: E8 41 7F 98 00     call        00000001412277A0
+  000000014089F85F: 85 C0              test        eax,eax
+  000000014089F861: 74 40              je          000000014089F8A3
+  000000014089F863: 48 83 C3 08        add         rbx,8
+  000000014089F867: 48 3B DF           cmp         rbx,rdi
+  000000014089F86A: 75 E4              jne         000000014089F850
+  000000014089F86C: 48 8B D6           mov         rdx,rsi
+  000000014089F86F: 49 8B CE           mov         rcx,r14
+  000000014089F872: E8 A9 69 FB FF     call        0000000140856220
+  000000014089F877: 48 8B F8           mov         rdi,rax
+  000000014089F87A: 48 85 C0           test        rax,rax
+  000000014089F87D: 74 24              je          000000014089F8A3
+  000000014089F87F: E8 AC 86 FB FF     call        0000000140857F30
+  000000014089F884: 48 8B 17           mov         rdx,qword ptr [rdi]
+  000000014089F887: 48 8B CF           mov         rcx,rdi
+  000000014089F88A: 48 8B D8           mov         rbx,rax
+  000000014089F88D: FF 52 58           call        qword ptr [rdx+58h]
+  000000014089F890: 48 85 C0           test        rax,rax
+  000000014089F893: 74 0E              je          000000014089F8A3
+  000000014089F895: 48 3B C3           cmp         rax,rbx
+  000000014089F898: 74 0B              je          000000014089F8A5
+  000000014089F89A: 48 8B 40 10        mov         rax,qword ptr [rax+10h]
+  000000014089F89E: 48 85 C0           test        rax,rax
+  000000014089F8A1: 75 F2              jne         000000014089F895
+  000000014089F8A3: 33 FF              xor         edi,edi
+  000000014089F8A5: 4C 8B 74 24 58     mov         r14,qword ptr [rsp+58h]
+  000000014089F8AA: 45 84 FF           test        r15b,r15b
+  000000014089F8AD: 4C 8B 7C 24 60     mov         r15,qword ptr [rsp+60h]
+  000000014089F8B2: 74 50              je          000000014089F904
+  000000014089F8B4: E8 67 61 A0 00     call        00000001412A5A20
+  000000014089F8B9: 48 8B 80 20 01 00  mov         rax,qword ptr [rax+0000000000000120h]
+                    00
+  000000014089F8C0: 49
+
+  Summary
+
+     1CAF000 .text

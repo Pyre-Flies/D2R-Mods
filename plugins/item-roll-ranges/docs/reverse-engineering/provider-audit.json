@@ -1,0 +1,33 @@
+{
+  "image": "<game-root>\\D2RCore.dll",
+  "sha256": "2a868d013d2e0830bd2d9e04b918b19e46a73cf726c833e70d089b948fdeb5a2",
+  "export_rva": "0x819530",
+  "calls": [
+    {
+      "call_rva": "0x8195da",
+      "return_rva": "0x8195e0",
+      "pointer_slot_rva": "0x6fe3b0"
+    },
+    {
+      "call_rva": "0x819954",
+      "return_rva": "0x81995a",
+      "pointer_slot_rva": "0x6fe470"
+    },
+    {
+      "call_rva": "0x328986",
+      "return_rva": "0x32898c",
+      "pointer_slot_rva": "0x702ae0"
+    },
+    {
+      "call_rva": "0x3e80ac",
+      "return_rva": "0x3e80b2",
+      "pointer_slot_rva": "0x704400"
+    },
+    {
+      "call_rva": "0x3e80f7",
+      "return_rva": "0x3e80fd",
+      "pointer_slot_rva": "0x704400"
+    }
+  ],
+  "result": "PASS: static call, slot, selection and panel witnesses; runtime behavior not attested"
+}

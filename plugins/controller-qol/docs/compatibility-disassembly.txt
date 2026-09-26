@@ -1,0 +1,842 @@
+Microsoft (R) COFF/PE Dumper Version 14.44.35220.0
+Copyright (C) Microsoft Corporation.  All rights reserved.
+
+
+Dump of file <private-workspace>\work\runtime-game.exe
+
+File Type: EXECUTABLE IMAGE
+
+  00000001404AC050: 48 83 EC 38        sub         rsp,38h
+  00000001404AC054: 44 89 4C 24 20     mov         dword ptr [rsp+20h],r9d
+  00000001404AC059: 4D 8B C8           mov         r9,r8
+  00000001404AC05C: 41 B8 02 00 00 00  mov         r8d,2
+  00000001404AC062: E8 09 7C 04 00     call        00000001404F3C70
+  00000001404AC067: 48 83 C4 38        add         rsp,38h
+  00000001404AC06B: C3                 ret
+  00000001404AC06C: CC                 int         3
+  00000001404AC06D: CC                 int         3
+  00000001404AC06E: CC                 int         3
+  00000001404AC06F: CC                 int         3
+  00000001404AC070: 48 89 5C 24 10     mov         qword ptr [rsp+10h],rbx
+  00000001404AC075: 48 89 6C 24 18     mov         qword ptr [rsp+18h],rbp
+  00000001404AC07A: 57                 push        rdi
+  00000001404AC07B: 48 83 EC 50        sub         rsp,50h
+  00000001404AC07F: 49 8B F8           mov         rdi,r8
+  00000001404AC082: 48 8B DA           mov         rbx,rdx
+  00000001404AC085: 48 8B E9           mov         rbp,rcx
+  00000001404AC088: 41 83 F9 07        cmp         r9d,7
+  00000001404AC08C: 74 15              je          00000001404AC0A3
+  00000001404AC08E: B8 03 00 00 00     mov         eax,3
+  00000001404AC093: 48 8B 5C 24 68     mov         rbx,qword ptr [rsp+68h]
+  00000001404AC098: 48 8B 6C 24 70     mov         rbp,qword ptr [rsp+70h]
+  00000001404AC09D: 48 83 C4 50        add         rsp,50h
+  00000001404AC0A1: 5F                 pop         rdi
+  00000001404AC0A2: C3                 ret
+  00000001404AC0A3: 0F B7 4F 01        movzx       ecx,word ptr [rdi+1]
+  00000001404AC0A7: 4C 8D 4C 24 78     lea         r9,[rsp+78h]
+  00000001404AC0AC: 0F 57 C0           xorps       xmm0,xmm0
+  00000001404AC0AF: 48
+  00000001404AC0B0: 89
+
+  Summary
+
+     1CAF000 .text
+Microsoft (R) COFF/PE Dumper Version 14.44.35220.0
+Copyright (C) Microsoft Corporation.  All rights reserved.
+
+
+Dump of file <private-workspace>\work\runtime-game.exe
+
+File Type: EXECUTABLE IMAGE
+
+  00000001404ACE20: 48 83 EC 38        sub         rsp,38h
+  00000001404ACE24: 44 89 4C 24 20     mov         dword ptr [rsp+20h],r9d
+  00000001404ACE29: 4D 8B C8           mov         r9,r8
+  00000001404ACE2C: 41 B8 02 00 00 00  mov         r8d,2
+  00000001404ACE32: E8 49 6D 04 00     call        00000001404F3B80
+  00000001404ACE37: 48 83 C4 38        add         rsp,38h
+  00000001404ACE3B: C3                 ret
+  00000001404ACE3C: CC                 int         3
+  00000001404ACE3D: CC                 int         3
+  00000001404ACE3E: CC                 int         3
+  00000001404ACE3F: CC                 int         3
+  00000001404ACE40: 48 83 EC 38        sub         rsp,38h
+  00000001404ACE44: 44 89 4C 24 20     mov         dword ptr [rsp+20h],r9d
+  00000001404ACE49: 4D 8B C8           mov         r9,r8
+  00000001404ACE4C: 41 B8 03 00 00 00  mov         r8d,3
+  00000001404ACE52: E8 19 6E 04 00     call        00000001404F3C70
+  00000001404ACE57: 48 83 C4 38        add         rsp,38h
+  00000001404ACE5B: C3                 ret
+  00000001404ACE5C: CC                 int         3
+  00000001404ACE5D: CC                 int         3
+  00000001404ACE5E: CC                 int         3
+  00000001404ACE5F: CC                 int         3
+  00000001404ACE60: 48 83 EC 38        sub         rsp,38h
+  00000001404ACE64: 44 89 4C 24 20     mov         dword ptr [rsp+20h],r9d
+  00000001404ACE69: 4D 8B C8           mov         r9,r8
+  00000001404ACE6C: 41 B8 03 00 00 00  mov         r8d,3
+  00000001404ACE72: E8 09 6D 04 00     call        00000001404F3B80
+  00000001404ACE77: 48 83 C4 38        add         rsp,38h
+  00000001404ACE7B: C3                 ret
+  00000001404ACE7C: CC                 int         3
+  00000001404ACE7D: CC                 int         3
+  00000001404ACE7E: CC                 int         3
+  00000001404ACE7F: CC                 int         3
+  00000001404ACE80: 48
+
+  Summary
+
+     1CAF000 .text
+Microsoft (R) COFF/PE Dumper Version 14.44.35220.0
+Copyright (C) Microsoft Corporation.  All rights reserved.
+
+
+Dump of file <private-workspace>\work\runtime-game.exe
+
+File Type: EXECUTABLE IMAGE
+
+  00000001404ACE40: 48 83 EC 38        sub         rsp,38h
+  00000001404ACE44: 44 89 4C 24 20     mov         dword ptr [rsp+20h],r9d
+  00000001404ACE49: 4D 8B C8           mov         r9,r8
+  00000001404ACE4C: 41 B8 03 00 00 00  mov         r8d,3
+  00000001404ACE52: E8 19 6E 04 00     call        00000001404F3C70
+  00000001404ACE57: 48 83 C4 38        add         rsp,38h
+  00000001404ACE5B: C3                 ret
+  00000001404ACE5C: CC                 int         3
+  00000001404ACE5D: CC                 int         3
+  00000001404ACE5E: CC                 int         3
+  00000001404ACE5F: CC                 int         3
+  00000001404ACE60: 48 83 EC 38        sub         rsp,38h
+  00000001404ACE64: 44 89 4C 24 20     mov         dword ptr [rsp+20h],r9d
+  00000001404ACE69: 4D 8B C8           mov         r9,r8
+  00000001404ACE6C: 41 B8 03 00 00 00  mov         r8d,3
+  00000001404ACE72: E8 09 6D 04 00     call        00000001404F3B80
+  00000001404ACE77: 48 83 C4 38        add         rsp,38h
+  00000001404ACE7B: C3                 ret
+  00000001404ACE7C: CC                 int         3
+  00000001404ACE7D: CC                 int         3
+  00000001404ACE7E: CC                 int         3
+  00000001404ACE7F: CC                 int         3
+  00000001404ACE80: 48 89 5C 24 08     mov         qword ptr [rsp+8],rbx
+  00000001404ACE85: 48 89 6C 24 10     mov         qword ptr [rsp+10h],rbp
+  00000001404ACE8A: 48 89 74 24 18     mov         qword ptr [rsp+18h],rsi
+  00000001404ACE8F: 57                 push        rdi
+  00000001404ACE90: 41 56              push        r14
+  00000001404ACE92: 41 57              push        r15
+  00000001404ACE94: 48 83 EC 30        sub         rsp,30h
+  00000001404ACE98: 48 8B FA           mov         rdi,rdx
+  00000001404ACE9B: 48 8B E9           mov         rbp,rcx
+  00000001404ACE9E: 41
+  00000001404ACE9F: 83
+  00000001404ACEA0: F9                 stc
+
+  Summary
+
+     1CAF000 .text
+Microsoft (R) COFF/PE Dumper Version 14.44.35220.0
+Copyright (C) Microsoft Corporation.  All rights reserved.
+
+
+Dump of file <private-workspace>\work\runtime-game.exe
+
+File Type: EXECUTABLE IMAGE
+
+  00000001404ACE60: 48 83 EC 38        sub         rsp,38h
+  00000001404ACE64: 44 89 4C 24 20     mov         dword ptr [rsp+20h],r9d
+  00000001404ACE69: 4D 8B C8           mov         r9,r8
+  00000001404ACE6C: 41 B8 03 00 00 00  mov         r8d,3
+  00000001404ACE72: E8 09 6D 04 00     call        00000001404F3B80
+  00000001404ACE77: 48 83 C4 38        add         rsp,38h
+  00000001404ACE7B: C3                 ret
+  00000001404ACE7C: CC                 int         3
+  00000001404ACE7D: CC                 int         3
+  00000001404ACE7E: CC                 int         3
+  00000001404ACE7F: CC                 int         3
+  00000001404ACE80: 48 89 5C 24 08     mov         qword ptr [rsp+8],rbx
+  00000001404ACE85: 48 89 6C 24 10     mov         qword ptr [rsp+10h],rbp
+  00000001404ACE8A: 48 89 74 24 18     mov         qword ptr [rsp+18h],rsi
+  00000001404ACE8F: 57                 push        rdi
+  00000001404ACE90: 41 56              push        r14
+  00000001404ACE92: 41 57              push        r15
+  00000001404ACE94: 48 83 EC 30        sub         rsp,30h
+  00000001404ACE98: 48 8B FA           mov         rdi,rdx
+  00000001404ACE9B: 48 8B E9           mov         rbp,rcx
+  00000001404ACE9E: 41 83 F9 05        cmp         r9d,5
+  00000001404ACEA2: 74 0C              je          00000001404ACEB0
+  00000001404ACEA4: BB 03 00 00 00     mov         ebx,3
+  00000001404ACEA9: 8B C3              mov         eax,ebx
+  00000001404ACEAB: E9 A8 00 00 00     jmp         00000001404ACF58
+  00000001404ACEB0: 45 0F B7 70 01     movzx       r14d,word ptr [r8+1]
+  00000001404ACEB5: 48 8B CF           mov         rcx,rdi
+  00000001404ACEB8: 45 0F B7 78 03     movzx       r15d,word ptr [r8+3]
+  00000001404ACEBD: E8
+  00000001404ACEBE: 7E E3              jle         00000001404ACEA3
+  00000001404ACEC0: E9
+
+  Summary
+
+     1CAF000 .text
+Microsoft (R) COFF/PE Dumper Version 14.44.35220.0
+Copyright (C) Microsoft Corporation.  All rights reserved.
+
+
+Dump of file <private-workspace>\work\runtime-game.exe
+
+File Type: EXECUTABLE IMAGE
+
+  00000001404ACE80: 48 89 5C 24 08     mov         qword ptr [rsp+8],rbx
+  00000001404ACE85: 48 89 6C 24 10     mov         qword ptr [rsp+10h],rbp
+  00000001404ACE8A: 48 89 74 24 18     mov         qword ptr [rsp+18h],rsi
+  00000001404ACE8F: 57                 push        rdi
+  00000001404ACE90: 41 56              push        r14
+  00000001404ACE92: 41 57              push        r15
+  00000001404ACE94: 48 83 EC 30        sub         rsp,30h
+  00000001404ACE98: 48 8B FA           mov         rdi,rdx
+  00000001404ACE9B: 48 8B E9           mov         rbp,rcx
+  00000001404ACE9E: 41 83 F9 05        cmp         r9d,5
+  00000001404ACEA2: 74 0C              je          00000001404ACEB0
+  00000001404ACEA4: BB 03 00 00 00     mov         ebx,3
+  00000001404ACEA9: 8B C3              mov         eax,ebx
+  00000001404ACEAB: E9 A8 00 00 00     jmp         00000001404ACF58
+  00000001404ACEB0: 45 0F B7 70 01     movzx       r14d,word ptr [r8+1]
+  00000001404ACEB5: 48 8B CF           mov         rcx,rdi
+  00000001404ACEB8: 45 0F B7 78 03     movzx       r15d,word ptr [r8+3]
+  00000001404ACEBD: E8 7E E3 E9 FF     call        000000014034B240
+  00000001404ACEC2: 48 8B F0           mov         rsi,rax
+  00000001404ACEC5: 48 85 C0           test        rax,rax
+  00000001404ACEC8: 75 0C              jne         00000001404ACED6
+  00000001404ACECA: BB 02 00 00 00     mov         ebx,2
+  00000001404ACECF: 8B C3              mov         eax,ebx
+  00000001404ACED1: E9 82 00 00 00     jmp         00000001404ACF58
+  00000001404ACED6: 41 B9 32 00 00 00  mov         r9d,32h
+  00000001404ACEDC: 45 0F B7 C7        movzx       r8d,r15w
+  00000001404ACEE0: 41
+
+  Summary
+
+     1CAF000 .text
+Microsoft (R) COFF/PE Dumper Version 14.44.35220.0
+Copyright (C) Microsoft Corporation.  All rights reserved.
+
+
+Dump of file <private-workspace>\work\runtime-game.exe
+
+File Type: EXECUTABLE IMAGE
+
+  00000001404ACF80: 48 89 5C 24 08     mov         qword ptr [rsp+8],rbx
+  00000001404ACF85: 48 89 6C 24 10     mov         qword ptr [rsp+10h],rbp
+  00000001404ACF8A: 48 89 74 24 18     mov         qword ptr [rsp+18h],rsi
+  00000001404ACF8F: 57                 push        rdi
+  00000001404ACF90: 48 83 EC 40        sub         rsp,40h
+  00000001404ACF94: 48 8B FA           mov         rdi,rdx
+  00000001404ACF97: 48 8B E9           mov         rbp,rcx
+  00000001404ACF9A: 41 83 F9 09        cmp         r9d,9
+  00000001404ACF9E: 74 07              je          00000001404ACFA7
+  00000001404ACFA0: B8 03 00 00 00     mov         eax,3
+  00000001404ACFA5: EB 70              jmp         00000001404AD017
+  00000001404ACFA7: 41 8B 58 01        mov         ebx,dword ptr [r8+1]
+  00000001404ACFAB: 41 8B 70 05        mov         esi,dword ptr [r8+5]
+  00000001404ACFAF: 83 FB 06           cmp         ebx,6
+  00000001404ACFB2: 72 07              jb          00000001404ACFBB
+  00000001404ACFB4: B8 02 00 00 00     mov         eax,2
+  00000001404ACFB9: EB 5C              jmp         00000001404AD017
+  00000001404ACFBB: 44 8B CE           mov         r9d,esi
+  00000001404ACFBE: C7 44 24 20 32 00  mov         dword ptr [rsp+20h],32h
+                    00 00
+  00000001404ACFC6: 44 8B C3           mov         r8d,ebx
+  00000001404ACFC9: E8 F2 10 05 00     call        00000001404FE0C0
+  00000001404ACFCE: 85 C0              test        eax,eax
+  00000001404ACFD0: 75 45              jne         00000001404AD017
+  00000001404ACFD2: 48 8B CF           mov         rcx,rdi
+  00000001404ACFD5: E8 66 D5 E9 FF     call        000000014034A540
+  00000001404ACFDA: 48 85 C0           test        rax,rax
+  00000001404ACFDD: 75 05              jne         00000001404ACFE4
+  00000001404ACFDF: 8D
+  00000001404ACFE0: 48
+
+  Summary
+
+     1CAF000 .text
+Microsoft (R) COFF/PE Dumper Version 14.44.35220.0
+Copyright (C) Microsoft Corporation.  All rights reserved.
+
+
+Dump of file <private-workspace>\work\runtime-game.exe
+
+File Type: EXECUTABLE IMAGE
+
+  00000001404AD030: 48 89 5C 24 08     mov         qword ptr [rsp+8],rbx
+  00000001404AD035: 48 89 6C 24 10     mov         qword ptr [rsp+10h],rbp
+  00000001404AD03A: 48 89 74 24 18     mov         qword ptr [rsp+18h],rsi
+  00000001404AD03F: 57                 push        rdi
+  00000001404AD040: 48 83 EC 40        sub         rsp,40h
+  00000001404AD044: 48 8B FA           mov         rdi,rdx
+  00000001404AD047: 48 8B E9           mov         rbp,rcx
+  00000001404AD04A: 41 83 F9 09        cmp         r9d,9
+  00000001404AD04E: 74 07              je          00000001404AD057
+  00000001404AD050: B8 03 00 00 00     mov         eax,3
+  00000001404AD055: EB 6C              jmp         00000001404AD0C3
+  00000001404AD057: 41 8B 58 01        mov         ebx,dword ptr [r8+1]
+  00000001404AD05B: 41 8B 70 05        mov         esi,dword ptr [r8+5]
+  00000001404AD05F: 83 FB 06           cmp         ebx,6
+  00000001404AD062: 72 07              jb          00000001404AD06B
+  00000001404AD064: B8 02 00 00 00     mov         eax,2
+  00000001404AD069: EB 58              jmp         00000001404AD0C3
+  00000001404AD06B: 44 8B CE           mov         r9d,esi
+  00000001404AD06E: C7 44 24 20 32 00  mov         dword ptr [rsp+20h],32h
+                    00 00
+  00000001404AD076: 44 8B C3           mov         r8d,ebx
+  00000001404AD079: E8 42 10 05 00     call        00000001404FE0C0
+  00000001404AD07E: 85 C0              test        eax,eax
+  00000001404AD080: 75 41              jne         00000001404AD0C3
+  00000001404AD082: 48 8B CF           mov         rcx,rdi
+  00000001404AD085: E8 B6 D4 E9 FF     call        000000014034A540
+  00000001404AD08A: 48 85 C0           test        rax,rax
+  00000001404AD08D: 75 05              jne         00000001404AD094
+  00000001404AD08F: 8D
+  00000001404AD090: 48
+
+  Summary
+
+     1CAF000 .text
+Microsoft (R) COFF/PE Dumper Version 14.44.35220.0
+Copyright (C) Microsoft Corporation.  All rights reserved.
+
+
+Dump of file <private-workspace>\work\runtime-game.exe
+
+File Type: EXECUTABLE IMAGE
+
+  00000001404AD0E0: 48 83 EC 38        sub         rsp,38h
+  00000001404AD0E4: C7 44 24 20 01 00  mov         dword ptr [rsp+20h],1
+                    00 00
+  00000001404AD0EC: E8 5F BB 04 00     call        00000001404F8C50
+  00000001404AD0F1: 48 83 C4 38        add         rsp,38h
+  00000001404AD0F5: C3                 ret
+  00000001404AD0F6: CC                 int         3
+  00000001404AD0F7: CC                 int         3
+  00000001404AD0F8: CC                 int         3
+  00000001404AD0F9: CC                 int         3
+  00000001404AD0FA: CC                 int         3
+  00000001404AD0FB: CC                 int         3
+  00000001404AD0FC: CC                 int         3
+  00000001404AD0FD: CC                 int         3
+  00000001404AD0FE: CC                 int         3
+  00000001404AD0FF: CC                 int         3
+  00000001404AD100: 48 83 EC 38        sub         rsp,38h
+  00000001404AD104: C6 44 24 28 00     mov         byte ptr [rsp+28h],0
+  00000001404AD109: C7 44 24 20 01 00  mov         dword ptr [rsp+20h],1
+                    00 00
+  00000001404AD111: E8 3A BA 04 00     call        00000001404F8B50
+  00000001404AD116: 48 83 C4 38        add         rsp,38h
+  00000001404AD11A: C3                 ret
+  00000001404AD11B: CC                 int         3
+  00000001404AD11C: CC                 int         3
+  00000001404AD11D: CC                 int         3
+  00000001404AD11E: CC                 int         3
+  00000001404AD11F: CC                 int         3
+  00000001404AD120: 48 83 EC 38        sub         rsp,38h
+  00000001404AD124: C6 44 24 28 01     mov         byte ptr [rsp+28h],1
+  00000001404AD129: C7 44 24 20 01 00  mov         dword ptr [rsp+20h],1
+                    00 00
+  00000001404AD131: E8 1A BA 04 00     call        00000001404F8B50
+  00000001404AD136: 48 83 C4 38        add         rsp,38h
+  00000001404AD13A: C3                 ret
+  00000001404AD13B: CC                 int         3
+  00000001404AD13C: CC                 int         3
+  00000001404AD13D: CC                 int         3
+  00000001404AD13E: CC                 int         3
+  00000001404AD13F: CC                 int         3
+  00000001404AD140: 48
+
+  Summary
+
+     1CAF000 .text
+Microsoft (R) COFF/PE Dumper Version 14.44.35220.0
+Copyright (C) Microsoft Corporation.  All rights reserved.
+
+
+Dump of file <private-workspace>\work\runtime-game.exe
+
+File Type: EXECUTABLE IMAGE
+
+  00000001404AD100: 48 83 EC 38        sub         rsp,38h
+  00000001404AD104: C6 44 24 28 00     mov         byte ptr [rsp+28h],0
+  00000001404AD109: C7 44 24 20 01 00  mov         dword ptr [rsp+20h],1
+                    00 00
+  00000001404AD111: E8 3A BA 04 00     call        00000001404F8B50
+  00000001404AD116: 48 83 C4 38        add         rsp,38h
+  00000001404AD11A: C3                 ret
+  00000001404AD11B: CC                 int         3
+  00000001404AD11C: CC                 int         3
+  00000001404AD11D: CC                 int         3
+  00000001404AD11E: CC                 int         3
+  00000001404AD11F: CC                 int         3
+  00000001404AD120: 48 83 EC 38        sub         rsp,38h
+  00000001404AD124: C6 44 24 28 01     mov         byte ptr [rsp+28h],1
+  00000001404AD129: C7 44 24 20 01 00  mov         dword ptr [rsp+20h],1
+                    00 00
+  00000001404AD131: E8 1A BA 04 00     call        00000001404F8B50
+  00000001404AD136: 48 83 C4 38        add         rsp,38h
+  00000001404AD13A: C3                 ret
+  00000001404AD13B: CC                 int         3
+  00000001404AD13C: CC                 int         3
+  00000001404AD13D: CC                 int         3
+  00000001404AD13E: CC                 int         3
+  00000001404AD13F: CC                 int         3
+  00000001404AD140: 48 89 5C 24 08     mov         qword ptr [rsp+8],rbx
+  00000001404AD145: 48 89 6C 24 10     mov         qword ptr [rsp+10h],rbp
+  00000001404AD14A: 48 89 74 24 18     mov         qword ptr [rsp+18h],rsi
+  00000001404AD14F: 57                 push        rdi
+  00000001404AD150: 41 56              push        r14
+  00000001404AD152: 41 57              push        r15
+  00000001404AD154: 48 83 EC 30        sub         rsp,30h
+  00000001404AD158: 48 8B FA           mov         rdi,rdx
+  00000001404AD15B: 48 8B E9           mov         rbp,rcx
+  00000001404AD15E: 41
+  00000001404AD15F: 83
+  00000001404AD160: F9                 stc
+
+  Summary
+
+     1CAF000 .text
+Microsoft (R) COFF/PE Dumper Version 14.44.35220.0
+Copyright (C) Microsoft Corporation.  All rights reserved.
+
+
+Dump of file <private-workspace>\work\runtime-game.exe
+
+File Type: EXECUTABLE IMAGE
+
+  00000001404AD120: 48 83 EC 38        sub         rsp,38h
+  00000001404AD124: C6 44 24 28 01     mov         byte ptr [rsp+28h],1
+  00000001404AD129: C7 44 24 20 01 00  mov         dword ptr [rsp+20h],1
+                    00 00
+  00000001404AD131: E8 1A BA 04 00     call        00000001404F8B50
+  00000001404AD136: 48 83 C4 38        add         rsp,38h
+  00000001404AD13A: C3                 ret
+  00000001404AD13B: CC                 int         3
+  00000001404AD13C: CC                 int         3
+  00000001404AD13D: CC                 int         3
+  00000001404AD13E: CC                 int         3
+  00000001404AD13F: CC                 int         3
+  00000001404AD140: 48 89 5C 24 08     mov         qword ptr [rsp+8],rbx
+  00000001404AD145: 48 89 6C 24 10     mov         qword ptr [rsp+10h],rbp
+  00000001404AD14A: 48 89 74 24 18     mov         qword ptr [rsp+18h],rsi
+  00000001404AD14F: 57                 push        rdi
+  00000001404AD150: 41 56              push        r14
+  00000001404AD152: 41 57              push        r15
+  00000001404AD154: 48 83 EC 30        sub         rsp,30h
+  00000001404AD158: 48 8B FA           mov         rdi,rdx
+  00000001404AD15B: 48 8B E9           mov         rbp,rcx
+  00000001404AD15E: 41 83 F9 05        cmp         r9d,5
+  00000001404AD162: 74 0C              je          00000001404AD170
+  00000001404AD164: BB 03 00 00 00     mov         ebx,3
+  00000001404AD169: 8B C3              mov         eax,ebx
+  00000001404AD16B: E9 A7 00 00 00     jmp         00000001404AD217
+  00000001404AD170: 45 0F B7 70 01     movzx       r14d,word ptr [r8+1]
+  00000001404AD175: 48 8B CF           mov         rcx,rdi
+  00000001404AD178: 45 0F B7 78 03     movzx       r15d,word ptr [r8+3]
+  00000001404AD17D: E8
+  00000001404AD17E: BE
+  00000001404AD17F: E0 E9              loopne      00000001404AD16A
+
+  Summary
+
+     1CAF000 .text
+Microsoft (R) COFF/PE Dumper Version 14.44.35220.0
+Copyright (C) Microsoft Corporation.  All rights reserved.
+
+
+Dump of file <private-workspace>\work\runtime-game.exe
+
+File Type: EXECUTABLE IMAGE
+
+  00000001404AD140: 48 89 5C 24 08     mov         qword ptr [rsp+8],rbx
+  00000001404AD145: 48 89 6C 24 10     mov         qword ptr [rsp+10h],rbp
+  00000001404AD14A: 48 89 74 24 18     mov         qword ptr [rsp+18h],rsi
+  00000001404AD14F: 57                 push        rdi
+  00000001404AD150: 41 56              push        r14
+  00000001404AD152: 41 57              push        r15
+  00000001404AD154: 48 83 EC 30        sub         rsp,30h
+  00000001404AD158: 48 8B FA           mov         rdi,rdx
+  00000001404AD15B: 48 8B E9           mov         rbp,rcx
+  00000001404AD15E: 41 83 F9 05        cmp         r9d,5
+  00000001404AD162: 74 0C              je          00000001404AD170
+  00000001404AD164: BB 03 00 00 00     mov         ebx,3
+  00000001404AD169: 8B C3              mov         eax,ebx
+  00000001404AD16B: E9 A7 00 00 00     jmp         00000001404AD217
+  00000001404AD170: 45 0F B7 70 01     movzx       r14d,word ptr [r8+1]
+  00000001404AD175: 48 8B CF           mov         rcx,rdi
+  00000001404AD178: 45 0F B7 78 03     movzx       r15d,word ptr [r8+3]
+  00000001404AD17D: E8 BE E0 E9 FF     call        000000014034B240
+  00000001404AD182: 48 8B F0           mov         rsi,rax
+  00000001404AD185: 48 85 C0           test        rax,rax
+  00000001404AD188: 75 0C              jne         00000001404AD196
+  00000001404AD18A: BB 02 00 00 00     mov         ebx,2
+  00000001404AD18F: 8B C3              mov         eax,ebx
+  00000001404AD191: E9 81 00 00 00     jmp         00000001404AD217
+  00000001404AD196: 41 B9 32 00 00 00  mov         r9d,32h
+  00000001404AD19C: 45 0F B7 C7        movzx       r8d,r15w
+  00000001404AD1A0: 41
+
+  Summary
+
+     1CAF000 .text
+Microsoft (R) COFF/PE Dumper Version 14.44.35220.0
+Copyright (C) Microsoft Corporation.  All rights reserved.
+
+
+Dump of file <private-workspace>\work\runtime-game.exe
+
+File Type: EXECUTABLE IMAGE
+
+  00000001404AD230: 48 89 5C 24 08     mov         qword ptr [rsp+8],rbx
+  00000001404AD235: 48 89 6C 24 10     mov         qword ptr [rsp+10h],rbp
+  00000001404AD23A: 48 89 74 24 18     mov         qword ptr [rsp+18h],rsi
+  00000001404AD23F: 57                 push        rdi
+  00000001404AD240: 41 56              push        r14
+  00000001404AD242: 41 57              push        r15
+  00000001404AD244: 48 83 EC 30        sub         rsp,30h
+  00000001404AD248: 48 8B FA           mov         rdi,rdx
+  00000001404AD24B: 48 8B E9           mov         rbp,rcx
+  00000001404AD24E: 41 83 F9 05        cmp         r9d,5
+  00000001404AD252: 74 0C              je          00000001404AD260
+  00000001404AD254: BB 03 00 00 00     mov         ebx,3
+  00000001404AD259: 8B C3              mov         eax,ebx
+  00000001404AD25B: E9 A8 00 00 00     jmp         00000001404AD308
+  00000001404AD260: 45 0F B7 70 01     movzx       r14d,word ptr [r8+1]
+  00000001404AD265: 48 8B CF           mov         rcx,rdi
+  00000001404AD268: 45 0F B7 78 03     movzx       r15d,word ptr [r8+3]
+  00000001404AD26D: E8 CE DF E9 FF     call        000000014034B240
+  00000001404AD272: 48 8B F0           mov         rsi,rax
+  00000001404AD275: 48 85 C0           test        rax,rax
+  00000001404AD278: 75 0C              jne         00000001404AD286
+  00000001404AD27A: BB 02 00 00 00     mov         ebx,2
+  00000001404AD27F: 8B C3              mov         eax,ebx
+  00000001404AD281: E9 82 00 00 00     jmp         00000001404AD308
+  00000001404AD286: 41 B9 32 00 00 00  mov         r9d,32h
+  00000001404AD28C: 45 0F B7 C7        movzx       r8d,r15w
+  00000001404AD290: 41
+
+  Summary
+
+     1CAF000 .text
+Microsoft (R) COFF/PE Dumper Version 14.44.35220.0
+Copyright (C) Microsoft Corporation.  All rights reserved.
+
+
+Dump of file <private-workspace>\work\runtime-game.exe
+
+File Type: EXECUTABLE IMAGE
+
+  00000001404AD330: 48 89 5C 24 08     mov         qword ptr [rsp+8],rbx
+  00000001404AD335: 48 89 6C 24 10     mov         qword ptr [rsp+10h],rbp
+  00000001404AD33A: 48 89 74 24 18     mov         qword ptr [rsp+18h],rsi
+  00000001404AD33F: 57                 push        rdi
+  00000001404AD340: 48 83 EC 40        sub         rsp,40h
+  00000001404AD344: 48 8B FA           mov         rdi,rdx
+  00000001404AD347: 48 8B E9           mov         rbp,rcx
+  00000001404AD34A: 41 83 F9 09        cmp         r9d,9
+  00000001404AD34E: 74 07              je          00000001404AD357
+  00000001404AD350: B8 03 00 00 00     mov         eax,3
+  00000001404AD355: EB 70              jmp         00000001404AD3C7
+  00000001404AD357: 41 8B 58 01        mov         ebx,dword ptr [r8+1]
+  00000001404AD35B: 41 8B 70 05        mov         esi,dword ptr [r8+5]
+  00000001404AD35F: 83 FB 06           cmp         ebx,6
+  00000001404AD362: 72 07              jb          00000001404AD36B
+  00000001404AD364: B8 02 00 00 00     mov         eax,2
+  00000001404AD369: EB 5C              jmp         00000001404AD3C7
+  00000001404AD36B: 44 8B CE           mov         r9d,esi
+  00000001404AD36E: C7 44 24 20 32 00  mov         dword ptr [rsp+20h],32h
+                    00 00
+  00000001404AD376: 44 8B C3           mov         r8d,ebx
+  00000001404AD379: E8 42 0D 05 00     call        00000001404FE0C0
+  00000001404AD37E: 85 C0              test        eax,eax
+  00000001404AD380: 75 45              jne         00000001404AD3C7
+  00000001404AD382: 48 8B CF           mov         rcx,rdi
+  00000001404AD385: E8 76 E0 E9 FF     call        000000014034B400
+  00000001404AD38A: 48 85 C0           test        rax,rax
+  00000001404AD38D: 75 05              jne         00000001404AD394
+  00000001404AD38F: 8D
+  00000001404AD390: 48
+
+  Summary
+
+     1CAF000 .text
+Microsoft (R) COFF/PE Dumper Version 14.44.35220.0
+Copyright (C) Microsoft Corporation.  All rights reserved.
+
+
+Dump of file <private-workspace>\work\runtime-game.exe
+
+File Type: EXECUTABLE IMAGE
+
+  00000001404AD3E0: 48 89 5C 24 08     mov         qword ptr [rsp+8],rbx
+  00000001404AD3E5: 48 89 6C 24 10     mov         qword ptr [rsp+10h],rbp
+  00000001404AD3EA: 48 89 74 24 18     mov         qword ptr [rsp+18h],rsi
+  00000001404AD3EF: 57                 push        rdi
+  00000001404AD3F0: 48 83 EC 40        sub         rsp,40h
+  00000001404AD3F4: 48 8B FA           mov         rdi,rdx
+  00000001404AD3F7: 48 8B E9           mov         rbp,rcx
+  00000001404AD3FA: 41 83 F9 09        cmp         r9d,9
+  00000001404AD3FE: 74 07              je          00000001404AD407
+  00000001404AD400: B8 03 00 00 00     mov         eax,3
+  00000001404AD405: EB 6C              jmp         00000001404AD473
+  00000001404AD407: 41 8B 58 01        mov         ebx,dword ptr [r8+1]
+  00000001404AD40B: 41 8B 70 05        mov         esi,dword ptr [r8+5]
+  00000001404AD40F: 83 FB 06           cmp         ebx,6
+  00000001404AD412: 72 07              jb          00000001404AD41B
+  00000001404AD414: B8 02 00 00 00     mov         eax,2
+  00000001404AD419: EB 58              jmp         00000001404AD473
+  00000001404AD41B: 44 8B CE           mov         r9d,esi
+  00000001404AD41E: C7 44 24 20 32 00  mov         dword ptr [rsp+20h],32h
+                    00 00
+  00000001404AD426: 44 8B C3           mov         r8d,ebx
+  00000001404AD429: E8 92 0C 05 00     call        00000001404FE0C0
+  00000001404AD42E: 85 C0              test        eax,eax
+  00000001404AD430: 75 41              jne         00000001404AD473
+  00000001404AD432: 48 8B CF           mov         rcx,rdi
+  00000001404AD435: E8 C6 DF E9 FF     call        000000014034B400
+  00000001404AD43A: 48 85 C0           test        rax,rax
+  00000001404AD43D: 75 05              jne         00000001404AD444
+  00000001404AD43F: 8D
+  00000001404AD440: 48
+
+  Summary
+
+     1CAF000 .text
+Microsoft (R) COFF/PE Dumper Version 14.44.35220.0
+Copyright (C) Microsoft Corporation.  All rights reserved.
+
+
+Dump of file <private-workspace>\work\runtime-game.exe
+
+File Type: EXECUTABLE IMAGE
+
+  00000001404AD490: 48 83 EC 38        sub         rsp,38h
+  00000001404AD494: C7 44 24 20 00 00  mov         dword ptr [rsp+20h],0
+                    00 00
+  00000001404AD49C: E8 AF B7 04 00     call        00000001404F8C50
+  00000001404AD4A1: 48 83 C4 38        add         rsp,38h
+  00000001404AD4A5: C3                 ret
+  00000001404AD4A6: CC                 int         3
+  00000001404AD4A7: CC                 int         3
+  00000001404AD4A8: CC                 int         3
+  00000001404AD4A9: CC                 int         3
+  00000001404AD4AA: CC                 int         3
+  00000001404AD4AB: CC                 int         3
+  00000001404AD4AC: CC                 int         3
+  00000001404AD4AD: CC                 int         3
+  00000001404AD4AE: CC                 int         3
+  00000001404AD4AF: CC                 int         3
+  00000001404AD4B0: 48 83 EC 38        sub         rsp,38h
+  00000001404AD4B4: C6 44 24 28 00     mov         byte ptr [rsp+28h],0
+  00000001404AD4B9: C7 44 24 20 00 00  mov         dword ptr [rsp+20h],0
+                    00 00
+  00000001404AD4C1: E8 8A B6 04 00     call        00000001404F8B50
+  00000001404AD4C6: 48 83 C4 38        add         rsp,38h
+  00000001404AD4CA: C3                 ret
+  00000001404AD4CB: CC                 int         3
+  00000001404AD4CC: CC                 int         3
+  00000001404AD4CD: CC                 int         3
+  00000001404AD4CE: CC                 int         3
+  00000001404AD4CF: CC                 int         3
+  00000001404AD4D0: 48 83 EC 38        sub         rsp,38h
+  00000001404AD4D4: C6 44 24 28 01     mov         byte ptr [rsp+28h],1
+  00000001404AD4D9: C7 44 24 20 00 00  mov         dword ptr [rsp+20h],0
+                    00 00
+  00000001404AD4E1: E8 6A B6 04 00     call        00000001404F8B50
+  00000001404AD4E6: 48 83 C4 38        add         rsp,38h
+  00000001404AD4EA: C3                 ret
+  00000001404AD4EB: CC                 int         3
+  00000001404AD4EC: CC                 int         3
+  00000001404AD4ED: CC                 int         3
+  00000001404AD4EE: CC                 int         3
+  00000001404AD4EF: CC                 int         3
+  00000001404AD4F0: 48
+
+  Summary
+
+     1CAF000 .text
+Microsoft (R) COFF/PE Dumper Version 14.44.35220.0
+Copyright (C) Microsoft Corporation.  All rights reserved.
+
+
+Dump of file <private-workspace>\work\runtime-game.exe
+
+File Type: EXECUTABLE IMAGE
+
+  00000001404AD4B0: 48 83 EC 38        sub         rsp,38h
+  00000001404AD4B4: C6 44 24 28 00     mov         byte ptr [rsp+28h],0
+  00000001404AD4B9: C7 44 24 20 00 00  mov         dword ptr [rsp+20h],0
+                    00 00
+  00000001404AD4C1: E8 8A B6 04 00     call        00000001404F8B50
+  00000001404AD4C6: 48 83 C4 38        add         rsp,38h
+  00000001404AD4CA: C3                 ret
+  00000001404AD4CB: CC                 int         3
+  00000001404AD4CC: CC                 int         3
+  00000001404AD4CD: CC                 int         3
+  00000001404AD4CE: CC                 int         3
+  00000001404AD4CF: CC                 int         3
+  00000001404AD4D0: 48 83 EC 38        sub         rsp,38h
+  00000001404AD4D4: C6 44 24 28 01     mov         byte ptr [rsp+28h],1
+  00000001404AD4D9: C7 44 24 20 00 00  mov         dword ptr [rsp+20h],0
+                    00 00
+  00000001404AD4E1: E8 6A B6 04 00     call        00000001404F8B50
+  00000001404AD4E6: 48 83 C4 38        add         rsp,38h
+  00000001404AD4EA: C3                 ret
+  00000001404AD4EB: CC                 int         3
+  00000001404AD4EC: CC                 int         3
+  00000001404AD4ED: CC                 int         3
+  00000001404AD4EE: CC                 int         3
+  00000001404AD4EF: CC                 int         3
+  00000001404AD4F0: 48 89 5C 24 08     mov         qword ptr [rsp+8],rbx
+  00000001404AD4F5: 48 89 6C 24 10     mov         qword ptr [rsp+10h],rbp
+  00000001404AD4FA: 48 89 74 24 18     mov         qword ptr [rsp+18h],rsi
+  00000001404AD4FF: 57                 push        rdi
+  00000001404AD500: 48 83 EC 40        sub         rsp,40h
+  00000001404AD504: 48 8B FA           mov         rdi,rdx
+  00000001404AD507: 48 8B E9           mov         rbp,rcx
+  00000001404AD50A: 41 83 F9 09        cmp         r9d,9
+  00000001404AD50E: 74 07              je          00000001404AD517
+  00000001404AD510: B8
+
+  Summary
+
+     1CAF000 .text
+Microsoft (R) COFF/PE Dumper Version 14.44.35220.0
+Copyright (C) Microsoft Corporation.  All rights reserved.
+
+
+Dump of file <private-workspace>\work\runtime-game.exe
+
+File Type: EXECUTABLE IMAGE
+
+  00000001404AD4D0: 48 83 EC 38        sub         rsp,38h
+  00000001404AD4D4: C6 44 24 28 01     mov         byte ptr [rsp+28h],1
+  00000001404AD4D9: C7 44 24 20 00 00  mov         dword ptr [rsp+20h],0
+                    00 00
+  00000001404AD4E1: E8 6A B6 04 00     call        00000001404F8B50
+  00000001404AD4E6: 48 83 C4 38        add         rsp,38h
+  00000001404AD4EA: C3                 ret
+  00000001404AD4EB: CC                 int         3
+  00000001404AD4EC: CC                 int         3
+  00000001404AD4ED: CC                 int         3
+  00000001404AD4EE: CC                 int         3
+  00000001404AD4EF: CC                 int         3
+  00000001404AD4F0: 48 89 5C 24 08     mov         qword ptr [rsp+8],rbx
+  00000001404AD4F5: 48 89 6C 24 10     mov         qword ptr [rsp+10h],rbp
+  00000001404AD4FA: 48 89 74 24 18     mov         qword ptr [rsp+18h],rsi
+  00000001404AD4FF: 57                 push        rdi
+  00000001404AD500: 48 83 EC 40        sub         rsp,40h
+  00000001404AD504: 48 8B FA           mov         rdi,rdx
+  00000001404AD507: 48 8B E9           mov         rbp,rcx
+  00000001404AD50A: 41 83 F9 09        cmp         r9d,9
+  00000001404AD50E: 74 07              je          00000001404AD517
+  00000001404AD510: B8 03 00 00 00     mov         eax,3
+  00000001404AD515: EB 67              jmp         00000001404AD57E
+  00000001404AD517: 41 8B 58 01        mov         ebx,dword ptr [r8+1]
+  00000001404AD51B: 41 8B 70 05        mov         esi,dword ptr [r8+5]
+  00000001404AD51F: 83 FB 06           cmp         ebx,6
+  00000001404AD522: 72 07              jb          00000001404AD52B
+  00000001404AD524: B8 02 00 00 00     mov         eax,2
+  00000001404AD529: EB 53              jmp         00000001404AD57E
+  00000001404AD52B: 44 8B CE           mov         r9d,esi
+  00000001404AD52E: C7
+  00000001404AD52F: 44
+  00000001404AD530: 24
+
+  Summary
+
+     1CAF000 .text
+Microsoft (R) COFF/PE Dumper Version 14.44.35220.0
+Copyright (C) Microsoft Corporation.  All rights reserved.
+
+
+Dump of file <private-workspace>\work\runtime-game.exe
+
+File Type: EXECUTABLE IMAGE
+
+  00000001404AD4F0: 48 89 5C 24 08     mov         qword ptr [rsp+8],rbx
+  00000001404AD4F5: 48 89 6C 24 10     mov         qword ptr [rsp+10h],rbp
+  00000001404AD4FA: 48 89 74 24 18     mov         qword ptr [rsp+18h],rsi
+  00000001404AD4FF: 57                 push        rdi
+  00000001404AD500: 48 83 EC 40        sub         rsp,40h
+  00000001404AD504: 48 8B FA           mov         rdi,rdx
+  00000001404AD507: 48 8B E9           mov         rbp,rcx
+  00000001404AD50A: 41 83 F9 09        cmp         r9d,9
+  00000001404AD50E: 74 07              je          00000001404AD517
+  00000001404AD510: B8 03 00 00 00     mov         eax,3
+  00000001404AD515: EB 67              jmp         00000001404AD57E
+  00000001404AD517: 41 8B 58 01        mov         ebx,dword ptr [r8+1]
+  00000001404AD51B: 41 8B 70 05        mov         esi,dword ptr [r8+5]
+  00000001404AD51F: 83 FB 06           cmp         ebx,6
+  00000001404AD522: 72 07              jb          00000001404AD52B
+  00000001404AD524: B8 02 00 00 00     mov         eax,2
+  00000001404AD529: EB 53              jmp         00000001404AD57E
+  00000001404AD52B: 44 8B CE           mov         r9d,esi
+  00000001404AD52E: C7 44 24 20 32 00  mov         dword ptr [rsp+20h],32h
+                    00 00
+  00000001404AD536: 44 8B C3           mov         r8d,ebx
+  00000001404AD539: E8 82 0B 05 00     call        00000001404FE0C0
+  00000001404AD53E: 85 C0              test        eax,eax
+  00000001404AD540: 75 3C              jne         00000001404AD57E
+  00000001404AD542: 33 D2              xor         edx,edx
+  00000001404AD544: 41 B8 FF FF FF FF  mov         r8d,0FFFFFFFFh
+  00000001404AD54A: 48 8B CF           mov         rcx,rdi
+  00000001404AD54D: E8
+  00000001404AD54E: 7E 07              jle         00000001404AD557
+  00000001404AD550: E9
+
+  Summary
+
+     1CAF000 .text
+Microsoft (R) COFF/PE Dumper Version 14.44.35220.0
+Copyright (C) Microsoft Corporation.  All rights reserved.
+
+
+Dump of file <private-workspace>\work\runtime-game.exe
+
+File Type: EXECUTABLE IMAGE
+
+  00000001403862D0: 40 53              push        rbx
+  00000001403862D2: 55                 push        rbp
+  00000001403862D3: 56                 push        rsi
+  00000001403862D4: 57                 push        rdi
+  00000001403862D5: 41 54              push        r12
+  00000001403862D7: 41 56              push        r14
+  00000001403862D9: 41 57              push        r15
+  00000001403862DB: 48 81 EC 70 01 00  sub         rsp,170h
+                    00
+  00000001403862E2: 48 8B 05 DF 4F 64  mov         rax,qword ptr [00000001429CB2C8h]
+                    02
+  00000001403862E9: 48 33 C4           xor         rax,rsp
+  00000001403862EC: 48 89 84 24 60 01  mov         qword ptr [rsp+0000000000000160h],rax
+                    00 00
+  00000001403862F4: 45 0F B6 E1        movzx       r12d,r9b
+  00000001403862F8: 4D 8B F8           mov         r15,r8
+  00000001403862FB: 48 8B EA           mov         rbp,rdx
+  00000001403862FE: 48 8B F9           mov         rdi,rcx
+  0000000140386301: 48 85 C9           test        rcx,rcx
+  0000000140386304: 75 37              jne         000000014038633D
+  0000000140386306: 88 4C 24 30        mov         byte ptr [rsp+30h],cl
+  000000014038630A: 48 8D 4C 24 30     lea         rcx,[rsp+30h]
+  000000014038630F: E8 AC D3 FF FF     call        00000001403836C0
+  0000000140386314: 84 C0              test        al,al
+  0000000140386316: 74 01              je          0000000140386319
+  0000000140386318: CC                 int         3
+  0000000140386319: 33 C0              xor         eax,eax
+  000000014038631B: 48 8B 8C 24 60 01  mov         rcx,qword ptr [rsp+0000000000000160h]
+                    00 00
+  0000000140386323: 48 33 CC           xor         rcx,rsp
+  0000000140386326: E8 25 AE F4 00     call        00000001412D1150
+  000000014038632B: 48
+  000000014038632C: 81
+  000000014038632D: C4
+  000000014038632E: 70 01              jo          0000000140386331
+  0000000140386330: 00
+
+  Summary
+
+     1CAF000 .text

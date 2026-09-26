@@ -1,0 +1,51 @@
+UNIQUE b'\xb5\x01Crafted Black Cleft' flags 8
+ SPEC (274, 0, 300, 300)
+ HANDLER 1 STAT 193 VAL 0 shift 0 descfn 19 descval 0
+ SPEC (37, 0, -45, -45)
+ HANDLER 1 STAT 37 VAL 0 shift 0 descfn 19 descval 0
+ SPEC (65543, 0, 1, 1)
+ GROUP HEADER 0700000002000000
+ ENTRY (283, 0, 0, 10, 15, 1)
+  SPEC (283, 0, 10, 15)
+  HANDLER 1 STAT 357 VAL 0 shift 0 descfn 19 descval 0
+ ENTRY (278, 0, 0, 5, 10, 1)
+  SPEC (278, 0, 5, 10)
+  HANDLER 1 STAT 358 VAL 0 shift 0 descfn 19 descval 0
+ SPEC (65549, 0, 1, 1)
+ GROUP HEADER 0d00000002000000
+ ENTRY (59, 0, 0, 14, 25, 1)
+  SPEC (59, 0, 14, 25)
+  HANDLER 1 STAT 80 VAL 0 shift 0 descfn 19 descval 0
+ ENTRY (58, 0, 0, 20, 55, 1)
+  SPEC (58, 0, 20, 55)
+  HANDLER 1 STAT 79 VAL 0 shift 0 descfn 19 descval 0
+ SPEC (65555, 0, 1, 1)
+ GROUP HEADER 1300000002000000
+ ENTRY (13, 0, 0, 10, 65, 1)
+  SPEC (13, 0, 10, 65)
+  HANDLER 1 STAT 7 VAL 0 shift 8 descfn 19 descval 0
+ ENTRY (11, 0, 0, 10, 75, 1)
+  SPEC (11, 0, 10, 75)
+  HANDLER 1 STAT 9 VAL 0 shift 8 descfn 19 descval 0
+ SPEC (65561, 0, 1, 1)
+ GROUP HEADER 1900000002000000
+ ENTRY (76, 0, 0, 5, 10, 1)
+  SPEC (76, 0, 5, 10)
+  HANDLER 8 STAT 96 VAL 0 shift 0 descfn 19 descval 0
+ ENTRY (79, 0, 0, 12, 24, 3)
+  SPEC (79, 0, 12, 24)
+  HANDLER 8 STAT 99 VAL 0 shift 0 descfn 19 descval 0
+ ENTRY (251, 0, 0, 3, 8, 1)
+  SPEC (251, 0, 3, 8)
+  HANDLER 1 STAT 0 VAL 0 shift 0 descfn 19 descval 0
+  HANDLER 3 STAT 1 VAL 0 shift 0 descfn 19 descval 0
+  HANDLER 3 STAT 2 VAL 0 shift 0 descfn 19 descval 0
+  HANDLER 3 STAT 3 VAL 0 shift 0 descfn 19 descval 0
+ SPEC (65567, 0, 1, 1)
+ GROUP HEADER 1f00000002000000
+ ENTRY (6, 0, 0, 5, 10, 1)
+  SPEC (6, 0, 5, 10)
+  HANDLER 1 STAT 35 VAL 0 shift 0 descfn 19 descval 0
+ ENTRY (3, 0, 0, 5, 10, 1)
+  SPEC (3, 0, 5, 10)
+  HANDLER 1 STAT 34 VAL 0 shift 0 descfn 19 descval 0

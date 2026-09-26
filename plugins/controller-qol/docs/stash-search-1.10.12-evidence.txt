@@ -1,0 +1,68 @@
+StashSearch SHA256 d2305982248980583c54e4db73c9cf7973dd7dcd1c71e2ef7eb9ca8f794e1a20
+stash-search.log bytes efbbbf
+0000C8AE 4885c0 test rax, rax
+0000C8B1 0f846d040000 je 0xcd24
+0000C8B7 e8443c0000 call 0x10500
+0000C8BC 84c0 test al, al
+0000C8BE 0f8460040000 je 0xcd24
+0000C8C4 488b153dec0000 mov rdx, qword ptr [rip + 0xec3d]
+0000C8CB 488b0d2eec0000 mov rcx, qword ptr [rip + 0xec2e]
+0000C8D2 e849390000 call 0x10220
+0000C8D7 84c0 test al, al
+0000C8D9 0f8445040000 je 0xcd24
+000109F9 4c8d05503c0000 lea r8, [rip + 0x3c50]
+00010A00 ba202e9000 mov edx, 0x902e20
+00010A05 488bcb mov rcx, rbx
+00010A08 e88308ffff call 0x1290
+00010A0D 84c0 test al, al
+00010A0F 0f84f8000000 je 0x10b0d
+00001290 4053 push rbx
+00001292 4883ec50 sub rsp, 0x50
+00001296 488b05639e0100 mov rax, qword ptr [rip + 0x19e63]
+0000129D 4833c4 xor rax, rsp
+000012A0 4889442440 mov qword ptr [rsp + 0x40], rax
+000012A5 4533d2 xor r10d, r10d
+000012A8 488d0411 lea rax, [rcx + rdx]
+000012AC 0f57c0 xorps xmm0, xmm0
+000012AF 4c8bca mov r9, rdx
+000012B2 49f7d1 not r9
+000012B5 498bd8 mov rbx, r8
+000012B8 493bc9 cmp rcx, r9
+000012BB 0f11442420 movups xmmword ptr [rsp + 0x20], xmm0
+000012C0 4c0f46d0 cmovbe r10, rax
+000012C4 0f11442430 movups xmmword ptr [rsp + 0x30], xmm0
+000012C9 4d85d2 test r10, r10
+000012CC 7442 je 0x1310
+000012CE 41b820000000 mov r8d, 0x20
+000012D4 488d542420 lea rdx, [rsp + 0x20]
+000012D9 498bca mov rcx, r10
+000012DC e80fdf0000 call 0xf1f0
+000012E1 84c0 test al, al
+000012E3 742b je 0x1310
+000012E5 41b820000000 mov r8d, 0x20
+000012EB 488d4c2420 lea rcx, [rsp + 0x20]
+000012F0 488bd3 mov rdx, rbx
+000012F3 e8e21f0100 call 0x132da
+000012F8 85c0 test eax, eax
+000012FA 0f94c0 sete al
+000012FD 488b4c2440 mov rcx, qword ptr [rsp + 0x40]
+00001302 4833cc xor rcx, rsp
+00001305 e896140100 call 0x127a0
+0000130A 4883c450 add rsp, 0x50
+0000130E 5b pop rbx
+0000130F c3 ret 
+00001310 32c0 xor al, al
+00001312 488b4c2440 mov rcx, qword ptr [rsp + 0x40]
+00001317 4833cc xor rcx, rsp
+0000131A e881140100 call 0x127a0
+0000131F 4883c450 add rsp, 0x50
+00001323 5b pop rbx
+0000CC4A 48c7455850000000 mov qword ptr [rbp + 0x58], 0x50
+0000CC52 48c7456060aa2300 mov qword ptr [rbp + 0x60], 0x23aa60
+0000CC5A 488d05bf780000 lea rax, [rip + 0x78bf]
+0000CC61 48894568 mov qword ptr [rbp + 0x68], rax
+0000CC65 c7457011000000 mov dword ptr [rbp + 0x70], 0x11
+0000CC6C 488d05bd71ffff lea rax, [rip - 0x8e43]
+0000CC73 48894578 mov qword ptr [rbp + 0x78], rax
+0000CC77 488d0592e80000 lea rax, [rip + 0xe892]
+Expected DrawText bytes at plugin RVA14650: 48 89 5c 24 08 48 89 74 24 10 57 48 83 ec 70 0f 29 74 24 60 49 8b f0 0f 28 f3 48 8b fa 48 8b d9

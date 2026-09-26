@@ -1,0 +1,11 @@
+# Menu restoration on D2RLoader 1.3.1 — 1.5.22
+
+The 1.5.21 startup repair was confirmed by the user; basic controls and ground loot also work. Main-menu remapping was disabled because game-only hooks unnecessarily required the old D2RCore file hash.
+
+Reviewed dependency paths in qol_navigation.cpp: HookMenuMessage/PrepareMenuMessage use copied D2R UI messages and the loader trampoline; HookSkillsMessage uses the same path; HookTabMessage uses physical input in L1 mode, with ReadNative independently gated by nativeVerified in other modes. HookBankMessage uses physical input, D2R selected-tab accessor and the original handler. Glyph rendering uses D2R widget/text paths and navigation state, no private core functions. OnMessage uses the public SharedEventService to track panels.
+
+1.5.22 removes only the unrelated core-hash prerequisite from these game-only features. All existing fixed D2R instruction/structure signatures remain required. Loader InstallInlineHook still owns installation. Private-core raw reads and label lock retain exact-core admission; the unsafe bridge remains guarded. No new core hash or guessed address is accepted.
+
+D2R.exe-relative RVAs retained: UISwitcher 0x27DF80 (menu_signatures.h); TabBar 0x878D30 (native_signatures.h); Skill Tree 0x14C6810 (skills_signatures.h); BankPanel 0x23CAA0 and selected-tab accessor 0x23AF50 (shared_page_signatures.h); widget draw 0x86D410 and text draw 0x902E20 (glyph_signatures.h). Runtime VA = exeBase + RVA. Headers include entry/body checks supporting the message action at payload+0x10, payload pointer message+0x110, TabBar switch flag +0x16A0 and left/right actions +0x16A4/+0x16A8. The bank's selected tab is read using the guarded native accessor, not a guessed field. Revalidate the full signatures and message ABI after a game patch; do not replace expected bytes with live bytes just to pass.
+
+Expected policy: main menus L2/R2; Skill/Quest sub-tabs L1/R1; Shared stash sub-pages L1+L2/R2; bare L1/R1 do not rotate Shared pages. Glyph eligibility follows installed remapping hooks. Existing policy/glyph/shared-page tests exercise mappings; runtime admission and controller behavior require a fresh launch and user testing. Global d2rloader deployment only; preserve configuration and old-loader golden archives.

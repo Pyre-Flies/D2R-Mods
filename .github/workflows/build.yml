@@ -1,0 +1,40 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ matrix.plugin }}
+    runs-on: windows-2022
+    strategy:
+      fail-fast: false
+      matrix:
+        plugin: [controller-qol, item-roll-ranges]
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Configure
+        run: cmake -S "plugins/${{ matrix.plugin }}" -B "build/${{ matrix.plugin }}" -A x64
+
+      - name: Build
+        run: cmake --build "build/${{ matrix.plugin }}" --config Release --parallel
+
+      - name: Test
+        run: ctest --test-dir "build/${{ matrix.plugin }}" -C Release --output-on-failure
+
+      - name: Upload DLL
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.plugin }}-${{ github.sha }}
+          path: build/${{ matrix.plugin }}/Release/*.dll
+          if-no-files-found: error

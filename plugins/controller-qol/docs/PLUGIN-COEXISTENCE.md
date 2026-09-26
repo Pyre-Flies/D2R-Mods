@@ -1,0 +1,16 @@
+# Plugin coexistence review — 2026-09-24
+
+Production baseline: 1.3.1.0. This is a static source review, not a claim of universal compatibility. Existing tests pass (QOL 8, ranges 5). No compatibility hook changes are included in this snapshot.
+
+## Findings and priorities
+1. Controller QOL src/controller_input.cpp InstallSingleHook / UninstallSingleHook manually replaces five bytes of XInput exports, recognizes E9 relays, otherwise copies five bytes without instruction relocation. Cleanup unconditionally restores saved bytes and frees relay/trampoline. A later plugin hook could be erased or retain a dangling chain. Highest priority: verified prologues, ownership-aware teardown and lifetime handling together; do not merely skip restoration and still free a reachable trampoline. Test earlier/later owners and in-flight calls. Prefer a suitable loader-managed facility if its documented contract supports external-module XInput exports; current SDK InlineHookRegistration exposes an RVA, not an arbitrary module target.
+2. Item Roll Ranges src/plugin.cpp Exchange/Restore uses compare-and-exchange, restores only owned slots, pins module, and deactivates before restore. Preserve these properties. Strict formatter-target checks reject foreign slot owners. Do not relax target checks without a versioned ABI contract; unknown wrappers may change semantics or lifetime.
+3. Item Roll Ranges PadAdapter replaces the result only at the qualified tooltip return site; other callers pass through. At the tooltip site it does not invoke the previous reader. Review cooperative input/tooltip negotiation before supporting another range/input plugin on this same slot. Keyboard adapter already calls its predecessor.
+4. QOL src/ground_action_hooks.h uses SDK inline hooks for 18 native actions, invokes predecessor once and observes afterward; no ownership of the potion plugin packet-pointer table. Shutdown leaves trampolines to loader cleanup. Existing tests exercise table-owner ordering and partial installation.
+5. QOL src/plugin_compatibility.cpp recognizes Potion Auto Pickup 1.3.3 by identity and guarded hook shape. This is a narrow verified contract, not blanket permission to trust every plugin or version. Existing native pickup bypass recognizes plugin callers to avoid suppressing their automated pickups.
+
+## Existing address inventory
+Ranges Core slots: special 0x7043A0, range helper 0x704400, single 0x7043E8, properties 0x704490, key 0x6FE3B0, pad 0x6FE470. See NATIVE-CONTRACT.md and versioned migration/formatter docs for game targets, byte witnesses and return-site contracts. QOL XInput exports are resolved with GetProcAddress (XInputGetState and ordinal 100), not stable game RVAs. No new live addresses were discovered in this review.
+
+## Verification matrix for compatibility changes
+Both load orders with Potion Auto Pickup 1.3.3 and StashSearch, each alone and together with both plugins; original return/argument preservation; unload after another owner; partial installation rollback; neutral-A portal priority, L1 loot/filter isolation, Ctrl/RB tooltip scope, mouse Ctrl-click, shared/material/gem/cube transfers, vendor sell and focused-potion refill. Unknown ownership should produce an actionable diagnostic and retain unrelated functionality wherever independent activation is safe.

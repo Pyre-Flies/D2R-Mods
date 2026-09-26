@@ -1,0 +1,32 @@
+name: Game-build compatibility
+description: Report a signature/hash mismatch or behavior change after an update
+title: "[Compatibility]: "
+labels: [compatibility]
+body:
+  - type: dropdown
+    id: plugin
+    attributes:
+      label: Plugin
+      options:
+        - Controller QOL Updates
+        - Item Roll Ranges
+    validations:
+      required: true
+  - type: textarea
+    id: hashes
+    attributes:
+      label: Build identity
+      description: File/product versions and SHA-256 hashes for D2R.exe and D2RCore.dll.
+    validations:
+      required: true
+  - type: textarea
+    id: symptoms
+    attributes:
+      label: Observed compatibility failure
+      description: Include the guard/mismatch log lines and whether the plugin failed open.
+    validations:
+      required: true
+  - type: textarea
+    id: validation
+    attributes:
+      label: Validation already performed

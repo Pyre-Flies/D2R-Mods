@@ -1,0 +1,10 @@
+{
+  "source": "<private-workspace>\\work\\runtime-game.exe",
+  "sha256": "81af5adeef90f6be190ca596cc39e6a6c794a47f0231f71a09c0dd27105904c5",
+  "range_helper_rva": "0x2d6330",
+  "range_return_rva": "0x2daadc",
+  "caller_actual_local": "rsp+0x44",
+  "actual_value_source": "statList array +0x30 or +0xa8; Core wide entry: stride16; key stat<<32|layer; int32 value +8",
+  "witnesses": 18,
+  "status": "static proof; live signatures checked at plugin load"
+}

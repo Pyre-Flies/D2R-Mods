@@ -1,0 +1,18 @@
+{
+  "layout": "<game-root>\\mods\\Reimagined\\Reimagined.mpq\\data\\global\\ui\\layouts\\controller\\bankexpansionlayouthd.json",
+  "sha256": "f90603fcf6351fa33b2c5574f9b4fa81ae359a0af3c71fc92dc642ff1f8a197a",
+  "lookup_name": "BankExpansionLayout",
+  "root_type": "BankPanel",
+  "direct_slots_checked": {
+    "gems": [
+      "gcg"
+    ],
+    "materials": [
+      "rvl",
+      "rvs"
+    ],
+    "runes": [
+      "r22"
+    ]
+  }
+}

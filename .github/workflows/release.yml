@@ -1,0 +1,61 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "release-*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-package-release:
+    runs-on: windows-2022
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Configure Controller QOL Updates
+        run: cmake -S plugins/controller-qol -B build/controller-qol -A x64
+
+      - name: Build Controller QOL Updates
+        run: cmake --build build/controller-qol --config Release --parallel
+
+      - name: Test Controller QOL Updates
+        run: ctest --test-dir build/controller-qol -C Release --output-on-failure
+
+      - name: Configure Item Roll Ranges
+        run: cmake -S plugins/item-roll-ranges -B build/item-roll-ranges -A x64
+
+      - name: Build Item Roll Ranges
+        run: cmake --build build/item-roll-ranges --config Release --parallel
+
+      - name: Test Item Roll Ranges
+        run: ctest --test-dir build/item-roll-ranges -C Release --output-on-failure
+
+      - name: Package runtime ZIPs
+        run: >-
+          python tools/package_runtime.py
+          --controller-dll "build/controller-qol/Release/Controller QOL Updates.dll"
+          --ranges-dll "build/item-roll-ranges/Release/Item Roll Ranges.dll"
+          --output dist
+
+      - name: Upload workflow artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: D2R-Mods-${{ github.ref_name }}
+          path: |
+            dist/*.zip
+            dist/SHA256SUMS
+          if-no-files-found: error
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: |
+            dist/*.zip
+            dist/SHA256SUMS

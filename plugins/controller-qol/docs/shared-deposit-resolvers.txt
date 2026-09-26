@@ -1,0 +1,38 @@
+Microsoft (R) COFF/PE Dumper Version 14.44.35220.0
+Copyright (C) Microsoft Corporation.  All rights reserved.
+
+
+Dump of file <private-workspace>\work\runtime-game.exe
+
+File Type: EXECUTABLE IMAGE
+
+  000000014009A5D0: 4C 63 CA           movsxd      r9,edx
+  000000014009A5D3: 48 8D 05 36 93 98  lea         rax,[0000000142A23910h]
+                    02
+  000000014009A5DA: 8B D1              mov         edx,ecx
+  000000014009A5DC: 44 8B C1           mov         r8d,ecx
+  000000014009A5DF: 49 8B C9           mov         rcx,r9
+  000000014009A5E2: 83 E2 7F           and         edx,7Fh
+  000000014009A5E5: 48 C1 E1 0A        shl         rcx,0Ah
+  000000014009A5E9: 48 03 C8           add         rcx,rax
+  000000014009A5EC: E9 7F 4C 00 00     jmp         000000014009F270
+  000000014009A5F1: CC                 int         3
+
+  Summary
+
+     1CAF000 .text
+Microsoft (R) COFF/PE Dumper Version 14.44.35220.0
+Copyright (C) Microsoft Corporation.  All rights reserved.
+
+
+Dump of file <private-workspace>\work\runtime-game.exe
+
+File Type: EXECUTABLE IMAGE
+
+  00000001402EF880: 8B 01              mov         eax,dword ptr [rcx]
+  00000001402EF882: C3                 ret
+  00000001402EF883: CC                 int         3
+
+  Summary
+
+     1CAF000 .text

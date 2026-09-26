@@ -1,0 +1,8 @@
+#pragma once
+#include <cstdint>
+namespace D2RL { struct PluginContext; }
+namespace QolPortal {
+void Initialize(const D2RL::PluginContext*, bool enabled, bool debug,
+    const char* groundModifier, uint32_t radius) noexcept;
+void Shutdown() noexcept;
+}

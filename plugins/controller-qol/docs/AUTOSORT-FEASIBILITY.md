@@ -1,0 +1,11 @@
+# Autosort feasibility evidence (2026-09-24)
+
+Assessment only; no live moves or new native RVAs tested.
+
+- SDK contract: sdk/README.md:588-603 and sdk/include/D2RLPlugin/item.h. executeExistingItemTransaction accepts a batch of existing-item Move operations in Inventory, Cube, PersonalStash and current CustomPage. ItemDestination supports Placement::Exact and x/y. The documented temporary occupancy model removes participating sources before destination validation, supporting swaps/chains; placement/postcondition failure restores moved items. Cursor and SharedStash moves are excluded. Verify actual installed service support and live save/reload before claiming autosort validated.
+- ItemInfo exposes identity, container/page and x/y, but not item width/height.
+- Game workspace Documentation/PluginSDK-master/include/D2RLPlugin/data_tables.h exposes Inventory table ID 58 and combined Items table ID 59, with item code lookup. Active compiled views are game-thread-only and expire at table reload. Compiled dimension field layouts and active bank/grid selection still need verification.
+- Game workspace mods/Reimagined/Reimagined.mpq/data/global/excel/inventory.txt has gridX/gridY: character rows 10x8, Transmogrify Box 12x8, Big Bank 16x13. These are disk data, not confirmation of the currently loaded runtime grid. armor.txt, weapons.txt and misc.txt contain invwidth/invheight keyed by code.
+- Existing docs/SHARED-DEPOSIT.md describes selected shared owner resolution and native automatic transfers, not an atomic exact-position shared sorting contract. docs/MATERIALS-NATIVE-CONTRACT.md establishes advanced tabs as counter proxies rather than ordinary rectangular stored items.
+
+Proposed implementation: snapshot one container, read effective dimensions, compute bounded deterministic packing with original layout as fallback, revalidate snapshot on game thread, submit one exact-position Move batch, verify identities/positions and persistence. Preserve fixed items/reserved cells if configured. Start with inventory/Cube/personal stash; defer shared stash pending an equivalent authoritative transaction path. Never substitute direct coordinate field writes for engine placement/occupancy/update logic.

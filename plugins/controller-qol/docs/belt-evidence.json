@@ -1,0 +1,68 @@
+{
+  "image": "<private-workspace>\\work\\runtime-game.exe",
+  "sha256": "81af5adeef90f6be190ca596cc39e6a6c794a47f0231f71a09c0dd27105904c5",
+  "image_base": "0x140000000",
+  "sites": [
+    {
+      "name": "PlaceStored",
+      "rva": "0x15f660",
+      "va": "0x14015f660",
+      "length": 588,
+      "bytes": "40 53 55 56 57 41 57 48 83 ec 60 48 8b 05 56 bc 86 02 48 33 c4 48 89 44 24 40 48 8b b4 24 b0 00 00 00 41 0f b6 d9 45 0f b6 f8 48 8b fa 48 8b e9 80 7e 04 00 75 5b c7 44 24 38 00 00 00 00 e8 2d bc f2 ff 8b c8 e8 d6 ad f3 ff 48 8b c8 48 8d 15 7c db b6 01 41 b8 d1 05 00 00 e8 a1 ac 1e 00 48 8b c8 4c 8d 44 24 38 44 0f b6 cb 48 8b d5 e8 fd 6b 22 00 85 c0 74 10 8b 44 24 38 80 7e 04 00 89 06 75 04 c6 46 04 01 80 7e 04 00 0f 84 9f 01 00 00 48 8b cf 84 db 0f 84 b6 00 00 00 4c 89 74 24 58 e8 7a fe ff ff 84 c0 75 06 41 80 ff 04 75 1f 48 8d 4c 24 38 e8 96 f6 ff ff 80 78 04 00 74 0a 44 8b 30 c6 44 24 3c 00 eb 0b c6 44 24 3c 00 41 be ff ff ff ff 80 7e 04 00 75 14 48 8d 4c 24 30 c6 44 24 30 00 e8 46 9d ff ff 84 c0 74 01 cc 8b 3e 48 8b cd e8 87 0a 00 00 41 b8 e2 05 00 00 48 8d 15 ca da b6 01 48 8b cd 8b d8 e8 c0 ab 1e 00 45 8b cf 89 7c 24 28 45 8b c6 89 5c 24 20 8b d0 b1 53 e8 99 d0 f8 ff e8 b4 4e fe ff 48 8b d8 e8 3c bb f2 ff 41 b9 ff ff ff ff 8b d0 48 8b cb 45 8d 41 08 e8 78 b7 fe ff 4c 8b 74 24 58 e9 ba 00 00 00 8b 1e 48 8d 15 75 da b6 01 41 b8 e7 05 00 00 e8 9a ab 1e 00 8b d3 48 8b c8 e8 c0 8b 22 00 0f b6 4e 04 48 8b d8 48 85 c0 74 56 84 c9 75 13 88 4c 24 30 48 8d 4c 24 30 e8 a2 9c ff ff 84 c0 74 01 cc 8b 3e 48 8d 15 34 da b6 01 41 b8 ea 05 00 00 48 8b cb e8 26 ab 1e 00 41 b8 ea 05 00 00 48 8d 15 19 da b6 01 48 8b cd 8b d8 e8 0f ab 1e 00 44 8b cf 44 8b c3 8b d0 b1 25 e8 50 cf f8 ff eb 3a 84 c9 75 13 88 4c 24 30 48 8d 4c 24 30 e8 4c 9c ff ff 84 c0 74 01 cc 8b 1e 48 8d 15 de d9 b6 01 41 b8 ef 05 00 00 48 8b cd e8 d0 aa 1e 00 44 8b c3 8b d0 b1 23 e8 c4 ce f8 ff 48 8b cd e8 4c 72 06 00 48 8b cd e8 a4 3b 06 00 8b c8 c6 44 24 20 00 45 33 c9 45 33 c0 33 d2 e8 f0 0e 04 00 c6 46 04 00 48 8b 4c 24 40 48 33 cc e8 af 18 17 01 48 83 c4 60 41 5f 5f 5e 5d 5b c3",
+      "sha256": "18650531b6cf433842d1c21b0bd026464e580844114e8379faa3f2a59c0b3a33"
+    },
+    {
+      "name": "LocalContext",
+      "rva": "0x8b2d0",
+      "va": "0x14008b2d0",
+      "length": 32,
+      "bytes": "8b 05 2e 84 99 02 c3 cc cc cc cc cc cc cc cc cc 8b 05 76 84 99 02 c3 cc cc cc cc cc cc cc cc cc",
+      "sha256": "0b1fd7432d785362bfee1bca421e544ab52d851ccd0d92144239576013059003"
+    },
+    {
+      "name": "LocalPlayer",
+      "rva": "0x9a480",
+      "va": "0x14009a480",
+      "length": 32,
+      "bytes": "48 89 5c 24 08 57 48 83 ec 20 83 f9 08 0f 83 85 00 00 00 8b d9 48 89 5c 24 38 48 83 fb 08 72 19",
+      "sha256": "c95d080836595847c63e4f725abd0cbe2fa545705140a1beff5afade4810334a"
+    },
+    {
+      "name": "UnitInventory",
+      "rva": "0x34a360",
+      "va": "0x14034a360",
+      "length": 32,
+      "bytes": "48 89 5c 24 18 56 48 83 ec 20 48 8b f1 48 85 c9 75 13 88 4c 24 30 48 8d 4c 24 30 e8 70 cc ff ff",
+      "sha256": "4dbc780a26c1381dfa158a12c12bcd82e97b00f466e38bd433ec08c35e3fc13c"
+    },
+    {
+      "name": "FreeBeltSlot",
+      "rva": "0x3862d0",
+      "va": "0x1403862d0",
+      "length": 32,
+      "bytes": "40 53 55 56 57 41 54 41 56 41 57 48 81 ec 70 01 00 00 48 8b 05 df 4f 64 02 48 33 c4 48 89 84 24",
+      "sha256": "7b2d9dbe341e8b2ed8b44f5ddfcd01fab68eeadb46fda520062bc719dd66ed9c"
+    },
+    {
+      "name": "TransferPage",
+      "rva": "0x15f8b0",
+      "va": "0x14015f8b0",
+      "length": 32,
+      "bytes": "40 55 53 56 57 41 54 41 55 41 56 41 57 48 8d ac 24 08 ff ff ff 48 81 ec f8 01 00 00 48 8b 05 f5",
+      "sha256": "03731769cfd0f1ad3259f87191ffef8cd7ed3b8f4a5347895ffff17d0ce37499"
+    },
+    {
+      "name": "FinishInteraction",
+      "rva": "0x1a0780",
+      "va": "0x1401a0780",
+      "length": 32,
+      "bytes": "40 55 56 57 41 56 41 57 48 8d 6c 24 d1 48 81 ec 00 01 00 00 48 8b 05 2d ab 82 02 48 33 c4 48 89",
+      "sha256": "e7791c3d60ae7f63d6c4ea116de7145d8d9bcb9a1a4c96d10cbc3bbf60bbf402"
+    }
+  ],
+  "candidate_E8_callers_requires_disassembly": [
+    "0x2283a6",
+    "0x2aa7c5",
+    "0x2c7d54"
+  ]
+}

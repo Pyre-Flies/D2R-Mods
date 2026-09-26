@@ -1,0 +1,39 @@
+# CMake and compiler output
+build/
+build-*/
+out/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+CTestTestfile.cmake
+Testing/
+*.sln
+*.vcxproj*
+*.obj
+*.pdb
+*.ilk
+*.exp
+*.lib
+*.dll
+
+# Local tooling
+__pycache__/
+*.py[cod]
+.venv/
+.vs/
+.vscode/
+.idea/
+
+# Runtime and private analysis artifacts
+*.log
+*.dmp
+backups/
+packages/
+releases/
+dist/
+tools/python-libs/
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini

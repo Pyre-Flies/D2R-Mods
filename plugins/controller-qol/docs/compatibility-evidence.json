@@ -1,0 +1,119 @@
+{
+  "address_kind": "D2R.exe-relative RVAs from reviewed decrypted capture",
+  "sites": [
+    {
+      "name": "Handler01",
+      "rva": "0x4ac050",
+      "size": 32,
+      "bytes": "4883ec3844894c24204d8bc841b802000000e8097c04004883c438c3cccccccc"
+    },
+    {
+      "name": "Handler02",
+      "rva": "0x4ace20",
+      "size": 32,
+      "bytes": "4883ec3844894c24204d8bc841b802000000e8496d04004883c438c3cccccccc"
+    },
+    {
+      "name": "Handler03",
+      "rva": "0x4ace40",
+      "size": 32,
+      "bytes": "4883ec3844894c24204d8bc841b803000000e8196e04004883c438c3cccccccc"
+    },
+    {
+      "name": "Handler04",
+      "rva": "0x4ace60",
+      "size": 32,
+      "bytes": "4883ec3844894c24204d8bc841b803000000e8096d04004883c438c3cccccccc"
+    },
+    {
+      "name": "Handler05",
+      "rva": "0x4ace80",
+      "size": 32,
+      "bytes": "48895c240848896c2410488974241857415641574883ec30488bfa488be94183"
+    },
+    {
+      "name": "Handler06",
+      "rva": "0x4acf80",
+      "size": 32,
+      "bytes": "48895c240848896c24104889742418574883ec40488bfa488be94183f9097407"
+    },
+    {
+      "name": "Handler07",
+      "rva": "0x4ad030",
+      "size": 32,
+      "bytes": "48895c240848896c24104889742418574883ec40488bfa488be94183f9097407"
+    },
+    {
+      "name": "Handler08",
+      "rva": "0x4ad0e0",
+      "size": 32,
+      "bytes": "4883ec38c744242001000000e85fbb04004883c438c3cccccccccccccccccccc"
+    },
+    {
+      "name": "Handler09",
+      "rva": "0x4ad100",
+      "size": 32,
+      "bytes": "4883ec38c644242800c744242001000000e83aba04004883c438c3cccccccccc"
+    },
+    {
+      "name": "Handler0A",
+      "rva": "0x4ad120",
+      "size": 32,
+      "bytes": "4883ec38c644242801c744242001000000e81aba04004883c438c3cccccccccc"
+    },
+    {
+      "name": "Handler0B",
+      "rva": "0x4ad140",
+      "size": 32,
+      "bytes": "48895c240848896c2410488974241857415641574883ec30488bfa488be94183"
+    },
+    {
+      "name": "Handler0C",
+      "rva": "0x4ad230",
+      "size": 32,
+      "bytes": "48895c240848896c2410488974241857415641574883ec30488bfa488be94183"
+    },
+    {
+      "name": "Handler0D",
+      "rva": "0x4ad330",
+      "size": 32,
+      "bytes": "48895c240848896c24104889742418574883ec40488bfa488be94183f9097407"
+    },
+    {
+      "name": "Handler0E",
+      "rva": "0x4ad3e0",
+      "size": 32,
+      "bytes": "48895c240848896c24104889742418574883ec40488bfa488be94183f9097407"
+    },
+    {
+      "name": "Handler0F",
+      "rva": "0x4ad490",
+      "size": 32,
+      "bytes": "4883ec38c744242000000000e8afb704004883c438c3cccccccccccccccccccc"
+    },
+    {
+      "name": "Handler10",
+      "rva": "0x4ad4b0",
+      "size": 32,
+      "bytes": "4883ec38c644242800c744242000000000e88ab604004883c438c3cccccccccc"
+    },
+    {
+      "name": "Handler11",
+      "rva": "0x4ad4d0",
+      "size": 32,
+      "bytes": "4883ec38c644242801c744242000000000e86ab604004883c438c3cccccccccc"
+    },
+    {
+      "name": "Handler12",
+      "rva": "0x4ad4f0",
+      "size": 32,
+      "bytes": "48895c240848896c24104889742418574883ec40488bfa488be94183f9097407"
+    },
+    {
+      "name": "BeltEntry",
+      "rva": "0x3862d0",
+      "size": 96,
+      "bytes": "40535556574154415641574881ec70010000488b05df4f64024833c44889842460010000450fb6e14d8bf8488bea488bf94885c97537884c2430488d4c2430e8acd3ffff84c07401cc33c0488b8c24600100004833cce825aef4004881c47001"
+    }
+  ]
+}

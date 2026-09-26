@@ -1,0 +1,3 @@
+[submodule "third_party/D2RLoader-PluginSDK"]
+	path = third_party/D2RLoader-PluginSDK
+	url = https://github.com/D2RLoader/PluginSDK.git
