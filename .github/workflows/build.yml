@@ -16,7 +16,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        plugin: [controller-qol, item-roll-ranges]
+        plugin: [controller-qol, item-roll-ranges, map-assistance]
 
     steps:
       - uses: actions/checkout@v4

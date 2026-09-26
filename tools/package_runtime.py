@@ -1,4 +1,4 @@
-"""Create the two installable runtime ZIPs for a D2R-Mods GitHub release."""
+"""Create the installable runtime ZIPs for a D2R-Mods GitHub release."""
 
 from __future__ import annotations
 
@@ -55,12 +55,14 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--controller-dll", type=Path, required=True)
     parser.add_argument("--ranges-dll", type=Path, required=True)
+    parser.add_argument("--map-assistance-dll", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
 
     controller = REPOSITORY / "plugins" / "controller-qol"
     ranges = REPOSITORY / "plugins" / "item-roll-ranges"
+    map_assistance = REPOSITORY / "plugins" / "map-assistance"
     controller_version = read_version(
         controller / "src" / "plugin_main.cpp",
         r'\.version\s*=\s*"([^"]+)"',
@@ -68,6 +70,10 @@ def main() -> None:
     ranges_version = read_version(
         ranges / "src" / "plugin.cpp",
         r'"item-roll-ranges",\s*"Item Roll Ranges",\s*"([^"]+)"',
+    )
+    map_assistance_version = read_version(
+        map_assistance / "src" / "plugin.cpp",
+        r'\.version\s*=\s*"([^"]+)"',
     )
 
     controller_compatibility = f"""Controller QOL Updates by PyreFly
@@ -113,13 +119,32 @@ before installing or replacing the DLL.
     ranges_zip = args.output / f"Item-Roll-Ranges-{ranges_version}-PyreFly.zip"
     make_archive(ranges_zip, ranges_files)
 
+    map_assistance_files = {
+        "d2rloader/plugins/Map Assistance.dll": require_file(args.map_assistance_dll),
+        "configuration/map-assistance.toml": require_file(
+            map_assistance / "map-assistance.toml"
+        ),
+        "README.md": require_file(map_assistance / "DISTRIBUTION-README.md"),
+        "CHANGELOG.md": require_file(map_assistance / "CHANGELOG.md"),
+        "COMPATIBILITY.md": require_file(map_assistance / "COMPATIBILITY.md"),
+        "CREDITS.md": require_file(map_assistance / "CREDITS.md"),
+    }
+    map_assistance_zip = args.output / (
+        f"Map-Assistance-{map_assistance_version}-PyreFly.zip"
+    )
+    make_archive(map_assistance_zip, map_assistance_files)
+
     release_sums = "".join(
         f"{hashlib.sha256(path.read_bytes()).hexdigest()}  {path.name}\n"
-        for path in sorted((controller_zip, ranges_zip), key=lambda item: item.name)
+        for path in sorted(
+            (controller_zip, ranges_zip, map_assistance_zip),
+            key=lambda item: item.name,
+        )
     )
     (args.output / "SHA256SUMS").write_text(release_sums, encoding="utf-8", newline="\n")
     print(controller_zip)
     print(ranges_zip)
+    print(map_assistance_zip)
     print(args.output / "SHA256SUMS")
 
 

@@ -35,11 +35,21 @@ jobs:
       - name: Test Item Roll Ranges
         run: ctest --test-dir build/item-roll-ranges -C Release --output-on-failure
 
+      - name: Configure Map Assistance
+        run: cmake -S plugins/map-assistance -B build/map-assistance -A x64
+
+      - name: Build Map Assistance
+        run: cmake --build build/map-assistance --config Release --parallel
+
+      - name: Test Map Assistance
+        run: ctest --test-dir build/map-assistance -C Release --output-on-failure
+
       - name: Package runtime ZIPs
         run: >-
           python tools/package_runtime.py
           --controller-dll "build/controller-qol/Release/Controller QOL Updates.dll"
           --ranges-dll "build/item-roll-ranges/Release/Item Roll Ranges.dll"
+          --map-assistance-dll "build/map-assistance/Release/Map Assistance.dll"
           --output dist
 
       - name: Upload workflow artifacts

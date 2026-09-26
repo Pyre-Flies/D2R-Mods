@@ -18,29 +18,31 @@ source history.
    ```
 
 The `release` workflow performs clean Release builds, runs all tests, creates
-both versioned runtime ZIPs, creates `SHA256SUMS`, and attaches all three files
-to the GitHub release. GitHub separately supplies repository source archives.
+the three versioned runtime ZIPs, creates `SHA256SUMS`, and attaches all four
+files to the GitHub release. GitHub separately supplies repository source
+archives.
 
 The release is not published if either build, test suite, ZIP integrity check,
 or packaging step fails.
 
 ## Local package verification
 
-After building both plugins, run:
+After building all three plugins, run:
 
 ```powershell
 python tools/package_runtime.py `
   --controller-dll "build/controller-qol/Release/Controller QOL Updates.dll" `
   --ranges-dll "build/item-roll-ranges/Release/Item Roll Ranges.dll" `
+  --map-assistance-dll "build/map-assistance/Release/Map Assistance.dll" `
   --output dist
 ```
 
 Each ZIP contains its own `SHA256SUMS` for installed files. The adjacent release
-`SHA256SUMS` covers the two ZIP assets themselves.
+`SHA256SUMS` covers the three ZIP assets themselves.
 
 ## Manual upload
 
 If GitHub Actions is unavailable, build, test, and run the same packaging script
 locally. On the repository's GitHub page, open **Releases**, choose **Draft a
-new release**, select or create the suite tag, and drag the two ZIPs plus
+new release**, select or create the suite tag, and drag the three ZIPs plus
 `SHA256SUMS` into the release assets area. Do not commit them to `main`.
