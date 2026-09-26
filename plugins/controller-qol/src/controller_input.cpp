@@ -575,6 +575,9 @@ static unsigned NativeActiveIndex() noexcept {
         return manager && *reinterpret_cast<const unsigned*>(manager+0xdc)==1 && index<8 ? index : ~0u;
     } __except(EXCEPTION_EXECUTE_HANDLER) {return ~0u;}
 }
+bool IsControllerUiActive() noexcept {
+    return NativeActiveIndex()!=~0u;
+}
 static void ResetNativeTracking() noexcept {
     s_NativeRaw=s_NativeDelivered=0;s_NativeIndex=~0u;
     s_NativeSnapshot.store(0);

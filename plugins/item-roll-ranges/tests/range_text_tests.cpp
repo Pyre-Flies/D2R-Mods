@@ -10,8 +10,56 @@ int main() {
     check(result.text.find("[+25 - +50]\xff" "c3 +38% Enhanced Weapon Damage")!=std::string::npos);
     check(result.text.ends_with("+25% Faster Hit Recovery\n"));
     result=RangeText::Merge("Adds 12 to 35 Fire Damage","Adds "+range("(10-20)")+" to "+range("(30-40)")+" Fire Damage",1024);
-    check(result.annotated==1 && result.text.find("[+10 - +20; +30 - +40]")!=std::string::npos);
+    check(result.annotated==1 && result.text.find("[+10 - +40]")!=std::string::npos);
     check(result.text.ends_with("Adds 12 to 35 Fire Damage"));
+    const auto fireKey=RangeText::Analyze("Adds 12 to 35 Fire Damage").key;
+    std::vector<RangeText::Label> stackedFire={{fireKey,"[P] [Smoldering] [T3] [S] [of Flame] [T4]"}};
+    stackedFire[0].unknownSources={"[P] [Smoldering] [T3]","[S] [of Flame] [T4]"};
+    result=RangeText::Merge("Adds 12 to 35 Fire Damage",
+        "Adds "+range("(10-20)")+" to "+range("(30-40)")+" Fire Damage",2048,stackedFire);
+    const auto fireLines=RangeText::Lines(result.text);
+    check(fireLines.size()==3 && fireLines[0].find("Adds ? to ? Fire Damage")!=std::string_view::npos);
+    check(fireLines[0].find("[S] [of Flame] [T4]")!=std::string_view::npos);
+    check(fireLines[1].find("[P] [Smoldering] [T3]")!=std::string_view::npos);
+    check(fireLines[2].find("[+10 - +40]")!=std::string_view::npos &&
+          fireLines[2].find("[Combined]")!=std::string_view::npos);
+    result=RangeText::Merge("Adds 12 to 35 Fire Damage","Adds 12 to 35 Fire Damage",2048,stackedFire);
+    const auto noNativeRange=RangeText::Lines(result.text);
+    check(noNativeRange.size()==3 && noNativeRange[0].find("Adds ? to ? Fire Damage")!=std::string_view::npos);
+    check(noNativeRange[2].find("Adds 12 to 35 Fire Damage [Combined]")!=std::string_view::npos &&
+          noNativeRange[2].find("[+")==std::string_view::npos);
+    result=RangeText::Merge("Adds 12 to 35 Fire Damage",
+        "+"+range("(2-5)")+" Weapon Fire Damage",2048,stackedFire);
+    const auto partialProvider=RangeText::Lines(result.text);
+    check(partialProvider.size()==3 && partialProvider[0].find("Adds ? to ? Fire Damage")!=std::string_view::npos);
+    check(partialProvider[2].find("Adds 12 to 35 Fire Damage [Combined]")!=std::string_view::npos &&
+          partialProvider[2].find("[+2 - +5]")==std::string_view::npos);
+    auto exactFire=stackedFire;
+    exactFire[0].key=RangeText::Analyze("Adds 22-53 Weapon Fire Damage").key;
+    exactFire[0].pairedParts={{21,21,50,50,"[P] [Elemental] [T1]"},
+                              {1,1,2,5,"[S] [of Flame] [T6]"}};
+    result=RangeText::Merge("Adds 22-53 Weapon Fire Damage",
+        "+"+range("(2-5)")+" Weapon Fire Damage",2048,exactFire);
+    const auto exactFireLines=RangeText::Lines(result.text);
+    check(exactFireLines.size()==3);
+    check(exactFireLines[0].find("Adds 1-3 Weapon Fire Damage")!=std::string_view::npos &&
+          exactFireLines[0].find("[S] [of Flame] [T6]")!=std::string_view::npos);
+    check(exactFireLines[1].find("Adds 21-50 Weapon Fire Damage")!=std::string_view::npos &&
+          exactFireLines[1].find("[P] [Elemental] [T1]")!=std::string_view::npos);
+    check(exactFireLines[2].find("Adds 22-53 Weapon Fire Damage [Combined]")!=std::string_view::npos);
+    result=RangeText::Merge("Adds 22-56 Weapon Fire Damage",
+        "+"+range("(2-5)")+" Weapon Fire Damage",2048,exactFire);
+    check(result.text.find("Adds ?-? Weapon Fire Damage")!=std::string::npos &&
+          result.text.find("Adds 1-6 Weapon Fire Damage")==std::string::npos);
+    check(RangeText::Analyze("Adds "+range("(27-51)")+"-"+range("(63-95)")+" Fire Damage").prefix==
+          "+27 - +51; +63 - +95");
+    check(RangeText::Analyze("Adds 1-"+range("(6-8)")+" Lightning Damage").prefix=="+6 - +8");
+    check(RangeText::Analyze("-"+range("(11-20)")+"% Target Defense").prefix=="-20 - -11");
+    check(RangeText::Analyze("Level 5: -"+range("(11-20)")+"% Target Defense").prefix=="-20 - -11");
+    check(RangeText::DisplayBounds("+27 - +51; +63 - +95")=="+27 - +95");
+    result=RangeText::Merge("-11% Target Defense","-"+range("(11-20)")+"% Target Defense",1024);
+    check(result.annotated==1 && result.text.find("[-20 - -11]")!=std::string::npos &&
+          result.text.ends_with("-11% Target Defense"));
     result=RangeText::Merge("5% Chance to cast level 7 Nova on striking","5% Chance to cast level "+range("(5-10)")+" Nova on striking",1024);
     check(result.annotated==1 && result.text.ends_with("5% Chance to cast level 7 Nova on striking"));
     result=RangeText::Merge("+20 All Resistances","+"+range("(10-30)")+" All Resistances",1024);
@@ -55,16 +103,16 @@ int main() {
     check(RangeText::Expand("Adds 10 to 20 Damage",RangeText::Analyze(native),split[0].parts).empty());
     // Live Bramble Song regression: Savage66..80 + Fine21..30, native provider
     // supplies only21..30 for the95 total. Each prefix needs its own line.
-    const std::vector<RangeText::Label> bow={{key,"[Prefix] [T4] [Prefix] [T6]",
-        {{66,80,"[Prefix] [T4]"},{21,30,"[Prefix] [T6]"}},true}};
+    const std::vector<RangeText::Label> bow={{key,"[P] [Savage] [T4] [P] [Fine] [T6]",
+        {{66,80,"[P] [Savage] [T4]"},{21,30,"[P] [Fine] [T6]"}},true}};
     const auto bowRange="+"+range("(21-30)")+"% Enhanced Damage";
     result=RangeText::Merge("+95% Enhanced Damage",bowRange,2048,bow);
     check(result.text.ends_with("+95% Enhanced Damage [Combined]"));
     check(result.text.find("[66%-80%]")!=std::string::npos && result.text.find("[21%-30%]")!=std::string::npos);
     const auto bowLines=RangeText::Lines(result.text);
     check(bowLines.size()==3);
-    check(bowLines[1].find("[Prefix] [T4]")!=std::string_view::npos && bowLines[1].find("[T6]")==std::string_view::npos);
-    check(bowLines[0].find("[Prefix] [T6]")!=std::string_view::npos && bowLines[0].find("[T4]")==std::string_view::npos);
+    check(bowLines[1].find("[P] [Savage] [T4]")!=std::string_view::npos && bowLines[1].find("[T6]")==std::string_view::npos);
+    check(bowLines[0].find("[P] [Fine] [T6]")!=std::string_view::npos && bowLines[0].find("[T4]")==std::string_view::npos);
     check(bowLines[1].find("?% Enhanced Damage")!=std::string_view::npos && bowLines[0].find("?% Enhanced Damage")!=std::string_view::npos && result.text.find("Roll unknown")==std::string::npos);
     check(bowLines[0].starts_with("\xff" "c5") && bowLines[1].starts_with("\xff" "c5"));
     check(bowLines[2].starts_with("\xff" "c3")); // Drawn above the gray children.

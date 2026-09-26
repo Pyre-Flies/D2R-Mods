@@ -5,7 +5,10 @@ import ctypes as c
 import json, struct, sys
 from pathlib import Path
 sys.path.insert(0,str(Path(__file__).parent/'python-libs'))
-import capstone
+try:
+ import capstone
+except ModuleNotFoundError:
+ capstone=None
 k=c.WinDLL('kernel32',use_last_error=True)
 k.OpenProcess.argtypes=[c.c_ulong,c.c_int,c.c_ulong];k.OpenProcess.restype=c.c_void_p
 k.ReadProcessMemory.argtypes=[c.c_void_p,c.c_void_p,c.c_void_p,c.c_size_t,c.c_void_p]
@@ -20,18 +23,20 @@ def q(a):return struct.unpack('<Q',read(a,8))[0]
 game=0x140000000
 try:
  core=0xc0de5000000
- image=read(core+0x1000,0x900000)
- for pos in range(len(image)-6):
-  if image[pos:pos+2]!=b'\xff\x15':continue
-  addr=core+0x1000+pos
-  target=addr+6+struct.unpack_from('<i',image,pos+2)[0]
-  if target==core+0x704400:print('Range helper call/return',hex(addr-core),hex(addr+6-core))
- md=capstone.Cs(capstone.CS_ARCH_X86,capstone.CS_MODE_64)
- fn=q(game+0x3e2a240) if '--adder' in sys.argv else q(game+0x2386ab0+7*8)
- print('Core stat adder' if '--adder' in sys.argv else 'Physical enhanced damage function7',hex(fn))
- for i in md.disasm(read(fn,0x600),fn):
-  print(hex(i.address),i.mnemonic,i.op_str)
-  if i.mnemonic=='ret':break
+ if '--items-only' not in sys.argv:
+  if capstone is None:raise RuntimeError('capstone is required unless --items-only is used')
+  image=read(core+0x1000,0x900000)
+  for pos in range(len(image)-6):
+   if image[pos:pos+2]!=b'\xff\x15':continue
+   addr=core+0x1000+pos
+   target=addr+6+struct.unpack_from('<i',image,pos+2)[0]
+   if target==core+0x704400:print('Range helper call/return',hex(addr-core),hex(addr+6-core))
+  md=capstone.Cs(capstone.CS_ARCH_X86,capstone.CS_MODE_64)
+  fn=q(game+0x3e2a240) if '--adder' in sys.argv else q(game+0x2386ab0+7*8)
+  print('Core stat adder' if '--adder' in sys.argv else 'Physical enhanced damage function7',hex(fn))
+  for i in md.disasm(read(fn,0x600),fn):
+   print(hex(i.address),i.mnemonic,i.op_str)
+   if i.mnemonic=='ret':break
  seen=set()
  for bucket in range(128):
   unit=q(game+0x2a23910+4*1024+bucket*8)

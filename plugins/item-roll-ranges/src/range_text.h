@@ -33,9 +33,25 @@ inline std::string Bounds(std::string text) {
     }
     return text;
 }
+inline std::string NegatedBounds(std::string text) {
+    const auto normalized=Bounds(std::move(text));
+    long long low{},high{}; int used{};
+    if (sscanf_s(normalized.c_str(),"%lld - %lld%n",&low,&high,&used)==2 &&
+        used==static_cast<int>(normalized.size())) {
+        const auto negatedLow=-high;
+        const auto negatedHigh=-low;
+        char out[96]{};
+        std::snprintf(out,sizeof(out),"%+lld - %+lld",
+            std::min(negatedLow,negatedHigh),std::max(negatedLow,negatedHigh));
+        return out;
+    }
+    // Preserve an unfamiliar native/localized span rather than guessing at it.
+    return "-("+normalized+")";
+}
 inline Analysis Analyze(std::string_view text) {
     Analysis a;
     char externalSign=0;
+    bool previousTokenWasNumeric=false;
     for (std::size_t i=0;i<text.size();) {
         char color{}; const auto token=Color(text,i,color);
         if (token) {
@@ -46,9 +62,10 @@ inline Analysis Analyze(std::string_view text) {
                 auto span=std::string(text.substr(start,end-start));
                 if (!span.empty()) {
                     if (!a.prefix.empty()) a.prefix+="; ";
-                    a.prefix+=(externalSign=='-' ? "-("+Bounds(span)+")" : Bounds(span));
+                    a.prefix+=(externalSign=='-' ? NegatedBounds(span) : Bounds(span));
                     externalSign=0;
                     a.key+='#';
+                    previousTokenWasNumeric=true;
                 }
                 i=end; continue;
             }
@@ -58,16 +75,39 @@ inline Analysis Analyze(std::string_view text) {
         if (Digit(c) || ((c=='+' || c=='-') && i+1<text.size() && Digit(text[i+1]))) {
             a.key+='#'; ++i;
             while (i<text.size() && (Digit(text[i]) || text[i]=='.' || text[i]==',')) ++i;
+            previousTokenWasNumeric=true;
             continue;
         }
         // The sign preceding a native colored range is outside its color span.
         if ((c=='+' || c=='-') && i+1<text.size()) {
-            char next{}; if (Color(text,i+1,next) && next=='U') { externalSign=c; ++i; continue; }
+            char next{}; if (Color(text,i+1,next) && next=='U') {
+                // A dash immediately following a numeric token is a native
+                // min/max separator (for example, Adds 1-(6-8) Lightning
+                // Damage). Otherwise it is a unary negative sign (for
+                // example, -(11-20)% Target Defense).
+                externalSign=(c=='-' && !previousTokenWasNumeric) ? '-' : 0;
+                ++i; continue;
+            }
         }
-        if (c!=' ' && c!='\t' && c!='\r') a.key+=c;
+        if (c!=' ' && c!='\t' && c!='\r') {
+            a.key+=c;
+            previousTokenWasNumeric=false;
+        }
         ++i;
     }
     return a;
+}
+inline std::string DisplayBounds(const std::string& bounds) {
+    long long firstLow{},firstHigh{},secondLow{},secondHigh{}; int used{};
+    if (sscanf_s(bounds.c_str(),"%lld - %lld; %lld - %lld%n",
+            &firstLow,&firstHigh,&secondLow,&secondHigh,&used)==4 &&
+        used==static_cast<int>(bounds.size()) && firstLow<=firstHigh &&
+        secondLow<=secondHigh && firstLow<=secondHigh) {
+        char result[96]{};
+        std::snprintf(result,sizeof(result),"%+lld - %+lld",firstLow,secondHigh);
+        return result;
+    }
+    return bounds;
 }
 inline std::vector<std::string_view> Lines(std::string_view s) {
     std::vector<std::string_view> lines;
@@ -75,7 +115,18 @@ inline std::vector<std::string_view> Lines(std::string_view s) {
     return lines;
 }
 struct Contribution { int low{},high{}; std::string label; };
-struct Label { std::string key, text; std::vector<Contribution> parts{}; bool allowPartialNativeRange{}; std::string fallbackRange{}; };
+struct PairedContribution {
+    int minLow{},minHigh{},maxLow{},maxHigh{};
+    std::string label;
+};
+struct Label {
+    std::string key, text;
+    std::vector<Contribution> parts{};
+    bool allowPartialNativeRange{};
+    std::string fallbackRange{};
+    std::vector<std::string> unknownSources{};
+    std::vector<PairedContribution> pairedParts{};
+};
 // Compare two native scalar renders; preserve localized wording and signs.
 inline std::string EndpointRange(std::string_view actual,std::string_view low,std::string_view high) {
     if (Analyze(actual).key!=Analyze(low).key || Analyze(actual).key!=Analyze(high).key) return {};
@@ -185,6 +236,96 @@ inline std::string Expand(std::string_view original,const Analysis& native,
     if (!exact) result+='\n'+marker+"3"+std::string(original)+" [Combined]";
     return result;
 }
+inline std::string ExpandUnknown(std::string_view original,const Analysis& native,
+                                 const std::vector<std::string>& sources) {
+    if (sources.size()<2 || sources.size()>6) return {};
+    std::string plain;
+    for (std::size_t i=0;i<original.size();) {
+        char color{}; const auto token=Color(original,i,color);
+        if (token) i+=token; else plain+=original[i++];
+    }
+    std::string unknown;
+    for (std::size_t i=0;i<plain.size();) {
+        if (Digit(plain[i]) || ((plain[i]=='+' || plain[i]=='-') && i+1<plain.size() && Digit(plain[i+1]))) {
+            if (plain[i]=='+' || plain[i]=='-') unknown+=plain[i++];
+            unknown+='?';
+            while (i<plain.size() && (Digit(plain[i]) || plain[i]=='.' || plain[i]==',')) ++i;
+        } else unknown+=plain[i++];
+    }
+    const std::string marker=native.marker.empty()?"\xee\x81\xbe":native.marker;
+    std::string result;
+    for (std::size_t i=0;i<sources.size();++i) {
+        if (i) result+='\n';
+        const auto index=sources.size()-1-i;
+        result+=marker+"5"+unknown+' '+marker+"5"+sources[index]+marker+"3";
+    }
+    result+='\n';
+    if (!native.prefix.empty()) result+=marker+"U["+DisplayBounds(native.prefix)+"]"+marker+"3 ";
+    else result+=marker+"3";
+    result+=plain+" [Combined]";
+    return result;
+}
+inline std::string ExpandPaired(std::string_view original,const Analysis& native,
+                                const std::vector<PairedContribution>& parts) {
+    if (parts.size()<2 || parts.size()>6) return {};
+    std::string plain;
+    for (std::size_t i=0;i<original.size();) {
+        char color{}; const auto token=Color(original,i,color);
+        if (token) i+=token; else plain+=original[i++];
+    }
+    struct Number { std::size_t start{},finish{}; long long value{}; bool plus{}; };
+    std::vector<Number> numbers;
+    for (std::size_t i=0;i<plain.size();) {
+        if (!Digit(plain[i])) { ++i; continue; }
+        auto start=i;
+        if (i && (plain[i-1]=='+' || plain[i-1]=='-') &&
+            (i<2 || !Digit(plain[i-2]))) --start;
+        char* end{}; errno=0;
+        const auto value=std::strtoll(plain.c_str()+start,&end,10);
+        if (errno || end==plain.c_str()+start) return {};
+        const auto finish=static_cast<std::size_t>(end-plain.c_str());
+        numbers.push_back({start,finish,value,plain[start]=='+'});
+        i=finish;
+    }
+    if (numbers.size()!=2) return {};
+    long long sumMinLow=0,sumMinHigh=0,sumMaxLow=0,sumMaxHigh=0;
+    for (const auto& p:parts) {
+        if (p.minLow>p.minHigh || p.maxLow>p.maxHigh) return {};
+        sumMinLow+=p.minLow; sumMinHigh+=p.minHigh;
+        sumMaxLow+=p.maxLow; sumMaxHigh+=p.maxHigh;
+    }
+    if (numbers[0].value<sumMinLow || numbers[0].value>sumMinHigh ||
+        numbers[1].value<sumMaxLow || numbers[1].value>sumMaxHigh) return {};
+    std::vector<std::pair<long long,long long>> values;
+    for (const auto& p:parts) {
+        const auto minLow=std::max<long long>(p.minLow,numbers[0].value-(sumMinHigh-p.minHigh));
+        const auto minHigh=std::min<long long>(p.minHigh,numbers[0].value-(sumMinLow-p.minLow));
+        const auto maxLow=std::max<long long>(p.maxLow,numbers[1].value-(sumMaxHigh-p.maxHigh));
+        const auto maxHigh=std::min<long long>(p.maxHigh,numbers[1].value-(sumMaxLow-p.maxLow));
+        if (minLow!=minHigh || maxLow!=maxHigh) return {};
+        values.emplace_back(minLow,maxLow);
+    }
+    const std::string marker=native.marker.empty()?"\xee\x81\xbe":native.marker;
+    auto valueText=[](long long value,bool plus) {
+        return std::string(plus && value>=0?"+":"")+std::to_string(value);
+    };
+    std::string result;
+    for (std::size_t i=0;i<parts.size();++i) {
+        if (i) result+='\n';
+        const auto index=parts.size()-1-i;
+        result+=marker+"5"+plain.substr(0,numbers[0].start);
+        result+=valueText(values[index].first,numbers[0].plus);
+        result+=plain.substr(numbers[0].finish,numbers[1].start-numbers[0].finish);
+        result+=valueText(values[index].second,numbers[1].plus);
+        result+=plain.substr(numbers[1].finish);
+        result+=' '; result+=marker+"5"+parts[index].label+marker+"3";
+    }
+    result+='\n';
+    if (!native.prefix.empty()) result+=marker+"U["+DisplayBounds(native.prefix)+"]"+marker+"3 ";
+    else result+=marker+"3";
+    result+=plain+" [Combined]";
+    return result;
+}
 struct Result { std::string text; unsigned annotated{}, unmatched{}, labeled{}; };
 inline Result Merge(std::string_view actual,std::string_view ranged,std::size_t capacity,
                     const std::vector<Label>& labels={}) {
@@ -201,7 +342,7 @@ inline Result Merge(std::string_view actual,std::string_view ranged,std::size_t 
         for (const auto& entry:r) if (entry.key==a[i].key) { ++rangeCount; match=&entry; }
         // Never attach one line's bounds to an ambiguous repeated label.
         if (actualCount==1 && rangeCount==1 && match && !match->prefix.empty()) {
-            prefix=match->marker+"U["+match->prefix+"]"+match->marker+"3 ";
+            prefix=match->marker+"U["+DisplayBounds(match->prefix)+"]"+match->marker+"3 ";
             ++result.annotated;
         } else if (actualCount!=1 || rangeCount!=1) ++result.unmatched;
         const Label* label=nullptr; unsigned labelCount=0;
@@ -211,7 +352,22 @@ inline Result Merge(std::string_view actual,std::string_view ranged,std::size_t 
             ++result.annotated;
         }
         if (actualCount==1 && rangeCount==1 && labelCount==1 && label && match) {
-            const auto expanded=Expand(originals[i],*match,label->parts,label->allowPartialNativeRange);
+            auto expanded=Expand(originals[i],*match,label->parts,label->allowPartialNativeRange);
+            if (expanded.empty()) expanded=ExpandPaired(originals[i],*match,label->pairedParts);
+            if (expanded.empty()) expanded=ExpandUnknown(originals[i],*match,label->unknownSources);
+            if (!expanded.empty()) {
+                result.text+=expanded; ++result.labeled;
+                if (i+1<originals.size() || actual.ends_with('\n')) result.text+='\n';
+                continue;
+            }
+        }
+        // A stacked source can change only one endpoint, so Core may emit a
+        // one-number ranged line for a two-number actual damage line. Its key
+        // and partial bounds cannot represent the combined total, but verified
+        // sources may still be shown as unknown gray contributions.
+        if (actualCount==1 && labelCount==1 && label && label->unknownSources.size()>1) {
+            auto expanded=ExpandPaired(originals[i],a[i],label->pairedParts);
+            if (expanded.empty()) expanded=ExpandUnknown(originals[i],a[i],label->unknownSources);
             if (!expanded.empty()) {
                 result.text+=expanded; ++result.labeled;
                 if (i+1<originals.size() || actual.ends_with('\n')) result.text+='\n';

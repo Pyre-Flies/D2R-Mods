@@ -1,6 +1,6 @@
 # Item Roll Ranges
 
-**By PyreFly · Version 1.3.1+rev.1**
+**By PyreFly · Version 1.3.1+rev.13**
 
 Show item roll ranges beside the actual stat value in light blue:
 
@@ -9,7 +9,7 @@ Show item roll ranges beside the actual stat value in light blue:
 Hold **Ctrl** on keyboard or **R1 / RB** on controller. Available in inventory,
 stash, Horadric Cube and vendor screens while the game is in the foreground.
 Release the button to return to the usual tooltip. Magic/rare/crafted affixes
-also show light-blue labels, for example `[+6 - +9] +8 to Minimum Damage [Suffix] [T1]`.
+also show light-blue labels, for example `[+6 - +9] +8 to Minimum Damage [S] [Craftsmanship] [T1]`.
 Fixed-value affixes can receive labels too. T1 is the highest affix level in
 the applicable family for that item type/quality; duplicate levels share a tier.
 The item's current level does not renumber the tiers. Unmatched or ambiguous properties retain their actual value without
@@ -25,9 +25,9 @@ Crafted items and every possible stat combination have not all been validated.
 ## Install
 
 1. Close Diablo II: Resurrected and D2RLoader.
-2. Extract this archive into your active mod folder, merging its `d2rloader`
-   folder. For Reimagined, the DLL belongs at:
-   `mods/Reimagined/d2rloader/plugins/Item Roll Ranges.dll`.
+2. Extract into the game folder for a global install at
+   `d2rloader/plugins/Item Roll Ranges.dll`. For a mod-scoped install, extract
+   into that active mod folder instead. Keep only one active copy.
 3. In the effective D2RLoader configuration, enable:
 
    ```toml
@@ -70,7 +70,7 @@ fixed-level triggered/charged skills and fully accounted-for grouped lines now
 participate in provenance matching. Fixed-value affixes still receive tags and
 applicable progression tiers. Unique definitions (including Renewed Sunder
 property groups) receive `[Unique]`, not fabricated Prefix/Suffix tiers.
-Automagic is marked `[Automagic]`. Labels identify matching source contributions,
+Inherent automagic is presented as `[Base]`. Labels identify matching source contributions,
 not a guarantee that the source accounts for an entire stacked stat value.
 
 Coverage is not universal: automatically calculated proc levels, variable group
@@ -100,6 +100,83 @@ Affixes display [Prefix] or [Suffix] and their tier, replacing the affix names i
 ## 0.4.6: multiple Enhanced Damage prefixes
 
 When the native ED range covers only one of multiple verified prefixes, Ctrl/RB now retains the combined total and lists each prefix's own range and tier on a separate line. Individual rolls are explicitly unknown on this incomplete-provider path; no split is invented. See docs/MULTIPLE-ED-PREFIXES-0.4.6.md in the source package for the bow regression and native assignment addresses.
+
+## 1.3.1+rev.2: compact named sources
+
+Rolled affixes use compact labels such as `[P] [Sharp] [T13]` and
+`[S] [Replenishing] [T1]`. Repeated names identify property lines supplied by
+the same affix. Inherent automagic is shown as `[Base]`. Native ranges and actual
+values remain unchanged.
+
+## 1.3.1+rev.3: combined poison attribution
+
+Combined weapon-poison lines receive their compact affix label when the active
+loaded `dmg-pois` source is verified and exactly one tooltip property line is
+otherwise unidentified. Ambiguous cases retain native text without a guessed
+label. Poison values, duration, localization and native range behavior are not
+reimplemented.
+
+## 1.3.1+rev.4: composite damage families
+
+The paired formatter observer now covers all native damage-pair families.
+Active affix tables remain authoritative, and encoded property groups are used
+only when their single fixed choice makes attribution deterministic. Randomized
+or malformed groups are intentionally left unlabeled.
+
+## 1.3.1+rev.5: composite-line fallback
+
+Fire, lightning, cold, magic and multi-element lines now use the same guarded
+sole-unidentified-line recovery proven by poison. The loaded affix definitions
+must resolve every candidate stat to one identical source label; ambiguous
+tooltips retain native text without a guessed tag.
+
+## 1.3.1+rev.6: multi-line elemental affixes
+
+One `Elemental1` affix can emit separate fire, lightning and cold lines. These
+are labeled together only when line count and loaded family count match exactly
+and every family proves the same complete source label.
+
+## 1.3.1+rev.7: mixed damage sources
+
+Different unresolved damage families can now receive different affix labels
+when their count matches exactly. Native loaded display priority determines the
+mapping; ambiguous counts and tied priorities remain unlabeled.
+
+## 1.3.1+rev.8: stacked damage details
+
+Composite damage supplied by multiple affixes keeps its native combined line
+and range, with one gray unknown-contribution row per verified source below it.
+No individual elemental or poison roll is inferred.
+
+## 1.3.1+rev.9: paired-range cleanup
+
+Mixed elemental sources now follow native buffer order. Two-part native damage
+bounds are collapsed to their lowest possible minimum and highest possible
+maximum, for example `[+27 - +95]`, while actual values remain untouched.
+
+## 1.3.1+rev.10: stacked sources without native bounds
+
+Gray source rows no longer require a native range span. If the provider has no
+range for a verified stacked line, its actual value remains `[Combined]` and
+the plugin does not manufacture a replacement range.
+
+## 1.3.1+rev.11: partial-provider stacked lines
+
+Stacked sources can expand when Core supplies a one-number range for one source
+but the actual combined damage line has two numbers. That incomplete interval
+is not shown as though it covered the total.
+
+## 1.3.1+rev.12: signed native ranges
+
+Range parsing now distinguishes damage separators from unary negative signs.
+Positive elemental spans remain positive, while reductions such as Target
+Defense display an ordered signed interval like `[-20 - -11]`.
+
+## 1.3.1+rev.13: exact stacked elemental rolls
+
+When loaded property definitions prove each fire, lightning, or cold endpoint
+and the combined total has one unique decomposition, gray source rows now show
+their exact contributions. Ambiguous cases continue to display `?`.
 
 ## 0.4.7: detail layout and unique ranges
 

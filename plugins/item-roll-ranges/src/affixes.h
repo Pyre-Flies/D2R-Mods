@@ -24,7 +24,8 @@ struct Row {
     }
 };
 struct Property { std::array<unsigned char,0x30> bytes{}; };
-static_assert(sizeof(Row)==0x8c && sizeof(Property)==0x30);
+struct PropertyGroup { std::array<unsigned char,0xc8> bytes{}; };
+static_assert(sizeof(Row)==0x8c && sizeof(Property)==0x30 && sizeof(PropertyGroup)==0xc8);
 // Distinct affix levels within the applicable family; duplicate levels share
 // a tier. Current item level does not hide stronger tiers.
 template<class Eligible> unsigned Tier(const Row& rolled,std::span<const Row> family,
@@ -39,38 +40,63 @@ template<class Eligible> unsigned Tier(const Row& rolled,std::span<const Row> fa
     return 1+static_cast<unsigned>(higher.size());
 }
 struct LayerEncoding { unsigned skillBits{6}, skillMask{63}; };
+inline bool PropertyContributes(const Property& property,int param,int level,int stat,int layer,
+                                LayerEncoding encoding={}) {
+    const auto* p=property.bytes.data();
+    for (unsigned slot=0;slot<7;++slot) {
+        const auto fn=p[0x18+slot];
+        if (!fn) continue;
+        const int target=Read<std::uint16_t>(p,0x20+slot*2);
+        // Physical damage functions have implicit stats, not statN fields.
+        if (!layer && ((fn==5 && (stat==21 || stat==23)) ||
+                      (fn==6 && (stat==22 || stat==24)) ||
+                      (fn==7 && (stat==17 || stat==18)))) return true;
+        if (target!=stat) continue;
+        // Mirror native property functions, not localized tooltip text.
+        if (fn==21) { // fixed class/element selector stored in Properties.valN
+            if (Read<std::uint16_t>(p,0x0a+slot*2)==layer) return true;
+        } else if (fn==10) { // tab = 3*class+tree, encoded as 8*class+tree
+            if (param>=0 && param<24 && (param/3*8+param%3)==layer) return true;
+        } else if (fn==22 || fn==24) {
+            if (param>=0 && param==layer) return true;
+        } else if (fn==11 || fn==19) { // triggered/charged skill + fixed level
+            if (param>=0 && level>0 && encoding.skillBits>0 && encoding.skillBits<16 &&
+                encoding.skillMask==((1u<<encoding.skillBits)-1) &&
+                static_cast<unsigned>(level)<=encoding.skillMask && layer>=0 &&
+                (static_cast<unsigned>(layer)>>encoding.skillBits)==static_cast<unsigned>(param) &&
+                (static_cast<unsigned>(layer)&encoding.skillMask)==static_cast<unsigned>(level)) return true;
+            // Automatically calculated levels need source item level; no guessed match.
+        } else if (!layer && fn>=1 && fn<=25) return true;
+    }
+    return false;
+}
+inline bool SpecContributes(std::uint32_t id,int param,int level,
+                            std::span<const Property> properties,std::span<const PropertyGroup> groups,
+                            int stat,int layer,LayerEncoding encoding,unsigned depth=0) {
+    if (depth>4 || id==0xffffffffu) return false;
+    if ((id>>16)==0)
+        return id<properties.size() && PropertyContributes(properties[id],param,level,stat,layer,encoding);
+    if ((id>>16)!=1 || (id&0xffff)>=groups.size()) return false;
+    const auto* group=groups[id&0xffff].bytes.data();
+    if (group[4]>2) return false;
+    // A weighted group is attributable only when selection is deterministic.
+    // Multiple viable entries are intentionally omitted rather than guessed.
+    const unsigned char* selected=nullptr;
+    for (unsigned n=0;n<8;++n) {
+        const auto* entry=group+8+n*24;
+        if (Read<int>(entry,20)<=0) continue;
+        if (selected || Read<int>(entry,4)!=Read<int>(entry,8)) return false;
+        selected=entry;
+    }
+    return selected && SpecContributes(Read<std::uint32_t>(selected,0),Read<int>(selected,4),
+        Read<int>(selected,16),properties,groups,stat,layer,encoding,depth+1);
+}
 inline bool Contributes(const Row& row,std::span<const Property> properties,int stat,int layer,
-                        LayerEncoding encoding={}) {
+                        LayerEncoding encoding={},std::span<const PropertyGroup> groups={}) {
     for (unsigned n=0;n<3;++n) {
-        const int id=row.Number(0x24+16*n),param=row.Number(0x28+16*n);
-        if (id<0 || static_cast<std::size_t>(id)>=properties.size()) continue;
-        const auto* p=properties[static_cast<std::size_t>(id)].bytes.data();
-        for (unsigned slot=0;slot<7;++slot) {
-            const auto fn=p[0x18+slot];
-            if (!fn) continue;
-            const int target=Read<std::uint16_t>(p,0x20+slot*2);
-            // Physical damage functions have implicit stats, not statN fields.
-            if (!layer && ((fn==5 && (stat==21 || stat==23)) ||
-                          (fn==6 && (stat==22 || stat==24)) ||
-                          (fn==7 && (stat==17 || stat==18)))) return true;
-            if (target!=stat) continue;
-            // Mirror native property functions, not localized tooltip text.
-            if (fn==21) { // fixed class/element selector stored in Properties.valN
-                if (Read<std::uint16_t>(p,0x0a+slot*2)==layer) return true;
-            } else if (fn==10) { // tab = 3*class+tree, encoded as 8*class+tree
-                if (param>=0 && param<24 && (param/3*8+param%3)==layer) return true;
-            } else if (fn==22 || fn==24) {
-                if (param>=0 && param==layer) return true;
-            } else if (fn==11 || fn==19) { // triggered/charged skill + fixed level
-                const int level=row.Number(0x30+16*n);
-                if (param>=0 && level>0 && encoding.skillBits>0 && encoding.skillBits<16 &&
-                    encoding.skillMask==((1u<<encoding.skillBits)-1) &&
-                    static_cast<unsigned>(level)<=encoding.skillMask && layer>=0 &&
-                    (static_cast<unsigned>(layer)>>encoding.skillBits)==static_cast<unsigned>(param) &&
-                    (static_cast<unsigned>(layer)&encoding.skillMask)==static_cast<unsigned>(level)) return true;
-                // Automatically calculated levels need source item level; no guessed match.
-            } else if (!layer && fn>=1 && fn<=25) return true;
-        }
+        const auto id=static_cast<std::uint32_t>(row.Number(0x24+16*n));
+        if (SpecContributes(id,row.Number(0x28+16*n),row.Number(0x30+16*n),
+                            properties,groups,stat,layer,encoding)) return true;
     }
     return false;
 }
@@ -90,7 +116,15 @@ inline bool UniqueScalarBounds(const Rolled& source,std::span<const Property> pr
     return found==1 && low<high && low>=-1000000 && high<=1000000;
 }
 inline std::string NamedLabel(const Rolled& affix) {
-    std::string result=affix.source?affix.source:(affix.prefix?"[Prefix]":"[Suffix]");
+    std::string result=affix.source?affix.source:(affix.prefix?"[P]":"[S]");
+    if (!affix.source) {
+        const auto* name=reinterpret_cast<const char*>(affix.row.bytes.data());
+        const auto length=strnlen(name,32);
+        bool safe=length>0 && length<32;
+        for (std::size_t n=0;n<length;++n)
+            safe &= static_cast<unsigned char>(name[n])>=32 && name[n]!='[' && name[n]!=']';
+        if (safe) result+=" ["+std::string(name,length)+"]";
+    }
     if (affix.tier) result+=" [T"+std::to_string(affix.tier)+"]";
     return result;
 }
@@ -119,10 +153,43 @@ inline bool ScalarBounds(const Rolled& affix,std::span<const Property> propertie
     }
     return found;
 }
-inline std::string Label(std::span<const Rolled> rolled,std::span<const Property> properties,int stat,int layer,LayerEncoding encoding={}) {
+// Resolve the two independently displayed endpoints of an elemental damage
+// family. Function 1 rolls the named endpoint within mod min/max; paired
+// functions 15/16 take the mod minimum and maximum as fixed damage endpoints.
+inline bool DamageEndpointBounds(const Rolled& affix,std::span<const Property> properties,
+                                 int minStat,int maxStat,int& minLow,int& minHigh,
+                                 int& maxLow,int& maxHigh) {
+    if (affix.source || minStat<0 || maxStat<0) return false;
+    bool foundMin=false,foundMax=false;
+    for (unsigned n=0;n<3;++n) {
+        const int id=affix.row.Number(0x24+16*n);
+        if (id<0 || static_cast<std::size_t>(id)>=properties.size()) continue;
+        const auto* p=properties[static_cast<std::size_t>(id)].bytes.data();
+        const int low=affix.row.Number(0x2c+16*n),high=affix.row.Number(0x30+16*n);
+        if (low>high || low< -1000000 || high>1000000) return false;
+        for (unsigned slot=0;slot<7;++slot) {
+            const auto fn=p[0x18+slot];
+            const int target=Read<std::uint16_t>(p,0x20+slot*2);
+            if (target==minStat && (fn==1 || fn==15)) {
+                if (foundMin) return false;
+                minLow=minHigh=(fn==15?low:0);
+                if (fn==1) { minLow=low; minHigh=high; }
+                foundMin=true;
+            } else if (target==maxStat && (fn==1 || fn==16)) {
+                if (foundMax) return false;
+                maxLow=maxHigh=(fn==16?high:0);
+                if (fn==1) { maxLow=low; maxHigh=high; }
+                foundMax=true;
+            }
+        }
+    }
+    return foundMin && foundMax;
+}
+inline std::string Label(std::span<const Rolled> rolled,std::span<const Property> properties,int stat,int layer,
+                         LayerEncoding encoding={},std::span<const PropertyGroup> groups={}) {
     std::string result;
     for (const auto& affix:rolled) {
-        if (!Contributes(affix.row,properties,stat,layer,encoding)) continue;
+        if (!Contributes(affix.row,properties,stat,layer,encoding,groups)) continue;
         if (affix.source && result.find(affix.source)!=std::string::npos) continue;
         if (!result.empty()) result+=' ';
         result+=NamedLabel(affix);
@@ -132,13 +199,14 @@ inline std::string Label(std::span<const Rolled> rolled,std::span<const Property
 // A combined display line is labeled only when every member has verified
 // contributors. Emit each contributing affix once across the entire group.
 inline std::string GroupLabel(std::span<const Rolled> rolled,std::span<const Property> properties,
-                              std::span<const int> stats,int layer,LayerEncoding encoding={}) {
+                              std::span<const int> stats,int layer,LayerEncoding encoding={},
+                              std::span<const PropertyGroup> groups={}) {
     if (stats.empty()) return {};
-    for (int stat:stats) if (Label(rolled,properties,stat,layer,encoding).empty()) return {};
+    for (int stat:stats) if (Label(rolled,properties,stat,layer,encoding,groups).empty()) return {};
     std::string result;
     for (const auto& affix:rolled) {
         bool contributes=false;
-        for (int stat:stats) contributes |= Contributes(affix.row,properties,stat,layer,encoding);
+        for (int stat:stats) contributes |= Contributes(affix.row,properties,stat,layer,encoding,groups);
         if (!contributes) continue;
         if (affix.source && result.find(affix.source)!=std::string::npos) continue;
         if (!result.empty()) result+=' ';

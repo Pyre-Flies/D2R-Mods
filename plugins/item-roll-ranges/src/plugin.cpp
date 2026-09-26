@@ -3,6 +3,7 @@
 #include <intrin.h>
 #include <bcrypt.h>
 #include <D2RLPlugin/context.h>
+#include <algorithm>
 #include <atomic>
 #include <cstdint>
 #include <cstring>
@@ -59,6 +60,68 @@ thread_local bool rendering{};
 wchar_t diagnosticPath[MAX_PATH]{};
 std::atomic<unsigned> diagnostics{0};
 bool Readable(const void*,std::size_t) noexcept;
+bool AddUnobservedCompositeIdentities(std::vector<CapturedLine>& lines,std::string_view actual,
+    std::span<const Affixes::Rolled> rolled,std::span<const Affixes::Property> properties,
+    Affixes::LayerEncoding encoding,std::span<const Affixes::PropertyGroup> groups,
+    const unsigned char* itemStats,std::size_t itemStatCount) {
+    std::vector<std::string> candidates;
+    for (const auto text:RangeText::Lines(actual)) {
+        const auto key=RangeText::Analyze(text).key;
+        if (key.empty()) continue;
+        bool observed=false;
+        for (const auto& line:lines) if (line.key==key) { observed=true; break; }
+        if (!observed) candidates.push_back(key);
+    }
+    if (candidates.empty()) return false;
+    constexpr std::array families{
+        std::array{21,22,23,24}, std::array{48,49,-1,-1},
+        std::array{50,51,-1,-1}, std::array{52,53,-1,-1},
+        std::array{54,55,56,-1}, std::array{57,58,59,-1}};
+    std::vector<std::string> observedSources;
+    for (const auto& line:lines) {
+        bool composite=false;
+        for (const auto& family:families)
+            for (const int member:family) composite |= member>=0 && line.stat==member;
+        if (!composite) continue;
+        const auto label=Affixes::Label(rolled,properties,line.stat,line.layer,encoding,groups);
+        if (!label.empty() && std::find(observedSources.begin(),observedSources.end(),label)==observedSources.end())
+            observedSources.push_back(label);
+    }
+    struct FamilySource { int stat; std::uint16_t priority; std::string label; };
+    std::vector<FamilySource> sources;
+    for (const auto& family:families) {
+        bool observed=false;
+        for (const auto& line:lines)
+            for (const int member:family) observed |= member>=0 && line.stat==member;
+        if (observed) continue;
+        std::string familyLabel;
+        int familyStat=-1;
+        for (const int stat:family) {
+            if (stat<0) continue;
+            const auto label=Affixes::Label(rolled,properties,stat,0,encoding,groups);
+            if (label.empty()) continue;
+            if (std::find(observedSources.begin(),observedSources.end(),label)!=observedSources.end()) continue;
+            if (familyLabel.empty()) { familyLabel=label; familyStat=stat; }
+            else if (familyLabel!=label) return false;
+        }
+        if (familyStat<0) continue;
+        if (!itemStats || familyStat>=static_cast<int>(itemStatCount)) return false;
+        sources.push_back({familyStat,Affixes::Read<std::uint16_t>(
+            itemStats+static_cast<std::size_t>(familyStat)*0x144,0x30),std::move(familyLabel)});
+    }
+    if (sources.size()!=candidates.size()) return false;
+    std::sort(sources.begin(),sources.end(),[](const FamilySource& a,const FamilySource& b) {
+        return a.priority<b.priority;
+    });
+    for (std::size_t n=1;n<sources.size();++n)
+        if (sources[n-1].priority==sources[n].priority) return false;
+    // Core appends lower display priorities first; D2R lays those buffer lines
+    // out bottom-to-top. Exact cardinality plus distinct priorities provides a
+    // locale-independent map.
+    for (std::size_t n=0;n<candidates.size();++n)
+        lines.push_back({std::move(candidates[n]),sources[n].stat,0,false,0});
+    return true;
+}
 __declspec(noinline) bool __fastcall SingleAdapter(void* unit,const void* row,int value,int layer,bool grouped,char* output,int mode) noexcept {
     const bool scoped=reinterpret_cast<std::uintptr_t>(_ReturnAddress())==singleReturn && captureLines;
     const bool result=originalSingle(unit,row,value,layer,grouped,output,mode);
@@ -73,10 +136,11 @@ __declspec(noinline) bool __fastcall SingleAdapter(void* unit,const void* row,in
     }
     return result;
 }
-// Core's mode-one fallback formats equal-bound actual values through the
-// range/paired helper, bypassing SingleAdapter (notably enhanced damage).
-void CaptureEnhancedDamage(int stat,int layer,const char* output) noexcept {
-    if (!captureLines || (stat!=17 && stat!=18) || !Readable(output,256)) return;
+// Core formats paired damage families and some equal-bound actual values
+// through this helper, bypassing SingleAdapter. Capture identity generically;
+// active-table source reconciliation below decides whether it is attributable.
+void CaptureRangeIdentity(int stat,int layer,const char* output) noexcept {
+    if (!captureLines || !Readable(output,256)) return;
     try {
         const auto n=strnlen(output,256);
         if (n && n<256 && captureLines->size()<256)
@@ -88,7 +152,7 @@ __declspec(noinline) int __fastcall RangeHelperAdapter(void* unit,void* stats,in
     const auto caller=reinterpret_cast<std::uintptr_t>(_ReturnAddress());
     const bool scoped=captureLines && (caller==rangeHelperReturn || caller==rangeHelperActualReturn);
     const int result=originalRangeHelper(unit,stats,stat,layer,low,high,output,mode);
-    if (scoped && result) CaptureEnhancedDamage(stat,layer,output);
+    if (scoped && result) CaptureRangeIdentity(stat,layer,output);
     return result;
 }
 void CaptureSpecialDamage(int stat,std::string_view appended) noexcept {
@@ -173,7 +237,7 @@ std::string UniqueRange(void* source,const CapturedLine& line,const std::vector<
 }
 std::vector<RangeText::Label> AffixLabels(void* source,const std::vector<CapturedLine>& lines,std::string_view actual={}) noexcept {
     try {
-        if (!getTables || !eligibleAffix || lines.empty() || !Readable(source,0x1be)) return {};
+        if (!getTables || !eligibleAffix || (lines.empty() && actual.empty()) || !Readable(source,0x1be)) return {};
         const auto* unit=static_cast<const unsigned char*>(source);
         if (Affixes::Read<unsigned>(unit,0)!=4 || unit[0x1bd]>=4) return {};
         const auto* data=Affixes::Read<const unsigned char*>(unit,0x10);
@@ -196,6 +260,12 @@ std::vector<RangeText::Label> AffixLabels(void* source,const std::vector<Capture
         const auto propCount=Affixes::Read<std::uint64_t>(tables,0x248);
         if (!propCount || propCount>32768 || !Readable(props,static_cast<std::size_t>(propCount)*sizeof(Affixes::Property))) return {};
         const std::span<const Affixes::Property> properties(props,static_cast<std::size_t>(propCount));
+        std::span<const Affixes::PropertyGroup> groups;
+        const auto* groupRows=Affixes::Read<const Affixes::PropertyGroup*>(tables,0x258);
+        const auto groupCount=Affixes::Read<std::uint64_t>(tables,0x260);
+        if (groupCount && groupCount<32768 &&
+            Readable(groupRows,static_cast<std::size_t>(groupCount)*sizeof(Affixes::PropertyGroup)))
+            groups={groupRows,static_cast<std::size_t>(groupCount)};
         std::vector<Affixes::Rolled> rolled;
         for (unsigned n=0;n<6 && (quality==4 || quality==6 || quality==8);++n) {
             const auto id=Affixes::Read<std::uint32_t>(data-24,n*4);
@@ -213,51 +283,78 @@ std::vector<RangeText::Label> AffixLabels(void* source,const std::vector<Capture
         const auto autoId=Affixes::Read<std::uint32_t>(data-28,0);
         if (autoId>autoIndex && autoId<=rowCount) {
             const auto& row=rows[autoId-1];
-            // Automagic is its own provenance, not a prefix or suffix.
-            rolled.push_back({autoId,row,false,0,"[Automagic]"});
+            // Automagic is an inherent base-item modifier, not a rolled prefix
+            // or suffix. Keep its internal table term out of the player UI.
+            rolled.push_back({autoId,row,false,0,"[Base]"});
         }
         if (quality==7) {
             const int record=Affixes::Read<int>(data,0x34);
             const auto* unique=Affixes::Read<const unsigned char*>(tables,0x13c8);
             const auto count=Affixes::Read<std::uint64_t>(tables,0x13d0);
-            const auto* groups=Affixes::Read<const unsigned char*>(tables,0x258);
-            const auto groupCount=Affixes::Read<std::uint64_t>(tables,0x260);
+            const auto* uniqueGroups=reinterpret_cast<const unsigned char*>(groupRows);
             if (record>=0 && count<32768 && static_cast<std::uint64_t>(record)<count &&
-                Readable(unique,count*0x15c) && groupCount<32768 && Readable(groups,groupCount*0xc8)) {
+                Readable(unique,count*0x15c) && !groups.empty()) {
                 const auto* recordRow=unique+record*0x15c;
                 // Flag8 suppresses Core's range clone for Renewed Sunders.
                 // It does not erase the original item's unique provenance.
                 for (unsigned n=0;n<12;++n)
-                    AddUniqueSource(recordRow+0x98+n*16,groups,groupCount,properties.size(),rolled);
+                    AddUniqueSource(recordRow+0x98+n*16,uniqueGroups,groups.size(),properties.size(),rolled);
             }
         }
         const Affixes::LayerEncoding encoding{Affixes::Read<unsigned>(tables,0x14d0),
                                               Affixes::Read<unsigned>(tables,0x14d4)};
+        const auto* itemStats=Affixes::Read<const unsigned char*>(tables,0x1258);
+        const auto itemStatCount=Affixes::Read<std::uint64_t>(tables,0x1260);
+        const bool itemStatsValid=itemStatCount && itemStatCount<=4096 &&
+            Readable(itemStats,static_cast<std::size_t>(itemStatCount)*0x144);
+        std::vector<CapturedLine> observed=lines;
+        // Composite damage lines can bypass both native identity observers.
+        // Require an exact line/family count; loaded native display priorities
+        // provide the locale-independent mapping for different source labels.
+        if (itemStatsValid) AddUnobservedCompositeIdentities(observed,actual,rolled,properties,
+            encoding,groups,itemStats,static_cast<std::size_t>(itemStatCount));
         std::vector<RangeText::Label> labels;
-        for (const auto& line:lines) {
+        for (const auto& line:observed) {
             std::string text;
             if (line.grouped) {
-                const auto* stats=Affixes::Read<const unsigned char*>(tables,0x1258);
-                const auto count=Affixes::Read<std::uint64_t>(tables,0x1260);
-                if (!line.group || !count || count>4096 || !Readable(stats,count*0x144)) continue;
+                if (!line.group || !itemStatsValid) continue;
                 std::vector<int> members;
-                for (std::size_t n=0;n<count;++n) {
-                    const auto* row=stats+n*0x144;
+                for (std::size_t n=0;n<itemStatCount;++n) {
+                    const auto* row=itemStats+n*0x144;
                     if (Affixes::Read<std::uint16_t>(row,0x3a)==line.group)
                         members.push_back(Affixes::Read<std::uint16_t>(row,0));
                 }
-                text=Affixes::GroupLabel(rolled,properties,members,line.layer,encoding);
-            } else text=Affixes::Label(rolled,properties,line.stat,line.layer,encoding);
+                text=Affixes::GroupLabel(rolled,properties,members,line.layer,encoding,groups);
+            } else text=Affixes::Label(rolled,properties,line.stat,line.layer,encoding,groups);
             if (!text.empty()) {
                 RangeText::Label label{line.key,std::move(text)};
                 bool complete=!line.grouped && (quality==4 || quality==6);
+                const bool compositeDamage=!line.layer &&
+                    ((line.stat>=21 && line.stat<=24) || (line.stat>=48 && line.stat<=59));
+                int endpointMin=-1,endpointMax=-1;
+                if (line.stat>=48 && line.stat<=55) {
+                    endpointMin=line.stat&~1;
+                    endpointMax=endpointMin+1;
+                }
+                bool completePaired=endpointMin>=0 && (quality==4 || quality==6);
                 for (const auto& affix:rolled) {
-                    if (!Affixes::Contributes(affix.row,properties,line.stat,line.layer,encoding)) continue;
+                    if (!Affixes::Contributes(affix.row,properties,line.stat,line.layer,encoding,groups)) continue;
+                    if (compositeDamage) {
+                        const auto named=Affixes::NamedLabel(affix);
+                        if (std::find(label.unknownSources.begin(),label.unknownSources.end(),named)==label.unknownSources.end())
+                            label.unknownSources.push_back(named);
+                    }
                     int low{},high{};
                     if (!Affixes::ScalarBounds(affix,properties,line.stat,line.layer,low,high)) complete=false;
                     else label.parts.push_back({low,high,Affixes::NamedLabel(affix)});
+                    int minLow{},minHigh{},maxLow{},maxHigh{};
+                    if (!completePaired || !Affixes::DamageEndpointBounds(affix,properties,
+                            endpointMin,endpointMax,minLow,minHigh,maxLow,maxHigh)) completePaired=false;
+                    else label.pairedParts.push_back({minLow,minHigh,maxLow,maxHigh,
+                        Affixes::NamedLabel(affix)});
                 }
                 if (!complete) label.parts.clear();
+                if (!completePaired || label.pairedParts.size()<2) label.pairedParts.clear();
                 label.allowPartialNativeRange=complete && label.parts.size()>1 &&
                     (line.stat==17 || line.stat==18) && line.layer==0;
                 if (quality==7) label.fallbackRange=UniqueRange(source,line,rolled,properties,tables,actual);
@@ -296,9 +393,16 @@ void* SourceItem(void* item) noexcept {
     void* overlay{}; std::memcpy(&overlay,block+0x1840,8);
     return overlay?SourceFromOverlay(overlay,item):item;
 }
-void TraceProperties(unsigned annotated,unsigned unmatched,const char* actual,const char* result,const char* ranged="",unsigned labeled=0,unsigned captured=0,const std::vector<CapturedLine>* identities=nullptr) noexcept {
-    // Production snapshot: formatter dumps disabled; ordinary loader errors remain enabled.
+void TraceProperties(unsigned annotated,unsigned unmatched,const char* actual,const char* result,const char* ranged="",
+                     unsigned labeled=0,unsigned captured=0,const std::vector<CapturedLine>* identities=nullptr,
+                     const std::vector<RangeText::Label>* sourceLabels=nullptr) noexcept {
+    // Production builds keep formatter dumps disabled. A bounded, explicit
+    // coverage build can enable them for deterministic Item Spawner audits.
+#ifdef ITEM_ROLL_RANGES_COVERAGE_DIAGNOSTICS
+    constexpr bool formatDiagnostics = true;
+#else
     constexpr bool formatDiagnostics = false;
+#endif
     if constexpr (!formatDiagnostics) return;
     if (!diagnosticPath[0]) return;
     // Comparison tooltips alternate every frame; deduplicate the complete set.
@@ -308,7 +412,7 @@ void TraceProperties(unsigned annotated,unsigned unmatched,const char* actual,co
     try { seen.emplace_back(actual); } catch (...) { return; }
     char message[14000]{};
     const int n=std::snprintf(message,sizeof(message),
-        "v1.3.1+rev.1 properties annotated=%u unmatched=%u labeled=%u captured=%u\r\nACTUAL: %.4095s\r\nRANGED: %.4095s\r\nRESULT: %.4095s\r\n",annotated,unmatched,labeled,captured,actual,ranged,result);
+        "v1.3.1+rev.13 properties annotated=%u unmatched=%u labeled=%u captured=%u\r\nACTUAL: %.4095s\r\nRANGED: %.4095s\r\nRESULT: %.4095s\r\n",annotated,unmatched,labeled,captured,actual,ranged,result);
     if (n<=0 || n>=static_cast<int>(sizeof(message))) return;
     HANDLE file=CreateFileW(diagnosticPath,FILE_APPEND_DATA,FILE_SHARE_READ|FILE_SHARE_WRITE,nullptr,OPEN_ALWAYS,FILE_ATTRIBUTE_NORMAL,nullptr);
     if (file==INVALID_HANDLE_VALUE) return;
@@ -319,6 +423,19 @@ void TraceProperties(unsigned annotated,unsigned unmatched,const char* actual,co
             for (const auto& line:*identities) {
                 char entry[256]{};
                 const int length=std::snprintf(entry,sizeof(entry),"IDENTITY stat=%d layer=%d grouped=%u key=%.160s\r\n",line.stat,line.layer,line.grouped?1u:0u,line.key.c_str());
+                if (length>0 && length<static_cast<int>(sizeof(entry))) WriteFile(details,entry,static_cast<DWORD>(length),&written,nullptr);
+            }
+            CloseHandle(details);
+        }
+    }
+    if (sourceLabels) {
+        HANDLE details=CreateFileW(diagnosticPath,FILE_APPEND_DATA,FILE_SHARE_READ|FILE_SHARE_WRITE,nullptr,OPEN_ALWAYS,FILE_ATTRIBUTE_NORMAL,nullptr);
+        if (details!=INVALID_HANDLE_VALUE) {
+            for (const auto& label:*sourceLabels) {
+                char entry[512]{};
+                const int length=std::snprintf(entry,sizeof(entry),
+                    "LABEL sources=%zu parts=%zu key=%.160s text=%.220s\r\n",
+                    label.unknownSources.size(),label.parts.size(),label.key.c_str(),label.text.c_str());
                 if (length>0 && length<static_cast<int>(sizeof(entry))) WriteFile(details,entry,static_cast<DWORD>(length),&written,nullptr);
             }
             CloseHandle(details);
@@ -385,9 +502,12 @@ std::uint64_t RenderProperties(void* source,void* item,char* output,int capacity
         if (actualLength==cap || rangedLength==cap) {
             std::memcpy(output,actualLength<cap?actual.data():ranged.data(),cap); output[cap-1]=0; return result;
         }
-        auto merged=RangeText::Merge({actual.data(),actualLength},{ranged.data(),rangedLength},cap,AffixLabels(source,captured,{actual.data(),actualLength}));
+        const auto propertyActual=std::string_view(actual.data()+initial,actualLength-initial);
+        const auto sourceLabels=AffixLabels(source,captured,propertyActual);
+        auto merged=RangeText::Merge({actual.data(),actualLength},{ranged.data(),rangedLength},cap,sourceLabels);
         std::memcpy(output,merged.text.c_str(),merged.text.size()+1);
-        TraceProperties(merged.annotated,merged.unmatched,actual.data(),output,ranged.data(),merged.labeled,static_cast<unsigned>(captured.size()),&captured);
+        TraceProperties(merged.annotated,merged.unmatched,actual.data(),output,ranged.data(),merged.labeled,
+            static_cast<unsigned>(captured.size()),&captured,&sourceLabels);
         return result;
     } catch (...) {
         return originalProperties(item,output,capacity,mode,state1,state2,flags,extra,definitions,count);
@@ -585,14 +705,14 @@ bool Install(const D2RL::PluginContext* context) noexcept {
         return false;
     }
     active.store(true, std::memory_order_release);
-    context->LogInfo("Item Roll Ranges 1.3.1+rev.1 by PyreFly: Ctrl / R1(RB); inventory, stash, Cube and vendor only. Actual values, native ranges, Prefix/Suffix tiers and verified Unique/Automagic sources. Unsupported or ambiguous provenance is omitted.");
+    context->LogInfo("Item Roll Ranges 1.3.1+rev.13 by PyreFly: Ctrl / R1(RB); inventory, stash, Cube and vendor only. Actual values, native ranges, named P/S tiers and guarded stacked-damage details. Unsupported or ambiguous provenance is omitted.");
     return true;
 }
 }
 
 D2RL_PLUGIN_EXPORT const D2RL::PluginInfo* __cdecl D2RLoaderGetPluginInfo() noexcept {
     static const D2RL::PluginInfo info{sizeof(D2RL::PluginInfo), D2RL_PLUGIN_ABI_VERSION,
-        "item-roll-ranges", "Item Roll Ranges", "1.3.1+rev.1", "PyreFly",
+        "item-roll-ranges", "Item Roll Ranges", "1.3.1+rev.13", "PyreFly",
         "Hold Ctrl or R1/RB for native item stat ranges in item-management screens.",
         D2RL::PluginFlags::Client | D2RL::PluginFlags::NativeHooks, {}};
     return &info;

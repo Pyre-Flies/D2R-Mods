@@ -34,6 +34,9 @@ bool IsControllerModifierActive(const char* mode, uint8_t triggerThreshold = 30)
 
 // Check specific face buttons (XInput button flags e.g. A, X, Y, B)
 bool IsControllerButtonPressed(uint16_t buttonMask) noexcept;
+// Current native UI mode, not controller connectivity or a cached button state.
+// Unknown/unavailable native mode returns false (hide controller-only hints).
+bool IsControllerUiActive() noexcept;
 
 bool IsButtonAPressed() noexcept;
 bool IsButtonBPressed() noexcept;

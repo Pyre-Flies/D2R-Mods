@@ -1,7 +1,7 @@
 # Controller QOL Updates
 
 **Made by PyreFly for D2RLoader**  
-Version **1.3.1+rev.7** | Windows x64 | Diablo II: Resurrected
+Version **1.3.1+rev.10** | Windows x64 | Diablo II: Resurrected
 
 Pick the loot you want directly from its ground label. Controller QOL Updates gives nearby items their own controller shortcuts, keeps those assignments stable while you loot, and respects the active loot filter. Inventory, Cube, stash, potion and shop shortcuts extend the same LB-based controls to item management.
 
@@ -104,3 +104,11 @@ The qualified D2RLoader 1.3.1 build uses the game's normalized controller input 
 ### Production 1.3.1+rev.7
 
 Ground-label and portal-contact interception now uses scoped call sites, leaving their shared entries available to other plugins. See [release notes](docs/PRODUCTION-1.3.1-rev.7.md) for validation and compatibility limits. Version-specific sections above describe historical changes.
+
+## Latest compatibility improvements
+
+Charm Inventory menu switching and LB+X transfers now cooperate with the
+loader's registered custom page. Item shortcut hints appear only in controller
+mode. These changes reuse native routing and transfer semantics; custom-page
+transfers add no hooks. See [current release record](docs/PRODUCTION-1.3.1-rev.10.md)
+for build requirements, validation scope and limitations.

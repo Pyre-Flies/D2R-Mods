@@ -1,12 +1,13 @@
 # Item Roll Ranges
 
-Experimental 1.3.1+rev.1, PyreFly. Separate client plugin for the installed D2RLoader.
+Experimental 1.3.1+rev.13, PyreFly. Separate client plugin for the installed D2RLoader.
 
-Light-blue `[Prefix] [Tn]` / `[Suffix] [Tn]` labels identify verified rolled
-magic/rare/crafted affix contributions, including fixed-value affixes. T1 is the
+Light-blue `[P] [Name] [Tn]` / `[S] [Name] [Tn]` labels identify verified rolled
+magic/rare/crafted affix contributions, including fixed-value affixes. Repeated
+names show when multiple property lines come from the same affix. T1 is the
 highest distinct affix level in the applicable family, filtered by item type,
 quality and version. Version 0.4.2 expands skill and grouped-line matching and
-adds `[Unique]` / `[Automagic]` source labels. Original values remain intact.
+adds `[Unique]` / `[Base]` source labels. Original values remain intact.
 See [the source audit](docs/SOURCE-AUDIT-0.4.2.md) for current coverage, evidence
 and limitations. All five test suites pass; 0.4.2 visual checks remain pending.
 
@@ -87,7 +88,7 @@ fixed-level triggered/charged skills and fully accounted-for grouped lines now
 participate in provenance matching. Fixed-value affixes still receive tags and
 applicable progression tiers. Unique definitions (including Renewed Sunder
 property groups) receive `[Unique]`, not fabricated Prefix/Suffix tiers.
-Automagic is marked `[Automagic]`. Labels identify matching source contributions,
+Inherent automagic is presented as `[Base]`. Labels identify matching source contributions,
 not a guarantee that the source accounts for an entire stacked stat value.
 
 Coverage is not universal: automatically calculated proc levels, variable group
@@ -117,6 +118,97 @@ Affixes display [Prefix] or [Suffix] and their tier, replacing the affix names i
 ## 0.4.6: multiple Enhanced Damage prefixes
 
 When the native ED range covers only one of multiple verified prefixes, Ctrl/RB now retains the combined total and lists each prefix's own range and tier on a separate line. Individual rolls are explicitly unknown on this incomplete-provider path; no split is invented. See docs/MULTIPLE-ED-PREFIXES-0.4.6.md in the source package for the bow regression and native assignment addresses.
+
+## 1.3.1+rev.2: compact named sources
+
+Rolled affixes now use compact labels such as `[P] [Sharp] [T13]` and
+`[S] [Replenishing] [T1]`. This makes separate property lines from one affix
+visibly share the same source. The internal term `[Automagic]` is now displayed
+as the player-facing `[Base]` label. Attribution, tiers, native ranges and actual
+values are otherwise unchanged.
+
+## 1.3.1+rev.3: combined poison attribution
+
+Combined weapon-poison lines can bypass the ordinary single-property formatter.
+When a verified loaded `dmg-pois` affix is present and exactly one displayed
+property line is otherwise unidentified, that line now receives the affix's
+compact name/type/tier label. Multiple unidentified candidates still fail open
+without a guessed label. Native poison wording, values, duration and range text
+remain untouched.
+
+## 1.3.1+rev.4: composite damage families
+
+The guarded paired formatter observer now preserves provenance for every native
+damage-pair family, including fire, lightning, cold, magic and normal damage,
+instead of admitting only Enhanced Damage. Labels are still emitted only when
+the active affix tables prove the source. Encoded PropertyGroups are followed
+only when they contain one fixed, positive-weight choice; randomized or
+malformed groups remain unlabeled rather than being guessed.
+
+## 1.3.1+rev.5: composite-line fallback
+
+Live tests established that fire, lightning, cold, magic and multi-element
+damage can bypass both native identity observers even while native ranges are
+present. The guarded sole-unidentified-line fallback now covers every damage
+family. Candidate stats must resolve to one identical complete source label;
+competing sources or multiple unidentified lines remain unlabeled.
+
+## 1.3.1+rev.6: multi-line elemental affixes
+
+`Elemental1` emits separate fire, lightning and cold lines from one source.
+Multiple unidentified damage lines are now accepted only when their count
+exactly equals the number of unobserved contributing damage families and every
+family resolves to the same complete source label.
+
+## 1.3.1+rev.7: mixed damage sources
+
+Multiple unidentified damage families may now carry different source labels
+when there is an exact one-to-one match. Lines are mapped by the active loaded
+`ItemStatCost.descpriority`; mismatched counts or tied priorities fail open.
+
+## 1.3.1+rev.8: stacked damage details
+
+When multiple affixes contribute to one composite damage line, the native
+combined value and range remain on top. Each verified source is listed beneath
+it in gray with unknown individual numeric contributions, matching the existing
+multi-source Enhanced Damage presentation without inventing a split.
+
+## 1.3.1+rev.9: paired-range cleanup
+
+Damage-family attribution now follows Core's buffer order (ascending loaded
+display priority), fixing `Elemental1` plus a direct element source. Paired
+native bounds such as minimum `27-51` and maximum `63-95` are presented as the
+clear overall possibility `[+27 - +95]`; the actual combined damage remains
+unchanged.
+
+## 1.3.1+rev.10: stacked sources without native bounds
+
+Verified stacked damage sources now receive gray child rows even when the
+provider supplies no native range span, as with `Elemental1` plus `of Flame`.
+The actual total remains the `[Combined]` line and no replacement range is
+invented.
+
+## 1.3.1+rev.11: partial-provider stacked lines
+
+Core can expose a one-number range for one source while the actual combined
+damage line has two numbers. Verified stacked sources now expand from the actual
+line despite that key mismatch. The partial provider interval is omitted because
+it does not describe the combined total.
+
+## 1.3.1+rev.12: signed native ranges
+
+Range parsing now distinguishes a damage separator such as the dash in
+`Adds 1-(6-8) Lightning Damage` from a unary negative sign such as
+`-(11-20)% Target Defense`. Negative intervals are displayed in ascending
+signed order (`[-20 - -11]`) instead of the misleading `[-(+11 - +20)]`.
+
+## 1.3.1+rev.13: exact stacked elemental rolls
+
+Stacked fire, lightning, and cold damage can now be decomposed when the loaded
+property definitions and the combined actual endpoints admit exactly one
+solution. For example, T1 `Elemental` contributes fixed `21-50` fire damage;
+a combined `22-53` line therefore proves an `of Flame` contribution of `1-3`.
+Ambiguous, incomplete, and out-of-range cases retain the existing `?` rows.
 
 ## 0.4.7: detail layout and unique ranges
 

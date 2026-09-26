@@ -8,6 +8,7 @@
 #include "native_d2r.h"
 #include "belt_actions.h"
 #include "materials_actions.h"
+#include "custom_page_actions.h"
 #include "materials_policy.h"
 #include "shared_owner_compatibility.h"
 #include "shared_item_policy.h"
@@ -121,7 +122,7 @@ static constexpr D2RL::PluginInfo ControllerQoLPluginInfo {
     .abiVersion  = D2RL_PLUGIN_ABI_VERSION,
     .id          = "controller-qol-updates",
     .name        = "Controller QOL Updates",
-    .version     = "1.3.1+rev.7",
+    .version     = "1.3.1+rev.10",
     .author      = "PyreFly",
     .description = "Direct controller looting with filtered labels, inventory shortcuts, and stash navigation.",
     .flags       = D2RL::PluginFlags::Shared | D2RL::PluginFlags::NativeHooks,
@@ -1142,6 +1143,8 @@ static void TriggerQuickMoveOnFocusedItem() noexcept {
             D2RL::Items::ItemInfo info{.structSize=D2RL::Items::ItemInfoSize};
             if (g_Items->getItemInfo(ctx,s_FocusedItem.load(),&info)==D2RL::Items::Result::Success) {
                 source=info.container;
+                if (GetTickCount64()-s_FocusedTick.load()>1000) return;
+                if (QolCustomPage::TryTransfer(ctx,info)) return;
                 if (QolVendor::Context(IsVendorPanelOpen(),TestUiMode(UI_MODE_STASH),TestUiMode(UI_MODE_CUBE),source)) {
                     TriggerNativeSellOnFocusedItem(ctx,info); return;
                 }
@@ -1158,6 +1161,7 @@ static void TriggerQuickMoveOnFocusedItem() noexcept {
                 }
             }
         }
+        if (QolCustomPage::Visible(ctx)) return; // Unresolved focus must not target another container.
         if (tab>=2 && tab<=4 && source!=D2RL::Items::ItemContainer::Inventory &&
             source!=D2RL::Items::ItemContainer::Cube) {
             ctx->LogWarn("[QOL/Materials] Advanced focus unresolved; refusing ordinary stash lookup.");
@@ -1592,6 +1596,8 @@ static void __cdecl OnItemTooltipCallback(
             s_FocusedCode.store(info.code);
             s_FocusedTick.store(GetTickCount64());
 
+            // Keep focus tracking above intact; only controller hint rendering is gated.
+            if (!ControllerQoL::IsControllerUiActive()) return;
             if (!event->text || event->capacity == 0) return;
 
             const bool isUnidentified = ((info.stateFlags & D2RL::Items::ItemStateIdentified) == 0);
@@ -1607,7 +1613,7 @@ static void __cdecl OnItemTooltipCallback(
             const bool playerHasCube  = PlayerHasCube(context, player);
 
             const bool canMove        = g_Settings.quickMove && (
-                (info.container == D2RL::Items::ItemContainer::Inventory && (isCubeOpen || isStashOpen || isVendorOpen)) ||
+                (info.container == D2RL::Items::ItemContainer::Inventory && (isCubeOpen || isStashOpen || isVendorOpen || QolCustomPage::Visible(context))) ||
                 (info.container == D2RL::Items::ItemContainer::PersonalStash ||
                  info.container == D2RL::Items::ItemContainer::SharedStash ||
                  info.container == D2RL::Items::ItemContainer::CustomPage ||
@@ -3202,6 +3208,7 @@ D2RL_PLUGIN_EXPORT auto D2RLoaderLoadPlugin(const D2RL::PluginContext* context) 
         }
     }
 
+    (void)QolCustomPage::Initialize(context);
     if (!QolMaterials::Initialize(context))
         context->LogWarn("[QOL/Materials] Advanced withdrawals unavailable; inspect native admission diagnostics.");
     if (!QolBelt::Initialize(context))
@@ -3419,7 +3426,7 @@ D2RL_PLUGIN_EXPORT auto D2RLoaderLoadPlugin(const D2RL::PluginContext* context) 
     }
     QolPortal::Initialize(context, g_Settings.enabled && g_Settings.groundPickup && g_Settings.prioritizePortals,
         g_Settings.debugLogging || g_Settings.portalDiagnostics, g_Settings.groundPickupButton, g_Settings.portalPriorityDistance);
-    context->LogInfo("[QOL] QOL v1.3.1+rev.7 loaded: controller item features and integrated v0.6 navigation/label hooks.");
+    context->LogInfo("[QOL] QOL v1.3.1+rev.10 loaded: controller item features and integrated v0.6 navigation/label hooks.");
     return true;
 }
 
@@ -3433,6 +3440,7 @@ D2RL_PLUGIN_EXPORT void D2RLoaderUnloadPlugin() noexcept {
     QolPortal::Shutdown();
     QolBelt::Shutdown();
     QolMaterials::Shutdown();
+    QolCustomPage::Shutdown();
     ControllerQoL::SetAutoFillBeltCallback(nullptr);
     QolNavigation::Shutdown();
     ControllerQoL::SetSpatialLeapCallback(nullptr);

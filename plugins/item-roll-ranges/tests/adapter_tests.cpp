@@ -40,6 +40,54 @@ int main() {
     AddUniqueSource(spec,group,1,1,expanded); check(expanded.empty()); // cycle bounded
     groupId=0x10001; std::memcpy(spec,&groupId,4);
     AddUniqueSource(spec,group,1,1,expanded); check(expanded.empty()); // out of bounds
+    Affixes::Row composite{};
+    std::memcpy(composite.bytes.data(),"Elemental1",11);
+    const int propertyZero=0, absent=-1;
+    std::memcpy(composite.bytes.data()+0x24,&propertyZero,4);
+    std::memcpy(composite.bytes.data()+0x34,&absent,4);
+    std::memcpy(composite.bytes.data()+0x44,&absent,4);
+    Affixes::Property compositeProperty{};
+    const std::uint16_t fire=48,lightning=50,cold=54;
+    compositeProperty.bytes[0x18]=15; std::memcpy(compositeProperty.bytes.data()+0x20,&fire,2);
+    compositeProperty.bytes[0x19]=15; std::memcpy(compositeProperty.bytes.data()+0x22,&lightning,2);
+    compositeProperty.bytes[0x1a]=15; std::memcpy(compositeProperty.bytes.data()+0x24,&cold,2);
+    const std::vector<Affixes::Rolled> compositeRolled={{1,composite,true,2}};
+    std::vector<unsigned char> compositeStats(60*0x144);
+    const std::uint16_t firePriority=102,lightningPriority=99,coldPriority=96;
+    std::memcpy(compositeStats.data()+48*0x144+0x30,&firePriority,2);
+    std::memcpy(compositeStats.data()+50*0x144+0x30,&lightningPriority,2);
+    std::memcpy(compositeStats.data()+54*0x144+0x30,&coldPriority,2);
+    std::vector<CapturedLine> compositeLines;
+    const bool compositeAdded=AddUnobservedCompositeIdentities(compositeLines,
+        "Adds 5-11 Cold Damage\nAdds 4-9 Lightning Damage\nAdds 3-7 Fire Damage",
+        compositeRolled,{&compositeProperty,1},{},{},compositeStats.data(),60);
+    if (!compositeAdded) std::puts("Composite identity fixture was not admitted.");
+    check(compositeAdded);
+    check(compositeLines.size()==3 && compositeLines[0].stat==54 &&
+          compositeLines[1].stat==50 && compositeLines[2].stat==48);
+    compositeLines={{RangeText::Analyze("Adds 3-7 Fire Damage").key,48,0,false,0}};
+    const bool unrelatedAdded=AddUnobservedCompositeIdentities(compositeLines,
+        "Adds 3-7 Fire Damage\nUnidentified fixed line",compositeRolled,
+        {&compositeProperty,1},{},{},compositeStats.data(),60);
+    if (unrelatedAdded) std::puts("Observed family incorrectly claimed an unrelated line.");
+    check(!unrelatedAdded);
+    Affixes::Row poison{};
+    std::memcpy(poison.bytes.data(),"of Blight",10);
+    const int propertyOne=1;
+    std::memcpy(poison.bytes.data()+0x24,&propertyOne,4);
+    std::memcpy(poison.bytes.data()+0x34,&absent,4);
+    std::memcpy(poison.bytes.data()+0x44,&absent,4);
+    std::vector<Affixes::Property> mixedProperties(2);
+    mixedProperties[0].bytes[0x18]=1; std::memcpy(mixedProperties[0].bytes.data()+0x20,&fire,2);
+    const std::uint16_t poisonStat=57,poisonPriority=92;
+    mixedProperties[1].bytes[0x18]=15; std::memcpy(mixedProperties[1].bytes.data()+0x20,&poisonStat,2);
+    std::memcpy(compositeStats.data()+57*0x144+0x30,&poisonPriority,2);
+    const std::vector<Affixes::Rolled> mixedRolled={{1,composite,true,2},{2,poison,false,3}};
+    compositeLines.clear();
+    check(AddUnobservedCompositeIdentities(compositeLines,
+        "+9 Poison Damage over 3 seconds\nAdds 3-7 Fire Damage",mixedRolled,mixedProperties,
+        {},{},compositeStats.data(),60));
+    check(compositeLines.size()==2 && compositeLines[0].stat==57 && compositeLines[1].stat==48);
     TestPropertyPasses();
     TestAffixRead();
     TestRangeHelper();
@@ -65,7 +113,7 @@ int main() {
     check(!D2RLoaderLoadPlugin(nullptr));
     auto info=D2RLoaderGetPluginInfo();
     check(std::strcmp(info->id,"item-roll-ranges")==0);
-    check(std::strcmp(info->version,"1.3.1+rev.1")==0);
+    check(std::strcmp(info->version,"1.3.1+rev.13")==0);
     std::puts("Passed real adapter passthrough/ABI, inactive late calls, atomic slot conflict/restore, exported identity.");
 }
 
@@ -92,13 +140,24 @@ void TestAffixRead() {
         put(r,0x34,-1); put(r,0x44,-1); put(r,0x58,static_cast<int>(i*10+1)); put(r,0x5c,1);
     }
     Affixes::Property props[1]{}; props[0].bytes[0x18]=1; props[0].bytes[0x20]=31;
+    std::vector<unsigned char> itemStats(60*0x144);
+    const std::uint16_t poisonPriority=92;
+    std::memcpy(itemStats.data()+57*0x144+0x30,&poisonPriority,2);
     put(fakeTables,0x15e8,rows+0); put(fakeTables,0x15f0,std::uint64_t{2});
     put(fakeTables,0x1600,rows+0); put(fakeTables,0x1608,rows+2); put(fakeTables,0x1610,rows+2);
     put(fakeTables,0x240,props+0); put(fakeTables,0x248,std::uint64_t{1});
+    put(fakeTables,0x1258,itemStats.data()); put(fakeTables,0x1260,std::uint64_t{60});
     getTables=FakeTables; eligibleAffix=FakeEligible;
     const std::vector<CapturedLine> lines={{RangeText::Analyze("+118 Defense").key,31,0,false}};
     auto labels=AffixLabels(unit,lines);
-    check(labels.size()==1 && labels[0].text=="[Suffix] [T2]");
+    check(labels.size()==1 && labels[0].text=="[S] [T2]");
+    std::memcpy(rows[0].bytes.data(),"of Blight",10);
+    props[0].bytes[0x18]=15; props[0].bytes[0x20]=57;
+    labels=AffixLabels(unit,{},"+7 Weapon Poison Damage over 3 seconds");
+    check(labels.size()==1 && labels[0].text=="[S] [of Blight] [T2]" &&
+          labels[0].key==RangeText::Analyze("+7 Weapon Poison Damage over 3 seconds").key);
+    check(AffixLabels(unit,{},"Unidentified fixed line\n+7 Weapon Poison Damage over 3 seconds").empty());
+    props[0].bytes[0x18]=1; props[0].bytes[0x20]=31;
     put(data,0,7); check(AffixLabels(unit,lines).empty()); // No unique definition yet.
     // Renewed Sunder regression: flag8 and no affix IDs still have unique sources.
     unsigned char unique[0x15c]{}, groups[0xc8]{};
@@ -134,7 +193,7 @@ std::uint64_t __fastcall FakeProperties(void* item,char* output,int cap,int mode
         std::snprintf(output,cap,"+\xff" "cU(80-120)\xff" "c3 Defense\n+\xff" "cU(25-50)\xff" "c3%% Enhanced Weapon Damage\n");
         check(captureLines!=nullptr); // Actual-only capture caused the 0.4.3 ED regression.
         char damage[256]="+\xff" "cU(25-50)\xff" "c3% Enhanced Weapon Damage";
-        CaptureEnhancedDamage(17,0,damage);
+        CaptureRangeIdentity(17,0,damage);
     }
     return 0x12345678;
 }
@@ -171,18 +230,19 @@ void TestRangeHelper() {
     char output[256]{};
     check(RangeHelperAdapter(reinterpret_cast<void*>(0x1234),reinterpret_cast<void*>(0x5678),17,0,75,75,output,1)==0x12345678);
     check(captured.empty()); // Unrelated call must remain a pure passthrough.
-    CaptureEnhancedDamage(17,0,output);
+    CaptureRangeIdentity(17,0,output);
     check(captured.size()==1 && captured[0].stat==17 && !captured[0].grouped);
     Affixes::Row row{}; put(row.bytes.data(),0x24,0); put(row.bytes.data(),0x34,-1); put(row.bytes.data(),0x44,-1);
     Affixes::Property property{}; property.bytes[0x18]=7;
     const std::vector<Affixes::Rolled> rolled={{1,row,true,3}};
     const std::vector<RangeText::Label> labels={{captured[0].key,Affixes::Label(rolled,{&property,1},17,0)}};
     auto merged=RangeText::Merge(output,"+75% Enhanced Damage",256,labels);
-    check(merged.labeled==1 && merged.text.find("[Prefix] [T3]")!=std::string::npos);
-    CaptureEnhancedDamage(39,0,output); check(captured.size()==1);
+    check(merged.labeled==1 && merged.text.find("[P] [T3]")!=std::string::npos);
+    CaptureRangeIdentity(54,0,output);
+    check(captured.size()==2 && captured[1].stat==54);
     captureLines=nullptr;
     check(RangeHelperAdapter(reinterpret_cast<void*>(0x1234),reinterpret_cast<void*>(0x5678),17,0,75,75,output,1)==0x12345678);
-    std::puts("Verified paired-helper ABI, unrelated/late calls, ED provenance and original values.");
+    std::puts("Verified paired-helper ABI, unrelated/late calls, generic damage provenance and original values.");
 }
 unsigned specialCalls{}; bool emitSpecial=true;
 unsigned uniqueEndpointCalls{};
@@ -228,10 +288,10 @@ void TestSpecial() {
     check(ObserveSpecial(true,reinterpret_cast<void*>(0xabcd),18,output,1024,3)==7);
     check(specialCalls==1 && captured.size()==1 && captured[0].stat==18);
     check(captured[0].key==RangeText::Analyze("+75% Enhanced Damage").key);
-    const std::vector<RangeText::Label> labels={{captured[0].key,"[Prefix] [T3]",{{66,80,"[Prefix] [T3]"}}}};
+    const std::vector<RangeText::Label> labels={{captured[0].key,"[P] [T3]",{{66,80,"[P] [T3]"}}}};
     const auto merged=RangeText::Merge(output,"+1 to Strength\n+\xee\x81\xbe" "U(66-80)\xee\x81\xbe" "3% Enhanced Damage\n",1024,labels);
     check(merged.text.find("[66%-80%]")!=std::string::npos && merged.text.find("+75% Enhanced Damage")!=std::string::npos);
-    check(merged.text.find("[Prefix] [T3]")!=std::string::npos);
+    check(merged.text.find("[P] [T3]")!=std::string::npos);
     emitSpecial=false;
     check(ObserveSpecial(true,reinterpret_cast<void*>(0xabcd),18,output,1024,3)==7);
     check(specialCalls==2 && captured.size()==1); // Handled with no appended text.

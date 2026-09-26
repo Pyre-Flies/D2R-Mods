@@ -16,6 +16,8 @@
 #include "native_signatures.h"
 #include "label_signatures.h"
 #include "menu_signatures.h"
+#include "menu_route_profile.h"
+#include "native_input_profile.h"
 #include "skills_signatures.h"
 #include "shared_page_signatures.h"
 #include "shared_page_policy.h"
@@ -270,7 +272,38 @@ bool CheckMenuSignatures(uintptr_t base) noexcept {
         return true;
     } __except(EXCEPTION_EXECUTE_HANDLER) {return false;}
 }
+bool CheckMenuRoute(uintptr_t game,uintptr_t provider) noexcept {
+    __try {
+        using namespace QolMenuRoute;
+        return ValidLinks(game,provider,*reinterpret_cast<const uintptr_t*>(game+Slot),
+            reinterpret_cast<const unsigned char*>(game+Thunk),
+            *reinterpret_cast<const uintptr_t*>(game+Import),
+            *reinterpret_cast<const uintptr_t*>(provider+0x70ea68)) &&
+            std::memcmp(reinterpret_cast<const void*>(provider+Dispatcher),DispatcherBytes,sizeof(DispatcherBytes))==0 &&
+            std::memcmp(reinterpret_cast<const void*>(provider+0x463cc0),RouteBytes,sizeof(RouteBytes))==0;
+    } __except(EXCEPTION_EXECUTE_HANDLER) {return false;}
+}
 void InstallMenuHook() noexcept {
+    // The loader's registered-route handler precedes the native menu handler.
+    // Intercept this one virtual dispatch, then forward to the unchanged loader
+    // thunk so translated triggers cycle through registered plugin tabs too.
+    auto provider=GetModuleHandleW(L"D2RCore.dll");
+    if(QolCore::VerifyFileHash(provider,QolNativeProfile::CoreHash) &&
+        CheckMenuSignatures(ctx->exeBase) && CheckMenuRoute(ctx->exeBase,reinterpret_cast<uintptr_t>(provider))) {
+        HMODULE pinned{};
+        if(!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS|GET_MODULE_HANDLE_EX_FLAG_PIN,
+            reinterpret_cast<LPCWSTR>(&HookMenuMessage),&pinned)) return;
+        const uintptr_t expected=ctx->exeBase+QolMenuRoute::Thunk;
+        const auto replacement=&HookMenuMessage;
+        originalMenuMessage=reinterpret_cast<MenuMessageFn>(expected);
+        menuHook=ctx->PatchBytes(QolMenuRoute::Slot,&expected,sizeof(expected),&replacement,sizeof(replacement));
+        ctx->LogInfo(menuHook?
+            "[QOL/Menu] Route-aware UISwitcher dispatch installed at game+0x1CEF450; loader controller routes preserved.":
+            "[QOL/Menu] Route-aware dispatch declined; original navigation retained.");
+        // Do not fall back after a publication attempt. A retained/pinned wrapper
+        // is safe on SDK cleanup; Cleanup clears ctx and makes it passthrough.
+        return;
+    }
     if(CheckMenuSignatures(ctx->exeBase))
         menuHook=ctx->InstallInlineHook<MenuMessageFn>(0x27df80,MenuBytes0,sizeof(MenuBytes0),&HookMenuMessage,&originalMenuMessage);
     ctx->LogInfo(menuHook?"[QOL/Menu] UISwitcher native remap installed: triggers navigate, bumpers pass to other systems.":

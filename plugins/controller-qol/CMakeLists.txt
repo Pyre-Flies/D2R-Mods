@@ -22,6 +22,7 @@ include("${PLUGIN_SDK}/cmake/D2RLPluginEmbedConfig.cmake")
 
 add_library(controller-qol SHARED
     src/plugin_compatibility.cpp src/portal_priority.cpp src/materials_actions.cpp
+    src/custom_page_actions.cpp
     src/belt_actions.cpp
     src/plugin_main.cpp
     src/controller_input.cpp
@@ -121,3 +122,12 @@ add_test(NAME qol-native-input COMMAND qol-native-input-tests)
 add_executable(qol-placard-tests tests/placard_tests.cpp)
 target_include_directories(qol-placard-tests PRIVATE src)
 add_test(NAME qol-placards COMMAND qol-placard-tests)
+
+add_executable(qol-custom-page-tests tests/custom_page_tests.cpp src/custom_page_actions.cpp)
+target_include_directories(qol-custom-page-tests PRIVATE src include "${PLUGIN_SDK}/include")
+target_compile_definitions(qol-custom-page-tests PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_link_libraries(qol-custom-page-tests PRIVATE bcrypt)
+add_test(NAME qol-custom-page COMMAND qol-custom-page-tests)
+add_executable(qol-menu-route-tests tests/menu_route_tests.cpp)
+target_include_directories(qol-menu-route-tests PRIVATE src)
+add_test(NAME qol-menu-route COMMAND qol-menu-route-tests)
