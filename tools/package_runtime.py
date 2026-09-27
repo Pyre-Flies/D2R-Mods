@@ -92,11 +92,19 @@ mismatch. Close D2R before installing or replacing the DLL.
         "README.md": require_file(controller / "README.md"),
         "CHANGELOG.md": require_file(controller / "CHANGELOG.md"),
         "COMPATIBILITY.txt": controller_compatibility,
-        "docs/PRODUCTION-1.3.1-rev.11.md": require_file(
-            controller / "docs" / "PRODUCTION-1.3.1-rev.11.md"
+        "docs/PRODUCTION-1.3.1-rev.22.md": require_file(
+            controller / "docs" / "PRODUCTION-1.3.1-rev.22.md"
         ),
     }
     controller_files["docs/IDENTIFY-REV11.md"] = require_file(controller / "docs" / "IDENTIFY-REV11.md")
+    # Include the release's focused compatibility and native-contract records.
+    for name in (
+        "LADDER-CONFLICTS-REV12.md", "LABEL-REFRESH-REV13.md", "LABEL-MODE-REV14.md",
+        "IDENTIFY-STAT70-REV15.md", "AUTO-BELT-COMPATIBILITY-REV16.md",
+        "VENDOR-BELT-REV17.md", "SHARED-SDK-REV18.md", "CHRONICLE-NAVIGATION-REV19.md",
+        "GROUND-CALLBACK-CRASH-REV20.md", "CONTROLLER-HEADER-REV21.md", "NATIVE-RANGES-REV22.md",
+    ):
+        controller_files[f"docs/{name}"] = require_file(controller / "docs" / name)
     controller_zip = args.output / (
         f"Controller-QOL-Updates-{controller_version}-PyreFly.zip"
     )

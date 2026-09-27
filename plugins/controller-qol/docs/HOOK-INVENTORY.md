@@ -1,4 +1,4 @@
-# Hook inventory — baseline plus revision updates
+# Hook inventory â€” baseline plus revision updates
 
 The original table/count below is a historical rev.4 baseline; revision sections supersede affected rows. For current prioritization see [narrower-hook review](HOOK-SCOPE-REVIEW-2026-09-26.md).
 
@@ -92,3 +92,14 @@ Replaces QOL entry hook at `0xCBEB0` with SDK-owned CALL patch at `0x1FAA18` (30
 ## 2026-09-26: rev.7 contact CALL migration
 
 Supersedes the historical shared-entry contact hook: QOL now patches calls at 0x191589, 0x1922CD and 0x192378; entry 0x34BC90 remains untouched. Other portal hooks are unchanged. See [evidence, ownership, admission and pending live checks](PORTAL-CONTACT-1.3.1-rev.7.md).
+
+## 2026-09-27: rev.18 Shared Stash SDK candidate
+
+Normal Shared LB+X item movement now uses public ItemService transactions when
+SharedStashWrite is available. No new hooks. Read-only native selected-page
+resolution remains; old-loader and remove-only seasonal transfers retain their
+native route. [SDK pin, page witnesses and validation](SHARED-SDK-REV18.md).
+
+Rev.21 item headers reuse the existing scoped widget/text hooks. A guarded ordinary font-metrics call at game+0x903CD0 is not an additional hook. See CONTROLLER-HEADER-REV21.md for ancestry, ABI evidence, presentation scope and validation limits.
+
+Rev.22 adds SDK inline hook game+0x13CA70 (native controller button query), scoped strictly to Core tooltip return +0x81995A / mask 0x800. It translates that query to RB 0x200; all other callers pass through. Full profile admission precedes a 15-byte SDK hook. Core slot +0x6FE470 and its caller remain untouched for Item Roll Ranges. See NATIVE-RANGES-REV22.md for ABI, guards, load-order reasoning and unresolved shared-entry ownership risk.

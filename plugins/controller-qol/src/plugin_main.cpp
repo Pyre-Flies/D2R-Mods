@@ -2,6 +2,7 @@
 #include "controller_input.h"
 #include "physical_input.h"
 #include "qol_navigation.h"
+#include "qol_glyphs.h"
 #include "item_dimensions.h"
 #include "d2r_defs.h"
 #include "d2r_memory.h"
@@ -10,9 +11,13 @@
 #include "materials_actions.h"
 #include "custom_page_actions.h"
 #include "identify_action.h"
+#include "identify_stat.h"
+#include "move_identity.h"
 #include "materials_policy.h"
 #include "shared_owner_compatibility.h"
 #include "shared_item_policy.h"
+#include "shared_sdk_transfer.h"
+#include "shared_sdk_selection.h"
 #include "vendor_policy.h"
 #include "vendor_compatibility.h"
 #include "belt_policy.h"
@@ -83,6 +88,14 @@ static std::atomic<uint32_t> s_FocusedCode{0};
 static std::atomic<int32_t> s_FocusedCellX{-1};
 static std::atomic<int32_t> s_FocusedCellY{-1};
 static std::atomic<ULONGLONG> s_FocusedTick{0};
+static std::mutex s_FocusIdentityMutex;
+static D2RL::Items::ItemInfo s_FocusIdentity{};
+static ULONGLONG s_FocusIdentityTick{};
+static bool ReadFocusIdentity(D2RL::Items::ItemInfo& info) noexcept {
+    std::lock_guard lock(s_FocusIdentityMutex);
+    if(!s_FocusIdentity.handle || GetTickCount64()-s_FocusIdentityTick>1000)return false;
+    info=s_FocusIdentity;return true;
+}
 static std::atomic<D2RL::PlayerHandle> s_LastPlayerHandle{D2RL::InvalidPlayerHandle};
 
 enum class PotionType {
@@ -123,7 +136,7 @@ static constexpr D2RL::PluginInfo ControllerQoLPluginInfo {
     .abiVersion  = D2RL_PLUGIN_ABI_VERSION,
     .id          = "controller-qol-updates",
     .name        = "Controller QOL Updates",
-    .version     = "1.3.1+rev.11",
+    .version     = "1.3.1+rev.22",
     .author      = "PyreFly",
     .description = "Direct controller looting with filtered labels, inventory shortcuts, and stash navigation.",
     .flags       = D2RL::PluginFlags::Shared | D2RL::PluginFlags::NativeHooks,
@@ -239,16 +252,16 @@ static void __cdecl ExecuteIdentifyTask(const D2RL::PluginContext* context,void*
     if(!req) {s_IdentifyPending.store(false);return;}
     const auto started=GetTickCount64();
     if(context && g_Settings.enabled && started-req->queuedAt<=2000) {
-        const auto result=QolIdentify::Execute(context,g_Items,g_Inventory,req->action);
+        const auto result=QolIdentify::Execute(context,g_Items,g_Inventory,req->action,QolIdentifyStat::Read);
         const auto elapsed=GetTickCount64()-started;
         // One bounded summary, never a synchronous per-item log dump. Failures
         // remain diagnosable with debug_logging=false; timings precede log I/O.
-        if(result.status!=QolIdentify::Status::Success || g_Settings.debugLogging || elapsed>=50) {
+        if(result.status!=QolIdentify::Status::Success || g_Settings.debugLogging || result.nativeReads || elapsed>=50) {
             char message[384];
             std::snprintf(message,sizeof(message),
-                "[QOL/Identify] result=%s scan=%u operation=%u scanned=%u tomes=%u scrolls=%u maxTomeQty=%d consumed=%u queueMs=%llu workMs=%llu runtimeId=%u.",
+                "[QOL/Identify] result=%s scan=%u operation=%u scanned=%u tomes=%u scrolls=%u maxTomeQty=%d consumed=%u sdkQty=%d stat70=%d remaining=%d readFailures=%u mismatches=%u queueMs=%llu workMs=%llu runtimeId=%u.",
                 QolIdentify::Name(result.status),static_cast<unsigned>(result.scan),static_cast<unsigned>(result.operation),
-                result.scanned,result.tomes,result.scrolls,result.maxTomeQuantity,result.consumed?1u:0u,
+                result.scanned,result.tomes,result.scrolls,result.maxTomeQuantity,result.consumed?1u:0u,result.sdkTomeQuantity,result.nativeTomeQuantity,result.remainingQuantity,result.nativeReadFailures,result.quantityMismatches,
                 static_cast<unsigned long long>(started-req->queuedAt),static_cast<unsigned long long>(elapsed),req->action.target.runtimeId);
             if(result.status==QolIdentify::Status::Success)context->LogInfo(message);else context->LogWarn(message);
         }
@@ -363,9 +376,29 @@ struct MoveRequest {
     D2RL::Items::ItemContainer  sourceContainer;
     D2RL::Items::ItemContainer  primaryDestination;
     D2RL::Items::ItemContainer  secondaryDestination;
+    QolSharedSdk::Selection sharedSelection{};
+    bool sdkSharedRequest{};
+    ULONGLONG sharedRequestedAt{};
     bool materialsFirst{};
     D2RL::Items::ItemInfo sharedIdentity{};
+    D2RL::Items::ItemInfo identity{};
 };
+
+// Capture the chosen normal page and player before scheduling across threads.
+static bool CaptureSharedRequest(const D2RL::PluginContext* ctx,MoveRequest& req) noexcept {
+    if (!QolSharedSdk::Supported(g_Items)) return true; // Older loader retains its reviewed native path.
+    req.sharedSelection=QolSharedSdk::Selected(ctx->exeBase);
+    if (!req.sharedSelection.valid) {ctx->LogWarn("[QOL/SharedSDK] Selected Shared page unavailable; no move queued.");return false;}
+    if (req.sharedSelection.previousSeason) return true; // SDK does not support remove-only pages.
+    if (!g_Inventory || g_Inventory->getLocalPlayer(ctx,&req.player)!=D2RL::Inventory::Result::Success || !req.player) return false;
+    req.sdkSharedRequest=true;req.sharedRequestedAt=GetTickCount64();
+    return true;
+}
+static void ReportSharedMove(const D2RL::PluginContext* ctx,const QolSharedSdk::Outcome& result,uint32_t page,bool deposit) noexcept {
+    char msg[224];std::snprintf(msg,sizeof(msg),"[QOL/SharedSDK] %s page=%u result=%u committed=%d failureIndex=%u; no native retry.",
+        deposit?"Deposit":"Withdraw",page,static_cast<unsigned>(result.result),result.committed?1:0,result.failureIndex);
+    if(result.committed)ctx->LogInfo(msg);else ctx->LogWarn(msg);
+}
 
 static void __cdecl ExecuteMoveTask(const D2RL::PluginContext* context, void* userData) noexcept {
     auto* req = static_cast<MoveRequest*>(userData);
@@ -385,6 +418,15 @@ static void __cdecl ExecuteMoveTask(const D2RL::PluginContext* context, void* us
         player = s_LastPlayerHandle.load();
     }
 
+    if (req->sdkSharedRequest) {
+        D2RL::PlayerHandle livePlayer{};
+        if (!g_Inventory || g_Inventory->getLocalPlayer(context,&livePlayer)!=D2RL::Inventory::Result::Success ||
+            !livePlayer || livePlayer!=req->player || GetTickCount64()-req->sharedRequestedAt>3000 ||
+            !QolSharedSdk::SameSelection(req->sharedSelection,QolSharedSdk::Selected(context->exeBase))) {
+            context->LogWarn("[QOL/SharedSDK] Player/page changed or request expired; cancelled.");delete req;return;
+        }
+        player=livePlayer;
+    }
     char startMsg[256];
     std::snprintf(startMsg, sizeof(startMsg),
         "[ControllerQoL] ExecuteMoveTask: player=%llu, initialTarget=%llu, cell=(%d,%d), code=0x%08X, src=%u, dest1=%u, dest2=%u",
@@ -422,67 +464,11 @@ static void __cdecl ExecuteMoveTask(const D2RL::PluginContext* context, void* us
                 static_cast<unsigned long long>(activeTarget)); context->LogInfo(msg);
         }
         if (activeTarget==D2RL::InvalidItemHandle) { delete req; return; }
-    } else if (g_Items->getItemInfo(context, activeTarget, &checkInfo) != D2RL::Items::Result::Success && g_Inventory) {
-        char warnBuf[160];
-        std::snprintf(warnBuf, sizeof(warnBuf),
-            "[ControllerQoL] Move target handle %llu is stale on game thread; resolving live handle...",
-            static_cast<unsigned long long>(activeTarget));
-        context->LogWarn(warnBuf);
-        activeTarget = D2RL::InvalidItemHandle;
-
-        struct MoveFindCtx {
-            const MoveRequest* req;
-            D2RL::ItemHandle posMatch = D2RL::InvalidItemHandle;
-            D2RL::ItemHandle codeMatch = D2RL::InvalidItemHandle;
-        } findCtx{ req };
-
-        uint32_t cMask = 0;
-        if (req->sourceContainer==D2RL::Items::ItemContainer::Cube) {
-            cMask=D2RL::Items::ContainerBit(D2RL::Items::ItemContainer::Cube);
-        } else if (req->sourceContainer == D2RL::Items::ItemContainer::Inventory) {
-            cMask = D2RL::Items::ContainerBit(D2RL::Items::ItemContainer::Inventory);
-        } else {
-            cMask = D2RL::Items::ContainerBit(D2RL::Items::ItemContainer::PersonalStash) |
-                    D2RL::Items::ContainerBit(D2RL::Items::ItemContainer::SharedStash) |
-                    D2RL::Items::ContainerBit(D2RL::Items::ItemContainer::CustomPage) |
-                    D2RL::Items::ContainerBit(D2RL::Items::ItemContainer::Cube);
-        }
-
-        D2RL::Inventory::ItemFilter filter{
-            .structSize    = D2RL::Inventory::ItemFilterSize,
-            .flags         = 0,
-            .containerMask = cMask,
-            .reserved      = 0,
-        };
-
-        g_Inventory->forEachInventoryItem(context, player, &filter, [](const D2RL::PluginContext*, const D2RL::Items::ItemInfo* item, void* u) noexcept -> D2RL::Inventory::IterationAction {
-            auto* fc = static_cast<MoveFindCtx*>(u);
-            if (fc->req->sourceContainer == D2RL::Items::ItemContainer::Inventory) {
-                if (item->container != D2RL::Items::ItemContainer::Inventory) return D2RL::Inventory::IterationAction::Continue;
-            } else {
-                if (item->container == D2RL::Items::ItemContainer::Inventory) return D2RL::Inventory::IterationAction::Continue;
-            }
-
-            int w = 1, h = 1;
-            ControllerQoL::GetItemDimensions(item->code, w, h);
-            if (fc->req->cellX >= item->x && fc->req->cellX < item->x + w &&
-                fc->req->cellY >= item->y && fc->req->cellY < item->y + h) {
-                fc->posMatch = item->handle;
-                return D2RL::Inventory::IterationAction::Stop;
-            }
-            if (item->code == fc->req->targetCode && fc->codeMatch == D2RL::InvalidItemHandle) {
-                fc->codeMatch = item->handle;
-            }
-            return D2RL::Inventory::IterationAction::Continue;
-        }, &findCtx);
-
-        if (findCtx.posMatch != D2RL::InvalidItemHandle) {
-            activeTarget = findCtx.posMatch;
-            context->LogInfo("[ControllerQoL] Resolved move target item by position!");
-        } else if (findCtx.codeMatch != D2RL::InvalidItemHandle) {
-            activeTarget = findCtx.codeMatch;
-            context->LogInfo("[ControllerQoL] Resolved move target item by code!");
-        }
+    } else {
+        // Never resolve a stale handle by a cell/code in another container.
+        if(req->identity.structSize!=D2RL::Items::ItemInfoSize ||
+            req->identity.container!=req->sourceContainer) {delete req;return;}
+        activeTarget=QolMove::Resolve(context,g_Items,g_Inventory,player,req->identity);
     }
 
     if (activeTarget == D2RL::InvalidItemHandle) {
@@ -547,6 +533,18 @@ static void __cdecl ExecuteMoveTask(const D2RL::PluginContext* context, void* us
             delete req; return;
         }
         if (activeTabIndex == 1) {
+            if (req->sdkSharedRequest) {
+                D2RL::Items::ItemInfo live{.structSize=D2RL::Items::ItemInfoSize};
+                if (g_Items->getItemInfo(context,activeTarget,&live)==D2RL::Items::Result::Success) {
+                    const auto result=QolSharedSdk::Move(context,g_Items,player,live,req->sharedSelection.page,true);
+                    ReportSharedMove(context,result,req->sharedSelection.page,true);
+                    if(result.committed){s_FocusedItem.store(D2RL::InvalidItemHandle);s_FocusedCode.store(0);}
+                }
+                delete req;return;
+            }
+            if (QolSharedSdk::Supported(g_Items) && !(req->sharedSelection.valid && req->sharedSelection.previousSeason)) {
+                context->LogWarn("[QOL/SharedSDK] No captured normal destination; native fallback refused.");delete req;return;
+            }
             if (!QolShared::ValidateOwner(exeBase) ||
                 !context->CheckExpectedBytes(0x2EF880,SharedOwnerIdBytes,sizeof(SharedOwnerIdBytes)) ||
                 !context->CheckExpectedBytes(0x09A5D0,SharedUnitLookupBytes,sizeof(SharedUnitLookupBytes))) {
@@ -609,6 +607,18 @@ static void __cdecl ExecuteMoveTask(const D2RL::PluginContext* context, void* us
 
     // 3. Shared Stash -> Inventory: Native client transfer
     if (req->sourceContainer == D2RL::Items::ItemContainer::SharedStash) {
+        if (req->sdkSharedRequest) {
+            D2RL::Items::ItemInfo live{.structSize=D2RL::Items::ItemInfoSize};
+            if (g_Items->getItemInfo(context,activeTarget,&live)==D2RL::Items::Result::Success && QolShared::SameItem(req->sharedIdentity,live)) {
+                const auto result=QolSharedSdk::Move(context,g_Items,player,live,req->sharedSelection.page,false);
+                ReportSharedMove(context,result,req->sharedSelection.page,false);
+                if(result.committed){s_FocusedItem.store(D2RL::InvalidItemHandle);s_FocusedCode.store(0);}
+            }
+            delete req;return;
+        }
+        if (QolSharedSdk::Supported(g_Items) && !(req->sharedSelection.valid && req->sharedSelection.previousSeason)) {
+            context->LogWarn("[QOL/SharedSDK] No captured normal source; native fallback refused.");delete req;return;
+        }
         struct Withdrawal { uintptr_t base; void* player; bool submitted{}; } withdrawal{exeBase,playerUnit};
         g_Items->editNativeItem(context,activeTarget,[](const D2RL::PluginContext*,void* item,void* user) noexcept {
             auto& w=*static_cast<Withdrawal*>(user);
@@ -683,160 +693,21 @@ static void __cdecl ExecuteMoveTask(const D2RL::PluginContext* context, void* us
     delete req;
 }
 
-static void QueueLegacyQuickMove(bool cubeDestination) noexcept {
-    if (!g_PluginContext || !g_Threads || !g_Settings.quickMove) return;
-
-    g_Threads->runOnGameThread(g_PluginContext, [](const D2RL::PluginContext* context, void* user) noexcept {
-        const bool cubeDestination=reinterpret_cast<uintptr_t>(user)!=0;
-        D2RL::PlayerHandle player = D2RL::InvalidPlayerHandle;
-        if (g_Inventory && g_Inventory->getLocalPlayer(context, &player) == D2RL::Inventory::Result::Success && player != D2RL::InvalidPlayerHandle) {
-            s_LastPlayerHandle.store(player);
-        } else {
-            player = s_LastPlayerHandle.load();
-        }
-
-        D2RL::ItemHandle focusedItem = s_FocusedItem.load();
-        D2RL::Items::ItemContainer srcContainer = s_FocusedContainer.load();
-        uint32_t targetCode = s_FocusedCode.load();
-        int32_t cellX = s_FocusedCellX.load();
-        int32_t cellY = s_FocusedCellY.load();
-
-        if (g_Items && focusedItem != D2RL::InvalidItemHandle) {
-            D2RL::Items::ItemInfo itemInfo{ .structSize = D2RL::Items::ItemInfoSize };
-            if (g_Items->getItemInfo(context, focusedItem, &itemInfo) == D2RL::Items::Result::Success) {
-                srcContainer = itemInfo.container;
-                targetCode = itemInfo.code;
-                cellX = itemInfo.x;
-                cellY = itemInfo.y;
-            }
-        }
-
-        // Fallback: if focusedItem is invalid or not found, try to locate the item occupying (cellX, cellY)
-        if (focusedItem == D2RL::InvalidItemHandle && cellX >= 0 && cellY >= 0 && g_Inventory && player != D2RL::InvalidPlayerHandle) {
-            struct CellFindCtx {
-                int32_t cx;
-                int32_t cy;
-                D2RL::ItemHandle handle = D2RL::InvalidItemHandle;
-                D2RL::Items::ItemInfo foundInfo{ .structSize = D2RL::Items::ItemInfoSize };
-            } cellCtx{ cellX, cellY };
-
-            uint32_t cMask = 0;
-            if (srcContainer==D2RL::Items::ItemContainer::Cube) {
-                cMask=D2RL::Items::ContainerBit(D2RL::Items::ItemContainer::Cube);
-            } else if (srcContainer == D2RL::Items::ItemContainer::Inventory) {
-                cMask = D2RL::Items::ContainerBit(D2RL::Items::ItemContainer::Inventory);
-            } else {
-                cMask = D2RL::Items::ContainerBit(D2RL::Items::ItemContainer::PersonalStash) |
-                        D2RL::Items::ContainerBit(D2RL::Items::ItemContainer::SharedStash) |
-                        D2RL::Items::ContainerBit(D2RL::Items::ItemContainer::CustomPage) |
-                        D2RL::Items::ContainerBit(D2RL::Items::ItemContainer::Cube);
-            }
-
-            D2RL::Inventory::ItemFilter filter{
-                .structSize    = D2RL::Inventory::ItemFilterSize,
-                .flags         = 0,
-                .containerMask = cMask,
-                .reserved      = 0,
-            };
-
-            struct FilterHelper {
-                CellFindCtx* ctx;
-                D2RL::Items::ItemContainer sc;
-            } fh{ &cellCtx, srcContainer };
-
-            g_Inventory->forEachInventoryItem(context, player, &filter, [](const D2RL::PluginContext*, const D2RL::Items::ItemInfo* item, void* u) noexcept -> D2RL::Inventory::IterationAction {
-                auto* h = static_cast<FilterHelper*>(u);
-                if (h->sc == D2RL::Items::ItemContainer::Inventory) {
-                    if (item->container != D2RL::Items::ItemContainer::Inventory) return D2RL::Inventory::IterationAction::Continue;
-                } else {
-                    if (item->container == D2RL::Items::ItemContainer::Inventory) return D2RL::Inventory::IterationAction::Continue;
-                }
-
-                int w = 1, hDim = 1;
-                ControllerQoL::GetItemDimensions(item->code, w, hDim);
-                if (h->ctx->cx >= item->x && h->ctx->cx < item->x + w &&
-                    h->ctx->cy >= item->y && h->ctx->cy < item->y + hDim) {
-                    h->ctx->handle = item->handle;
-                    h->ctx->foundInfo = *item;
-                    return D2RL::Inventory::IterationAction::Stop;
-                }
-                return D2RL::Inventory::IterationAction::Continue;
-            }, &fh);
-
-            if (cellCtx.handle != D2RL::InvalidItemHandle) {
-                focusedItem = cellCtx.handle;
-                srcContainer = cellCtx.foundInfo.container;
-                targetCode = cellCtx.foundInfo.code;
-                s_FocusedItem.store(focusedItem);
-                s_FocusedContainer.store(srcContainer);
-                s_FocusedCode.store(targetCode);
-            }
-        }
-
-        const bool isCubeOpen   = cubeDestination || TestUiMode(UI_MODE_CUBE);
-        const bool isStashOpen  = TestUiMode(UI_MODE_STASH);
-        const bool isVendorOpen = IsVendorPanelOpen();
-
-        if (!isStashOpen && !isCubeOpen && !isVendorOpen) {
-            return;
-        }
-
-        if (focusedItem == D2RL::InvalidItemHandle) {
-            context->LogWarn("[ControllerQoL] Quick Move: No focused item.");
-            return;
-        }
-
-        // Diagnostic: Scan active UI modes (0x00 to 0x20)
-        char modeScan[128]{};
-        int modeScanLen = 0;
-        for (int m = 0; m <= 32; ++m) {
-            if (TestUiMode(m)) {
-                modeScanLen += std::snprintf(modeScan + modeScanLen, sizeof(modeScan) - modeScanLen, "0x%02X ", m);
-            }
-        }
-
-        char modeMsg[256];
-        std::snprintf(modeMsg, sizeof(modeMsg),
-            "[ControllerQoL] Quick Move triggered: Stash=%d, Cube=%d, Vendor=%d, container=%u, activeModes=[ %s]",
-            static_cast<int>(isStashOpen), static_cast<int>(isCubeOpen),
-            static_cast<int>(isVendorOpen), static_cast<uint32_t>(srcContainer), modeScan);
-        context->LogInfo(modeMsg);
-
-        D2RL::Items::ItemContainer primaryDest   = D2RL::Items::ItemContainer::Unknown;
-        D2RL::Items::ItemContainer secondaryDest = D2RL::Items::ItemContainer::Unknown;
-
-        if (srcContainer == D2RL::Items::ItemContainer::Inventory) {
-            // Prioritize Stash and Cube transfer over vendor selling
-            if (isCubeOpen) {
-                primaryDest = D2RL::Items::ItemContainer::Cube;
-            } else if (isStashOpen) {
-                primaryDest   = D2RL::Items::ItemContainer::PersonalStash;
-                secondaryDest = D2RL::Items::ItemContainer::SharedStash;
-            } else if (isVendorOpen) {
-                context->LogWarn("[QOL/Sell] Selling requires a current UI item snapshot; legacy fallback refused.");
-                return;
-            } else {
-                context->LogInfo("[ControllerQoL] Quick Move skipped: Neither Stash, Cube, nor Vendor is open.");
-                return;
-            }
-        } else {
-            // Any container other than Inventory (PersonalStash, SharedStash, CustomPage, Cube, etc.) moves to player Inventory
-            primaryDest = D2RL::Items::ItemContainer::Inventory;
-        }
-
-        auto* req = new MoveRequest{
-            .player               = player,
-            .targetItem           = focusedItem,
-            .targetCode           = targetCode,
-            .cellX                = cellX,
-            .cellY                = cellY,
-            .sourceContainer      = srcContainer,
-            .primaryDestination   = primaryDest,
-            .secondaryDestination = secondaryDest,
-        };
-
-        ExecuteMoveTask(context, req);
-    }, reinterpret_cast<void*>(static_cast<uintptr_t>(cubeDestination)));
+static void QueueLegacyQuickMove(const D2RL::Items::ItemInfo& info,bool cubeDestination) noexcept {
+    if(!g_PluginContext || !g_Threads || !g_Settings.quickMove)return;
+    const bool cube=cubeDestination || TestUiMode(UI_MODE_CUBE);
+    const bool stash=TestUiMode(UI_MODE_STASH);
+    if(!cube && !stash)return;
+    using C=D2RL::Items::ItemContainer;
+    const auto destination=info.container==C::Inventory ? (cube?C::Cube:C::PersonalStash) : C::Inventory;
+    auto* req=new MoveRequest{};
+    req->targetItem=info.handle;req->targetCode=info.code;req->cellX=info.x;req->cellY=info.y;
+    req->sourceContainer=info.container;req->primaryDestination=destination;
+    req->secondaryDestination=info.container==C::Inventory && !cube?C::SharedStash:C::Unknown;
+    req->identity=info;req->sharedIdentity=info;
+    if (!cube && TestUiMode(UI_MODE_STASH) && D2R::Native::GetActiveStashTabIndex(g_PluginContext->exeBase)==1 &&
+        !CaptureSharedRequest(g_PluginContext,*req)) {delete req;return;}
+    if(g_Threads->runOnGameThread(g_PluginContext,ExecuteMoveTask,req)!=D2RL::Threads::Result::Success)delete req;
 }
 
 static void QueueQuickMoveToCube(bool materialsFirst) noexcept;
@@ -857,12 +728,15 @@ static void TriggerQuickMoveOnFocusedItem() noexcept {
             return;
         }
         auto source=s_FocusedContainer.load();
+        D2RL::Items::ItemInfo focused{};
+        bool hasFocused=false;
         if (g_Items) {
             D2RL::Items::ItemInfo info{.structSize=D2RL::Items::ItemInfoSize};
             if (g_Items->getItemInfo(ctx,s_FocusedItem.load(),&info)==D2RL::Items::Result::Success) {
-                source=info.container;
+                source=info.container;focused=info;hasFocused=true;
                 if (GetTickCount64()-s_FocusedTick.load()>1000) return;
-                if (QolCustomPage::TryTransfer(ctx,info)) return;
+                if (QolMove::CustomRoute(TestUiMode(UI_MODE_STASH),TestUiMode(UI_MODE_CUBE),IsVendorPanelOpen()) &&
+                    QolCustomPage::TryTransfer(ctx,info)) return;
                 if (QolVendor::Context(IsVendorPanelOpen(),TestUiMode(UI_MODE_STASH),TestUiMode(UI_MODE_CUBE),source)) {
                     TriggerNativeSellOnFocusedItem(ctx,info); return;
                 }
@@ -874,12 +748,13 @@ static void TriggerQuickMoveOnFocusedItem() noexcept {
                     req->sourceContainer=source;
                     req->primaryDestination=D2RL::Items::ItemContainer::Inventory;
                     req->sharedIdentity=info;
+                    if (!CaptureSharedRequest(ctx,*req)) {delete req;return;}
                     if (g_Threads->runOnGameThread(ctx,ExecuteMoveTask,req)!=D2RL::Threads::Result::Success) delete req;
                     return;
                 }
             }
         }
-        if (QolCustomPage::Visible(ctx)) return; // Unresolved focus must not target another container.
+        if (QolMove::CustomRoute(TestUiMode(UI_MODE_STASH),TestUiMode(UI_MODE_CUBE),IsVendorPanelOpen()) && QolCustomPage::Visible(ctx)) return; // Unresolved focus must not target another container.
         if (tab>=2 && tab<=4 && source!=D2RL::Items::ItemContainer::Inventory &&
             source!=D2RL::Items::ItemContainer::Cube) {
             ctx->LogWarn("[QOL/Materials] Advanced focus unresolved; refusing ordinary stash lookup.");
@@ -895,7 +770,8 @@ static void TriggerQuickMoveOnFocusedItem() noexcept {
         if (tab==1 && source==D2RL::Items::ItemContainer::SharedStash) {
             ctx->LogWarn("[QOL/Shared] Focus snapshot unavailable; no cross-page fallback."); return;
         }
-        QueueLegacyQuickMove(TestUiMode(UI_MODE_CUBE));
+        if(hasFocused)QueueLegacyQuickMove(focused,TestUiMode(UI_MODE_CUBE));
+        else ctx->LogWarn("[QOL/Move] Current UI identity unavailable; no cell/code fallback.");
     },nullptr);
 }
 
@@ -943,97 +819,20 @@ static void QueueQuickMoveToCube(bool materialsFirst) noexcept {
     }
     s_LastQuickMoveCubeTick.store(now);
 
-    g_Threads->runOnGameThread(g_PluginContext, [](const D2RL::PluginContext* context, void* user) noexcept {
-        const bool materialsFirst=reinterpret_cast<uintptr_t>(user)!=0;
-        D2RL::PlayerHandle player = D2RL::InvalidPlayerHandle;
-        if (g_Inventory && g_Inventory->getLocalPlayer(context, &player) == D2RL::Inventory::Result::Success && player != D2RL::InvalidPlayerHandle) {
-            s_LastPlayerHandle.store(player);
-        } else {
-            player = s_LastPlayerHandle.load();
-        }
-
-        D2RL::ItemHandle focusedItem = s_FocusedItem.load();
-        D2RL::Items::ItemContainer srcContainer = s_FocusedContainer.load();
-        uint32_t targetCode = s_FocusedCode.load();
-        int32_t cellX = s_FocusedCellX.load();
-        int32_t cellY = s_FocusedCellY.load();
-
-        if (g_Items && focusedItem != D2RL::InvalidItemHandle) {
-            D2RL::Items::ItemInfo itemInfo{ .structSize = D2RL::Items::ItemInfoSize };
-            if (g_Items->getItemInfo(context, focusedItem, &itemInfo) == D2RL::Items::Result::Success) {
-                srcContainer = itemInfo.container;
-                targetCode = itemInfo.code;
-                cellX = itemInfo.x;
-                cellY = itemInfo.y;
-            }
-        }
-
-        // Fallback: if focusedItem is invalid or not found, try to locate the item occupying (cellX, cellY)
-        if (focusedItem == D2RL::InvalidItemHandle && cellX >= 0 && cellY >= 0 && g_Inventory && player != D2RL::InvalidPlayerHandle) {
-            struct CellFindCtx {
-                int32_t cx;
-                int32_t cy;
-                D2RL::ItemHandle handle = D2RL::InvalidItemHandle;
-                D2RL::Items::ItemInfo foundInfo{ .structSize = D2RL::Items::ItemInfoSize };
-            } cellCtx{ cellX, cellY };
-
-            uint32_t cMask = 0;
-            if (srcContainer==D2RL::Items::ItemContainer::Cube) {
-                cMask=D2RL::Items::ContainerBit(D2RL::Items::ItemContainer::Cube);
-            } else if (srcContainer == D2RL::Items::ItemContainer::Inventory) {
-                cMask = D2RL::Items::ContainerBit(D2RL::Items::ItemContainer::Inventory);
-            } else {
-                cMask = D2RL::Items::ContainerBit(D2RL::Items::ItemContainer::PersonalStash) |
-                        D2RL::Items::ContainerBit(D2RL::Items::ItemContainer::SharedStash) |
-                        D2RL::Items::ContainerBit(D2RL::Items::ItemContainer::CustomPage) |
-                        D2RL::Items::ContainerBit(D2RL::Items::ItemContainer::Cube);
-            }
-
-            D2RL::Inventory::ItemFilter filter{
-                .structSize    = D2RL::Inventory::ItemFilterSize,
-                .flags         = 0,
-                .containerMask = cMask,
-                .reserved      = 0,
-            };
-
-            struct FilterHelper {
-                CellFindCtx* ctx;
-                D2RL::Items::ItemContainer sc;
-            } fh{ &cellCtx, srcContainer };
-
-            g_Inventory->forEachInventoryItem(context, player, &filter, [](const D2RL::PluginContext*, const D2RL::Items::ItemInfo* item, void* u) noexcept -> D2RL::Inventory::IterationAction {
-                auto* h = static_cast<FilterHelper*>(u);
-                if (h->sc == D2RL::Items::ItemContainer::Inventory) {
-                    if (item->container != D2RL::Items::ItemContainer::Inventory) return D2RL::Inventory::IterationAction::Continue;
-                } else {
-                    if (item->container == D2RL::Items::ItemContainer::Inventory) return D2RL::Inventory::IterationAction::Continue;
-                }
-
-                int w = 1, hDim = 1;
-                ControllerQoL::GetItemDimensions(item->code, w, hDim);
-                if (h->ctx->cx >= item->x && h->ctx->cx < item->x + w &&
-                    h->ctx->cy >= item->y && h->ctx->cy < item->y + hDim) {
-                    h->ctx->handle = item->handle;
-                    h->ctx->foundInfo = *item;
-                    return D2RL::Inventory::IterationAction::Stop;
-                }
-                return D2RL::Inventory::IterationAction::Continue;
-            }, &fh);
-
-            if (cellCtx.handle != D2RL::InvalidItemHandle) {
-                focusedItem = cellCtx.handle;
-                srcContainer = cellCtx.foundInfo.container;
-                targetCode = cellCtx.foundInfo.code;
-                s_FocusedItem.store(focusedItem);
-                s_FocusedContainer.store(srcContainer);
-                s_FocusedCode.store(targetCode);
-            }
-        }
-
-        if (focusedItem == D2RL::InvalidItemHandle) {
-            context->LogWarn("[ControllerQoL] Quick Move to Cube: No focused item.");
-            return;
-        }
+    D2RL::Items::ItemInfo focused{};
+    if(!ReadFocusIdentity(focused))return;
+    struct Pending { D2RL::Items::ItemInfo info; bool materials; };
+    auto* pending=new Pending{focused,materialsFirst};
+    const auto scheduled=g_Threads->runOnGameThread(g_PluginContext, [](const D2RL::PluginContext* context, void* user) noexcept {
+        const auto pending=*static_cast<Pending*>(user);delete static_cast<Pending*>(user);
+        const auto& identity=pending.info;
+        const bool materialsFirst=pending.materials;
+        D2RL::PlayerHandle player{};
+        if(!g_Inventory || g_Inventory->getLocalPlayer(context,&player)!=D2RL::Inventory::Result::Success || !player)return;
+        const auto focusedItem=identity.handle;
+        const auto srcContainer=identity.container;
+        const auto targetCode=identity.code;
+        const auto cellX=identity.x,cellY=identity.y;
 
         if (targetCode == D2R::ITEM_CODE_BOX) {
             context->LogWarn("[ControllerQoL] Quick Move to Cube: Cannot move Horadric Cube into itself.");
@@ -1063,21 +862,36 @@ static void QueueQuickMoveToCube(bool materialsFirst) noexcept {
             .primaryDestination   = primaryDest,
             .secondaryDestination = D2RL::Items::ItemContainer::Unknown,
             .materialsFirst       = materialsFirst,
+            .sharedIdentity       = identity,
+            .identity             = identity,
         };
 
         ExecuteMoveTask(context, req);
-    }, reinterpret_cast<void*>(static_cast<uintptr_t>(materialsFirst)));
+    }, pending);
+    if(scheduled!=D2RL::Threads::Result::Success)delete pending;
 }
 
 static void TriggerQuickMoveToCubeOnFocusedItem() noexcept {
     QueueQuickMoveToCube(false);
 }
 
+static bool VendorRefillContext() noexcept {
+    return IsVendorPanelOpen() && !TestUiMode(UI_MODE_STASH) && !TestUiMode(UI_MODE_CUBE);
+}
 static void TriggerAutoFillBelt() noexcept {
     if (!g_PluginContext || !g_Settings.enabled || !g_Settings.quickMove || !g_Threads) return;
     (void)g_Threads->runOnUiThread(g_PluginContext,[](const D2RL::PluginContext* ctx,void*) noexcept {
         if (QolBelt::Busy() || QolMaterials::Busy()) return;
         const bool stash=TestUiMode(UI_MODE_STASH);
+        if (VendorRefillContext()) {
+            D2RL::Items::ItemInfo focus{};
+            if (!ReadFocusIdentity(focus) || GetTickCount64()-s_FocusedTick.load()>1000) return;
+            if (focus.container!=D2RL::Items::ItemContainer::Inventory) {
+                if (!IsPotionItem(focus.code) || !QolBelt::RequestVendorRefill(ctx,focus,VendorRefillContext))
+                    ctx->LogWarn("[QOL/VendorBelt] Highlighted merchant potion could not be bound; no purchase.");
+                return;
+            }
+        }
         if (!stash && !TestUiMode(UI_MODE_INVENTORY) && !TestUiMode(UI_MODE_CUBE)) return;
         if (stash && QolMaterials::SelectedStashTab(ctx)==3 && g_Items) {
             D2RL::Items::ItemInfo focus{.structSize=D2RL::Items::ItemInfoSize};
@@ -1251,6 +1065,7 @@ static void __cdecl OnItemTooltipCallback(
     void* userData
 ) noexcept {
     (void)userData;
+    QolGlyphs::PublishHeader(nullptr,nullptr,nullptr,nullptr,nullptr);
     if (!g_Settings.enabled || !event) return;
 
     if (g_Items && event->item != D2RL::InvalidItemHandle) {
@@ -1285,6 +1100,8 @@ static void __cdecl OnItemTooltipCallback(
             s_FocusedContainer.store(info.container);
             s_FocusedCode.store(info.code);
             s_FocusedTick.store(GetTickCount64());
+            { std::lock_guard lock(s_FocusIdentityMutex);s_FocusIdentity=info;s_FocusIdentityTick=GetTickCount64(); }
+
 
             // Keep focus tracking above intact; only controller hint rendering is gated.
             if (!ControllerQoL::IsControllerUiActive()) return;
@@ -1294,6 +1111,10 @@ static void __cdecl OnItemTooltipCallback(
             const bool isCubeOpen     = TestUiMode(UI_MODE_CUBE);
             const bool isStashOpen    = TestUiMode(UI_MODE_STASH);
             const bool isVendorOpen   = IsVendorPanelOpen();
+            // Merchant stock must not advertise player-storage transfers.
+            const bool vendorStock=isVendorOpen && !isStashOpen && !isCubeOpen &&
+                info.container!=D2RL::Items::ItemContainer::Inventory;
+
 
             D2RL::PlayerHandle player = s_LastPlayerHandle.load();
             if (player == D2RL::InvalidPlayerHandle && g_Inventory) {
@@ -1302,7 +1123,7 @@ static void __cdecl OnItemTooltipCallback(
             }
             const bool playerHasCube  = PlayerHasCube(context, player);
 
-            const bool canMove        = g_Settings.quickMove && (
+            const bool canMove        = !vendorStock && g_Settings.quickMove && (
                 (info.container == D2RL::Items::ItemContainer::Inventory && (isCubeOpen || isStashOpen || isVendorOpen || QolCustomPage::Visible(context))) ||
                 (info.container == D2RL::Items::ItemContainer::PersonalStash ||
                  info.container == D2RL::Items::ItemContainer::SharedStash ||
@@ -1310,16 +1131,16 @@ static void __cdecl OnItemTooltipCallback(
                  info.container == D2RL::Items::ItemContainer::Cube)
             );
 
-            const bool canMoveToCube  = g_Settings.quickMove && playerHasCube && (info.code != D2R::ITEM_CODE_BOX) && (!isCubeOpen) && (
+            const bool canMoveToCube  = !vendorStock && g_Settings.quickMove && playerHasCube && (info.code != D2R::ITEM_CODE_BOX) && (!isCubeOpen) && (
                 info.container == D2RL::Items::ItemContainer::Inventory ||
                 info.container == D2RL::Items::ItemContainer::PersonalStash ||
                 info.container == D2RL::Items::ItemContainer::SharedStash
             );
 
             const bool isPotionItem   = QolBelt::BeltCandidate(info.code) && QolBelt::SupportedSource(info.container);
-            const bool canMoveToBelt  = isPotionItem;
-            const bool canIdentify    = isUnidentified && g_Settings.quickIdentify;
-            const bool canAutoFill    = g_Settings.quickMove && IsPotionItem(info.code) && (isStashOpen || isCubeOpen || info.container == D2RL::Items::ItemContainer::Inventory ||
+            const bool canMoveToBelt  = !vendorStock && isPotionItem;
+            const bool canIdentify    = !vendorStock && isUnidentified && g_Settings.quickIdentify;
+            const bool canAutoFill    = g_Settings.quickMove && IsPotionItem(info.code) && (vendorStock || isStashOpen || isCubeOpen || info.container == D2RL::Items::ItemContainer::Inventory ||
                                          info.container == D2RL::Items::ItemContainer::PersonalStash ||
                                          info.container == D2RL::Items::ItemContainer::SharedStash);
 
@@ -1348,6 +1169,10 @@ static void __cdecl OnItemTooltipCallback(
                     }
                 }
 
+                QolGlyphs::PublishHeader(g_Settings.requireModifier?modStr:"",
+                    canIdentify?"Identify":(canMoveToBelt?"To Belt":nullptr),
+                    canMove?moveAction:nullptr,canMoveToCube?"To Cube":nullptr,
+                    canAutoFill?(vendorStock?"Refill / Buy":"Fill Belt"):nullptr);
                 int promptLen = 0;
                 auto appendLine = [&](const char* btn, const char* act) {
                     if (promptLen > 0 && promptLen < static_cast<int>(sizeof(prompt)) - 1) {
@@ -1377,7 +1202,7 @@ static void __cdecl OnItemTooltipCallback(
                     appendLine("Y", "To Cube");
                 }
                 if (canAutoFill) {
-                    appendLine("R3", "Fill Belt");
+                    appendLine("R3", vendorStock ? "Refill Belt / Buy Missing" : "Fill Belt");
                 }
 
                 const size_t len = std::strlen(prompt);
@@ -2264,7 +2089,7 @@ namespace GroundLoot {
             InspectGroundItems(player, targetGame, g_PluginContext, false);
 
             const int32_t pendingSlot = s_PendingPickupSlot.exchange(-1);
-            if (pendingSlot >= 0 && player) {
+            if (pendingSlot >= 0 && player && QolNavigation::GroundShortcutsAllowed()) {
                 const uint32_t dist = std::max(g_Settings.groundPickupDistance, 10U);
                 PickupCandidateSlot(player, targetGame, static_cast<uint32_t>(pendingSlot), dist, g_PluginContext);
             }
@@ -2287,12 +2112,8 @@ static void __cdecl ScanGroundTask(const D2RL::PluginContext* context, void* use
     const bool verbose = (userData != nullptr);
 
     void* player = GroundLoot::s_ActivePlayer;
-    if (!player && g_Inventory && context) {
-        D2RL::PlayerHandle handle = D2RL::InvalidPlayerHandle;
-        if (g_Inventory->getLocalPlayer(context, &handle) == D2RL::Inventory::Result::Success && handle != D2RL::InvalidPlayerHandle) {
-            player = reinterpret_cast<void*>(handle);
-        }
-    }
+    // PlayerHandle is an opaque SDK ID, never a UnitAny pointer. Until a
+    // native action supplies context, skip rather than reinterpret a handle.
 
     void* realGame = nullptr;
     if (player && GroundLoot::s_GetGame) {
@@ -2549,13 +2370,10 @@ static void __cdecl ClearPlacardsTask(const D2RL::PluginContext* context, void* 
 
 static void __cdecl RefreshStickySlotsTask(const D2RL::PluginContext* context, void* userData) noexcept {
     (void)userData;
+    if (!QolNavigation::GroundShortcutsAllowed()) return;
     void* player = GroundLoot::s_ActivePlayer;
-    if (!player && g_Inventory && context) {
-        D2RL::PlayerHandle handle = D2RL::InvalidPlayerHandle;
-        if (g_Inventory->getLocalPlayer(context, &handle) == D2RL::Inventory::Result::Success && handle != D2RL::InvalidPlayerHandle) {
-            player = reinterpret_cast<void*>(handle);
-        }
-    }
+    // PlayerHandle is an opaque SDK ID, never a UnitAny pointer. Until a
+    // native action supplies context, skip rather than reinterpret a handle.
 
     void* realGame = nullptr;
     if (player && GroundLoot::s_GetGame) {
@@ -2592,6 +2410,7 @@ static void __cdecl PickupGroundTask(const D2RL::PluginContext* context, void* u
     auto* args = static_cast<PickupTaskArgs*>(userData);
     const uint32_t slot = args ? args->slotIndex : 0;
     delete args;
+    if (!QolNavigation::GroundShortcutsAllowed()) {GroundLoot::s_PendingPickupSlot.store(-1);return;}
 
     // Check if HookTrigger already consumed and executed this pending slot
     if (GroundLoot::s_PendingPickupSlot.load() == static_cast<int32_t>(slot)) {
@@ -2603,12 +2422,8 @@ static void __cdecl PickupGroundTask(const D2RL::PluginContext* context, void* u
     }
 
     void* player = GroundLoot::s_ActivePlayer;
-    if (!player && g_Inventory && context) {
-        D2RL::PlayerHandle handle = D2RL::InvalidPlayerHandle;
-        if (g_Inventory->getLocalPlayer(context, &handle) == D2RL::Inventory::Result::Success && handle != D2RL::InvalidPlayerHandle) {
-            player = reinterpret_cast<void*>(handle);
-        }
-    }
+    // PlayerHandle is an opaque SDK ID, never a UnitAny pointer. Until a
+    // native action supplies context, skip rather than reinterpret a handle.
 
     void* realGame = nullptr;
     if (player && GroundLoot::s_GetGame) {
@@ -2704,6 +2519,10 @@ D2RL_PLUGIN_EXPORT auto D2RLoaderLoadPlugin(const D2RL::PluginContext* context) 
         !D2RL::HasItemServiceField(g_Items, D2RL::ItemServiceRequiredSize)) {
         context->LogWarn("[ControllerQoL] ItemService unavailable.");
     }
+
+    context->LogInfo(QolSharedSdk::Supported(g_Items)
+        ? "[QOL/SharedSDK] SharedStashWrite available; normal LB+X transfers use SDK transactions."
+        : "[QOL/SharedSDK] SharedStashWrite unavailable; reviewed native transfer path retained.");
 
     if (context->QueryService(&g_Inventory) != D2RL::ServiceQueryResult::Success ||
         !D2RL::HasInventoryServiceField(g_Inventory, D2RL::InventoryServiceRequiredSize)) {
@@ -2898,6 +2717,7 @@ D2RL_PLUGIN_EXPORT auto D2RLoaderLoadPlugin(const D2RL::PluginContext* context) 
         }
     }
 
+    QolIdentifyStat::Initialize(context);
     (void)QolCustomPage::Initialize(context);
     if (!QolMaterials::Initialize(context))
         context->LogWarn("[QOL/Materials] Advanced withdrawals unavailable; inspect native admission diagnostics.");
@@ -2939,6 +2759,7 @@ D2RL_PLUGIN_EXPORT auto D2RLoaderLoadPlugin(const D2RL::PluginContext* context) 
                 if (!g_Settings.enabled) continue;
 
                 ControllerQoL::PumpNativeInput();
+                QolNavigation::PumpLabels(context,g_Threads);
                 QolBelt::Pump(context);
                 QolMaterials::Pump(context);
 
@@ -3026,6 +2847,11 @@ D2RL_PLUGIN_EXPORT auto D2RLoaderLoadPlugin(const D2RL::PluginContext* context) 
                 s_LastRt = rt;
                 s_LastLt = lt;
 
+                if (!QolNavigation::GroundShortcutsAllowed()) {
+                    s_ModUsedWithFace=false;
+                    GroundLoot::s_PendingPickupSlot.store(-1);
+                    continue; // Track edges above, but menu bumpers must not queue world-loot work.
+                }
                 const ULONGLONG now = GetTickCount64();
 
                 if ((modDown || modUp) && g_Settings.debugLogging) {
@@ -3116,7 +2942,7 @@ D2RL_PLUGIN_EXPORT auto D2RLoaderLoadPlugin(const D2RL::PluginContext* context) 
     }
     QolPortal::Initialize(context, g_Settings.enabled && g_Settings.groundPickup && g_Settings.prioritizePortals,
         g_Settings.debugLogging || g_Settings.portalDiagnostics, g_Settings.groundPickupButton, g_Settings.portalPriorityDistance);
-    context->LogInfo("[QOL] QOL v1.3.1+rev.11 loaded: controller item features and integrated v0.6 navigation/label hooks.");
+    context->LogInfo("[QOL] QOL v1.3.1+rev.22 loaded: controller item features and integrated v0.6 navigation/label hooks.");
     return true;
 }
 

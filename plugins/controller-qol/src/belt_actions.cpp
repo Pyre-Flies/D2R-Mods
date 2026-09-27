@@ -1,7 +1,9 @@
 #include "belt_actions.h"
 #include "materials_actions.h"
+#include "vendor_buy.h"
 #include "belt_policy.h"
 #include "belt_signatures.h"
+#include "belt_compatibility.h"
 #include "belt_native_contract.h"
 #include "native_d2r.h"
 #include "plugin_compatibility.h"
@@ -18,6 +20,11 @@ const D2RL::InventoryService* inventory{};
 const D2RL::ThreadService* threads{};
 std::mutex mutex;
 bool ready{}, active{}, queued{}, collect{}, includeStash{}, validate{};
+uintptr_t generation{};
+bool vendor{}, vendorReady{};
+bool (*shopOpen)() noexcept{};
+Info stock{};
+ULONGLONG vendorStarted{};
 D2RL::PlayerHandle owner{};
 std::array<Info, 512> candidates{};
 size_t count{}, index{};
@@ -26,7 +33,9 @@ Phase phase{Phase::Ready};
 ULONGLONG deadline{}, queuedAt{};
 
 void Reset() noexcept {
-    active = queued = collect = includeStash = false;
+    ++generation;
+    active = queued = collect = includeStash = vendor = vendorReady = false;
+    shopOpen = nullptr; stock = {}; vendorStarted = 0;
     count = index = confirmed = skipped = 0;
     owner = D2RL::InvalidPlayerHandle;
     phase = Phase::Ready;
@@ -36,7 +45,9 @@ bool Validate(const D2RL::PluginContext* ctx) noexcept {
     for (const auto& site : Signatures::All) {
         const bool matched = site.rva == D2R::Native::GetFreeBeltSlotRva
             ? QolCompat::ValidateBeltEntry(ctx->exeBase + site.rva)
-            : ctx->CheckExpectedBytes(site.rva, site.bytes, site.size);
+            : site.rva == D2R::Native::ShiftRightClickPlaceActionRva
+                ? QolBeltCompat::Stored(ctx->exeBase+site.rva)
+                : QolBeltCompat::Match(ctx->exeBase+site.rva,site.bytes,site.size);
         if (!matched) {
             char message[128];
             std::snprintf(message, sizeof(message), "[QOL/Belt] Native admission mismatch at RVA 0x%llX.", static_cast<unsigned long long>(site.rva));
@@ -115,8 +126,9 @@ NativeCall Native(const D2RL::PluginContext* ctx, const Info& info, Action actio
     return call;
 }
 
-void __cdecl Tick(const D2RL::PluginContext* ctx, void*) noexcept {
+void __cdecl Tick(const D2RL::PluginContext* ctx, void* token) noexcept {
     std::lock_guard lock(mutex);
+    if (reinterpret_cast<uintptr_t>(token)!=generation) return;
     queued = false;
     if (!ready || !active) return;
     if (validate) {
@@ -136,7 +148,7 @@ void __cdecl Tick(const D2RL::PluginContext* ctx, void*) noexcept {
                 D2RL::Items::ContainerBit(container), 0};
             const auto result = inventory->forEachInventoryItem(ctx, owner, &filter,
                 [](const D2RL::PluginContext*, const Info* item, void*) noexcept {
-                    if (BeltCandidate(item->code) && SupportedSource(item->container) && count < candidates.size())
+                    if (BeltCandidate(item->code) && (!vendor || item->code==stock.code) && SupportedSource(item->container) && count < candidates.size())
                         candidates[count++] = *item;
                     return count == candidates.size() ? D2RL::Inventory::IterationAction::Stop : D2RL::Inventory::IterationAction::Continue;
                 }, nullptr);
@@ -149,6 +161,7 @@ void __cdecl Tick(const D2RL::PluginContext* ctx, void*) noexcept {
         if (count == candidates.size()) ctx->LogWarn("[QOL/Belt] Candidate limit reached (512); press refill again for remaining items.");
     }
     if (index >= count) {
+        if (vendor) { vendorReady=true; return; }
         if (includeStash) QolMaterials::RequestRefill();
         Finish(ctx, "Batch complete"); return;
     }
@@ -266,6 +279,17 @@ bool RequestRefill(bool stash) noexcept {
     Reset(); collect = true; includeStash = stash; active = true;
     return true;
 }
+bool RequestVendorRefill(const D2RL::PluginContext* ctx, const Info& info, bool (*isShopOpen)() noexcept) noexcept {
+    std::lock_guard lock(mutex);
+    if (!ready || !threads->runOnUiThread || active || QolMaterials::Busy() || !isShopOpen || !isShopOpen() ||
+        !BeltCandidate(info.code) || info.code==D2RL::Items::MakeItemCode("isc") || info.code==D2RL::Items::MakeItemCode("tsc") ||
+        !QolVendorBuy::Check(ctx,info)) return false;
+    D2RL::PlayerHandle player{};
+    if (inventory->getLocalPlayer(ctx,&player)!=D2RL::Inventory::Result::Success || !player) return false;
+    Reset(); stock=info; owner=player; shopOpen=isShopOpen;
+    vendor=collect=active=true; vendorStarted=GetTickCount64();
+    return true;
+}
 void Pump(const D2RL::PluginContext* ctx) noexcept {
     std::lock_guard lock(mutex);
     if (!ready || !active) return;
@@ -275,16 +299,33 @@ void Pump(const D2RL::PluginContext* ctx) noexcept {
         if (GetTickCount64() - queuedAt > 5000) Finish(ctx, "Cancelled: scheduled game task unavailable");
         return;
     }
+    if (vendor && GetTickCount64()-vendorStarted>10000) { Finish(ctx,"Cancelled: vendor refill expired"); return; }
     queued = true; queuedAt = GetTickCount64();
-    const auto result = threads->runOnGameThread(ctx, [](const D2RL::PluginContext* context, void*) noexcept {
+    if (vendorReady) {
+        const auto result=threads->runOnUiThread(ctx,[](const D2RL::PluginContext* context,void* token) noexcept {
+            std::lock_guard uiLock(mutex);
+            if (reinterpret_cast<uintptr_t>(token)!=generation) return;
+            queued=false;
+            if (!ready || !active || !vendorReady) return;
+            D2RL::PlayerHandle current{};
+            if (GetTickCount64()-vendorStarted<=10000 && shopOpen && shopOpen() && Validate(context) &&
+                inventory->getLocalPlayer(context,&current)==D2RL::Inventory::Result::Success && current && current==owner)
+                QolVendorBuy::Submit(context,stock);
+            Finish(context,"Vendor refill finished (purchase submission is not confirmation)");
+        },reinterpret_cast<void*>(generation));
+        if (result!=D2RL::Threads::Result::Success) Finish(ctx,"Cancelled: vendor UI scheduling rejected");
+        return;
+    }
+    const auto result = threads->runOnGameThread(ctx, [](const D2RL::PluginContext* context, void* token) noexcept {
         {
             std::lock_guard ownerLock(mutex);
+            if (reinterpret_cast<uintptr_t>(token)!=generation) return;
             if (active && collect && !owner) {
                 if (inventory->getLocalPlayer(context, &owner) != D2RL::Inventory::Result::Success) owner = 0;
             }
         }
-        Tick(context, nullptr);
-    }, nullptr);
+        Tick(context, token);
+    }, reinterpret_cast<void*>(generation));
     if (result != D2RL::Threads::Result::Success) Finish(ctx, "Cancelled: loader rejected game-thread scheduling");
 }
 }

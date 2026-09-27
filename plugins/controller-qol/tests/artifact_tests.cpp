@@ -10,7 +10,7 @@ static void check(bool ok,const char* message) {
     if(!ok) {std::fprintf(stderr,"FAIL: %s (Win32=%lu)\n",message,GetLastError());std::exit(1);}
 }
 int main(int argc,char** argv) {
-    check(argc==2,"DLL path required");
+    check(argc==3,"DLL path and expected version required");
     HMODULE dll=LoadLibraryExA(argv[1],nullptr,LOAD_WITH_ALTERED_SEARCH_PATH);
     check(dll!=nullptr,"merged DLL loads with Windows dependencies");
     using GetInfo=const D2RL::PluginInfo*(*)() noexcept;
@@ -20,7 +20,7 @@ int main(int argc,char** argv) {
     check(info && info->infoSize==D2RL::PluginInfoSize,"metadata layout matches SDK");
     check(info->abiVersion==D2RL_PLUGIN_ABI_VERSION,"metadata ABI matches SDK");
     check(std::strcmp(info->id,"controller-qol-updates")==0 && std::strcmp(info->name,"Controller QOL Updates")==0,"single QOL identity");
-    check(std::strcmp(info->version,"1.5.25")==0,"merged version");
+    check(std::strcmp(info->version,argv[2])==0,"merged version");
     check(std::strcmp(info->author,"PyreFly")==0,"release author credit");
     check(GetProcAddress(dll,"D2RLoaderLoadPlugin") && GetProcAddress(dll,"D2RLoaderUnloadPlugin"),"lifecycle exports exist");
     HRSRC manifest=FindResourceA(dll,MAKEINTRESOURCEA(D2RL_PLUGIN_MANIFEST_RESOURCE_ID),MAKEINTRESOURCEA(10));

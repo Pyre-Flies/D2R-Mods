@@ -23,6 +23,9 @@ include("${PLUGIN_SDK}/cmake/D2RLPluginEmbedConfig.cmake")
 add_library(controller-qol SHARED
     src/plugin_compatibility.cpp src/portal_priority.cpp src/materials_actions.cpp
     src/custom_page_actions.cpp
+    src/identify_stat.cpp
+    src/belt_compatibility.cpp
+    src/vendor_buy.cpp
     src/belt_actions.cpp
     src/plugin_main.cpp
     src/controller_input.cpp
@@ -135,3 +138,25 @@ add_test(NAME qol-menu-route COMMAND qol-menu-route-tests)
 add_executable(qol-identify-tests tests/identify_tests.cpp)
 target_include_directories(qol-identify-tests PRIVATE src "${PLUGIN_SDK}/include")
 add_test(NAME qol-identify COMMAND qol-identify-tests)
+
+add_executable(qol-move-identity-tests tests/move_identity_tests.cpp)
+target_include_directories(qol-move-identity-tests PRIVATE src "${PLUGIN_SDK}/include")
+add_test(NAME qol-move-identity COMMAND qol-move-identity-tests)
+
+add_executable(qol-belt-compatibility-tests tests/belt_compatibility_tests.cpp src/belt_compatibility.cpp)
+target_include_directories(qol-belt-compatibility-tests PRIVATE src)
+target_compile_definitions(qol-belt-compatibility-tests PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_link_libraries(qol-belt-compatibility-tests PRIVATE bcrypt)
+add_test(NAME qol-belt-compatibility COMMAND qol-belt-compatibility-tests)
+
+# Keep the shipped resource/exports/defaults in the routine regression run.
+add_executable(qol-artifact-tests tests/artifact_tests.cpp)
+target_include_directories(qol-artifact-tests PRIVATE "${PLUGIN_SDK}/include")
+target_compile_definitions(qol-artifact-tests PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+add_dependencies(qol-artifact-tests controller-qol)
+add_test(NAME qol-artifact COMMAND qol-artifact-tests "$<TARGET_FILE:controller-qol>" "1.3.1+rev.22")
+
+add_executable(qol-shared-sdk-tests tests/shared_sdk_tests.cpp)
+target_include_directories(qol-shared-sdk-tests PRIVATE src "${PLUGIN_SDK}/include")
+target_compile_definitions(qol-shared-sdk-tests PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+add_test(NAME qol-shared-sdk COMMAND qol-shared-sdk-tests)

@@ -6,7 +6,7 @@
 #include <cstdlib>
 #include <cstring>
 using namespace QolMaterials;
-int checks{},calls{};
+int checks{},calls{},buyCalls{};
 void Check(bool value,const char* why) { ++checks; if (!value) { std::fprintf(stderr,"FAIL: %s\n",why); std::exit(1); } }
 void __fastcall Widget(void* widget,const int32_t* cell,uint8_t page) {
     ++calls; Check(widget && cell,"valid widget and synchronous coordinate storage");
@@ -20,9 +20,22 @@ void __fastcall Sell(void* panel,void* player,void* item,bool sell,bool immediat
     Check(panel && player && item && item!=player,"native sell receives exact item and local player");
     Check(sell && immediate && !shift,"native quick-sell flags match reviewed caller");
 }
+void __fastcall Buy(void* panel,void* player,void* item,bool sell,bool immediate,bool shift) {
+    ++buyCalls;
+    Check(panel && player && item && item!=player,"native purchase keeps stock distinct from player");
+    Check(!sell && immediate && shift,"bulk purchase must force Shift without using sell flags");
+}
 int main() {
     using C=D2RL::Items::ItemContainer;
     int panel{},player{},saleItem{};
+    const auto beforeBuy=buyCalls;
+    Check(QolVendor::SubmitBuy(Buy,&panel,&player,&saleItem),"native bulk-buy invocation");
+    Check(buyCalls==beforeBuy+1,"exactly one bulk request, no purchase loop");
+    Check(!QolVendor::SubmitBuy(Buy,nullptr,&player,&saleItem) &&
+          !QolVendor::SubmitBuy(Buy,&panel,nullptr,&saleItem) &&
+          !QolVendor::SubmitBuy(Buy,&panel,&player,nullptr) &&
+          !QolVendor::SubmitBuy(nullptr,&panel,&player,&saleItem),"missing native purchase dependencies refused");
+    Check(buyCalls==beforeBuy+1,"refused requests never buy");
     Check(QolVendor::Submit(Sell,&panel,&player,&saleItem),"native sell submitted once");
     Check(!QolVendor::Submit(Sell,nullptr,&player,&saleItem),"missing vendor cannot submit");
     Check(QolVendor::Context(true,false,false,C::Inventory),"inventory sale in shop");

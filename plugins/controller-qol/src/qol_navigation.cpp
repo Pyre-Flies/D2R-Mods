@@ -12,12 +12,15 @@
 #include "qol_navigation.h"
 #include "qol_glyphs.h"
 #include "physical_input.h"
+#include "controller_input.h"
 #include "core_compatibility.h"
 #include "native_signatures.h"
 #include "label_signatures.h"
+#include "label_recovery_signatures.h"
 #include "menu_signatures.h"
 #include "menu_route_profile.h"
 #include "native_input_profile.h"
+#include "native_ranges.h"
 #include "skills_signatures.h"
 #include "shared_page_signatures.h"
 #include "shared_page_policy.h"
@@ -43,6 +46,8 @@ using InGameFn=bool(__cdecl*)() noexcept;
 LabelActionFn originalLabelPress=nullptr,originalLabelRelease=nullptr;
 InGameFn isInGame=nullptr;
 bool labelHooks=false;
+bool labelRecoveryReady=false,labelRecoveryQueued=false;
+ULONGLONG lastLabelCheck=0;
 bool labelRefreshNeeded=true;
 uint64_t labelPressBlocked=0,labelReleaseBlocked=0,labelEnforced=0;
 thread_local bool updatingLabels=false;
@@ -57,7 +62,23 @@ int ReadFilteredLabelState() noexcept {
 }
 bool LabelLockActive(unsigned channel=0) noexcept {
     return ctx && Probe::LockFilteredLabels(enabled,useL1,labelHooks,
-        isInGame && isInGame(),channel);
+        isInGame && isInGame(),ControllerQoL::IsControllerUiActive(),channel);
+}
+bool ControllerLabelsStale() noexcept {
+    if(!ctx || !labelRecoveryReady)return false;
+    __try {
+        const auto base=ctx->exeBase;
+        // Recheck witnesses before calling: another plugin may patch after load.
+        for(const auto& sig:LabelRecoverySignatures)
+            if(std::memcmp(reinterpret_cast<const void*>(base+sig.rva),sig.bytes,sig.size)) {
+                labelRecoveryReady=false;ctx->LogWarn("[QOL/Labels] Recovery contract changed; recovery disabled.");return false;
+            }
+        if(!reinterpret_cast<bool(__fastcall*)()>(base+0x77e10)())return false;
+        auto input=reinterpret_cast<void*(__fastcall*)()>(base+0x13ce90)();
+        if(!input || !reinterpret_cast<bool(__fastcall*)(void*)>(base+0x13de60)(input))return false;
+        auto render=reinterpret_cast<const unsigned char*(__fastcall*)()>(base+0x144640)();
+        return render && Probe::RecoverControllerLabels(true,true,true,ReadFilteredLabelState(),render[0x1f60]);
+    } __except(EXCEPTION_EXECUTE_HANDLER) {labelRecoveryReady=false;return false;}
 }
 bool EnsureLabels() noexcept {
     if(updatingLabels) return false;
@@ -110,7 +131,12 @@ void InstallLabelHooks() noexcept {
     bool press=ctx->InstallInlineHook<LabelActionFn>(0xc66a0,LabelBytes0,19,&HookLabelPress,&originalLabelPress);
     bool release=ctx->InstallInlineHook<LabelActionFn>(0xc6e90,LabelBytes1,20,&HookLabelRelease,&originalLabelRelease);
     labelHooks=press && release;
-    ctx->LogInfo(labelHooks?"[QOL/Labels] Label press/release hooks installed via SDK. L1 mode locks FILTERED labels ON.":
+    labelRecoveryReady=labelHooks;
+    for(const auto& sig:LabelRecoverySignatures)
+        if(!ctx->CheckExpectedBytes(sig.rva,sig.bytes,sig.size))labelRecoveryReady=false;
+    ctx->LogInfo(labelRecoveryReady?"[QOL/Labels] Guarded controller display recovery enabled.":
+        "[QOL/Labels] Controller display recovery unavailable; existing label hooks retained.");
+    ctx->LogInfo(labelHooks?"[QOL/Labels] Label press/release hooks installed via SDK. Controller mode locks FILTERED labels ON; keyboard label actions pass through.":
         "[QOL/Labels] Label hook installation incomplete; both callbacks pass through.");
 }
 
@@ -392,6 +418,24 @@ NativeMessage DecodeNative(void* widget,void* message) noexcept {
     } __except(EXCEPTION_EXECUTE_HANDLER) {n={};n.fault=true;}
     return n;
 }
+// Same bounded widget-name/parent layout used by the existing scoped glyph hook.
+bool IsScopedSubTab(void* widget,bool chronicle=false) noexcept {
+    __try {
+        const auto* w=static_cast<const unsigned char*>(widget);
+        if(!w)return false;
+        const auto* parent=*reinterpret_cast<const unsigned char* const*>(w+0x30);
+        if(!parent)return false;
+        const auto* name=*reinterpret_cast<const char* const*>(w+8);
+        const auto* owner=*reinterpret_cast<const char* const*>(parent+8);
+        if(!name || !owner)return false;
+        size_t n=0,p=0;
+        while(n<64 && name[n])++n;
+        while(p<64 && owner[p])++p;
+        const bool visible=w[0x50] && w[0x51] && parent[0x50] && parent[0x51];
+        return n<64 && p<64 && (chronicle ? Probe::ChronicleTab({name,n},{owner,p},visible) :
+            Probe::OptionsTab({name,n},{owner,p},visible));
+    } __except(EXCEPTION_EXECUTE_HANDLER) {return false;}
+}
 void __fastcall HookTabMessage(void* widget,void* message) noexcept {
     // Preserve the original function's void ABI. Do not mutate input, widget
     // selection, message payload, or raw state used by controller-qol.
@@ -406,11 +450,19 @@ void __fastcall HookTabMessage(void* widget,void* message) noexcept {
             if(n.fault) ++faults;
             if(n.controllerBegin) {
                 ++nativeControllerCalls;
-                if(SubMenusEnabled() && (subPanels&1) && n.switchEnabled && n.left==7 && n.right==8) {
+                const bool options=(subPanels&4) && IsScopedSubTab(widget);
+                const bool chronicle=(subPanels&8) && IsScopedSubTab(widget,true);
+                if(SubMenusEnabled() && ((subPanels&1) || options || chronicle) && n.switchEnabled && n.left==7 && n.right==8) {
                     subDecision=PrepareMenuMessage(message,subCopy,true);
                     if(subDecision<0) ++questReleased;
                     if(subDecision>0) ++questTranslated;
-                    if(subDecision && trace) ctx->LogInfo(subDecision>0?
+                    if(subDecision && trace && options) ctx->LogInfo(subDecision>0?
+                        "[QOL/Submenu] Options: bumper translated to settings tab navigation.":
+                        "[QOL/Submenu] Options: trigger released to main menu.");
+                    if(subDecision && trace && chronicle) ctx->LogInfo(subDecision>0?
+                        "[QOL/Submenu] Chronicle: bumper translated to inner tab navigation.":
+                        "[QOL/Submenu] Chronicle: trigger released to main menu.");
+                    if(subDecision && trace && !options && !chronicle) ctx->LogInfo(subDecision>0?
                         "[QOL/Submenu] Quest: bumper translated to act tab navigation.":
                         "[QOL/Submenu] Quest: trigger released to main menu without marking input handled.");
                 }
@@ -521,6 +573,7 @@ auto Command(D2R::Game::Client*,const D2RL::ConsoleCommandContext* cmd,void*) no
             ctx->WriteConsoleMessage("qol status|trace|quiet|menu on|menu off|input on|input off");
             return D2RL::ConsoleCommandResult::InvalidArguments;
         }
+        QolNativeRanges::Enable(enabled && useL1 && menuRemap && menuHook);
         auto r=ReadRaw();LogRaw(r);
         char line[896];
         std::snprintf(line,sizeof(line),"[QOL/Input] v1.3.1+rev.4 %s mode=%s route=%s:%s coreVerified=%d nativeValid=%d rawValid=%d modifier=%s held=%d L1=%d L2=%d UI=%llu matched=%llu consumed=%llu samples=%llu faults=%llu controllerEvents=%llu relevant=%llu modifierSamples=%llu nativeHook=%d nativeCalls=%llu nativeController=%llu nativeBlocked=%llu",
@@ -546,6 +599,7 @@ auto Command(D2R::Game::Client*,const D2RL::ConsoleCommandContext* cmd,void*) no
     } catch(...) {return D2RL::ConsoleCommandResult::Failed;}
 }
 void Cleanup() noexcept {
+    QolNativeRanges::Enable(false);
     sharedPageInputActive.store(false);
     QolGlyphs::Shutdown();
     if(ctx && events) {
@@ -553,6 +607,7 @@ void Cleanup() noexcept {
         if(tooltipHandle && events->unregisterItemTooltipListener) events->unregisterItemTooltipListener(ctx,tooltipHandle);
     }
     uiHandle=tooltipHandle=0;
+    labelRecoveryReady=false;
     ctx=nullptr;events=nullptr;
 }
 }
@@ -582,6 +637,8 @@ bool QolNavigation::Initialize(const D2RL::PluginContext* context,bool featureEn
     InstallMenuHook();
     InstallSkillsHook();
     InstallSharedPageHook();
+    QolNativeRanges::Install(ctx);
+    QolNativeRanges::Enable(enabled && useL1 && menuRemap && menuHook);
     // These hooks touch guarded D2R.exe code, not private D2RCore addresses.
     QolGlyphs::Initialize(ctx,menuHook && nativeHookInstalled && skillsHook);
     ctx->LogInfo("[QOL/Input] v1.3.1+rev.4 loaded. Native hook uses D2RLoader SDK only; no MinHook. Item actions are integrated in this QOL DLL.");
@@ -618,3 +675,41 @@ bool QolNavigation::SharedPageRemapEnabled() noexcept {
 }
 
 bool QolNavigation::SharedPageInputActive() noexcept { return sharedPageInputActive.load(); }
+
+bool QolNavigation::OptionsRemapEnabled() noexcept {
+    std::lock_guard lock(stateMutex);
+    return SubMenusEnabled() && (subPanels&4);
+}
+
+bool QolNavigation::GroundShortcutsAllowed() noexcept {
+    std::lock_guard lock(stateMutex);
+    return ctx && enabled && Probe::GroundShortcutsAllowed(dedicatedPanels,subPanels);
+}
+
+bool QolNavigation::ChronicleRemapEnabled() noexcept {
+    std::lock_guard lock(stateMutex);
+    return SubMenusEnabled() && (subPanels&8);
+}
+
+void QolNavigation::PumpLabels(const D2RL::PluginContext* context,const D2RL::ThreadService* threads) noexcept {
+    std::lock_guard lock(stateMutex);
+    if(!ctx || ctx!=context || !threads || !threads->runOnGameThread || !labelRecoveryReady || !enabled || !useL1 || labelRecoveryQueued)return;
+    const auto now=GetTickCount64();
+    if(now-lastLabelCheck<250)return;
+    lastLabelCheck=now;labelRecoveryQueued=true;
+    if(threads->runOnGameThread(context,[](const D2RL::PluginContext* owner,void*) noexcept {
+        std::lock_guard taskLock(stateMutex);
+        labelRecoveryQueued=false;
+        if(!ctx || ctx!=owner || updatingLabels)return;
+        // Re-entering controller mode must restore its labels even if Alt last
+        // left them OFF. In keyboard mode EnsureLabels only marks refresh dirty.
+        if(!EnsureLabels())return;
+        if(ControllerLabelsStale()) {
+            labelRefreshNeeded=true;
+            EnsureLabels();
+            if(trace)ctx->LogInfo("[QOL/Labels] Recovered stale controller display flag through native refresh.");
+        }
+    },nullptr)!=D2RL::Threads::Result::Success)labelRecoveryQueued=false;
+}
+
+bool QolNavigation::RangesRemapEnabled() noexcept {return QolNativeRanges::active.load(std::memory_order_acquire);}

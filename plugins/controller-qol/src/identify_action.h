@@ -5,14 +5,16 @@ using Info=D2RL::Items::ItemInfo;
 using Container=D2RL::Items::ItemContainer;
 using ItemResult=D2RL::Items::Result;
 using ScanResult=D2RL::Inventory::Result;
-enum class Status { Success, ServicesUnavailable, PlayerUnavailable, ScanFailed, TargetMissing, AlreadyIdentified, NoConsumable, EmptyTome, MutationFailed, RollbackFailed };
+using ReadQuantity=bool(*)(const D2RL::PluginContext*,const D2RL::ItemService*,D2RL::ItemHandle,int32_t&) noexcept;
+enum class Status { Success, ServicesUnavailable, PlayerUnavailable, ScanFailed, TargetMissing, AlreadyIdentified, NoConsumable, EmptyTome, MutationFailed, ChargeReadFailed, ChargeVerificationFailed, RollbackFailed };
 struct Request { D2RL::PlayerHandle player{}; Info target{}; bool requireConsumable{true},consume{true}; };
 struct Result {
     Status status{Status::ServicesUnavailable};
     ScanResult scan{ScanResult::Unavailable};
     ItemResult operation{ItemResult::Unavailable};
     unsigned scanned{},tomes{},scrolls{};
-    int32_t maxTomeQuantity{};
+    int32_t maxTomeQuantity{},sdkTomeQuantity{},nativeTomeQuantity{},remainingQuantity{-1};
+    unsigned nativeReads{},nativeReadFailures{},quantityMismatches{};
     bool consumed{};
 };
 inline bool Code(uint32_t code,uint32_t expected) noexcept {
@@ -26,11 +28,13 @@ inline bool Same(const Info& a,const Info& b) noexcept {
 }
 struct Scan {
     const Request* request{};
+    const D2RL::ItemService* items{};
+    ReadQuantity readQuantity{};
     Result result{};
     Info target{},tome{},scroll{};
     bool found{};
 };
-inline D2RL::Inventory::IterationAction __cdecl Visit(const D2RL::PluginContext*,const Info* item,void* user) noexcept {
+inline D2RL::Inventory::IterationAction __cdecl Visit(const D2RL::PluginContext* ctx,const Info* item,void* user) noexcept {
     auto& s=*static_cast<Scan*>(user);
     if(!item) return D2RL::Inventory::IterationAction::Continue;
     ++s.result.scanned;
@@ -38,8 +42,17 @@ inline D2RL::Inventory::IterationAction __cdecl Visit(const D2RL::PluginContext*
     if(item->container==Container::Inventory || item->container==Container::Cube) {
         if(Code(item->code,D2RL::Items::MakeItemCode("ibk"))) {
             ++s.result.tomes;
-            if(item->quantity>s.result.maxTomeQuantity)s.result.maxTomeQuantity=item->quantity;
-            if(item->quantity>0 && !s.tome.handle)s.tome=*item;
+            int32_t quantity=item->quantity;
+            if(s.readQuantity) {
+                ++s.result.nativeReads;
+                if(!s.readQuantity(ctx,s.items,item->handle,quantity) || quantity<0) {
+                    ++s.result.nativeReadFailures;return D2RL::Inventory::IterationAction::Continue;
+                }
+                if(quantity!=item->quantity)++s.result.quantityMismatches;
+                s.result.sdkTomeQuantity=item->quantity;s.result.nativeTomeQuantity=quantity;
+            }
+            if(quantity>s.result.maxTomeQuantity)s.result.maxTomeQuantity=quantity;
+            if(quantity>0 && !s.tome.handle){s.tome=*item;s.tome.quantity=quantity;}
         } else if(Code(item->code,D2RL::Items::MakeItemCode("isc"))) {
             ++s.result.scrolls;
             if(!s.scroll.handle)s.scroll=*item;
@@ -64,8 +77,8 @@ inline ItemResult SetQuantity(const D2RL::PluginContext* ctx,const D2RL::ItemSer
 }
 // One authoritative game-thread call. No per-item logs, raw native mutation,
 // cross-thread consumable preflight or same-code/coordinate-only fallback.
-inline Result Execute(const D2RL::PluginContext* ctx,const D2RL::ItemService* items,const D2RL::InventoryService* inventory,const Request& req) noexcept {
-    Scan s{};s.request=&req;
+inline Result Execute(const D2RL::PluginContext* ctx,const D2RL::ItemService* items,const D2RL::InventoryService* inventory,const Request& req,ReadQuantity readQuantity=nullptr) noexcept {
+    Scan s{};s.request=&req;s.items=items;s.readQuantity=readQuantity;
     if(!items || !inventory || !items->editItem || !items->executeExistingItemTransaction || !items->destroyItem || !inventory->getLocalPlayer || !inventory->forEachInventoryItem)return s.result;
     D2RL::PlayerHandle player{};
     if(inventory->getLocalPlayer(ctx,&player)!=ScanResult::Success || !player || player!=req.player) {s.result.status=Status::PlayerUnavailable;return s.result;}
@@ -76,10 +89,29 @@ inline Result Execute(const D2RL::PluginContext* ctx,const D2RL::ItemService* it
     if(!s.found) {s.result.status=Status::TargetMissing;return s.result;}
     if(s.target.stateFlags&D2RL::Items::ItemStateIdentified) {s.result.status=Status::AlreadyIdentified;return s.result;}
     const Info& supply=s.tome.handle?s.tome:s.scroll;
-    if(req.requireConsumable && !supply.handle) {s.result.status=s.result.tomes?Status::EmptyTome:Status::NoConsumable;return s.result;}
+    if(req.requireConsumable && !supply.handle) {s.result.status=s.result.nativeReadFailures?Status::ChargeReadFailed:s.result.tomes?Status::EmptyTome:Status::NoConsumable;return s.result;}
     s.result.status=Status::MutationFailed;
     if(!req.consume || !supply.handle) {
         s.result.operation=SetIdentified(ctx,items,player,s.target.handle,true);
+    } else if(s.tome.handle && readQuantity) {
+        // Snapshot quantity may be wrong: use a checked SDK absolute edit, not
+        // Debit's potentially inconsistent quantity preflight. Never write native stat memory.
+        int32_t before{};
+        if(!readQuantity(ctx,items,supply.handle,before) || before<=0) {s.result.status=Status::ChargeReadFailed;return s.result;}
+        const auto expected=before-1;
+        s.result.operation=SetQuantity(ctx,items,player,supply.handle,static_cast<uint32_t>(expected));
+        if(s.result.operation!=ItemResult::Success)return s.result;
+        int32_t after{};
+        if(!readQuantity(ctx,items,supply.handle,after) || after!=expected) {
+            s.result.status=Status::ChargeVerificationFailed;return s.result;
+        }
+        s.result.remainingQuantity=after;
+        s.result.operation=SetIdentified(ctx,items,player,s.target.handle,true);
+        if(s.result.operation!=ItemResult::Success) {
+            int32_t restored{};
+            if(SetQuantity(ctx,items,player,supply.handle,static_cast<uint32_t>(before))!=ItemResult::Success ||
+                !readQuantity(ctx,items,supply.handle,restored) || restored!=before)s.result.status=Status::RollbackFailed;
+        } else s.result.consumed=true;
     } else if(supply.quantity>1) {
         // Debit requires positive remainder: combine it with the identify edit.
         D2RL::Items::ExistingItemOperation ops[2]{};
@@ -121,6 +153,8 @@ inline const char* Name(Status s) noexcept {
     case Status::AlreadyIdentified:return "already-identified-no-charge-used";
     case Status::NoConsumable:return "no-identify-tome-or-scroll-in-inventory-or-cube";
     case Status::EmptyTome:return "tome-seen-but-no-positive-authoritative-quantity";
+    case Status::ChargeReadFailed:return "native-tome-charge-read-unavailable";
+    case Status::ChargeVerificationFailed:return "SDK-charge-edit-not-confirmed-inspect-tome";
     case Status::MutationFailed:return "SDK-operation-failed";
     case Status::RollbackFailed:return "SDK-rollback-failed-inspect-item-and-consumable";
     }

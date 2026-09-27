@@ -1,10 +1,21 @@
 #pragma once
 #include <string_view>
 namespace Probe {
+inline bool GroundShortcutsAllowed(unsigned dedicated,unsigned submenus) noexcept {
+    return dedicated==0 && submenus==0;
+}
 inline unsigned SubPanelBit(std::string_view name) noexcept {
     if(name=="QuestLogPanelExpansion" || name=="QuestLogPanelOriginal") return 1;
     if(name=="SkillsTreePanel") return 2;
+    if(name=="SettingsPanel") return 4;
+    if(name=="ChroniclePanel") return 8;
     return 0;
+}
+inline bool OptionsTab(std::string_view widget,std::string_view parent,bool visible) noexcept {
+    return visible && widget=="OptionsTabs" && parent=="SettingsPanel";
+}
+inline bool ChronicleTab(std::string_view widget,std::string_view parent,bool visible) noexcept {
+    return visible && widget=="ChronicleTabs" && parent=="ChroniclePanel";
 }
 inline int SubMenuAction(bool enabled,unsigned action) noexcept {
     if(!enabled) return static_cast<int>(action);
@@ -34,9 +45,12 @@ inline int MenuAction(bool enabled, unsigned action) noexcept {
 inline bool ModifierHeld(bool useL1, bool l1, bool l2) noexcept {
     return useL1 ? l1 : l2;
 }
+inline bool RecoverControllerLabels(bool active,bool controller,bool eligible,int filtered,int displayed) noexcept {
+    return active && controller && eligible && filtered==1 && displayed==0;
+}
 inline bool LockFilteredLabels(bool enabled, bool l1Mode, bool hooksReady,
-                               bool inGame, unsigned channel) noexcept {
-    return enabled && l1Mode && hooksReady && inGame && channel == 0;
+                               bool inGame, bool controllerMode, unsigned channel) noexcept {
+    return enabled && l1Mode && hooksReady && inGame && controllerMode && channel == 0;
 }
 inline bool ConsumeTabLeft(bool enabled, bool l2, bool controllerBegin,
                            bool tabSwitchEnabled, unsigned action,
