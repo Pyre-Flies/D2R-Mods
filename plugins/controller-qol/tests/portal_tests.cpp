@@ -41,6 +41,34 @@ int main() {
     static_assert(!QolPortal::LootOwnsPortalSelection(false,true,357,true));
 
     using namespace QolPortal;
+    constexpr unsigned char originalPrefix[5]={0x48,0x83,0xec,0x28,0x48};
+    constexpr unsigned char detourPrefix[5]={0xe9,0x70,0x77,0xca,0xff};
+    constexpr unsigned char unknownPrefix[5]={0xff,0x25,0,0,0};
+    Check(AdmitSharedEntryPrefix(originalPrefix,originalPrefix,false),"original shared entry admitted");
+    Check(AdmitSharedEntryPrefix(detourPrefix,originalPrefix,true),"executable E9 owner admitted");
+    Check(!AdmitSharedEntryPrefix(detourPrefix,originalPrefix,false),"nonexecutable E9 target refused");
+    Check(!AdmitSharedEntryPrefix(unknownPrefix,originalPrefix,true),"unknown detour form refused");
+    static_assert(ClassifyPriorityObject(59,0x04)==PriorityKind::Portal);
+    static_assert(ClassifyPriorityObject(267,0)==PriorityKind::Stash);
+    static_assert(ClassifyPriorityObject(119,0x40)==PriorityKind::Waypoint);
+    static_assert(ClassifyPriorityObject(159,0)==PriorityKind::None); // hidden stash is not town storage
+    static_assert(ClassifyPriorityObject(2,0x01)==PriorityKind::Shrine);
+    static_assert(ClassifyPriorityObject(111,0)==PriorityKind::Well);
+    static_assert(ClassifyPriorityObject(130,0x20)==PriorityKind::Well);
+    static_assert(ClassifyPriorityObject(322,0x20)==PriorityKind::Well);
+    static_assert(ClassifyPriorityObject(519,0)==PriorityKind::Well);
+    static_assert(ClassifyPriorityObject(5,0x08)==PriorityKind::Chest);
+    static_assert(ClassifyPriorityObject(354,0x08)==PriorityKind::None); // quest chest excluded
+    static_assert(ClassifyPriorityObject(416,0x08)==PriorityKind::None); // StoneStash excluded
+    static_assert(KindEnabled(PriorityKind::Portal,true,false,false));
+    static_assert(KindEnabled(PriorityKind::Stash,false,true,false));
+    static_assert(KindEnabled(PriorityKind::Waypoint,false,false,true));
+    static_assert(KindEnabled(PriorityKind::Shrine,false,false,false,true,false));
+    static_assert(KindEnabled(PriorityKind::Well,false,false,false,true,false));
+    static_assert(!KindEnabled(PriorityKind::Well,true,true,true,false,true));
+    static_assert(KindEnabled(PriorityKind::Chest,false,false,false,false,true));
+    static_assert(!KindEnabled(PriorityKind::Chest,true,true,true,true,false));
+    static_assert(!KindEnabled(PriorityKind::Stash,true,false,true));
     // A portal rejected BEFORE comparison must be admitted by native scoring.
     // Model only its two independent gates: center distance and facing angle.
     unsigned char native[ScoringControllerBytes]{}, view[ScoringControllerBytes]{};
@@ -86,6 +114,14 @@ int main() {
     Check(!PreferPortal(true,false,0,4,2,4,2,6),"attack skill unchanged");
     Check(!PreferPortal(true,false,357,1,2,4,2,6),"NPC/monster target unchanged");
     Check(!PreferPortal(true,false,357,4,2,16,2,6),"ordinary nonportal object unchanged");
+    Check(PreferObject(true,false,357,4,PriorityKind::Stash,6,6),"stash beats loot at boundary");
+    Check(PreferObject(true,false,357,4,PriorityKind::Waypoint,6,6),"waypoint beats loot at boundary");
+    Check(PreferObject(true,false,357,4,PriorityKind::Shrine,6,6),"shrine beats loot at boundary");
+    Check(PreferObject(true,false,357,4,PriorityKind::Well,6,6),"well beats loot at boundary");
+    Check(PreferObject(true,false,357,4,PriorityKind::Chest,6,6),"enabled normal chest beats loot at boundary");
+    Check(!PreferObject(true,true,357,4,PriorityKind::Stash,2,6),"LB loot retains ownership over stash");
+    Check(!PreferObject(true,false,357,4,PriorityKind::None,2,6),"ordinary object is not promoted");
+    Check(!PreferObject(true,false,357,2,PriorityKind::Waypoint,2,6),"object versus object retains native ranking");
     int item=1, portal=2; void* selected=&item; float best=0.9f;
     int calls=0;
     auto accept=[&](float score) { ++calls; if (score>best) {best=score;selected=&portal;} };

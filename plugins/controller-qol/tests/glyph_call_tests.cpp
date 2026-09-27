@@ -1,4 +1,5 @@
 #include "glyph_calls.h"
+#include "pickup_calls.h"
 #include "glyph_policy.h"
 #include "header_policy.h"
 #include "range_input_policy.h"
@@ -6,6 +7,10 @@
 #include <cstdio>
 void check(bool b){if(!b)std::exit(1);}
 int main(){
+ const std::string_view filterTabs[]={"TabLeftIndicator","ItemListTabs","LootFilterRuleDetailsPanel"};
+ check(QolGlyphPolicy::Classify(filterTabs,3,true,true,false,false,false,true)==QolGlyphPolicy::Hint::SubLeft);
+ check(QolGlyphPolicy::Classify(filterTabs,3,true,true)==QolGlyphPolicy::Hint::None);
+
  check(QolRangePolicy::Mask(true,0x81995a,0x81995a,0,0x800)==0x200);
  check(QolRangePolicy::Mask(false,0x81995a,0x81995a,0,0x800)==0x800);
  check(QolRangePolicy::Mask(true,0x81995a,0x81995a,8,0x800)==0x800);
@@ -22,7 +27,18 @@ int main(){
  const std::string_view unrelated[]={"Text","Legend","legendBG","Anchor","OtherPlugin"};
  check(!QolHeaderPolicy::Scope(unrelated,5));
  check(QolHeaderPolicy::Slot("\xEE\x80\x91" "Drop")==1);
- check(QolHeaderPolicy::Slot("\xEE\x80\x90" "Close Menu")==-1);
+ check(QolHeaderPolicy::Slot("\xEE\x80\x90" "Close Menu")==6);
+ check(QolHeaderPolicy::Slot("\xEE\x80\x88" "Open Cube")==4);
+ check(QolHeaderPolicy::Slot("\xEE\x80\x8E" "Show Ranges")==5);
+ check(QolHeaderPolicy::Compact("\xEE\x80\x91" "Drop (Hold to Move to Private Stash)")!=nullptr);
+ check(QolHeaderPolicy::Compact("\xEE\x80\x91" "Localized action")==nullptr);
+ char lines[7][128]{};std::snprintf(lines[1],sizeof(lines[1]),"Transfer");
+ check(QolHeaderPolicy::Compose(lines,false,"LB"));
+ check(lines[1][0]==0 && std::string_view(lines[4]).find("Stash All")!=std::string_view::npos);
+ std::snprintf(lines[1],sizeof(lines[1]),"Transfer");
+ check(QolHeaderPolicy::Compose(lines,true,"LB") && lines[1][0]!=0);
+ check(QolHeaderPolicy::Compose(lines,true,nullptr) && lines[4][0]==0);
+ check(!QolHeaderPolicy::Compose(lines,false,nullptr) && lines[1][0]==0);
  check(QolHeaderPolicy::Fresh(1000,900));check(!QolHeaderPolicy::Fresh(1000,749));
  check(!QolHeaderPolicy::Fresh(10,100));check(!QolHeaderPolicy::Fresh(10,0));
  check(std::string_view(QolHeaderPolicy::Modifier("LB"))=="\xEE\x80\xA7");
@@ -44,6 +60,11 @@ int main(){
   check(0x140000000+QolGlyphCalls::Sites[i]+5+displacement==0x130000000);
  }
  check(!QolGlyphCalls::Encode(0x140000000,0x7ff000000000,bytes));
+ for(const auto& call:QolPickupCalls::Calls){
+  int32_t displacement{};std::memcpy(&displacement,call.expected+1,4);
+  check(call.expected[0]==0xe8);
+  check(0x140000000+call.rva+5+displacement==0x140000000+QolPickupCalls::Target);
+ }
  check(QolGlyphPolicy::Text(QolGlyphPolicy::Hint::SharedLeft)!=nullptr);
  check(QolGlyphPolicy::Text(QolGlyphPolicy::Hint::None)==nullptr);
  std::puts("Passed both native call targets, signed relay relocation, overflow refusal and scoped prompt policy.");

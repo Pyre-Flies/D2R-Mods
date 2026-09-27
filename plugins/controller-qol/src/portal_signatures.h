@@ -27,7 +27,9 @@ inline constexpr Site Sites[] = {
 {0x18dee9,Closure,sizeof(Closure)},
 {0x18e0be,PrimaryCall,sizeof(PrimaryCall)},
 {0x18e2ac,SecondaryCall,sizeof(SecondaryCall)},
-{0x349860,Class,sizeof(Class)},
+// Entry may be owned by a cooperative E9 detour. The installer separately
+// admits the original prefix or an executable detour target; retain the exact tail.
+{0x349865,Class+5,sizeof(Class)-5},
 {0x34a0e0,Version,sizeof(Version)},
 {0x38fd00,Objects,sizeof(Objects)},
 {0x325140,Distance,sizeof(Distance)},

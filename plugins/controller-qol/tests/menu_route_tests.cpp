@@ -4,6 +4,24 @@
 #include <cstdlib>
 void Check(bool ok,const char* text) {if(!ok){std::fprintf(stderr,"FAIL: %s\n",text);std::exit(1);}}
 int main() {
+    Check(!Probe::GroundLootHooksRequired(false,false),"ground hooks remain off when both loot features are disabled");
+    Check(Probe::GroundLootHooksRequired(true,false),"direct ground pickup enables ground hooks");
+    Check(Probe::GroundLootHooksRequired(false,true),"filtered A-button blocking independently enables ground hooks");
+    Check(!Probe::BlockNativePickup(false,true,false,false),"disabled pickup policies do not block native pickup");
+    Check(!Probe::BlockNativePickup(false,true,true,true),"visible filtered-policy item remains pickable");
+    Check(Probe::BlockNativePickup(false,false,true,false),"hidden item is blocked without enabling shortcuts");
+    Check(!Probe::BlockNativePickup(false,true,true,true),"modifier alone cannot activate a disabled shortcut");
+    Check(Probe::BlockNativePickup(true,true,false,true),"enabled shortcut suppresses native pickup while held");
+    Check(Probe::BatchFeatureEnabled(true,true),"enabled batch feature follows enabled master");
+    Check(!Probe::BatchFeatureEnabled(true,false),"feature gate disables batch action");
+    Check(!Probe::BatchFeatureEnabled(false,true),"master gate disables batch action");
+    Check(Probe::GroundShortcutsEnabled(true,true),"enabled direct ground pickup permits shortcuts");
+    Check(!Probe::GroundShortcutsEnabled(true,false),"filtered A-only mode does not permit shortcuts");
+    Check(!Probe::GroundShortcutsEnabled(false,true),"disabled plugin does not permit shortcuts");
+    Check(Probe::LootFilterTab("ItemListTabs","LootFilterRuleDetailsPanel",true),"exact rule editor tab");
+    Check(!Probe::LootFilterTab("OtherTabs","LootFilterRuleDetailsPanel",true) && !Probe::LootFilterTab("ItemListTabs","OtherPanel",true) && !Probe::LootFilterTab("ItemListTabs","LootFilterRuleDetailsPanel",false),"unrelated and hidden tabs excluded");
+    for(unsigned mask : {16U,32U,64U}) Check(!Probe::GroundShortcutsAllowed(0,mask),"loot editor excludes world shortcuts");
+
     Check(Probe::GroundShortcutsAllowed(0,0),"world loot allowed outside menus");
     for(unsigned panel : {1U,2U,4U,8U}) Check(!Probe::GroundShortcutsAllowed(0,panel),"Quest Skills Options Chronicle bumpers cannot queue ground loot");
     Check(!Probe::GroundShortcutsAllowed(1,0),"dedicated stash panel excludes world loot");
@@ -29,6 +47,15 @@ int main() {
     Check(!Probe::LockFilteredLabels(true,true,true,false,true,0),"out of game native labels preserved");
     for(bool controller : {true,false,true,false})
         Check(Probe::LockFilteredLabels(true,true,true,true,controller,0)==controller,"input mode transitions update ownership");
+    Check(Probe::EnterFilterItems(true,true,13),"focused filter Down enters lower section");
+    Check(!Probe::EnterFilterItems(false,true,13) && !Probe::EnterFilterItems(true,false,13),"disabled or unfocused input passes through");
+    for(unsigned action : {0u,7u,8u,12u,16u,19u,20u,22u})
+        Check(!Probe::EnterFilterItems(true,true,action),"other actions and nested section event pass through");
+    Check(Probe::RecoverFilterTabFocus(0,1,true),"Equipment to Items missing focus recovered");
+    Check(Probe::RecoverFilterTabFocus(1,0,true),"Items nested rows to Equipment missing focus recovered");
+    Check(!Probe::RecoverFilterTabFocus(0,0,true) && !Probe::RecoverFilterTabFocus(1,1,true) &&
+          !Probe::RecoverFilterTabFocus(0,1,false) && !Probe::RecoverFilterTabFocus(1,0,false) &&
+          !Probe::RecoverFilterTabFocus(~0u,1,true) && !Probe::RecoverFilterTabFocus(0,2,true),"unchanged, healthy and unknown transitions preserved");
     using namespace QolMenuRoute;
     constexpr uintptr_t game=0x140000000,core=0xc0de5000000;
     unsigned char thunk[6]={0xff,0x25};

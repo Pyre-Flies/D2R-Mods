@@ -1,7 +1,7 @@
 # Controller QOL Updates
 
 **Made by PyreFly for D2RLoader**  
-Version **1.3.1+rev.11** | Windows x64 | Diablo II: Resurrected
+Version **1.3.1+rev.46** | Windows x64 | Diablo II: Resurrected
 
 Pick the loot you want directly from its ground label. Controller QOL Updates gives nearby items their own controller shortcuts, keeps those assignments stable while you loot, and respects the active loot filter. Inventory, Cube, stash, potion and shop shortcuts extend the same LB-based controls to item management.
 
@@ -23,13 +23,15 @@ Holding or releasing LB alone does **not** automatically collect items. This plu
 
 ### Neutral A: nearby portal priority
 
-With `prioritize_portals = true` (default), the native Interact target comparison prefers an eligible nearby portal over ground loot. The independent `portal_priority_distance = 10` setting controls the range (default **10 game units**, inclusive; supported values 1â€“20). `ground_pickup_distance` remains 6 by default. Version 1.5.19 extends the portal-only candidate contact gate as well as scoring and Interact distance checks. Actual portal use remains native. Native visibility, angle and skill checks still apply. `portal_diagnostics = false` controls optional portal-only tracing independently of general debug logging. Restart the game after editing the TOML. The game retains its normal portal eligibility and entry handling. Bare A still picks up items when no eligible portal wins that comparison; **LB+A and the other direct-loot chords remain unchanged**. NPCs and other objects keep their normal comparisons. Set `prioritize_portals = false` to restore the original targeting behavior.
+With `prioritize_portals`, `prioritize_stash_boxes`, `prioritize_waypoints`, and `prioritize_shrines` enabled by default, the native Interact target comparison prefers those eligible nearby objects—including wells—over ground loot. `prioritize_chests = false` is an opt-in for ordinary chests only. `portal_priority_distance = 10` remains the shared priority range (default **10 game units**, inclusive; supported values 1-20); `ground_pickup_distance` remains independent. Actual object use remains native, including visibility, angle and eligibility checks. `portal_diagnostics = false` controls optional priority tracing independently of general debug logging. Restart after editing the TOML. Bare A still picks up items when no eligible priority object wins; enabled **LB+A and the other direct-loot chords remain unchanged**. Quest chests, hidden stashes, NPCs and other objects keep native ranking. Each priority-object family can be disabled independently.
+
+`identify_all = true` controls the batch action offered on an Identify Tome without disabling single-item Identify. `quick_deposit = true` controls modifier+L3 Stash All without disabling ordinary modifier+X transfers. Both default true for backward compatibility; disabling either also removes its controller hint.
 
 ## Inventory, storage and shop controls
 
 | Shortcut | Action |
 |---|---|
-| LB + A | Identify the focused item using an available identify charge |
+| LB + A | Identify the focused item using an available identify charge; on an Identify Tome, identify all unidentified main-inventory items |
 | LB + X | Transfer the focused item between inventory and the open storage context; sell an inventory item when an NPC shop is open |
 | LB + Y | Transfer an item using the existing inventory/Cube action |
 | LB + R3 | Refill belt potions, including supported stash rejuvenation sources |
@@ -58,7 +60,7 @@ Ground looting, quick identify, quick move and filtered-pickup blocking are enab
 
 Requires D2RLoader. Earlier gameplay features were developed and manually qualified with the current Reimagined installation. Native code profiles target that tested game build; other patches and mod configurations have not been qualified. Item roll-range display is separate research and is not included.
 
-All 12 automated suites passed. The user confirmed Chronicle Ground Flag coexistence in rev.6 and portal behavior in rev.7. Earlier native-controller validation covered Battle.net DualShock without Steam and Steam Controller/DualShock on Steam, with Stash Search and Potion Auto Pickup. See `docs/PRODUCTION-1.3.1-rev.7.md` for precise validation scope. `SHA256SUMS` lists package hashes.
+All 20 automated suites pass for rev.46, including policy tests and DLL ABI/export/version verification. Later live testing confirmed the SDK identification and bulk-stash iterations, and the expanded interaction priority was reported substantially improved. The environmental-well addition in rev.46 still needs a focused visible retest. Earlier native-controller validation covered Battle.net DualShock without Steam and Steam Controller/DualShock on Steam, with Stash Search and Potion Auto Pickup. See `docs/PRODUCTION-1.3.1-rev.46.md` for the current validation boundary. `SHA256SUMS` lists package hashes.
 
 The monorepo references a shared, pinned SDK submodule and includes tests and patch-recovery documents. Start with `docs/README.md` for the research map. See `docs/PORTAL-PRIORITY.md` for the new hook and patch recovery, `docs/PACKAGING.md` for naming evidence, and the feature-specific documents for native contracts. `docs/LEGACY-REIMAGINED-MIGRATION.md` records the extraction from the former Reimagined working tree and the evidence distilled from excluded local logs. Historical documents retain their original filenames and version-specific observations. The 1.5.13 and 1.5.19 golden checkpoints remain separate.
 
@@ -87,7 +89,7 @@ For a launch with no active mod, install in the game's **d2rloader/plugins** fol
 
 Highlight a potion stack in Materials and press LB+R3 to refill from that exact stack. It does not switch to another potion type when stock runs out. Fill Belt appears only on potions. Existing inventory refill remains available. See docs/FOCUSED-REFILL-1.5.25.md.
 
-See docs/PRODUCTION-1.3.1.0.md for the production snapshot and version policy.
+See docs/PRODUCTION-1.3.1-rev.46.md for the current production snapshot and version policy.
 
 XInput hardening: see docs/XINPUT-HARDENING-1.3.1.1.md. Shutdown retains a transparent hook until process exit; restart to change DLL versions.
 
@@ -116,3 +118,31 @@ for build requirements, validation scope and limitations.
 Rev.11 removes synchronous per-item identification logging, validates the exact
 item and consumables in one game-thread scan, and reports distinct failure
 reasons without enabling verbose logging. See docs/IDENTIFY-REV11.md.
+
+### Identification (rev.36 candidate)
+
+Hold LB and tap A on an unidentified item to identify it, or on a Tome of Identify
+to identify all unidentified items already in main inventory and the Horadric Cube. The batch uses only
+the highlighted tome and always consumes one verified charge per item. Cube and
+Shared Stash tomes are excluded; inventory and open Personal Stash tomes are supported.
+
+`native_identify = false` is the default: SDK item edits consume and verify a
+charge before identifying, without entering the targeting cursor. Bulk work yields
+between game updates and stops on depletion, changed item identity, or failure.
+Set `native_identify = true` and restart to use the slower native hold-A sequence
+for compatibility. SDK failures never automatically retry natively, since a charge
+may already have changed. Native bulk mode was confirmed working in rev.34;
+rev.35 SDK speed and navigation were confirmed working. Cube targets use SDK mode;
+native compatibility mode remains inventory-only. Rev.36 Cube behavior needs an in-game check.
+
+L1/LB no longer changes directional inventory navigation or skips empty cells.
+The usual transfer, identify and belt shortcuts remain available.
+
+### Bulk quick stash (rev.38+)
+
+With the stash open, hold **LB and tap L3** to deposit eligible materials, gems,
+runes and rejuvenation potions from inventory using the game's existing smart-stash
+rules. Other inventory items remain in place. Cube contents and belt potions are
+not included. Eligible items are submitted together in one game update, then verified as a batch.
+Further submissions stop on refusal or changed identity; no ordinary stash
+fallback is used. Normal L3 still opens the Cube outside this chord.

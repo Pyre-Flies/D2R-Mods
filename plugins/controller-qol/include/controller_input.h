@@ -49,13 +49,6 @@ bool IsGroundPickupActive(const char* button) noexcept;
 
 bool IsAnyControllerConnected() noexcept;
 
-// Spatial inventory leap hook support
-using SpatialLeapCallback = bool(*)(uint16_t dpadDirection, int& outDeltaX, int& outDeltaY);
-void SetSpatialLeapCallback(SpatialLeapCallback callback) noexcept;
-
-using RegularDpadCallback = void(*)(uint16_t dpadDirection);
-void SetRegularDpadCallback(RegularDpadCallback callback) noexcept;
-
 using TriggerPassThroughPredicate = bool(*)() noexcept;
 void SetTriggerPassThroughPredicate(TriggerPassThroughPredicate predicate) noexcept;
 
@@ -65,10 +58,12 @@ void SetQuickMoveCallback(QuickMoveCallback callback) noexcept;
 using QuickMoveCubeCallback = void(*)();
 void SetQuickMoveCubeCallback(QuickMoveCubeCallback callback) noexcept;
 
+using BulkStashCallback = bool(*)() noexcept;
+void SetBulkStashCallback(BulkStashCallback callback) noexcept;
+
 using AutoFillBeltCallback = void(*)();
 void SetAutoFillBeltCallback(AutoFillBeltCallback callback) noexcept;
 
-void TriggerSyntheticPulseSequence(uint16_t direction, int steps) noexcept;
 
 void TriggerSyntheticHold(uint16_t button, uint32_t maxDurationMs = 650) noexcept;
 void CancelSyntheticHold() noexcept;
@@ -80,7 +75,6 @@ void SetVendorContextPredicate(VendorContextPredicate pred) noexcept;
 bool InstallXInputHooks() noexcept;
 const char* GetXInputHookReport() noexcept;
 void UninstallXInputHooks() noexcept;
-bool IsLeapActive() noexcept;
 
 struct NativeBridgeDiag {
     bool d2rCoreFound = false;

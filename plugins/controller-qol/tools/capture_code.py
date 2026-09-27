@@ -12,6 +12,10 @@ import struct
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--pid', type=int, required=True)
 parser.add_argument('--output', type=Path, required=True)
+parser.add_argument('--module', default='D2R.exe',
+                    help='main game image name; current loader-hosted builds use D2RLoader.exe')
+parser.add_argument('--all-sections', action='store_true',
+                    help='capture every readable PE section for private string/xref analysis')
 args = parser.parse_args()
 k = c.WinDLL('kernel32', use_last_error=True)
 p = c.WinDLL('psapi', use_last_error=True)
@@ -30,9 +34,13 @@ try:
     modules = (w.HMODULE * 1024)(); needed = w.DWORD()
     if not p.EnumProcessModules(handle, modules, c.sizeof(modules), c.byref(needed)):
         raise c.WinError(c.get_last_error())
-    module = modules[0]; name = c.create_unicode_buffer(1024)
-    if not p.GetModuleBaseNameW(handle, module, name, len(name)) or name.value.lower() != 'd2r.exe':
-        raise ValueError('PID does not identify D2R.exe')
+    module = None; name = c.create_unicode_buffer(1024)
+    for candidate in modules[:needed.value // c.sizeof(w.HMODULE)]:
+        if p.GetModuleBaseNameW(handle, candidate, name, len(name)) and name.value.lower() == args.module.lower():
+            module = candidate
+            break
+    if module is None:
+        raise ValueError(f'PID does not contain {args.module}')
     base = int(module)
     def read(address, size):
         buffer = c.create_string_buffer(size); received = c.c_size_t()
@@ -48,21 +56,31 @@ try:
     header_size = struct.unpack_from('<I',header,pe+24+60)[0]
     if header_size > len(header): header = bytearray(read(base,header_size))
     struct.pack_into('<Q',header,pe+24+24,base)
-    captured = None
+    captured = []
     for i in range(count):
         at = pe+24+optional_size+40*i
         name = header[at:at+8].rstrip(b'\0')
         virtual_size, rva = struct.unpack_from('<II',header,at+8)
-        if name == b'.text':
-            captured = (rva, read(base+rva,virtual_size))
-            struct.pack_into('<II',header,at+16,virtual_size,rva)
+        if name == b'.text' or args.all_sections:
+            try:
+                data = read(base+rva,virtual_size)
+            except OSError:
+                if name == b'.text': raise
+                data = None
+            if data is not None:
+                captured.append((rva, data))
+                struct.pack_into('<II',header,at+16,virtual_size,rva)
+            else:
+                struct.pack_into('<II',header,at+16,0,0)
         else:
             struct.pack_into('<II',header,at+16,0,0)
-    if captured is None: raise ValueError('No .text section')
-    rva, code = captured
+    if not captured or not any(rva for rva, _ in captured): raise ValueError('No sections captured')
     # 'xb' refuses to overwrite earlier evidence.
     with args.output.open('xb') as file:
-        file.write(header[:header_size]); file.seek(rva); file.write(code)
-    print(f'Captured .text at module base {base:#x}; {len(code)} bytes. Other sections omitted.')
+        file.write(header[:header_size])
+        for rva, data in captured:
+            file.seek(rva); file.write(data)
+    total = sum(len(data) for _, data in captured)
+    print(f'Captured {len(captured)} section(s) at module base {base:#x}; {total} bytes.')
 finally:
     k.CloseHandle(handle)

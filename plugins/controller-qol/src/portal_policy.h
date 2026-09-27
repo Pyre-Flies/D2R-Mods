@@ -9,6 +9,53 @@
 
 namespace QolPortal {
 inline constexpr int InteractSkill = 357;
+inline bool AdmitSharedEntryPrefix(const unsigned char* actual,
+    const unsigned char* original, bool detourTargetExecutable) noexcept {
+    if (!actual || !original) return false;
+    if (std::memcmp(actual, original, 5) == 0) return true;
+    return actual[0] == 0xe9 && detourTargetExecutable;
+}
+enum class PriorityKind : uint8_t { None, Portal, Stash, Waypoint, Shrine, Well, Chest };
+inline constexpr bool IsWellClass(uint32_t classId) noexcept {
+    switch (classId) {
+    case 111: case 113: case 115: case 118: case 130: case 132: case 137:
+    case 138: case 322: case 426: case 493: case 498: case 513: case 519:
+        return true;
+    default:
+        return false;
+    }
+}
+inline constexpr bool IsNormalChestClass(uint32_t classId) noexcept {
+    switch (classId) {
+    case 5: case 6: case 87: case 88: case 139: case 140: case 141: case 144:
+    case 146: case 147: case 148: case 176: case 177: case 181: case 183: case 198:
+    case 240: case 241: case 242: case 243: case 246: case 329: case 330: case 331:
+    case 332: case 333: case 334: case 335: case 336: case 387: case 389: case 390:
+    case 391: case 397: case 413: case 420: case 424: case 425: case 430: case 431:
+    case 432: case 433: case 455: case 501: case 502: case 504: case 505:
+        return true;
+    default:
+        return false;
+    }
+}
+inline constexpr PriorityKind ClassifyPriorityObject(uint32_t classId, uint8_t subclass) noexcept {
+    if ((subclass & 0x04) != 0) return PriorityKind::Portal;
+    if ((subclass & 0x40) != 0) return PriorityKind::Waypoint;
+    if (classId == 267) return PriorityKind::Stash; // ObjectsTxt Bank
+    if ((subclass & 0x01) != 0) return PriorityKind::Shrine;
+    if (IsWellClass(classId)) return PriorityKind::Well;
+    if (IsNormalChestClass(classId)) return PriorityKind::Chest;
+    return PriorityKind::None;
+}
+inline constexpr bool KindEnabled(PriorityKind kind, bool portals, bool stash, bool waypoints,
+                                  bool shrines = false, bool chests = false) noexcept {
+    return (kind == PriorityKind::Portal && portals) ||
+        (kind == PriorityKind::Stash && stash) ||
+        (kind == PriorityKind::Waypoint && waypoints) ||
+        (kind == PriorityKind::Shrine && shrines) ||
+        (kind == PriorityKind::Well && shrines) ||
+        (kind == PriorityKind::Chest && chests);
+}
 inline constexpr bool LootOwnsPortalSelection(bool enabled,bool modifierHeld,int skill,bool portal) noexcept {
     return enabled && modifierHeld && skill==InteractSkill && portal;
 }
@@ -100,6 +147,12 @@ inline bool PreferPortal(bool enabled, bool modified, int skill,
     return enabled && !modified && skill == InteractSkill && currentType == 4 &&
         candidateType == 2 && (objectSubclass & 4) != 0 &&
         WithinPriorityDistance(distance, radius);
+}
+
+inline bool PreferObject(bool enabled, bool modified, int skill,
+    uint32_t currentType, PriorityKind candidateKind, int distance, uint32_t radius) noexcept {
+    return enabled && !modified && skill == InteractSkill && currentType == 4 &&
+        candidateKind != PriorityKind::None && WithinPriorityDistance(distance, radius);
 }
 
 // Change only this comparison. The native callback still decides eligibility.

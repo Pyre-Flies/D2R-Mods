@@ -15,19 +15,19 @@ SDK inline hooks: loader owns executable patches/trampolines; plugin typically s
 |---|---|---|---|
 | Ground-action observation; dispatch pending loot after native actions | Game: 18 entries listed below | SDK inline hooks; src/ground_action_hooks.h | Fixed32-byte witnesses in compatibility_signatures.h; predecessor called once then observer. Packet table is not patched. Partial install leaves observers inactive; loader owns hook cleanup. Another hook at these entries can prevent installation. |
 | Ground placard text / assigned loot buttons | Game0xCBEB0 | SDK inline hook; plugin_main.cpp HookBuildGroundItemTooltip | Caller supplies current live16 bytes as expected. Separate GetItemCode fingerprint exists but does not independently qualify this entry. Broad tooltip sharing surface. |
-| Native ground pickup suppression/filtering | Game0x471950 | SDK inline hook; plugin_main.cpp HookPickup | Also supplies current live16 bytes as expected. Plugin-origin bypass is in plugin_compatibility.cpp; intentional suppression can skip predecessor. Review admission and cross-plugin semantics together. |
+| Native ground pickup suppression/filtering | Game CALLs `0x410005`, `0x4112F5`, `0x416126`, `0x41738D`, `0x4BA0EF`, `0x4BBAD0`, `0x55496C` | Seven SDK PatchBytes CALL redirects; pickup_calls.h + plugin_main.cpp HookPickup | Exact five-byte witnesses for build 3.3.93847. Shared entry `0x471950` is untouched, so Auto Deposit may retain ownership and allowed calls traverse it. Wrapper remains passthrough unless every call publishes. |
 | Label press/release, keep filtered labels visible for L1 looting | Game0xC66A0 /0xC6E90 | SDK inline hooks; qol_navigation.cpp | Fixed signatures; intentionally suppresses configured label actions. Other label-toggle plugins may want the same inputs. |
 | Main menu trigger navigation | Game0x27DF80 | SDK inline hook; qol_navigation.cpp | Fixed signature; changes recognized menu messages. |
 | Tab-bar navigation | Game0x878D30 | SDK inline hook; qol_navigation.cpp | native_signatures.h; filters before selection mutation. Broad UI function: review scoping for newly added panels. |
 | Skill sub-tabs retain bumpers | Game0x14C6810 | SDK inline hook; qol_navigation.cpp | Fixed signature; scoped skill behavior. |
 | Shared stash LB+LT/RT paging | Game0x23CAA0 | SDK inline hook; qol_navigation.cpp | shared-page profile; consumes/replaces recognized page actions. Potential semantic overlap with other stash navigation plugins. |
-| Portal candidate contact | Game0x34BC90 | SDK inline hook; portal_priority.cpp | portal_signatures.h; native predecessor plus caller whitelists0x19158E/0x1922D2/0x19237D. |
-| Portal score / range / comparison | Game0x18B350 /0x18AED0 /0x18A650 | SDK inline hooks; portal_priority.cpp | Fixed witnesses and scoped range state; neutral portal priority, modified Interact excludes portal selection. Other targeting mods can disagree even without byte overlap. |
+| Priority-object candidate contact | Game CALLs 0x191589 /0x1922CD /0x192378 to shared entry 0x34BC90 | SDK PatchBytes redirects; portal_priority.cpp | portal_signatures.h; native entry remains untouched. Exact return-site whitelist extends contact only for enabled portal, Bank stash and waypoint candidates. |
+| Priority-object score / range / comparison | Game0x18B350 /0x18AED0 /0x18A650 | SDK inline hooks; portal_priority.cpp | Fixed witnesses and scoped range state. Read-only class getter `0x349860` admits original or bounded executable E9 ownership while its tail remains exact; QOL does not patch that entry. Other targeting mods can disagree semantically even without byte overlap. |
 | Controller prompt widget scope | Game0x86D410 | SDK inline hook; qol_glyphs.cpp | glyph_signatures.h; original draw in thread-local scope, restored in finally. |
 | Controller prompt text/spacing | Game0x86D6A9 /0x86D6F3 | Two SDK PatchBytes CALL redirects; glyph_calls.h | Exact5-byte calls; near RX relay/pinned plugin retained for delayed calls. Inactive unless all glyph pieces succeed. Global renderer0x902E20 is no longer hooked. |
 | Physical controller interception | xinput1_4 /xinput1_3: XInputGetState +ordinal100; xinput9_1_0: XInputGetState when available | Manual entry patch; controller_input.cpp +xinput_hook.h | Verified MOV prologue or pinnable module-backed E9; aligned8-byte CAS, original tail bytes preserved. Earlier private relay chains rejected. Shutdown drains filtering, keeps pass-through code/records for process lifetime. Other owners may still alter input semantics. |
 
-Count:31 candidate game inline-hook entries,2 game CALL patches, and up to6 resolved XInput entries (the observed system has5; xinput9_1_0 ordinal100 absent). These are potential sites, not a runtime activation claim.
+Count:30 candidate game inline-hook entries,9 game CALL patches, and up to6 resolved XInput entries (the observed system has5; xinput9_1_0 ordinal100 absent). These are potential sites, not a runtime activation claim.
 
 ### Ground action entries
 
@@ -103,3 +103,7 @@ native route. [SDK pin, page witnesses and validation](SHARED-SDK-REV18.md).
 Rev.21 item headers reuse the existing scoped widget/text hooks. A guarded ordinary font-metrics call at game+0x903CD0 is not an additional hook. See CONTROLLER-HEADER-REV21.md for ancestry, ABI evidence, presentation scope and validation limits.
 
 Rev.22 adds SDK inline hook game+0x13CA70 (native controller button query), scoped strictly to Core tooltip return +0x81995A / mask 0x800. It translates that query to RB 0x200; all other callers pass through. Full profile admission precedes a 15-byte SDK hook. Core slot +0x6FE470 and its caller remain untouched for Item Roll Ranges. See NATIVE-RANGES-REV22.md for ABI, guards, load-order reasoning and unresolved shared-entry ownership risk.
+
+Rev.26 candidate: inventory native tome-use adapter adds no hooks/slot patches. See IDENTIFY-NATIVE-REV26.md for guarded hold-A/grid activation calls and pending live validation.
+
+Rev.37 bulk stash adds no hooks or slot writes. Existing LB+X eligibility/deposit helpers are reused through SDK native-item access, with per-batch byte admission. See BULK-STASH-REV37.md for reused addresses, guard provenance and live-validation limits.

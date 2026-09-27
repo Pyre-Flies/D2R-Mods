@@ -27,10 +27,10 @@
       "bytes": "488b442478448bce488bd3488d0c40f3410f10948fb80c0000488d4de0e882c3ffff"
     },
     {
-      "name": "Class",
-      "rva": "0x349860",
-      "size": 32,
-      "bytes": "4883ec284885c9751d884c2430488d4c2430e849cbffff84c07401ccb8ffffff"
+      "name": "ClassTail",
+      "rva": "0x349865",
+      "size": 27,
+      "bytes": "85c9751d884c2430488d4c2430e849cbffff84c07401ccb8ffffff"
     },
     {
       "name": "Version",

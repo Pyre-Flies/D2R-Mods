@@ -9,6 +9,7 @@
 #include <mutex>
 #include <atomic>
 #include "policy.h"
+#include "filter_focus_signatures.h"
 #include "qol_navigation.h"
 #include "qol_glyphs.h"
 #include "physical_input.h"
@@ -419,7 +420,7 @@ NativeMessage DecodeNative(void* widget,void* message) noexcept {
     return n;
 }
 // Same bounded widget-name/parent layout used by the existing scoped glyph hook.
-bool IsScopedSubTab(void* widget,bool chronicle=false) noexcept {
+bool IsScopedSubTab(void* widget,unsigned kind=0) noexcept {
     __try {
         const auto* w=static_cast<const unsigned char*>(widget);
         if(!w)return false;
@@ -432,9 +433,160 @@ bool IsScopedSubTab(void* widget,bool chronicle=false) noexcept {
         while(n<64 && name[n])++n;
         while(p<64 && owner[p])++p;
         const bool visible=w[0x50] && w[0x51] && parent[0x50] && parent[0x51];
-        return n<64 && p<64 && (chronicle ? Probe::ChronicleTab({name,n},{owner,p},visible) :
+        return n<64 && p<64 && (kind==2 ? Probe::LootFilterTab({name,n},{owner,p},visible) : kind==1 ? Probe::ChronicleTab({name,n},{owner,p},visible) :
             Probe::OptionsTab({name,n},{owner,p},visible));
     } __except(EXCEPTION_EXECUTE_HANDLER) {return false;}
+}
+// Borrowed synchronous message routed through the existing provider wrapper.
+// No focus-pointer writes, new inline hooks, or global direction remaps.
+bool filterFocusAdmitted=false;
+unsigned FilterSelection(void* widget) noexcept {
+    __try {
+        auto w=static_cast<unsigned char*>(widget);
+        if(!w)return ~0u;
+        auto parent=*reinterpret_cast<unsigned char**>(w+0x30);
+        if(!parent || *reinterpret_cast<uintptr_t*>(parent)!=core+0x7b13d0)return ~0u;
+        return *reinterpret_cast<unsigned*>(parent+0x3fc);
+    } __except(EXCEPTION_EXECUTE_HANDLER) {return ~0u;}
+}
+bool EnterFilterItems(void* widget,void* message,unsigned action,bool recover=false) noexcept {
+    if(!filterFocusAdmitted || !Probe::EnterFilterItems(true,true,action))return false;
+    __try {
+        const auto base=ctx->exeBase;
+        using namespace QolFilterFocus;
+        if(std::memcmp(reinterpret_cast<void*>(base+0x846020),FocusGetter,sizeof(FocusGetter)) ||
+           std::memcmp(reinterpret_cast<void*>(base+0x14af750),RuleInput,sizeof(RuleInput)) ||
+           std::memcmp(reinterpret_cast<void*>(base+0x14af520),Resolver,sizeof(Resolver)) ||
+           std::memcmp(reinterpret_cast<void*>(core+0x2c1840),Wrapper,sizeof(Wrapper))) {
+            filterFocusAdmitted=false;
+            ctx->LogWarn("[QOL/Filter] Focus contract changed; native input preserved.");return false;
+        }
+        auto w=static_cast<unsigned char*>(widget);
+        auto parent=*reinterpret_cast<unsigned char**>(w+0x30);
+        auto manager=*reinterpret_cast<unsigned char**>(base+0x3440170);
+        if(!manager || !parent)return false;
+        auto focus=*reinterpret_cast<unsigned char**>(manager+0xd0);
+        if(!focus)return false;
+        if(recover) {
+            if(FilterSelection(widget)>1 || *reinterpret_cast<void**>(focus+0x190))return false;
+        } else if(*reinterpret_cast<void**>(focus+0x188)!=parent ||
+                  *reinterpret_cast<void**>(focus+0x190)!=widget)return false;
+        if(*reinterpret_cast<uintptr_t*>(parent)!=core+0x7b13d0 ||
+           *reinterpret_cast<uintptr_t*>(core+0x7b13f0)!=core+0x2c1840 ||
+           *reinterpret_cast<uintptr_t*>(core+0x7b1350)!=base+0x14aff80)return false;
+        bool moved=false;
+        if(!recover) {
+        auto m=static_cast<unsigned char*>(message);
+        auto payload=*reinterpret_cast<unsigned char**>(m+0x110);
+        if(!payload)return false;
+        MenuCopy copy;
+        std::memcpy(copy.message,m,sizeof(copy.message));
+        std::memcpy(copy.payload,payload,sizeof(copy.payload));
+        *reinterpret_cast<unsigned*>(copy.payload+0x10)=22;
+        *reinterpret_cast<void**>(copy.message+0x110)=copy.payload;
+        reinterpret_cast<TabMessageFn>(core+0x2c1840)(parent,copy.message);
+        moved=*reinterpret_cast<void**>(focus+0x188)!=parent ||
+            *reinterpret_cast<void**>(focus+0x190)!=widget;
+        }
+        // The loader merges Equipment/Misc into one panel. The native section
+        // resolver still names the two absent panels; use its registered pair.
+        if(!moved &&
+           !std::memcmp(reinterpret_cast<void*>(base+0x14abc60),EnterPanel,sizeof(EnterPanel)) &&
+           !std::memcmp(reinterpret_cast<void*>(base+0x14aa6d0),EnterList,sizeof(EnterList)) &&
+           !std::memcmp(reinterpret_cast<void*>(core+0x2c0f00),ItemWrapper,sizeof(ItemWrapper))) {
+            for(unsigned i=0;i<4;++i) {
+                auto slot=core+0x7b0ed0+i*24;
+                auto panel=*reinterpret_cast<unsigned char**>(slot);
+                auto helper=*reinterpret_cast<unsigned char**>(slot+8);
+                if(!panel || !helper || !panel[0x50] || !panel[0x51])continue;
+                if(recover && *reinterpret_cast<void**>(focus+0x188)!=panel)continue;
+                if(*reinterpret_cast<uintptr_t*>(panel)!=core+0x7b10b0 ||
+                   *reinterpret_cast<uintptr_t*>(helper)!=base+0x1fd6098 ||
+                   *reinterpret_cast<void**>(panel+0x168)!=parent ||
+                   *reinterpret_cast<void**>(helper+0x168)!=parent)continue;
+                const auto model=*reinterpret_cast<void**>(parent+0x168);
+                if(!model || *reinterpret_cast<void**>(panel+0x170)!=model ||
+                   *reinterpret_cast<void**>(helper+0x170)!=model)continue;
+                auto list=*reinterpret_cast<unsigned char**>(panel+0x178);
+                if(!list || *reinterpret_cast<void**>(helper+0x178)!=list ||
+                   *reinterpret_cast<uintptr_t*>(list)!=core+0x7b1240 ||
+                   *reinterpret_cast<void**>(list+0x30)!=panel ||
+                   !list[0x50] || !list[0x51] || !*reinterpret_cast<void**>(list+0x320))continue;
+                if(*reinterpret_cast<uintptr_t*>(core+0x7b10d0)!=core+0x2c0f00)continue;
+                reinterpret_cast<void(__fastcall*)(void*)>(base+0x14abc60)(panel);
+                moved=recover?(*reinterpret_cast<void**>(focus+0x188)==panel && *reinterpret_cast<void**>(focus+0x190)!=nullptr):
+                    (*reinterpret_cast<void**>(focus+0x188)!=parent || *reinterpret_cast<void**>(focus+0x190)!=widget);
+                static unsigned entrySamples=0;
+                if(entrySamples++<8)ctx->LogInfo(moved?
+                    "[QOL/Filter] Merged item-panel native entry changed focus.":
+                    "[QOL/Filter] Merged item-panel native entry left focus unchanged.");
+                break;
+            }
+        }
+        static unsigned samples=0;
+        if(samples++<8)ctx->LogInfo(moved?
+            "[QOL/Filter] Down native handoff changed focus.":
+            "[QOL/Filter] Native section/merged-panel handoff did not change focus.");
+        return moved;
+    } __except(EXCEPTION_EXECUTE_HANDLER) {filterFocusAdmitted=false;return false;}
+}
+// Tab updates can invalidate the former focus after the tab handler returns.
+// Reacquire through the current registry on later SDK UI updates; never call a
+// cached widget pointer. Short-lived repair applies only to the same rule/panel.
+const D2RL::ThreadService* filterUiThreads=nullptr;
+uint64_t filterRepairGeneration=0;
+struct FilterRepair {uintptr_t parent{},panel{},model{};unsigned before{},remaining{};ULONGLONG started{};} filterRepair;
+bool CaptureFilterRepair(void* widget,unsigned before) noexcept {
+    if(!filterFocusAdmitted || before>1 || !filterUiThreads)return false;
+    __try {
+        auto parent=*reinterpret_cast<unsigned char**>(static_cast<unsigned char*>(widget)+0x30);
+        auto manager=*reinterpret_cast<unsigned char**>(ctx->exeBase+0x3440170);
+        if(!parent || !manager)return false;
+        auto focus=*reinterpret_cast<unsigned char**>(manager+0xd0);
+        if(!focus)return false;
+        for(unsigned i=0;i<4;++i) {
+            auto panel=*reinterpret_cast<unsigned char**>(core+0x7b0ed0+i*24);
+            if(!panel || *reinterpret_cast<uintptr_t*>(panel)!=core+0x7b10b0 ||
+               *reinterpret_cast<void**>(panel+0x168)!=parent || *reinterpret_cast<void**>(focus+0x188)!=panel)continue;
+            filterRepair={reinterpret_cast<uintptr_t>(parent),reinterpret_cast<uintptr_t>(panel),
+                *reinterpret_cast<uintptr_t*>(parent+0x168),before,8,GetTickCount64()};
+            ++filterRepairGeneration;return true;
+        }
+    } __except(EXCEPTION_EXECUTE_HANDLER) {}
+    return false;
+}
+// -1 cancel, 0 await destination, 1 destination active. Output is freshly resolved.
+int ResolveFilterRepair(void*& widget) noexcept {
+    __try {
+        for(unsigned i=0;i<4;++i) {
+            auto panel=*reinterpret_cast<unsigned char**>(core+0x7b0ed0+i*24);
+            if(reinterpret_cast<uintptr_t>(panel)!=filterRepair.panel)continue;
+            if(!panel || *reinterpret_cast<uintptr_t*>(panel)!=core+0x7b10b0 || !panel[0x50] || !panel[0x51])return -1;
+            auto parent=*reinterpret_cast<unsigned char**>(panel+0x168);
+            if(reinterpret_cast<uintptr_t>(parent)!=filterRepair.parent || !parent ||
+               *reinterpret_cast<uintptr_t*>(parent)!=core+0x7b13d0 ||
+               *reinterpret_cast<uintptr_t*>(parent+0x168)!=filterRepair.model)return -1;
+            auto manager=*reinterpret_cast<unsigned char**>(ctx->exeBase+0x3440170);
+            if(!manager)return -1;
+            auto focus=*reinterpret_cast<unsigned char**>(manager+0xd0);
+            if(!focus || *reinterpret_cast<void**>(focus+0x188)!=panel)return -1;
+            widget=*reinterpret_cast<void**>(parent+0x160);
+            if(!IsScopedSubTab(widget,2))return -1;
+            return Probe::RecoverFilterTabFocus(filterRepair.before,FilterSelection(widget),true)?1:0;
+        }
+    } __except(EXCEPTION_EXECUTE_HANDLER) {}
+    return -1;
+}
+void __cdecl RepairFilterFocus(const D2RL::PluginContext* owner,void* token) noexcept {
+    std::lock_guard lock(stateMutex);
+    if(!ctx || owner!=ctx || reinterpret_cast<uintptr_t>(token)!=filterRepairGeneration || !filterRepair.remaining)return;
+    if(!SubMenusEnabled() || !ControllerQoL::IsControllerUiActive() || GetTickCount64()-filterRepair.started>250) {filterRepair.remaining=0;return;}
+    --filterRepair.remaining;
+    void* widget=nullptr;
+    const int state=ResolveFilterRepair(widget);
+    if(state<0){filterRepair.remaining=0;return;}
+    if(state>0 && EnterFilterItems(widget,nullptr,13,true))ctx->LogInfo("[QOL/Filter] Deferred tab-change focus recovered through native list entry.");
+    if(filterRepair.remaining && filterUiThreads->runOnUiThread(ctx,RepairFilterFocus,token)!=D2RL::Threads::Result::Success)filterRepair.remaining=0;
 }
 void __fastcall HookTabMessage(void* widget,void* message) noexcept {
     // Preserve the original function's void ABI. Do not mutate input, widget
@@ -442,6 +594,8 @@ void __fastcall HookTabMessage(void* widget,void* message) noexcept {
     bool block=false;
     MenuCopy subCopy;
     int subDecision=0;
+    bool repairFilter=false;
+    uint64_t repairGeneration=0;
     {
         std::lock_guard lock(stateMutex);
         ++nativeCalls;
@@ -451,9 +605,21 @@ void __fastcall HookTabMessage(void* widget,void* message) noexcept {
             if(n.controllerBegin) {
                 ++nativeControllerCalls;
                 const bool options=(subPanels&4) && IsScopedSubTab(widget);
-                const bool chronicle=(subPanels&8) && IsScopedSubTab(widget,true);
-                if(SubMenusEnabled() && ((subPanels&1) || options || chronicle) && n.switchEnabled && n.left==7 && n.right==8) {
+                const bool chronicle=(subPanels&8) && IsScopedSubTab(widget,1);
+                const bool lootFilter=(subPanels&16) && IsScopedSubTab(widget,2);
+                if(lootFilter) {
+                    static unsigned filterInputSamples=0;
+                    if(filterInputSamples++<32) {
+                        char line[128];std::snprintf(line,sizeof(line),"[QOL/Filter] Controller tab input action=%u bindings=%u/%u switch=%d",n.action,n.left,n.right,n.switchEnabled);
+                        ctx->LogInfo(line);
+                    }
+                }
+                if(SubMenusEnabled() && ((subPanels&1) || options || chronicle || lootFilter) && n.switchEnabled && n.left==7 && n.right==8) {
                     subDecision=PrepareMenuMessage(message,subCopy,true);
+                    if(lootFilter && subDecision>0) {
+                        repairFilter=CaptureFilterRepair(widget,FilterSelection(widget));
+                        repairGeneration=filterRepairGeneration;
+                    }
                     if(subDecision<0) ++questReleased;
                     if(subDecision>0) ++questTranslated;
                     if(subDecision && trace && options) ctx->LogInfo(subDecision>0?
@@ -462,10 +628,13 @@ void __fastcall HookTabMessage(void* widget,void* message) noexcept {
                     if(subDecision && trace && chronicle) ctx->LogInfo(subDecision>0?
                         "[QOL/Submenu] Chronicle: bumper translated to inner tab navigation.":
                         "[QOL/Submenu] Chronicle: trigger released to main menu.");
-                    if(subDecision && trace && !options && !chronicle) ctx->LogInfo(subDecision>0?
+                    if(subDecision && trace && lootFilter) ctx->LogInfo("[QOL/Submenu] Loot filter Equipment/Items tabs: scoped bumper remap.");
+                    if(subDecision && trace && !options && !chronicle && !lootFilter) ctx->LogInfo(subDecision>0?
                         "[QOL/Submenu] Quest: bumper translated to act tab navigation.":
                         "[QOL/Submenu] Quest: trigger released to main menu without marking input handled.");
                 }
+                if(lootFilter && SubMenusEnabled() && ControllerQoL::IsControllerUiActive() &&
+                   EnterFilterItems(widget,message,n.action))return;
                 auto r=ReadRaw();
                 block=Probe::ConsumeTabLeft(enabled && nativeMode && !useL1,r.valid && r.held,
                     n.controllerBegin,n.switchEnabled,n.action,n.left,n.right);
@@ -480,7 +649,13 @@ void __fastcall HookTabMessage(void* widget,void* message) noexcept {
             }
         }
     }
-    if(!block && subDecision>=0 && originalTabMessage) originalTabMessage(widget,subDecision>0?subCopy.message:message);
+    if(!block && subDecision>=0 && originalTabMessage) {
+        originalTabMessage(widget,subDecision>0?subCopy.message:message);
+        std::lock_guard lock(stateMutex);
+        if(ctx && repairFilter && repairGeneration==filterRepairGeneration && filterUiThreads &&
+           filterUiThreads->runOnUiThread(ctx,RepairFilterFocus,reinterpret_cast<void*>(repairGeneration))!=D2RL::Threads::Result::Success)
+            filterRepair.remaining=0;
+    }
 }
 bool CheckNativeSignatures(uintptr_t base) noexcept {
     if(!base) return false;
@@ -599,6 +774,7 @@ auto Command(D2R::Game::Client*,const D2RL::ConsoleCommandContext* cmd,void*) no
     } catch(...) {return D2RL::ConsoleCommandResult::Failed;}
 }
 void Cleanup() noexcept {
+    ++filterRepairGeneration;filterRepair.remaining=0;filterUiThreads=nullptr;
     QolNativeRanges::Enable(false);
     sharedPageInputActive.store(false);
     QolGlyphs::Shutdown();
@@ -624,6 +800,9 @@ bool QolNavigation::Initialize(const D2RL::PluginContext* context,bool featureEn
     }
     auto module=GetModuleHandleW(L"D2RCore.dll");core=reinterpret_cast<uintptr_t>(module);
     nativeVerified=module && QolCore::VerifyCore(module);
+    filterFocusAdmitted=module && QolCore::VerifyFileHash(module,QolNativeProfile::CoreHash);
+    if(ctx->QueryService(&filterUiThreads)!=D2RL::ServiceQueryResult::Success ||
+       !D2RL::HasThreadServiceField(filterUiThreads,D2RL::ThreadServiceRequiredSize) || !filterUiThreads->runOnUiThread)filterUiThreads=nullptr;
     D2RL::SharedEvents::UiMessageListener listener{
         .structSize=D2RL::SharedEvents::UiMessageListenerSize,.priority=1000,.callback=OnMessage};
     if(events->registerUiMessageListener(ctx,&listener,&uiHandle)!=D2RL::SharedEvents::Result::Success) {Cleanup();return false;}
@@ -713,3 +892,7 @@ void QolNavigation::PumpLabels(const D2RL::PluginContext* context,const D2RL::Th
 }
 
 bool QolNavigation::RangesRemapEnabled() noexcept {return QolNativeRanges::active.load(std::memory_order_acquire);}
+
+bool QolNavigation::LootFilterRemapEnabled() noexcept {
+    std::lock_guard lock(stateMutex);return SubMenusEnabled() && (subPanels&16);
+}

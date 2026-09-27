@@ -10,6 +10,7 @@ bool SharedPageInputActive() noexcept;
 bool SharedPageRemapEnabled() noexcept;
 bool OptionsRemapEnabled() noexcept;
 bool ChronicleRemapEnabled() noexcept;
+bool LootFilterRemapEnabled() noexcept;
 bool RangesRemapEnabled() noexcept;
 bool GroundShortcutsAllowed() noexcept;
 void Shutdown() noexcept;

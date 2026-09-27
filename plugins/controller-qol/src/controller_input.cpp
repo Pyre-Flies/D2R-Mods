@@ -1,4 +1,5 @@
 #include "controller_input.h"
+#include "bulk_stash_input.h"
 #include "physical_input.h"
 #include "xinput_hook.h"
 #include "native_input_policy.h"
@@ -266,24 +267,14 @@ bool IsAnyControllerConnected() noexcept {
 }
 
 // ---------------------------------------------------------------------------
-// Spatial Leap XInput Trampoline Hooking & Pulse Engine
+// Controller shortcut input filtering
 // ---------------------------------------------------------------------------
-static SpatialLeapCallback s_SpatialLeapCallback = nullptr;
-static RegularDpadCallback s_RegularDpadCallback = nullptr;
 static QuickMoveCallback s_QuickMoveCallback = nullptr;
 static TriggerPassThroughPredicate s_TriggerPassThroughPredicate=nullptr;
 void SetTriggerPassThroughPredicate(TriggerPassThroughPredicate predicate) noexcept {
     s_TriggerPassThroughPredicate=predicate;
 }
 static QuickMoveCubeCallback s_QuickMoveCubeCallback = nullptr;
-
-void SetSpatialLeapCallback(SpatialLeapCallback callback) noexcept {
-    s_SpatialLeapCallback = callback;
-}
-
-void SetRegularDpadCallback(RegularDpadCallback callback) noexcept {
-    s_RegularDpadCallback = callback;
-}
 
 void SetQuickMoveCallback(QuickMoveCallback callback) noexcept {
     s_QuickMoveCallback = callback;
@@ -293,28 +284,20 @@ void SetQuickMoveCubeCallback(QuickMoveCubeCallback callback) noexcept {
     s_QuickMoveCubeCallback = callback;
 }
 
+static BulkStashCallback s_BulkStashCallback=nullptr;
+static QolBulkStash::Gesture s_BulkStashGesture[8]{};
+void SetBulkStashCallback(BulkStashCallback cb) noexcept {s_BulkStashCallback=cb;}
 static AutoFillBeltCallback s_AutoFillBeltCallback = nullptr;
 
 void SetAutoFillBeltCallback(AutoFillBeltCallback callback) noexcept {
     s_AutoFillBeltCallback = callback;
 }
 
-struct PulseEngine {
-    bool active = false;
-    uint16_t direction = 0;
-    int remainingSteps = 0;
-    uint16_t suppressMask = 0;
-    int phase = 0; // 0 = Pressing (35ms), 1 = Releasing (25ms)
-    ULONGLONG phaseStartTick = 0;
-};
-
-static PulseEngine s_PulseEngine;
 static uint16_t s_PrevDpadButtons[8] = {};
 static uint16_t s_PrevRawButtons[8] = {};
 static bool s_QuickMoveTriggeredX[8] = {};
 static bool s_QuickMoveTriggeredY[8] = {};
 static bool s_AutoFillBeltTriggered[8] = {};
-static DWORD s_ActiveLeapUserIndex = 0;
 
 struct SyntheticHoldEngine {
     bool active = false;
@@ -351,21 +334,7 @@ void SetVendorContextPredicate(VendorContextPredicate pred) noexcept {
     s_VendorContextPredicate = pred;
 }
 
-void TriggerSyntheticPulseSequence(uint16_t direction, int steps) noexcept {
-    if (steps <= 0 || direction == 0) return;
-    s_PulseEngine.direction = direction;
-    s_PulseEngine.remainingSteps = steps;
-    s_PulseEngine.suppressMask = 0;
-    s_PulseEngine.active = true;
-    s_PulseEngine.phase = 0;
-    s_PulseEngine.phaseStartTick = GetTickCount64();
-}
-
-bool IsLeapActive() noexcept {
-    return s_PulseEngine.active;
-}
-
-static void ProcessGamepadLeap(DWORD dwUserIndex, XINPUT_STATE* pState) noexcept {
+static void ProcessGamepadShortcuts(DWORD dwUserIndex, XINPUT_STATE* pState) noexcept {
     if (!pState || dwUserIndex >= 8) return;
 
     s_HookCallCount.fetch_add(1);
@@ -377,6 +346,10 @@ static void ProcessGamepadLeap(DWORD dwUserIndex, XINPUT_STATE* pState) noexcept
     s_PrevRawButtons[dwUserIndex] = rawButtons;
 
     const bool modHeld = IsActiveModifierHeldForPad(dwUserIndex, pState);
+
+    // Keep L3 suppressed until release, even if the stash closes during the batch.
+    if(s_BulkStashGesture[dwUserIndex].Update(modHeld,(rawButtons&XINPUT_GAMEPAD_LEFT_THUMB)!=0,
+        []() noexcept {return s_BulkStashCallback && s_BulkStashCallback();}))buttons&=~XINPUT_GAMEPAD_LEFT_THUMB;
 
     // Vendor selling tap-protection and auto-sustain:
     // When vendor window is open and cursor is on an item in Inventory, tapping X
@@ -461,80 +434,10 @@ static void ProcessGamepadLeap(DWORD dwUserIndex, XINPUT_STATE* pState) noexcept
             CancelSyntheticHold();
         }
 
-        uint16_t dpadDir = 0;
-        if (newlyPressed & XINPUT_GAMEPAD_DPAD_RIGHT) dpadDir = XINPUT_GAMEPAD_DPAD_RIGHT;
-        else if (newlyPressed & XINPUT_GAMEPAD_DPAD_LEFT) dpadDir = XINPUT_GAMEPAD_DPAD_LEFT;
-        else if (newlyPressed & XINPUT_GAMEPAD_DPAD_DOWN) dpadDir = XINPUT_GAMEPAD_DPAD_DOWN;
-        else if (newlyPressed & XINPUT_GAMEPAD_DPAD_UP) dpadDir = XINPUT_GAMEPAD_DPAD_UP;
-
-        if (dpadDir != 0) {
-            if (modHeld) {
-                if (s_SpatialLeapCallback) {
-                    int deltaX = 0;
-                    int deltaY = 0;
-                    if (s_SpatialLeapCallback(dpadDir, deltaX, deltaY)) {
-                        const int totalSteps = (dpadDir == XINPUT_GAMEPAD_DPAD_RIGHT || dpadDir == XINPUT_GAMEPAD_DPAD_LEFT)
-                                             ? std::abs(deltaX)
-                                             : std::abs(deltaY);
-
-                        s_PulseEngine.direction = dpadDir;
-                        s_PulseEngine.remainingSteps = totalSteps;
-                        s_PulseEngine.suppressMask = dpadDir;
-
-                        if (s_PulseEngine.remainingSteps > 0) {
-                            s_ActiveLeapUserIndex = dwUserIndex;
-                            s_PulseEngine.active = true;
-                            s_PulseEngine.phase = 0; // Start in press phase
-                            s_PulseEngine.phaseStartTick = GetTickCount64();
-                        }
-                    }
-                }
-            } else {
-                if (s_RegularDpadCallback) {
-                    s_RegularDpadCallback(dpadDir);
-                }
-            }
-        }
     }
 
+    // Preserve physical D-pad navigation, including while the modifier is held.
     const ULONGLONG now = GetTickCount64();
-
-    // Suppress physical button so game doesn't scroll past the landing target while user still holds D-Pad
-    if (s_PulseEngine.suppressMask != 0 && dwUserIndex == s_ActiveLeapUserIndex) {
-        if ((rawButtons & s_PulseEngine.suppressMask) == 0) {
-            s_PulseEngine.suppressMask = 0;
-        } else {
-            buttons &= ~s_PulseEngine.suppressMask;
-        }
-    }
-
-    // Process synthetic leap pulses
-    if (s_PulseEngine.active && dwUserIndex == s_ActiveLeapUserIndex) {
-        if (s_PulseEngine.remainingSteps <= 0 || s_PulseEngine.direction == 0) {
-            s_PulseEngine.active = false;
-        } else {
-            if (s_PulseEngine.phase == 0) {
-                // Injected Press phase (35 ms - reliably captured across multiple frames)
-                buttons |= s_PulseEngine.direction;
-                if (now - s_PulseEngine.phaseStartTick >= 35) {
-                    s_PulseEngine.phase = 1;
-                    s_PulseEngine.phaseStartTick = now;
-                    s_PulseEngine.remainingSteps--;
-                }
-            } else {
-                // Injected Release phase (25 ms - guarantees game sees falling edge)
-                buttons &= ~s_PulseEngine.direction;
-                if (now - s_PulseEngine.phaseStartTick >= 25) {
-                    if (s_PulseEngine.remainingSteps <= 0) {
-                        s_PulseEngine.active = false;
-                    } else {
-                        s_PulseEngine.phase = 0;
-                        s_PulseEngine.phaseStartTick = now;
-                    }
-                }
-            }
-        }
-    }
 
     // Process synthetic button hold (e.g. native hold-to-sell)
     if (s_HoldEngine.active && dwUserIndex == s_HoldEngine.activeUserIndex) {
@@ -584,8 +487,9 @@ static void ResetNativeTracking() noexcept {
     for(unsigned n=0;n<8;++n) {
         s_PrevDpadButtons[n]=s_PrevRawButtons[n]=0;
         s_QuickMoveTriggeredX[n]=s_QuickMoveTriggeredY[n]=s_AutoFillBeltTriggered[n]=false;
+        s_BulkStashGesture[n]={};
     }
-    s_PulseEngine={};s_HoldEngine={};
+    s_HoldEngine={};
 }
 static void SeedNativeTracking(unsigned index) noexcept {
     if(index==s_NativeIndex) return;
@@ -605,7 +509,7 @@ static void ProcessNativeState(unsigned primaryKey=0,bool primaryPressed=false) 
     XINPUT_STATE state{};
     state.Gamepad.wButtons=raw.buttons;
     state.Gamepad.bLeftTrigger=raw.leftTrigger;state.Gamepad.bRightTrigger=raw.rightTrigger;
-    ProcessGamepadLeap(s_NativeIndex,&state);
+    ProcessGamepadShortcuts(s_NativeIndex,&state);
     auto filtered=raw;filtered.buttons=state.Gamepad.wButtons;
     filtered.leftTrigger=state.Gamepad.bLeftTrigger;filtered.rightTrigger=state.Gamepad.bRightTrigger;
     const unsigned desired=QolNativeInput::Encode(filtered);
@@ -711,7 +615,7 @@ static DWORD WINAPI HookedXInputGetState_N(DWORD dwUserIndex, XINPUT_STATE* pSta
         s_CachedUserIndex.store(dwUserIndex, std::memory_order_relaxed);
         s_LastStateTick.store(GetTickCount64(), std::memory_order_relaxed);
 
-        s_InputGate.Run([&] { ProcessGamepadLeap(dwUserIndex, pState); });
+        s_InputGate.Run([&] { ProcessGamepadShortcuts(dwUserIndex, pState); });
     }
     return result;
 }
@@ -729,7 +633,7 @@ static DWORD WINAPI HookedXInputGetStateEx_N(DWORD dwUserIndex, void* pState) {
         s_CachedUserIndex.store(dwUserIndex, std::memory_order_relaxed);
         s_LastStateTick.store(GetTickCount64(), std::memory_order_relaxed);
 
-        s_InputGate.Run([&] { ProcessGamepadLeap(dwUserIndex, xiState); });
+        s_InputGate.Run([&] { ProcessGamepadShortcuts(dwUserIndex, xiState); });
     }
     return result;
 }

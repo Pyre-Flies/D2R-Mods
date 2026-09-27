@@ -1,3 +1,5 @@
+#include "identify_bulk.h"
+#include "bulk_stash.h"
 #include <D2RLPlugin/api.h>
 #include "controller_input.h"
 #include "physical_input.h"
@@ -11,6 +13,7 @@
 #include "materials_actions.h"
 #include "custom_page_actions.h"
 #include "identify_action.h"
+#include "native_identify.h"
 #include "identify_stat.h"
 #include "move_identity.h"
 #include "materials_policy.h"
@@ -23,8 +26,10 @@
 #include "belt_policy.h"
 #include "portal_priority.h"
 #include "portal_policy.h"
+#include "policy.h"
 #include "ground_action_hooks.h"
 #include "placard_call.h"
+#include "pickup_calls.h"
 #include "placard_text.h"
 #include "plugin_compatibility.h"
 #include <xinput.h>
@@ -47,7 +52,10 @@ namespace {
 struct PluginSettings {
     bool enabled = true;
     bool quickIdentify = true;
+    bool identifyAll = true;
+    bool nativeIdentify = false;
     bool quickMove = true;
+    bool quickDeposit = true;
     bool groundPickup = true;
     uint32_t groundPickupDistance = 6;
     uint32_t portalPriorityDistance = 10;
@@ -60,6 +68,10 @@ struct PluginSettings {
     bool debugLogging = false;
     bool blockFilteredPickup = true;
     bool prioritizePortals = true;
+    bool prioritizeStashBoxes = true;
+    bool prioritizeWaypoints = true;
+    bool prioritizeShrines = true;
+    bool prioritizeChests = false;
     bool portalDiagnostics = false;
 };
 
@@ -85,8 +97,6 @@ static std::atomic<ULONGLONG> g_LastInventoryInteractionTick{0};
 static std::atomic<D2RL::ItemHandle> s_FocusedItem{D2RL::InvalidItemHandle};
 static std::atomic<D2RL::Items::ItemContainer> s_FocusedContainer{D2RL::Items::ItemContainer::Unknown};
 static std::atomic<uint32_t> s_FocusedCode{0};
-static std::atomic<int32_t> s_FocusedCellX{-1};
-static std::atomic<int32_t> s_FocusedCellY{-1};
 static std::atomic<ULONGLONG> s_FocusedTick{0};
 static std::mutex s_FocusIdentityMutex;
 static D2RL::Items::ItemInfo s_FocusIdentity{};
@@ -136,7 +146,7 @@ static constexpr D2RL::PluginInfo ControllerQoLPluginInfo {
     .abiVersion  = D2RL_PLUGIN_ABI_VERSION,
     .id          = "controller-qol-updates",
     .name        = "Controller QOL Updates",
-    .version     = "1.3.1+rev.22",
+    .version     = "1.3.1+rev.46",
     .author      = "PyreFly",
     .description = "Direct controller looting with filtered labels, inventory shortcuts, and stash navigation.",
     .flags       = D2RL::PluginFlags::Shared | D2RL::PluginFlags::NativeHooks,
@@ -169,7 +179,10 @@ static void LoadConfiguration(const D2RL::PluginContext* context) noexcept {
 
     parseBool("enabled", g_Settings.enabled);
     parseBool("quick_identify", g_Settings.quickIdentify);
+    parseBool("identify_all", g_Settings.identifyAll);
+    parseBool("native_identify", g_Settings.nativeIdentify);
     parseBool("quick_move", g_Settings.quickMove);
+    parseBool("quick_deposit", g_Settings.quickDeposit);
     parseBool("ground_pickup", g_Settings.groundPickup);
     parseBool("require_tome_or_scroll", g_Settings.requireTomeOrScroll);
     parseBool("consume_tome_or_scroll", g_Settings.consumeTomeOrScroll);
@@ -177,6 +190,10 @@ static void LoadConfiguration(const D2RL::PluginContext* context) noexcept {
     parseBool("debug_logging", g_Settings.debugLogging);
     parseBool("block_filtered_pickup", g_Settings.blockFilteredPickup);
     parseBool("prioritize_portals", g_Settings.prioritizePortals);
+    parseBool("prioritize_stash_boxes", g_Settings.prioritizeStashBoxes);
+    parseBool("prioritize_waypoints", g_Settings.prioritizeWaypoints);
+    parseBool("prioritize_shrines", g_Settings.prioritizeShrines);
+    parseBool("prioritize_chests", g_Settings.prioritizeChests);
     parseBool("portal_diagnostics", g_Settings.portalDiagnostics);
 
     // Parse modifier string
@@ -252,18 +269,18 @@ static void __cdecl ExecuteIdentifyTask(const D2RL::PluginContext* context,void*
     if(!req) {s_IdentifyPending.store(false);return;}
     const auto started=GetTickCount64();
     if(context && g_Settings.enabled && started-req->queuedAt<=2000) {
-        const auto result=QolIdentify::Execute(context,g_Items,g_Inventory,req->action,QolIdentifyStat::Read);
+        const auto result=QolIdentify::Execute(context,g_Items,g_Inventory,req->action,QolIdentifyStat::Read,g_Settings.nativeIdentify?QolNativeIdentify::Request:nullptr);
         const auto elapsed=GetTickCount64()-started;
         // One bounded summary, never a synchronous per-item log dump. Failures
         // remain diagnosable with debug_logging=false; timings precede log I/O.
         if(result.status!=QolIdentify::Status::Success || g_Settings.debugLogging || result.nativeReads || elapsed>=50) {
-            char message[384];
+            char message[512];
             std::snprintf(message,sizeof(message),
-                "[QOL/Identify] result=%s scan=%u operation=%u scanned=%u tomes=%u scrolls=%u maxTomeQty=%d consumed=%u sdkQty=%d stat70=%d remaining=%d readFailures=%u mismatches=%u queueMs=%llu workMs=%llu runtimeId=%u.",
+                "[QOL/Identify] result=%s scan=%u operation=%u scanned=%u tomes=%u scrolls=%u maxTomeQty=%d consumed=%u sdkQty=%d stat70=%d remaining=%d readFailures=%u mismatches=%u queueMs=%llu workMs=%llu runtimeId=%u route=%s targetContainer=%u sourceContainer=%u.",
                 QolIdentify::Name(result.status),static_cast<unsigned>(result.scan),static_cast<unsigned>(result.operation),
                 result.scanned,result.tomes,result.scrolls,result.maxTomeQuantity,result.consumed?1u:0u,result.sdkTomeQuantity,result.nativeTomeQuantity,result.remainingQuantity,result.nativeReadFailures,result.quantityMismatches,
-                static_cast<unsigned long long>(started-req->queuedAt),static_cast<unsigned long long>(elapsed),req->action.target.runtimeId);
-            if(result.status==QolIdentify::Status::Success)context->LogInfo(message);else context->LogWarn(message);
+                static_cast<unsigned long long>(started-req->queuedAt),static_cast<unsigned long long>(elapsed),req->action.target.runtimeId,result.route,static_cast<unsigned>(req->action.target.container),static_cast<unsigned>(result.sourceContainer));
+            if(result.status==QolIdentify::Status::Success || result.status==QolIdentify::Status::NativePending)context->LogInfo(message);else context->LogWarn(message);
         }
     }
     delete req;s_IdentifyPending.store(false);
@@ -721,7 +738,7 @@ static void TriggerQuickMoveOnFocusedItem() noexcept {
     // Advanced slots are UI-owned proxies: route them before entering the
     // authoritative legacy resolver, which cannot resolve that proxy handle.
     (void)g_Threads->runOnUiThread(g_PluginContext, [](const D2RL::PluginContext* ctx,void*) noexcept {
-        if (QolBelt::Busy() || QolMaterials::Busy()) return;
+        if (QolBelt::Busy() || QolMaterials::Busy() || QolBulkStash::Busy()) return;
         const auto tab=QolMaterials::SelectedStashTab(ctx);
         if (TestUiMode(UI_MODE_STASH) && tab==0xFFFFFFFF) {
             ctx->LogWarn("[QOL/Stash] Selected tab unavailable; refusing an ordinary stash fallback.");
@@ -881,7 +898,7 @@ static bool VendorRefillContext() noexcept {
 static void TriggerAutoFillBelt() noexcept {
     if (!g_PluginContext || !g_Settings.enabled || !g_Settings.quickMove || !g_Threads) return;
     (void)g_Threads->runOnUiThread(g_PluginContext,[](const D2RL::PluginContext* ctx,void*) noexcept {
-        if (QolBelt::Busy() || QolMaterials::Busy()) return;
+        if (QolBelt::Busy() || QolMaterials::Busy() || QolBulkStash::Busy()) return;
         const bool stash=TestUiMode(UI_MODE_STASH);
         if (VendorRefillContext()) {
             D2RL::Items::ItemInfo focus{};
@@ -924,7 +941,7 @@ static auto __cdecl OnItemInteraction(
         return D2RL::ItemInteractions::Decision::Continue;
     }
 
-    if (!g_Settings.enabled) {
+    if (QolNativeIdentify::Forwarding() || !g_Settings.enabled) {
         return D2RL::ItemInteractions::Decision::Continue;
     }
 
@@ -1016,13 +1033,18 @@ static auto __cdecl OnItemInteraction(
 
     g_LastInventoryInteractionTick.store(GetTickCount64());
 
+    if(Probe::BatchFeatureEnabled(g_Settings.quickIdentify,g_Settings.identifyAll) &&
+       modifierActive && !btnX && QolIdentify::BulkTome(itemInfo)) {
+        (void)QolNativeIdentify::RequestAll(context,event->player,itemInfo,g_Settings.nativeIdentify);
+        return D2RL::ItemInteractions::Decision::Consume;
+    }
     if (isUnidentified && g_Settings.quickIdentify && modifierActive) {
         // UI events expose a copied/client-side item. Do not scan consumables
         // here: authoritative enumeration and quantity validation happen once
         // in the game-thread task, using this item's exact identity.
         if(s_IdentifyPending.exchange(true))return D2RL::ItemInteractions::Decision::Consume;
         auto* req=new IdentifyRequest{
-            .action={event->player,itemInfo,g_Settings.requireTomeOrScroll,g_Settings.consumeTomeOrScroll},
+            .action={event->player,itemInfo,g_Settings.requireTomeOrScroll,g_Settings.consumeTomeOrScroll,QolNativeIdentify::PersonalStashOpen()},
             .queuedAt=GetTickCount64(),
         };
 
@@ -1073,29 +1095,6 @@ static void __cdecl OnItemTooltipCallback(
         if (g_Items->getItemInfo(context, event->item, &info) == D2RL::Items::Result::Success) {
             g_LastInventoryInteractionTick.store(GetTickCount64());
 
-            // Update focused item coordinates for smart spatial leap.
-            // If a synthetic leap is actively pulsing inputs, do not let intermediate
-            // tooltip events clobber the leap target coordinates.
-            if (!ControllerQoL::IsLeapActive()) {
-                int w = 1, h = 1;
-                ControllerQoL::GetItemDimensions(info.code, w, h);
-                const int curX = s_FocusedCellX.load();
-                const int curY = s_FocusedCellY.load();
-
-                // Decoupled coordinate clamping: independently clamp X and Y so that entering
-                // on a lower row (e.g. row 1 of a 2x2 item) does NOT force Y back to row 0.
-                if (curX < info.x) {
-                    s_FocusedCellX.store(info.x);
-                } else if (curX >= info.x + w) {
-                    s_FocusedCellX.store(info.x + w - 1);
-                }
-
-                if (curY < info.y) {
-                    s_FocusedCellY.store(info.y);
-                } else if (curY >= info.y + h) {
-                    s_FocusedCellY.store(info.y + h - 1);
-                }
-            }
             s_FocusedItem.store(event->item);
             s_FocusedContainer.store(info.container);
             s_FocusedCode.store(info.code);
@@ -1139,12 +1138,16 @@ static void __cdecl OnItemTooltipCallback(
 
             const bool isPotionItem   = QolBelt::BeltCandidate(info.code) && QolBelt::SupportedSource(info.container);
             const bool canMoveToBelt  = !vendorStock && isPotionItem;
+            const bool canIdentifyAll = !vendorStock &&
+                Probe::BatchFeatureEnabled(g_Settings.quickIdentify,g_Settings.identifyAll) && QolIdentify::BulkTome(info);
             const bool canIdentify    = !vendorStock && isUnidentified && g_Settings.quickIdentify;
             const bool canAutoFill    = g_Settings.quickMove && IsPotionItem(info.code) && (vendorStock || isStashOpen || isCubeOpen || info.container == D2RL::Items::ItemContainer::Inventory ||
                                          info.container == D2RL::Items::ItemContainer::PersonalStash ||
                                          info.container == D2RL::Items::ItemContainer::SharedStash);
 
-            if (canIdentify || canMoveToBelt || canMove || canMoveToCube || canAutoFill) {
+            const bool canBulkStash=isStashOpen &&
+                Probe::BatchFeatureEnabled(g_Settings.quickMove,g_Settings.quickDeposit);
+            if (canBulkStash || canIdentifyAll || canIdentify || canMoveToBelt || canMove || canMoveToCube || canAutoFill) {
                 char prompt[256]{};
                 const char* moveAction = "Transfer";
                 if (info.container == D2RL::Items::ItemContainer::Inventory && isVendorOpen && !isStashOpen && !isCubeOpen) {
@@ -1170,9 +1173,9 @@ static void __cdecl OnItemTooltipCallback(
                 }
 
                 QolGlyphs::PublishHeader(g_Settings.requireModifier?modStr:"",
-                    canIdentify?"Identify":(canMoveToBelt?"To Belt":nullptr),
+                    canIdentifyAll?"Identify All":canIdentify?"Identify":(canMoveToBelt?"To Belt":nullptr),
                     canMove?moveAction:nullptr,canMoveToCube?"To Cube":nullptr,
-                    canAutoFill?(vendorStock?"Refill / Buy":"Fill Belt"):nullptr);
+                    canAutoFill?(vendorStock?"Refill / Buy":"Fill Belt"):nullptr,canBulkStash?"Stash All":nullptr);
                 int promptLen = 0;
                 auto appendLine = [&](const char* btn, const char* act) {
                     if (promptLen > 0 && promptLen < static_cast<int>(sizeof(prompt)) - 1) {
@@ -1190,7 +1193,9 @@ static void __cdecl OnItemTooltipCallback(
                     }
                 };
 
-                if (canIdentify) {
+                if (canIdentifyAll) {
+                    appendLine("A", "Identify All");
+                } else if (canIdentify) {
                     appendLine("A", "Identify");
                 } else if (canMoveToBelt) {
                     appendLine("A", "To Belt");
@@ -1213,213 +1218,6 @@ static void __cdecl OnItemTooltipCallback(
             }
         }
     }
-}
-
-static void OnRegularDpadStep(uint16_t dpadDirection) noexcept {
-    const bool isStashOpen  = TestUiMode(UI_MODE_STASH);
-    const bool isCubeOpen   = TestUiMode(UI_MODE_CUBE);
-    const bool isVendorOpen = IsVendorPanelOpen();
-    const bool isDualPanel  = (isStashOpen || isCubeOpen || isVendorOpen);
-
-    int x = s_FocusedCellX.load();
-    int y = s_FocusedCellY.load();
-    if (x < 0) x = 0;
-    if (y < 0) y = 0;
-    auto container = s_FocusedContainer.load();
-
-    if (dpadDirection == XINPUT_GAMEPAD_DPAD_RIGHT) {
-        if (x < 9) {
-            x++;
-        } else if (isDualPanel && container != D2RL::Items::ItemContainer::Inventory) {
-            // Crossing boundary from Stash/Cube/Vendor into Inventory!
-            x = 0;
-            container = D2RL::Items::ItemContainer::Inventory;
-            s_FocusedItem.store(D2RL::InvalidItemHandle);
-        }
-    } else if (dpadDirection == XINPUT_GAMEPAD_DPAD_LEFT) {
-        if (x > 0) {
-            x--;
-        } else if (isDualPanel && container == D2RL::Items::ItemContainer::Inventory) {
-            // Crossing boundary from Inventory into Stash/Cube/Vendor!
-            x = 9;
-            container = isStashOpen ? D2RL::Items::ItemContainer::PersonalStash :
-                        (isCubeOpen ? D2RL::Items::ItemContainer::Cube : D2RL::Items::ItemContainer::Trade);
-            s_FocusedItem.store(D2RL::InvalidItemHandle);
-        }
-    } else if (dpadDirection == XINPUT_GAMEPAD_DPAD_DOWN) {
-        if (y < 7) y++;
-    } else if (dpadDirection == XINPUT_GAMEPAD_DPAD_UP) {
-        if (y > 0) y--;
-    }
-
-    s_FocusedCellX.store(x);
-    s_FocusedCellY.store(y);
-    s_FocusedContainer.store(container);
-}
-
-static bool OnSpatialLeapRequest(uint16_t dpadDirection, int& outDeltaX, int& outDeltaY) noexcept {
-    if (!g_Settings.enabled) return false;
-
-    // Check if an inventory / stash / cube / vendor screen is open
-    const bool isInvOpen   = TestUiMode(UI_MODE_INVENTORY);
-    const bool isStashOpen = TestUiMode(UI_MODE_STASH);
-    const bool isCubeOpen  = TestUiMode(UI_MODE_CUBE);
-    const bool isVendorOpen= IsVendorPanelOpen();
-    if (!isInvOpen && !isStashOpen && !isCubeOpen && !isVendorOpen) {
-        return false;
-    }
-
-    int curX = s_FocusedCellX.load();
-    int curY = s_FocusedCellY.load();
-    auto container = s_FocusedContainer.load();
-
-    if (container == D2RL::Items::ItemContainer::Unknown) {
-        if (isInvOpen && !isStashOpen && !isCubeOpen && !isVendorOpen) {
-            container = D2RL::Items::ItemContainer::Inventory;
-        } else if (isStashOpen) {
-            container = D2RL::Items::ItemContainer::PersonalStash;
-        } else if (isCubeOpen) {
-            container = D2RL::Items::ItemContainer::Cube;
-        } else if (isVendorOpen) {
-            container = D2RL::Items::ItemContainer::Trade;
-        } else {
-            container = D2RL::Items::ItemContainer::Inventory;
-        }
-    }
-
-    if (curX < 0 || curY < 0) {
-        curX = 0;
-        curY = 0;
-    }
-
-    constexpr int MAX_GRID_X = 20;
-    constexpr int MAX_GRID_Y = 20;
-    uint64_t grid[MAX_GRID_X][MAX_GRID_Y] = {};
-
-    struct ItemRecord {
-        D2RL::ItemHandle handle;
-        uint32_t code;
-        int x;
-        int y;
-        int w;
-        int h;
-    };
-    std::vector<ItemRecord> items;
-
-    if (g_Inventory && g_PluginContext) {
-        D2RL::PlayerHandle player = D2RL::InvalidPlayerHandle;
-        if (g_Inventory->getLocalPlayer(g_PluginContext, &player) == D2RL::Inventory::Result::Success) {
-            D2RL::Inventory::ItemFilter filter{
-                .structSize    = D2RL::Inventory::ItemFilterSize,
-                .flags         = 0,
-                .containerMask = D2RL::Items::ContainerBit(container),
-                .reserved      = 0,
-            };
-            g_Inventory->forEachInventoryItem(g_PluginContext, player, &filter,
-                [](const D2RL::PluginContext*, const D2RL::Items::ItemInfo* it, void* u) noexcept {
-                    auto* list = static_cast<std::vector<ItemRecord>*>(u);
-                    int w = 1, h = 1;
-                    ControllerQoL::GetItemDimensions(it->code, w, h);
-                    list->push_back({ it->handle, it->code, it->x, it->y, w, h });
-                    return D2RL::Inventory::IterationAction::Continue;
-                }, &items);
-        }
-    }
-
-    if (items.empty()) return false;
-
-    // Populate the 2D occupancy grid
-    for (const auto& it : items) {
-        for (int dx = 0; dx < it.w; ++dx) {
-            for (int dy = 0; dy < it.h; ++dy) {
-                const int gx = it.x + dx;
-                const int gy = it.y + dy;
-                if (gx >= 0 && gx < MAX_GRID_X && gy >= 0 && gy < MAX_GRID_Y) {
-                    grid[gx][gy] = it.handle;
-                }
-            }
-        }
-    }
-
-    const uint64_t curHandle = (curX >= 0 && curX < MAX_GRID_X && curY >= 0 && curY < MAX_GRID_Y)
-                               ? grid[curX][curY] : 0;
-
-    int targetX = -1;
-    int targetY = -1;
-
-    if (dpadDirection == XINPUT_GAMEPAD_DPAD_RIGHT) {
-        // Raycast straight RIGHT along row curY (no 90-degree turns)
-        for (int x = curX + 1; x < MAX_GRID_X; ++x) {
-            const uint64_t h = grid[x][curY];
-            if (h != 0 && h != curHandle) {
-                targetX = x;
-                targetY = curY;
-                break;
-            }
-        }
-    } else if (dpadDirection == XINPUT_GAMEPAD_DPAD_LEFT) {
-        // Raycast straight LEFT along row curY (no 90-degree turns)
-        for (int x = curX - 1; x >= 0; --x) {
-            const uint64_t h = grid[x][curY];
-            if (h != 0 && h != curHandle) {
-                targetX = x;
-                targetY = curY;
-                break;
-            }
-        }
-    } else if (dpadDirection == XINPUT_GAMEPAD_DPAD_DOWN) {
-        // Raycast straight DOWN along column curX (no 90-degree turns)
-        for (int y = curY + 1; y < MAX_GRID_Y; ++y) {
-            const uint64_t h = grid[curX][y];
-            if (h != 0 && h != curHandle) {
-                targetX = curX;
-                targetY = y;
-                break;
-            }
-        }
-    } else if (dpadDirection == XINPUT_GAMEPAD_DPAD_UP) {
-        // Raycast straight UP along column curX (no 90-degree turns)
-        for (int y = curY - 1; y >= 0; --y) {
-            const uint64_t h = grid[curX][y];
-            if (h != 0 && h != curHandle) {
-                targetX = curX;
-                targetY = y;
-                break;
-            }
-        }
-    }
-
-    if (targetX >= 0 && targetY >= 0) {
-        outDeltaX = targetX - curX;
-        outDeltaY = targetY - curY;
-
-        // Immediately update cursor tracking so consecutive presses work seamlessly
-        s_FocusedCellX.store(targetX);
-        s_FocusedCellY.store(targetY);
-
-        if (g_PluginContext) {
-            char leapMsg[256];
-            std::snprintf(leapMsg, sizeof(leapMsg),
-                "[ControllerQoL] Spatial Leap: straight from (%d,%d) -> to (%d,%d), delta=(%d,%d), dir=0x%04X",
-                curX, curY, targetX, targetY, outDeltaX, outDeltaY, dpadDirection);
-            g_PluginContext->LogInfo(leapMsg);
-
-            if (dpadDirection == XINPUT_GAMEPAD_DPAD_RIGHT || dpadDirection == XINPUT_GAMEPAD_DPAD_LEFT) {
-                char rowBuf[256];
-                int offset = std::snprintf(rowBuf, sizeof(rowBuf), "[ControllerQoL] Row %d occupancy: ", curY);
-                for (int x = 0; x < 10; ++x) {
-                    if (offset + 12 < static_cast<int>(sizeof(rowBuf))) {
-                        offset += std::snprintf(rowBuf + offset, sizeof(rowBuf) - offset,
-                            "[%d:%s] ", x, grid[x][curY] != 0 ? "OCC" : "---");
-                    }
-                }
-                g_PluginContext->LogInfo(rowBuf);
-            }
-        }
-        return true;
-    }
-
-    return false;
 }
 
 } // namespace
@@ -1479,44 +1277,70 @@ namespace GroundLoot {
     static UnitPairFn s_UnitDistance = nullptr;
     static CollisionFn s_UnitCollision = nullptr;
     static PickupFn s_Pickup = nullptr;
-    static PickupFn s_OriginalPickup = nullptr;
+    static std::atomic<bool> s_PickupCallsActive{false};
     static GetItemCodeFn s_GetItemCode = nullptr;
 
-    inline thread_local bool t_IsPluginPickup = false;
-
     __declspec(noinline) bool __fastcall HookPickup(void* player, uint32_t guid, bool arg3, uint32_t dist, bool arg5, bool arg6) {
-        if (t_IsPluginPickup || QolCompat::IsPluginCaller(reinterpret_cast<uintptr_t>(_ReturnAddress()))) {
-            return s_OriginalPickup ? s_OriginalPickup(player, guid, arg3, dist, arg5, arg6) : false;
-        }
+        if (!s_Pickup) return false;
+        if (!s_PickupCallsActive.load())
+            return s_Pickup(player, guid, arg3, dist, arg5, arg6);
 
-        // If this pickup was initiated natively by the game (e.g. user pressing A) while ground modifier is held:
-        if (ControllerQoL::IsGroundPickupActive(g_Settings.groundPickupButton)) {
+        const bool shortcutsEnabled = Probe::GroundShortcutsEnabled(g_Settings.enabled, g_Settings.groundPickup);
+        const bool modifierHeld = shortcutsEnabled &&
+            ControllerQoL::IsGroundPickupActive(g_Settings.groundPickupButton);
+        const bool placardActive = !g_Settings.blockFilteredPickup || PlacardOverlay::IsPlacardActive(guid);
+        if (Probe::BlockNativePickup(shortcutsEnabled, modifierHeld,
+                g_Settings.blockFilteredPickup, placardActive)) {
             if (g_PluginContext && g_Settings.debugLogging) {
                 char supMsg[128];
                 std::snprintf(supMsg, sizeof(supMsg),
-                    "[ControllerQoL] Suppressed native game pickup for GUID=%u (ground modifier held)", guid);
+                    "[ControllerQoL] Suppressed native game pickup for GUID=%u (%s)", guid,
+                    modifierHeld ? "ground modifier held" : "filtered by loot filter");
                 g_PluginContext->LogInfo(supMsg);
             }
             return false;
         }
+        return s_Pickup(player, guid, arg3, dist, arg5, arg6);
+    }
 
-        // Suppress native pickup (e.g. pressing A) for items without an active visible placard (filtered out by loot filter)
-        if (g_Settings.blockFilteredPickup && !PlacardOverlay::IsPlacardActive(guid)) {
-            if (g_PluginContext && g_Settings.debugLogging) {
-                char supMsg[128];
-                std::snprintf(supMsg, sizeof(supMsg),
-                    "[ControllerQoL] Suppressed native game pickup for GUID=%u (filtered by loot filter)", guid);
-                g_PluginContext->LogInfo(supMsg);
-            }
+    static bool InstallPickupCalls(const D2RL::PluginContext* context) noexcept {
+        if (!context || !context->exeBase) return false;
+        HMODULE pinned{};
+        if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_PIN,
+                reinterpret_cast<LPCWSTR>(&HookPickup), &pinned)) return false;
+        SYSTEM_INFO info{};
+        GetSystemInfo(&info);
+        const uintptr_t step = info.dwAllocationGranularity;
+        const uintptr_t aligned = (context->exeBase + QolPickupCalls::Calls[0].rva) & ~(step - 1);
+        unsigned char* relay = nullptr;
+        for (uintptr_t offset = step; offset < 0x40000000 && !relay; offset += step)
+            relay = static_cast<unsigned char*>(VirtualAlloc(reinterpret_cast<void*>(aligned + offset),
+                64, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE));
+        if (!relay) return false;
+        relay[0] = 0xff;
+        relay[1] = 0x25;
+        std::memset(relay + 2, 0, 4);
+        const auto destination = &HookPickup;
+        std::memcpy(relay + 6, &destination, sizeof(destination));
+        DWORD old{};
+        if (!VirtualProtect(relay, 64, PAGE_EXECUTE_READ, &old) ||
+            !FlushInstructionCache(GetCurrentProcess(), relay, 64)) {
+            VirtualFree(relay, 0, MEM_RELEASE);
             return false;
         }
-
-        return s_OriginalPickup ? s_OriginalPickup(player, guid, arg3, dist, arg5, arg6) : false;
+        // Keep the relay and pinned wrapper for process lifetime once publication
+        // begins. A partial failure remains harmless because active stays false.
+        const bool published = QolPickupCalls::Publish(context->exeBase,
+            reinterpret_cast<uintptr_t>(relay),
+            [context](uintptr_t rva, const unsigned char* expected, const unsigned char* replacement) {
+                return context->PatchBytes(rva, expected, 5, replacement, 5);
+            });
+        if (published) s_PickupCallsActive.store(true);
+        return published;
     }
 
     static uint32_t s_HookTriggerCount = 0;
     static std::atomic<int32_t> s_PendingPickupSlot{-1};
-
     static void UpdateStickySlotsUnsafe(void* player, void* game, uint32_t maxDistance, const D2RL::PluginContext* context, bool forceRefresh = false);
 
     static uint32_t InspectGroundItemsUnsafe(void* player, void* game, const D2RL::PluginContext* context, bool verbose) {
@@ -2022,9 +1846,7 @@ namespace GroundLoot {
         const int32_t targetDist = s_StickySlots[actualSlot].distance;
         const uint32_t targetQual = s_StickySlots[actualSlot].quality;
 
-        t_IsPluginPickup = true;
         const bool picked = s_Pickup(player, targetGuid, true, maxDistance, true, false);
-        t_IsPluginPickup = false;
 
         if (context) {
             char msg[192];
@@ -2062,7 +1884,6 @@ namespace GroundLoot {
 
     static void ObserveTrigger(uint8_t opcode, void* game, void* player,
         void* packet, int32_t size) noexcept {
-        (void)packet; (void)size;
         s_ActiveGame = game;
         s_ActivePlayer = player;
 
@@ -2089,7 +1910,9 @@ namespace GroundLoot {
             InspectGroundItems(player, targetGame, g_PluginContext, false);
 
             const int32_t pendingSlot = s_PendingPickupSlot.exchange(-1);
-            if (pendingSlot >= 0 && player && QolNavigation::GroundShortcutsAllowed()) {
+            if (pendingSlot >= 0 && player &&
+                Probe::GroundShortcutsEnabled(g_Settings.enabled,g_Settings.groundPickup) &&
+                QolNavigation::GroundShortcutsAllowed()) {
                 const uint32_t dist = std::max(g_Settings.groundPickupDistance, 10U);
                 PickupCandidateSlot(player, targetGame, static_cast<uint32_t>(pendingSlot), dist, g_PluginContext);
             }
@@ -2101,6 +1924,7 @@ namespace GroundLoot {
         return QolCompat::ActionHooks::Install(context, &ObserveTrigger);
     }
     static void UninstallHooks(const D2RL::PluginContext*) noexcept {
+        s_PickupCallsActive.store(false);
         QolCompat::ActionHooks::Shutdown();
         s_ActivePlayer = nullptr;
         s_ActiveGame = nullptr;
@@ -2311,7 +2135,8 @@ namespace PlacardOverlay {
         RegisterPlacard(guid, textBuffer, bufferSize, isWide);
 
         // If ground pickup modifier is currently held down, apply the prefix immediately
-        if (ControllerQoL::IsGroundPickupActive(g_Settings.groundPickupButton)) {
+        if (Probe::GroundShortcutsEnabled(g_Settings.enabled,g_Settings.groundPickup) &&
+            ControllerQoL::IsGroundPickupActive(g_Settings.groundPickupButton)) {
             for (size_t i = 0; i < GroundLoot::NUM_STICKY_SLOTS; ++i) {
                 if (GroundLoot::s_StickySlots[i].guid == guid) {
                     ApplyPlacardBuffer(s_TrackedPlacards.at(guid),
@@ -2370,7 +2195,8 @@ static void __cdecl ClearPlacardsTask(const D2RL::PluginContext* context, void* 
 
 static void __cdecl RefreshStickySlotsTask(const D2RL::PluginContext* context, void* userData) noexcept {
     (void)userData;
-    if (!QolNavigation::GroundShortcutsAllowed()) return;
+    if (!Probe::GroundShortcutsEnabled(g_Settings.enabled,g_Settings.groundPickup) ||
+        !QolNavigation::GroundShortcutsAllowed()) return;
     void* player = GroundLoot::s_ActivePlayer;
     // PlayerHandle is an opaque SDK ID, never a UnitAny pointer. Until a
     // native action supplies context, skip rather than reinterpret a handle.
@@ -2410,7 +2236,8 @@ static void __cdecl PickupGroundTask(const D2RL::PluginContext* context, void* u
     auto* args = static_cast<PickupTaskArgs*>(userData);
     const uint32_t slot = args ? args->slotIndex : 0;
     delete args;
-    if (!QolNavigation::GroundShortcutsAllowed()) {GroundLoot::s_PendingPickupSlot.store(-1);return;}
+    if (!Probe::GroundShortcutsEnabled(g_Settings.enabled,g_Settings.groundPickup) ||
+        !QolNavigation::GroundShortcutsAllowed()) {GroundLoot::s_PendingPickupSlot.store(-1);return;}
 
     // Check if HookTrigger already consumed and executed this pending slot
     if (GroundLoot::s_PendingPickupSlot.load() == static_cast<int32_t>(slot)) {
@@ -2607,7 +2434,10 @@ D2RL_PLUGIN_EXPORT auto D2RLoaderLoadPlugin(const D2RL::PluginContext* context) 
 
     // Initialize Ground Loot Native Subsystem
     GroundLoot::s_Base = reinterpret_cast<uint8_t*>(context->exeBase);
-    if (GroundLoot::s_Base && g_Settings.groundPickup) {
+    // Filtered A-button blocking is independent of the optional direct-loot
+    // shortcuts, but both rely on this guarded native/placard observation path.
+    if (GroundLoot::s_Base && Probe::GroundLootHooksRequired(
+            g_Settings.groundPickup, g_Settings.blockFilteredPickup)) {
         const bool match = context->CheckExpectedBytes(
             GroundLoot::GetItemCodeRva,
             GroundLoot::GetItemCodeExpected,
@@ -2633,11 +2463,15 @@ D2RL_PLUGIN_EXPORT auto D2RLoaderLoadPlugin(const D2RL::PluginContext* context) 
             GroundLoot::s_Pickup = reinterpret_cast<GroundLoot::PickupFn>(GroundLoot::s_Base + GroundLoot::PickupRva);
             GroundLoot::s_GetItemCode = reinterpret_cast<GroundLoot::GetItemCodeFn>(GroundLoot::s_Base + GroundLoot::GetItemCodeRva);
 
-            const bool installed = GroundLoot::InstallHooks(context, GroundLoot::s_Base);
-            if (installed) {
-                context->LogInfo("[ControllerQoL] Native Ground Loot handler observers installed; packet table unchanged.");
+            if (g_Settings.groundPickup) {
+                const bool installed = GroundLoot::InstallHooks(context, GroundLoot::s_Base);
+                if (installed) {
+                    context->LogInfo("[ControllerQoL] Native Ground Loot handler observers installed; packet table unchanged.");
+                } else {
+                    context->LogWarn("[ControllerQoL] Native handler observer admission/installation failed; observation disabled.");
+                }
             } else {
-                context->LogWarn("[ControllerQoL] Native handler observer admission/installation failed; observation disabled.");
+                context->LogInfo("[QOL/Loot] Direct ground shortcuts disabled; filtered A-button guard remains eligible.");
             }
 
             // Diagnostic Ground Label Placard Engine match
@@ -2699,37 +2533,38 @@ D2RL_PLUGIN_EXPORT auto D2RLoaderLoadPlugin(const D2RL::PluginContext* context) 
                 ? "[QOL/Placards] Scoped label call installed at game+0x1FAA18; shared builder+0xCBEB0 untouched."
                 : "[QOL/Placards] Label caller guard/patch failed; controller label hints unavailable.");
 
-            // Install Native Pickup Hook (to suppress vanilla auto-pickup of closest item on "A" when L1 is held)
-            const uint8_t* pPickupCode = GroundLoot::s_Base + GroundLoot::PickupRva;
-            const bool pickupHookOk = context->InstallInlineHook(
-                GroundLoot::PickupRva,
-                pPickupCode,
-                16,
-                reinterpret_cast<void*>(&GroundLoot::HookPickup),
-                reinterpret_cast<void**>(&GroundLoot::s_OriginalPickup));
-
-            if (pickupHookOk) {
-                context->LogInfo("[ControllerQoL] Native Pickup hook installed successfully!");
-                GroundLoot::s_Pickup = GroundLoot::s_OriginalPickup;
-            } else {
-                context->LogWarn("[ControllerQoL] Native Pickup hook installation failed.");
-            }
+            const bool pickupCallsOk = GroundLoot::InstallPickupCalls(context);
+            context->LogInfo(pickupCallsOk
+                ? "[QOL/Loot] Seven guarded pickup CALL patches installed; shared game+0x471950 entry left untouched."
+                : "[QOL/Loot] Pickup CALL-site guard mismatch/publication failure; native pickup behavior preserved.");
         }
     }
 
     QolIdentifyStat::Initialize(context);
+    QolNativeIdentify::Initialize(context,g_Items,g_Threads);
     (void)QolCustomPage::Initialize(context);
     if (!QolMaterials::Initialize(context))
         context->LogWarn("[QOL/Materials] Advanced withdrawals unavailable; inspect native admission diagnostics.");
     if (!QolBelt::Initialize(context))
         context->LogWarn("[QOL/Belt] Potion shortcuts disabled: required SDK services or native contract unavailable.");
 
-    // Register spatial inventory leap callback & hooks
-    ControllerQoL::SetSpatialLeapCallback(OnSpatialLeapRequest);
-    ControllerQoL::SetRegularDpadCallback(OnRegularDpadStep);
+    // Register controller shortcut callbacks and hooks
     ControllerQoL::SetTriggerPassThroughPredicate(+[]() noexcept {
         return TestUiMode(UI_MODE_STASH) && QolNavigation::SharedPageInputActive();
     });
+    QolGlyphs::SetBulkHeaderContext(+[]() noexcept -> const char* {
+        if(!g_Settings.enabled || !Probe::BatchFeatureEnabled(g_Settings.quickMove,g_Settings.quickDeposit) || !TestUiMode(UI_MODE_STASH))return nullptr;
+        const auto* mode=g_Settings.modifier;
+        if(_stricmp(mode,"bumper")==0 || _stricmp(mode,"lb")==0 || _stricmp(mode,"l1")==0)return "LB";
+        if(_stricmp(mode,"l3")==0)return "L3";
+        if(_stricmp(mode,"[")==0 || _stricmp(mode,"bracket")==0 || _stricmp(mode,"leftbracket")==0 || _stricmp(mode,"l4")==0)return "[";
+        return "LT";
+    });
+    QolBulkStash::Initialize(context,+[]() noexcept {
+        return g_Settings.enabled && Probe::BatchFeatureEnabled(g_Settings.quickMove,g_Settings.quickDeposit) && ControllerQoL::IsControllerUiActive() &&
+            TestUiMode(UI_MODE_STASH) && !QolBelt::Busy() && !QolMaterials::Busy();
+    });
+    ControllerQoL::SetBulkStashCallback(QolBulkStash::Request);
     ControllerQoL::SetQuickMoveCallback(TriggerQuickMoveOnFocusedItem);
     ControllerQoL::SetQuickMoveCubeCallback(TriggerQuickMoveToCubeOnFocusedItem);
     ControllerQoL::SetAutoFillBeltCallback(TriggerAutoFillBelt);
@@ -2807,6 +2642,11 @@ D2RL_PLUGIN_EXPORT auto D2RLoaderLoadPlugin(const D2RL::PluginContext* context) 
                 }
 
                 if ((GetTickCount64() - g_LastInventoryInteractionTick.load()) < 500) {
+                    continue;
+                }
+
+                if (!Probe::GroundShortcutsEnabled(g_Settings.enabled,g_Settings.groundPickup)) {
+                    GroundLoot::s_PendingPickupSlot.store(-1);
                     continue;
                 }
 
@@ -2940,9 +2780,14 @@ D2RL_PLUGIN_EXPORT auto D2RLoaderLoadPlugin(const D2RL::PluginContext* context) 
     if (!QolNavigation::Initialize(context, g_Settings.enabled, g_Settings.debugLogging)) {
         context->LogWarn("[QOL] Navigation/label module unavailable; inspect QOL diagnostics. Item features remain loaded.");
     }
-    QolPortal::Initialize(context, g_Settings.enabled && g_Settings.groundPickup && g_Settings.prioritizePortals,
-        g_Settings.debugLogging || g_Settings.portalDiagnostics, g_Settings.groundPickupButton, g_Settings.portalPriorityDistance);
-    context->LogInfo("[QOL] QOL v1.3.1+rev.22 loaded: controller item features and integrated v0.6 navigation/label hooks.");
+    QolPortal::Initialize(context,
+        g_Settings.enabled && (g_Settings.prioritizePortals || g_Settings.prioritizeStashBoxes ||
+            g_Settings.prioritizeWaypoints || g_Settings.prioritizeShrines || g_Settings.prioritizeChests),
+        g_Settings.groundPickup, g_Settings.prioritizePortals, g_Settings.prioritizeStashBoxes,
+        g_Settings.prioritizeWaypoints, g_Settings.prioritizeShrines, g_Settings.prioritizeChests,
+        g_Settings.debugLogging || g_Settings.portalDiagnostics,
+        g_Settings.groundPickupButton, g_Settings.portalPriorityDistance);
+    context->LogInfo("[QOL] QOL v1.3.1+rev.46 loaded: controller item features and integrated v0.6 navigation/label hooks.");
     return true;
 }
 
@@ -2953,14 +2798,15 @@ D2RL_PLUGIN_EXPORT void D2RLoaderUnloadPlugin() noexcept {
     }
     ControllerQoL::UninstallXInputHooks(); // Drain input before destroying callback dependencies.
     PlacardOverlay::Shutdown();
+    QolBulkStash::Shutdown();
+    ControllerQoL::SetBulkStashCallback(nullptr);
+    QolNativeIdentify::Shutdown();
     QolPortal::Shutdown();
     QolBelt::Shutdown();
     QolMaterials::Shutdown();
     QolCustomPage::Shutdown();
     ControllerQoL::SetAutoFillBeltCallback(nullptr);
     QolNavigation::Shutdown();
-    ControllerQoL::SetSpatialLeapCallback(nullptr);
-    ControllerQoL::SetRegularDpadCallback(nullptr);
     ControllerQoL::SetTriggerPassThroughPredicate(nullptr);
     ControllerQoL::SetQuickMoveCallback(nullptr);
     ControllerQoL::SetQuickMoveCubeCallback(nullptr);
@@ -2979,4 +2825,3 @@ D2RL_PLUGIN_EXPORT void D2RLoaderUnloadPlugin() noexcept {
     g_ActionHandle = D2RL::Input::InvalidHandle;
     g_TooltipActionHandle = D2RL::SharedEvents::InvalidHandle;
 }
-

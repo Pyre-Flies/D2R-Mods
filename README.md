@@ -7,8 +7,8 @@ D2RLoader plugins for Diablo II: Resurrected.
 
 | Plugin | Current source version | Status |
 |---|---:|---|
-| [Controller QOL Updates](plugins/controller-qol/README.md) | 1.3.1+rev.7 | Production candidate; build-specific native hooks |
-| [Item Roll Ranges](plugins/item-roll-ranges/README.md) | 1.3.1+rev.1 | Experimental; build-specific formatter/table integration |
+| [Controller QOL Updates](plugins/controller-qol/README.md) | 1.3.1+rev.46 | Production candidate; build-specific native hooks |
+| [Item Roll Ranges](plugins/item-roll-ranges/README.md) | 1.3.1+rev.13 | Production; build-specific formatter/table integration |
 | [Map Assistance](plugins/map-assistance/README.md) | 1.3.1+rev.1 | Configurable non-town campaign coverage |
 
 Each plugin is independently buildable and keeps its own README, changelog,

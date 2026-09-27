@@ -1,18 +1,44 @@
 #pragma once
 #include <string_view>
 namespace Probe {
+inline bool GroundLootHooksRequired(bool groundPickup,bool blockFilteredPickup) noexcept {
+    return groundPickup || blockFilteredPickup;
+}
+inline bool GroundShortcutsEnabled(bool pluginEnabled,bool groundPickup) noexcept {
+    return pluginEnabled && groundPickup;
+}
+inline bool BlockNativePickup(bool shortcutsEnabled,bool modifierHeld,
+                              bool blockFilteredPickup,bool placardActive) noexcept {
+    return (shortcutsEnabled && modifierHeld) ||
+           (blockFilteredPickup && !placardActive);
+}
 inline bool GroundShortcutsAllowed(unsigned dedicated,unsigned submenus) noexcept {
     return dedicated==0 && submenus==0;
+}
+inline bool BatchFeatureEnabled(bool masterEnabled,bool featureEnabled) noexcept {
+    return masterEnabled && featureEnabled;
 }
 inline unsigned SubPanelBit(std::string_view name) noexcept {
     if(name=="QuestLogPanelExpansion" || name=="QuestLogPanelOriginal") return 1;
     if(name=="SkillsTreePanel") return 2;
     if(name=="SettingsPanel") return 4;
     if(name=="ChroniclePanel") return 8;
+    if(name=="LootFilterRuleDetailsPanel") return 16;
+    if(name=="LootFilterItemPanel") return 32;
+    if(name=="LootFilterOptionsPanel") return 64;
     return 0;
 }
 inline bool OptionsTab(std::string_view widget,std::string_view parent,bool visible) noexcept {
     return visible && widget=="OptionsTabs" && parent=="SettingsPanel";
+}
+inline bool LootFilterTab(std::string_view widget,std::string_view parent,bool visible) noexcept {
+    return visible && widget=="ItemListTabs" && parent=="LootFilterRuleDetailsPanel";
+}
+inline bool RecoverFilterTabFocus(unsigned before,unsigned after,bool missing) noexcept {
+    return before<2 && after<2 && before!=after && missing;
+}
+inline bool EnterFilterItems(bool active,bool focused,unsigned action) noexcept {
+    return active && focused && action==13; // Down observed at the focused rule tab.
 }
 inline bool ChronicleTab(std::string_view widget,std::string_view parent,bool visible) noexcept {
     return visible && widget=="ChronicleTabs" && parent=="ChroniclePanel";

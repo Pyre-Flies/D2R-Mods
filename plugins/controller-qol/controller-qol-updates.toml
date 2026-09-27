@@ -1,7 +1,12 @@
 [qol]
 enabled = true
 quick_identify = true
+identify_all = true
+# Compatibility option: native hold-A sequence instead of faster SDK edits.
+# No automatic native retry after a failed SDK mutation.
+native_identify = false
 quick_move = true
+quick_deposit = true
 require_tome_or_scroll = true
 consume_tome_or_scroll = true
 require_modifier = true
@@ -13,6 +18,10 @@ ground_pickup_distance = 6
 debug_logging = false
 block_filtered_pickup = true
 prioritize_portals = true
+prioritize_stash_boxes = true
+prioritize_waypoints = true
+prioritize_shrines = true
+prioritize_chests = false
 portal_priority_distance = 10
 # Targeted, throttled portal selection diagnostics; separate from general debug.
 portal_diagnostics = false

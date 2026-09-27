@@ -6,7 +6,8 @@
 // Shared admission for every private D2RCore address. Never accept a new hash
 // without recovering and reviewing the associated code and data RVAs.
 namespace QolCore {
-inline bool VerifyFileHash(HMODULE module, const unsigned char (&expected)[32]) noexcept {
+inline bool VerifyFileHash(HMODULE module, const unsigned char (&expected)[32], unsigned char* actual=nullptr, bool* readable=nullptr) noexcept {
+    if(readable)*readable=false;
     if (!module) return false;
     wchar_t path[32768]{};
     if (!GetModuleFileNameW(module,path,32768)) return false;
@@ -26,6 +27,8 @@ inline bool VerifyFileHash(HMODULE module, const unsigned char (&expected)[32]) 
     if(hash) BCryptDestroyHash(hash);
     if(algorithm) BCryptCloseAlgorithmProvider(algorithm,0);
     CloseHandle(file);
+    if(ok && actual)std::memcpy(actual,digest,32);
+    if(readable)*readable=ok;
     return ok && std::memcmp(digest,expected,32)==0;
 }
 inline bool VerifyCore(HMODULE module) noexcept {

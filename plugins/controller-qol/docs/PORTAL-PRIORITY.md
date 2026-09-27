@@ -1,5 +1,8 @@
 # Neutral interaction: portal priority (1.5.19)
 
+> Rev.43 extends this same guarded pipeline to the exact town Bank class and
+> waypoint SubClass. See [STASH-WAYPOINT-PRIORITY-REV43.md](STASH-WAYPOINT-PRIORITY-REV43.md).
+
 ## Behavior and scope
 
 An eligible portal within `portal_priority_distance` (default 10 native game units, inclusive; clamped to 1–20) wins an Interact comparison against a ground item. `prioritize_portals = true` is the default; false disables installation of this hook. Enabled/ground_pickup must also be true. Ground-loot modifier gestures retain their original targeting. Dedicated Loot (358), CubeLoot (370), combat skills, NPC comparisons and other object comparisons are unchanged.

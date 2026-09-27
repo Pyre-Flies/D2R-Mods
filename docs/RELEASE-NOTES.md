@@ -1,14 +1,13 @@
-## Controller QOL Updates 1.3.1+rev.22
+## Controller QOL Updates 1.3.1+rev.46
 
-- Fix stash withdrawal selecting items from the wrong container; use SDK transactions for normal Shared Stash transfers with explicit page selection.
-- Keep ground labels on only in controller mode and recover stale labels after identification, preserving keyboard/mouse Alt behavior.
-- Read Tome of Identify charges through stat 70, with checked SDK edits and rollback handling.
-- Improve potion compatibility with Auto Belt Refill while retaining standalone operation. LB+R3 on vendor potions fills from inventory, then buys missing potions through native bulk-buy behavior.
-- Use LB/RB inside Options and Chronicle while retaining LT/RT outer menu navigation.
-- Remove invalid SDK-handle-to-native-pointer conversions and block menu navigation from queuing ground-loot actions, fixing the reported Chronicle-to-Quest crash.
-- Add available item shortcuts to controller headers and move native Show Ranges to RB independently of Item Roll Ranges, preserving that plugin's detailed-range interception.
+- Add SDK-first Identify All for inventory and Cube items, with verified tome-charge accounting, bounded sequencing, exact item identity checks, and an optional native compatibility mode.
+- Add LB+L3 Stash All for eligible advanced-storage transfers and keep its header hint visible over empty stash slots. `quick_deposit` and `identify_all` independently gate the batch features.
+- Keep filtered items blocked from bare-A pickup independently of the optional LB ground-pickup shortcuts, and avoid competing for Auto Deposit's shared pickup hook.
+- Prefer portals, the personal stash, waypoints, shrines, and wells over nearby ground loot when using neutral A. Ordinary chests remain opt-in. Each family remains configurable and uses the shared priority distance.
+- Admit a reviewed pre-existing executable detour on the shared object-class getter without patching or bypassing its owner; unknown owners and changed tails still fail open.
+- Preserve the rev.22 controller header, native range-query, menu-navigation, transfer, potion, label, and crash fixes.
 
-This release packages the previously built rev.22 artifact; all 19 QOL suites passed during development. No additional local test run was requested for publication. The header layout remains an initial implementation with spacing limitations. Rev.22's standalone and combined-plugin RB behavior still awaits explicit live confirmation; earlier fixes have the validation details recorded in the included documentation.
+All 20 Controller QOL suites pass locally, including DLL ABI/export/version checks and policy coverage. The user has confirmed the later identification and bulk-stash iterations and reported that the expanded interaction priority works substantially better; rev.46's environmental-well correction still needs a focused live retest. Static and automated coverage does not imply validation on unreviewed game builds.
 
 ## Included unchanged
 
@@ -19,4 +18,4 @@ This release packages the previously built rev.22 artifact; all 19 QOL suites pa
 
 Close the game and loader, back up existing DLLs, and extract the desired ZIPs into the game directory for a global installation. Preserve existing configuration and keep only one active copy of each plugin. Debug logging defaults remain off. Item Roll Ranges requires `d2rcore.items.item_stat_ranges = true`.
 
-Target: Windows x64, D2RLoader 1.3.1 / ABI4; SDK pinned to v0.3.0. Native features retain build-specific guards. See the bundled production record for compatibility limits. Hot reload is unsupported.
+Target: Windows x64, D2RLoader 1.3.1 / ABI4; SDK pinned to v0.3.0. Native features retain build-specific guards. See the bundled rev.46 production record for compatibility limits. Hot reload is unsupported.

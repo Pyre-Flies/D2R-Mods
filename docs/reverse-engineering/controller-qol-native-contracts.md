@@ -72,12 +72,21 @@ The reviewed caller supplies `true, true, false` for the wrapper's final flags. 
 
 | RVA / calls | Observed role | Current ownership direction |
 | --- | --- | --- |
-| `0x471950` | Native ground pickup path | Broad entry historically hooked; preserve filter and plugin-origin semantics when narrowing |
+| `0x471950` | Native ground pickup path | Shared entry is deliberately untouched in rev.42; allowed redirected game calls traverse the current entry owner, including Auto Deposit |
+| calls `0x410005`, `0x4112F5`, `0x416126`, `0x41738D` | Direct pickup calls in `D2Game\\src\\Player\\PlrMsgCheats.cpp` | Exact five-byte CALL guards; redirected to QOL's pickup policy wrapper |
+| calls `0x4BA0EF`, `0x4BBAD0` | Direct normal player-message pickup calls (`0x4BBAD0` carries `D2Game\\src\\Player\\PlrMsg.cpp` evidence) | Exact five-byte CALL guards; expected A/interact coverage requires live confirmation |
+| call `0x55496C` | Direct pickup call in `D2Game\\src\\Skills\\SkillSor.cpp`, consistent with the Sorceress skill path | Exact five-byte CALL guard; redirected without changing the shared entry |
 | `0xCBEB0` | Ground placard builder | Shared entry collided with Chronicle; current QOL uses scoped caller `0x1FAA18` |
 | `0x18B350` / `0x18AED0` / `0x18A650` | Portal score, range and comparison paths | Neutral portal priority with modifier-specific exclusions |
 | calls `0x191589`, `0x1922CD`, `0x192378` | Portal-contact call sites | Current rev.7 scoped CALL migration leaves shared entry `0x34BC90` untouched |
+| ObjectsTxt class `267` | Town stash (`Bank`, OperateFn 32 in the active table) | Rev.43 exact-class priority classifier; hidden stashes and chests are excluded |
+| ObjectsTxt `SubClass & 0x40` | Waypoint family (OperateFn 23 in all inspected active rows) | Rev.43 priority classifier using established compiled SubClass offset `+0x127` |
+| ObjectsTxt `SubClass & 0x01` | Shrine plus healing/mana-well family (OperateFn 2 in inspected active rows) | Rev.44 default-on priority classifier using established compiled SubClass offset `+0x127` |
+| ObjectsTxt classes `111, 113, 115, 118, 130, 132, 137, 138, 322, 426, 493, 498, 513, 519` | Complete environmental Fountain/Well family using OperateFn 22 in active table SHA-256 `45851636360723F5E1B3DE98207625748AF23546D40918C1BC8254A263F2747B` | Rev.46 exact allowlist under `prioritize_shrines`; avoids broad SubClass 0/32 promotion |
+| ObjectsTxt class allowlist (47 IDs) | Ordinary active-table chest family | Rev.44 opt-in priority; exact IDs in `SHRINE-CHEST-PRIORITY-REV44.md`, deliberately not generic SubClass 8 |
+| `0x349860` entry / exact tail `0x349865..0x34987F` | Object class getter shared-entry admission | Rev.45 accepts original prefix or executable rel32 `E9`, never patches/bypasses the owner, and still requires the reviewed 27-byte tail |
 
-See `plugins/controller-qol/docs/PORTAL-PRIORITY.md`, `PORTAL-CONTACT-1.3.1-rev.7.md`, `CHRONICLE-GROUND-FLAG-CONFLICT.md`, and `HOOK-SCOPE-REVIEW-2026-09-26.md`.
+See `plugins/controller-qol/docs/PORTAL-PRIORITY.md`, `STASH-WAYPOINT-PRIORITY-REV43.md`, `SHRINE-CHEST-PRIORITY-REV44.md`, `PORTAL-CONTACT-1.3.1-rev.7.md`, `CHRONICLE-GROUND-FLAG-CONFLICT.md`, and `HOOK-SCOPE-REVIEW-2026-09-26.md`.
 
 ## Reuse rules
 

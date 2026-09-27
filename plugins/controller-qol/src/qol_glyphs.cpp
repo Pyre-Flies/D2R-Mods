@@ -20,10 +20,12 @@ const D2RL::PluginContext* context=nullptr;
 std::atomic<bool> active{false};
 std::atomic<unsigned long long> mainDraws{0},subDraws{0},faults{0},hintDraws{0};
 thread_local Hint currentHint=Hint::None;
-struct HeaderSnapshot {char lines[4][128]{};unsigned long long tick=0;};
+struct HeaderSnapshot {char lines[7][128]{};unsigned long long tick=0;};
 HeaderSnapshot headerSnapshot{};
 std::mutex headerMutex;
+std::atomic<QolGlyphs::BulkHeaderContext> bulkHeaderContext{nullptr};
 thread_local bool currentHeader=false;
+thread_local char currentHeaderLabel[512]{};
 using MeasureText=uint64_t(__fastcall*)(const char*,void*,float,const int*);
 MeasureText measureText=nullptr;
 constexpr unsigned char measureBytes[]={0x48,0x89,0x5c,0x24,0x08,0x48,0x89,0x74,0x24,0x10,0x57,0x48,0x83,0xec,0x50,0x0f,0x29,0x74,0x24,0x40,0x49,0x8b,0xf9,0x0f,0x28,0xf2,0x48,0x8b,0xf2,0x48,0x8b,0xd9};
@@ -53,13 +55,38 @@ bool ReadGlyphText(const char* text) noexcept {
         return size<64 && QolGlyphPolicy::ContainsGlyph({text,size});
     } __except(EXCEPTION_EXECUTE_HANDLER) {++faults;return false;}
 }
+// Recover the unscrolled label only from the exact known Legend layout.
+bool CopyHeaderLabel(void* widget,char* output) noexcept {
+    __try {
+        if(!context || !widget)return false;
+        const auto node=reinterpret_cast<uintptr_t>(widget);
+        const auto legend=*reinterpret_cast<const uintptr_t*>(node+0x30);
+        if(!legend || *reinterpret_cast<const uintptr_t*>(legend)!=context->exeBase+0x1d76550 || node<legend+0x680)return false;
+        const auto offset=node-(legend+0x680);
+        const auto count=*reinterpret_cast<const uint64_t*>(legend+0x90);
+        if(offset%0x230 || count>8 || offset/0x230>=count)return false;
+        const auto entries=*reinterpret_cast<const uintptr_t*>(legend+0x88);
+        if(!entries)return false;
+        const auto entry=entries+(offset/0x230)*0x40;
+        const auto glyph=*reinterpret_cast<const uint32_t*>(entry);
+        const auto length=*reinterpret_cast<const uint64_t*>(entry+0x18);
+        const auto label=*reinterpret_cast<const char* const*>(entry+0x10);
+        if(!label || !length || length>480 || glyph<0xe000 || glyph>0xe03f)return false;
+        output[0]=static_cast<char>(0xee);output[1]=static_cast<char>(0x80);output[2]=static_cast<char>(0x80+(glyph-0xe000));
+        std::memcpy(output+3,label,static_cast<size_t>(length));output[length+3]=0;
+        return true;
+    } __except(EXCEPTION_EXECUTE_HANDLER) {return false;}
+}
 void DrawScoped(void* widget,Hint hint,bool header) {
+    char previousLabel[512];std::memcpy(previousLabel,currentHeaderLabel,sizeof(previousLabel));
+    currentHeaderLabel[0]=0;
+    if(header && !CopyHeaderLabel(widget,currentHeaderLabel))currentHeaderLabel[0]=0;
     auto previous=currentHint;
     const bool previousHeader=currentHeader;
     currentHeader=header;
     currentHint=hint; // A nested unrelated draw never inherits a hint.
     __try {originalDrawWidget(widget);}
-    __finally {currentHint=previous;currentHeader=previousHeader;}
+    __finally {currentHint=previous;currentHeader=previousHeader;std::memcpy(currentHeaderLabel,previousLabel,sizeof(previousLabel));}
 }
 void __fastcall HookWidget(void* widget) {
     auto hint=Hint::None;
@@ -72,7 +99,7 @@ void __fastcall HookWidget(void* widget) {
         header=measureText && QolHeaderPolicy::Scope(views,count) && ControllerQoL::IsControllerUiActive();
         bool primary=false,secondary=false;
         QolNavigation::GetGlyphModes(primary,secondary);
-        hint=QolGlyphPolicy::Classify(views,count,primary,secondary,QolNavigation::SharedPageRemapEnabled(),QolNavigation::OptionsRemapEnabled(),QolNavigation::ChronicleRemapEnabled());
+        hint=QolGlyphPolicy::Classify(views,count,primary,secondary,QolNavigation::SharedPageRemapEnabled(),QolNavigation::OptionsRemapEnabled(),QolNavigation::ChronicleRemapEnabled(),QolNavigation::LootFilterRemapEnabled());
         if(hint!=Hint::None) ++hintDraws;
     }
     // No widget, text buffer, asset, or binding is modified. The two guarded
@@ -90,17 +117,24 @@ bool DrawHeader(const char* text,void* rect,void* style,float scale,const Header
         size_t size=0;while(size<512 && text[size])++size;
         if(size==512)return false;
         const int slot=QolHeaderPolicy::Slot({text,size});
-        if(slot<0 || !snapshot.lines[slot][0])return false;
+        if(slot<0)return false;
         auto top=*static_cast<const QolGlyphPolicy::DrawRect*>(rect);
         if(top.width<=8 || top.width>16384 || top.height<20 || top.height>1024)return false;
+        // Leave a small gutter between adjacent native columns.
+        const int gutter=top.width/40;
+        top.x+=gutter;top.width-=2*gutter;
         auto bottom=top;
         top.height/=2;bottom.y+=top.height;bottom.height-=top.height;
         const int limits[2]={32767,32767};
         float scales[2]={scale*0.75f,scale*0.75f};
-        const char* rows[2]={text,snapshot.lines[slot]};
+        const char* compact=QolHeaderPolicy::Compact({text,size});
+        const char* primary=compact?compact:text;
+        if(slot==5 && QolNavigation::RangesRemapEnabled())primary="\xEE\x80\xA8" "Show Ranges";
+        const char* rows[2]={primary,snapshot.lines[slot]};
         // Native font metrics include the active controller artwork. Fit within
         // the existing slot; never write native rectangles or text buffers.
         for(int i=0;i<2;++i) {
+            if(!rows[i][0])continue;
             const auto sizePx=measureText(rows[i],style,scales[i],limits);
             const auto width=static_cast<uint32_t>(sizePx);
             const auto height=static_cast<uint32_t>(sizePx>>32);
@@ -112,8 +146,8 @@ bool DrawHeader(const char* text,void* rect,void* style,float scale,const Header
             scales[i]*=fit;
             if(scales[i]<scale*0.30f)return false;
         }
-        originalDrawText(text,&top,style,scales[0]);
-        originalDrawText(rows[1],&bottom,style,scales[1]);
+        originalDrawText(rows[0],&top,style,scales[0]);
+        if(rows[1][0])originalDrawText(rows[1],&bottom,style,scales[1]);
         return true;
     } __except(EXCEPTION_EXECUTE_HANDLER) {++faults;return false;}
 }
@@ -125,16 +159,19 @@ bool IsRangeLabel(const char* text) noexcept {
     } __except(EXCEPTION_EXECUTE_HANDLER) {return false;}
 }
 void __fastcall HookText(const char* text,void* rect,void* style,float scale) {
-    if(currentHeader && active.load(std::memory_order_relaxed) &&
-        QolNavigation::RangesRemapEnabled() && IsRangeLabel(text)) {
-        originalDrawText("\xEE\x80\xA8" "Show Ranges",rect,style,scale);
-        return;
-    }
 
     if(currentHeader && active.load(std::memory_order_relaxed)) {
         HeaderSnapshot snapshot;
         {std::lock_guard lock(headerMutex);snapshot=headerSnapshot;}
-        if(QolHeaderPolicy::Fresh(GetTickCount64(),snapshot.tick) && DrawHeader(text,rect,style,scale,snapshot))return;
+        const auto bulkContext=bulkHeaderContext.load();
+        const char* bulkModifier=bulkContext?bulkContext():nullptr;
+        if(QolHeaderPolicy::Compose(snapshot.lines,QolHeaderPolicy::Fresh(GetTickCount64(),snapshot.tick),bulkModifier) && DrawHeader(currentHeaderLabel[0]?currentHeaderLabel:text,rect,style,scale,snapshot))return;
+    }
+
+    if(currentHeader && active.load(std::memory_order_relaxed) &&
+        QolNavigation::RangesRemapEnabled() && IsRangeLabel(text)) {
+        originalDrawText("\xEE\x80\xA8" "Show Ranges",rect,style,scale);
+        return;
     }
 
     auto replacement=active.load(std::memory_order_relaxed)?QolGlyphPolicy::Text(currentHint):nullptr;
@@ -206,7 +243,8 @@ void QolGlyphs::Initialize(const D2RL::PluginContext* ctx,bool compatible) noexc
     ctx->LogInfo(active?"[QOL/Glyphs] Scoped widget text calls installed; global renderer untouched: main=triggers, Quest/Skills=bumpers.":
         "[QOL/Glyphs] Hook installation incomplete; native prompts retained.");
 }
-void QolGlyphs::Shutdown() noexcept {active.store(false);}
+void QolGlyphs::SetBulkHeaderContext(BulkHeaderContext callback) noexcept {bulkHeaderContext.store(callback);}
+void QolGlyphs::Shutdown() noexcept {active.store(false);bulkHeaderContext.store(nullptr);}
 void QolGlyphs::Status() noexcept {
     if(!context) return;
     char line[256];
@@ -215,13 +253,13 @@ void QolGlyphs::Status() noexcept {
     context->WriteConsoleMessage(line);context->LogInfo(line);
 }
 
-void QolGlyphs::PublishHeader(const char* modifier,const char* a,const char* x,const char* y,const char* stick) noexcept {
+void QolGlyphs::PublishHeader(const char* modifier,const char* a,const char* x,const char* y,const char* stick,const char* leftStick) noexcept {
     HeaderSnapshot snapshot{};
     if(modifier) {
-        const char* actions[]={a,x,y,stick};
+        const char* actions[]={a,x,y,stick,leftStick};
         const char* glyph=QolHeaderPolicy::Modifier(modifier);
-        for(int i=0;i<4;++i) if(actions[i])
-            std::snprintf(snapshot.lines[i],sizeof(snapshot.lines[i]),"%s%s%s %s",glyph,*glyph?" + ":"",QolHeaderPolicy::Buttons[i],actions[i]);
+        for(int i=0;i<5;++i) if(actions[i])
+            std::snprintf(snapshot.lines[i],sizeof(snapshot.lines[i]),"%s%s%s %s",glyph,*glyph?"+":"",QolHeaderPolicy::Buttons[i],actions[i]);
         snapshot.tick=GetTickCount64();
     }
     std::lock_guard lock(headerMutex);headerSnapshot=snapshot;

@@ -12,6 +12,9 @@ int main() {
     CHECK(raw.valid && raw.providers==Provider && raw.buttons==0x4100);
     CHECK(Encode(filtered)==0x100);
     CHECK(Encode(FilterModified(raw,false,false))==0x4100);
+    // L1 must not suppress, replace or skip ordinary directional navigation.
+    for(const unsigned direction:{1u,2u,4u,8u})
+        CHECK(Encode(FilterModified(Decode(0x100|direction),true,false))==(0x100|direction));
     // Neutral Cross, including modifier+Cross, remains a native interaction.
     CHECK(Encode(FilterModified(Decode(0x1100),true,false))==0x1100);
     // Trigger keys are distinct from buttons; Shared needs both digital edges.

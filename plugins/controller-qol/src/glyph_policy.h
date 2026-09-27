@@ -3,7 +3,7 @@
 #include <string_view>
 namespace QolGlyphPolicy {
 enum class Hint { None, MainLeft, MainRight, SubLeft, SubRight, SharedLeft, SharedRight };
-inline Hint Classify(const std::string_view* names, size_t count, bool primary, bool secondary, bool shared=false, bool options=false, bool chronicle=false) noexcept {
+inline Hint Classify(const std::string_view* names, size_t count, bool primary, bool secondary, bool shared=false, bool options=false, bool chronicle=false, bool lootFilter=false) noexcept {
     // A generated child indicator must not shadow the owning Shared legend.
     if(shared) {
         Hint owner=Hint::None;
@@ -26,7 +26,7 @@ inline Hint Classify(const std::string_view* names, size_t count, bool primary, 
             if(indicator=="CycleLeftIndicator") return Hint::MainLeft;
             if(indicator=="CycleRightIndicator") return Hint::MainRight;
         }
-        if(secondary && (name=="QuestLogPanelOriginal" || name=="QuestLogPanelExpansion" || name=="SkillsTreePanel" || (options && name=="SettingsPanel") || (chronicle && name=="ChroniclePanel"))) {
+        if(secondary && (name=="QuestLogPanelOriginal" || name=="QuestLogPanelExpansion" || name=="SkillsTreePanel" || (options && name=="SettingsPanel") || (chronicle && name=="ChroniclePanel") || (lootFilter && name=="LootFilterRuleDetailsPanel"))) {
             if(indicator=="TabLeftIndicator") return Hint::SubLeft;
             if(indicator=="TabRightIndicator") return Hint::SubRight;
         }

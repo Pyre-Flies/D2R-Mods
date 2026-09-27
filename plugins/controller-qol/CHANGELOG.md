@@ -1,7 +1,122 @@
+# Rev.46 well-priority classification candidate
+
+- Extend the existing default-on `prioritize_shrines` family to the 14 environmental Fountain/Well classes that use OperateFn 22 but do not carry the shrine SubClass bit. The allowlist is exact to the inspected active ObjectsTxt table and avoids promoting unrelated SubClass-0 or SubClass-32 objects.
+- Keep the same priority hooks, native eligibility checks and `portal_priority_distance`; no new hook or RVA. Automated classification coverage added; visible well selection remains pending live validation.
+
+# Rev.45 shared class-getter compatibility candidate
+
+- Admit the native object-class getter at game `0x349860` when it is original or begins with a five-byte `E9` whose target is committed executable memory, while requiring the remaining reviewed 27-byte function body at `0x349865` to match exactly.
+- Do not patch or bypass the existing owner. Priority classification calls the current shared entry, so the predecessor detour remains in the chain. Unknown detour forms, non-executable targets, or changed function tails disable priority and preserve native targeting.
+- The captured Auto Deposit runtime image now passes all 20 portal/priority evidence checks. Unit tests cover original, accepted E9, non-executable E9, and unknown-prefix refusal; live priority behavior remains pending.
+
+# Rev.44 shrine/chest priority and batch-feature gates candidate
+
+- Add `prioritize_shrines = true` using the active ObjectsTxt shrine SubClass bit and `prioritize_chests = false` using an exact active-table normal-chest class allowlist. Quest chests, hidden stashes, scenery, bodies, urns and other generic treasure objects are not promoted.
+- Add `identify_all = true` and `quick_deposit = true`. Disabling either removes its controller execution path and its header/tooltip hint while retaining single-item Identify and ordinary LB+X transfer behavior.
+- Reuse the existing priority hooks and range setting; no new RVA or interception site. Automated classification and artifact validation added; live shrine/chest selection remains pending.
+
+# Rev.43 stash and waypoint interaction-priority candidate
+
+- Extend neutral A/Interact priority from portals to the actual town stash (`ObjectsTxt` Bank class 267) and waypoints (SubClass bit `0x40`). Hidden stashes, treasure chests and other interactable objects remain native.
+- Preserve the selected stash/waypoint against later ground-item candidates, while enabled LB direct-loot gestures retain ownership of loot selection. The priority system is now independent of `ground_pickup`; disabling LB shortcuts no longer disables neutral A priority.
+- Reuse the existing guarded contact, score, comparison and Interact-range paths with no new hooks or RVAs. Add independent `prioritize_stash_boxes` and `prioritize_waypoints` switches; all three object types share `portal_priority_distance` for backward compatibility.
+
+# Rev.42 Auto Deposit pickup compatibility candidate
+
+- Leave the shared native pickup entry at game `0x471950` untouched. Redirect seven guarded direct game CALL sites through the filtered-pickup wrapper so allowed pickups still traverse an earlier Auto Deposit hook and QOL no longer requests the same MinHook target.
+- Keep the wrapper inert unless all seven call sites publish successfully. Exact five-byte witnesses and automated target-resolution checks fail open on a mismatched game build. Live A-button filtering with Auto Deposit remains pending.
+
+# Rev.41 filtered-A / direct-loot gate candidate
+
+- Activate the native filtered-item pickup guard when `block_filtered_pickup = true` even if optional direct ground pickup is disabled. Bare A remains native for visible items; LB loot shortcuts remain disabled when `ground_pickup = false`.
+- Restore the independent `ground_pickup` execution gate throughout modifier suppression, placard shortcuts, observer scheduling and queued pickup work. Filtered-A-only mode no longer activates LB ground-loot shortcuts.
+
+# Rev.40 header candidate
+
+- Keep Stash All and the two-row header layout visible over empty stash slots. Bulk hint availability now comes from open-stash context rather than expiring item-tooltip snapshots; stale item-specific hints still disappear. No gameplay changes.
+
+# Rev.39 header candidate
+
+- Add modifier+L3 Stash All beneath Open Cube while stash is open. Align recognized native controls to a consistent top row with contextual QOL shortcuts below; tighten chord spacing and add column gutters. Compact the English native Drop/Hold-to-Move label while retaining hold semantics and localized text.
+- Rev.38 instant full-inventory stash confirmed working and retained. Header visual validation pending.
+
+# Rev.38 experimental candidate
+
+- Submit all eligible bulk-stash inventory items in one authoritative game update, then verify submitted identities together. No per-item UI round trips, automatic retries, or new hooks. Stop further submissions on refusal/changed identity and still verify earlier submissions.
+- Rev.37 sequential deposit confirmed working. Rev.38 whole-inventory timing and destination behavior require live testing.
+
+# Rev.37 candidate
+
+- Add LB+L3 while stash is open to deposit advanced-storage eligible inventory items using the existing LB+X native helpers. Sequential submissions, exact identity checks and source-removal observation; no ordinary stash/Cube fallback.
+- Capture L3 only for the accepted stash chord, preserving normal Open Cube elsewhere. Automated checks recorded in docs/BULK-STASH-REV37.md; live verification pending.
+- User confirmed rev.36 Cube bulk identification works.
+
+# Rev.36 candidate
+
+- Include unidentified Horadric Cube items in SDK Identify All. Tome sources remain inventory/open Personal Stash; Cube and Shared tomes remain excluded. Preserve exact target identity, per-item charge verification and stop-on-failure behavior. Native compatibility mode retains inventory-only targets.
+- Rev.35 SDK identification and normal L1 navigation confirmed working by the user. Rev.36 live Cube verification pending.
+
+# Rev.35 candidate
+
+- Restore SDK-first single and bulk identification; share stat-70 debit verification and rejected-identify compensation. Bulk stays bound to the highlighted inventory/Personal tome and yields between items. Explicit `native_identify = true` retains native compatibility mode; no automatic retry after SDK mutations.
+- Remove L1 spatial inventory leaps and synthetic directional pulses, preserving normal navigation and focused-item shortcut tracking.
+- Automated validation and deployment recorded in docs/IDENTIFY-NATIVE-REV26.md; live rev.35 validation pending.
+
+# Rev.34 candidate
+
+- Wait for the native tome-block check to clear before each bulk use, replacing the unsuccessful fixed pause. Bound readiness waiting and preserve one-charge confirmation. All 19 suites pass; live batch validation pending.
+
+# Rev.33 diagnostic candidate
+
+- Log guarded native tome eligibility and cursor state around each bulk tome-use attempt to locate the second-item refusal. No eligibility bypass; all 19 suites pass, live diagnosis pending.
+
+# Rev.32 candidate
+
+- Add bounded UI-callback pacing between bulk identifications and target/stage diagnostics for the second-item timeout. All 19 suites pass; pacing hypothesis requires live testing.
+
+# Rev.31 candidate
+
+- LB+A on an eligible Identify Tome identifies main-inventory items sequentially using that tome, one native charge per confirmed item. Adds Identify All controller hints and stops on empty charges, changed identities or interrupted native work. All 19 suites pass; live validation pending.
+
+# Rev.30 candidate
+
+- Exclude Cube and Shared Stash tomes; prefer charged inventory tomes, with open Personal Stash as a fallback. Extend native tome-use to Personal Stash source/target grids with fresh identity and tab checks. All 19 suites pass; user confirmed QOL Personal Stash identification works.
+
+# Rev.29 diagnostic candidate
+
+- Explain native identification admission/refusal with provider hashes, precise byte/slot checks, scheduling results and route/container summaries. Native rejection no longer masquerades as an SDK edit failure. Compatibility and consumption behavior unchanged; all 19 suites pass, remote testing pending.
+
+# Rev.28 candidate
+
+- Defer missing-focus recovery after loot-filter inner tab changes to SDK UI callbacks, covering both Rarity/Quality-to-Items and expanded Misc-to-Equipment transitions. Preserve healthy focus and native entry behavior. All 19 suites pass; live validation pending.
+
+# Rev.27 candidate
+
+- Recover missing child focus after Equipment-to-Items bumper switching in the loot-filter editor, using the existing guarded native list entry. Pending live validation.
+- Native inventory tome identification and lower filter navigation confirmed locally in rev.26.
+
+# Rev.26 candidate
+
+- Main-inventory LB+A with a tome uses native hold-A and target activation, with charge/identity confirmation and no SDK quantity edit. Live candidate validation pending; other containers retain existing behavior.
+
+# Rev.25 candidate
+
+- After the legacy filter section route fails, resolve the loader-owned merged item panel and use native list focus entry. Live navigation validation pending.
+
+# Rev.24 candidate
+
+- Scoped Down-to-native-section handoff for the focused loot-filter rule tab. No raw focus writes or additional hooks. Lower-list editing remains pending live validation.
+
 # Changelog
 
 All notable changes to Controller QOL Updates are recorded here. Versions before
 the GitHub migration are reconstructed from release and validation records.
+
+## [1.3.1+rev.23] - candidate
+
+- Remap the loot-filter rule editor's Equipment/Items tabs to LB/RB with matching glyphs through the existing scoped TabBar hook.
+- Exclude loot-filter editing panels from world-loot shortcut scheduling.
+- All 19 suites pass; installation and visible behavior pending. Lower-panel Gold/Potions controller focus is a separate unresolved issue reproduced with QOL disabled. See docs/LOOT-FILTER-EDITOR-INVESTIGATION.md.
 
 ## [1.3.1+rev.22] - 2026-09-27
 

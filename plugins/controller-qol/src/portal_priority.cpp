@@ -29,6 +29,12 @@ thread_local RangeOverride rangeOverride;
 const D2RL::PluginContext* context = nullptr;
 std::atomic<bool> active{false};
 bool trace = false;
+bool directLoot = false;
+bool portals = true;
+bool stash = true;
+bool waypoints = true;
+bool shrines = true;
+bool chests = false;
 char modifier[16] = "bumper";
 uint32_t range = 10;
 using UnitScoreFn = float(__fastcall*)(void*, void*, void*, int);
@@ -38,19 +44,54 @@ ContactFn originalContact = nullptr;
 
 bool InstallContactCalls(const D2RL::PluginContext* ctx) noexcept;
 
-bool ReadPortalDistance(void* player, void* candidate, int& measured) noexcept {
+bool ExecutableAddress(uintptr_t address) noexcept {
+    MEMORY_BASIC_INFORMATION info{};
+    if (!address || VirtualQuery(reinterpret_cast<const void*>(address), &info, sizeof(info)) != sizeof(info) ||
+        info.State != MEM_COMMIT || (info.Protect & (PAGE_GUARD | PAGE_NOACCESS))) return false;
+    const DWORD protection = info.Protect & 0xff;
+    return protection == PAGE_EXECUTE || protection == PAGE_EXECUTE_READ ||
+        protection == PAGE_EXECUTE_READWRITE || protection == PAGE_EXECUTE_WRITECOPY;
+}
+
+bool AdmitClassGetter(const D2RL::PluginContext* ctx, bool& sharedDetour) noexcept {
+    sharedDetour = false;
+    if (!ctx || !ctx->exeBase) return false;
+    unsigned char prefix[5]{};
+    SIZE_T read{};
+    if (!ReadProcessMemory(GetCurrentProcess(), reinterpret_cast<const void*>(ctx->exeBase + 0x349860),
+            prefix, sizeof(prefix), &read) || read != sizeof(prefix)) return false;
+    bool executable = false;
+    if (prefix[0] == 0xe9) {
+        int32_t displacement{};
+        std::memcpy(&displacement, prefix + 1, sizeof(displacement));
+        const uintptr_t target = static_cast<uintptr_t>(
+            static_cast<int64_t>(ctx->exeBase + 0x349865) + displacement);
+        executable = ExecutableAddress(target);
+        sharedDetour = executable;
+    }
+    return AdmitSharedEntryPrefix(prefix, PortalNative::Class, executable);
+}
+
+PriorityKind ReadPriorityObjectDistance(void* player, void* candidate, int& measured) noexcept {
     __try {
-        if (!context || !player || !candidate || *static_cast<uint32_t*>(candidate) != 2) return false;
+        if (!context || !player || !candidate || *static_cast<uint32_t*>(candidate) != 2) return PriorityKind::None;
         const auto base = context->exeBase;
         auto getClass = reinterpret_cast<uint32_t(__fastcall*)(void*, const char*, uint32_t)>(base + 0x349860);
         auto getVersion = reinterpret_cast<uint8_t(__fastcall*)(void*)>(base + 0x34A0E0);
         auto getObject = reinterpret_cast<const uint8_t*(__fastcall*)(uint8_t, uint32_t)>(base + 0x38FD00);
         auto distance = reinterpret_cast<int(__fastcall*)(void*, void*)>(base + 0x325140);
-        const auto record = getObject(getVersion(candidate), getClass(candidate, "Controller QOL Updates", 0));
-        if (!record || !(record[0x127] & 4)) return false;
+        const auto classId = getClass(candidate, "Controller QOL Updates", 0);
+        const auto record = getObject(getVersion(candidate), classId);
+        if (!record) return PriorityKind::None;
+        const auto kind = ClassifyPriorityObject(classId, record[0x127]);
+        if (!KindEnabled(kind, portals, stash, waypoints, shrines, chests)) return PriorityKind::None;
         measured = distance(player, candidate);
-        return measured >= 0;
-    } __except(EXCEPTION_EXECUTE_HANDLER) { return false; }
+        return measured >= 0 ? kind : PriorityKind::None;
+    } __except(EXCEPTION_EXECUTE_HANDLER) { return PriorityKind::None; }
+}
+
+bool ModifiedLoot() noexcept {
+    return directLoot && ControllerQoL::IsGroundPickupActive(modifier);
 }
 
 __declspec(noinline) int __fastcall CandidateContact(void* player, void* candidate) {
@@ -61,20 +102,21 @@ __declspec(noinline) int __fastcall CandidateContact(void* player, void* candida
     if (!active.load() || !context) return nativeContact;
     const uintptr_t caller = returnAddress - context->exeBase;
     if (!IsCandidateContactCaller(caller)) return nativeContact;
-    const bool modified = ControllerQoL::IsGroundPickupActive(modifier);
+    const bool modified = ModifiedLoot();
     if (modified) return nativeContact;
     int measured = -1;
-    const bool portal = ReadPortalDistance(player, candidate, measured);
-    const bool extended = ExtendCandidateContact(true, modified, caller, portal, measured, range);
-    if (portal && trace) {
+    const auto kind = ReadPriorityObjectDistance(player, candidate, measured);
+    const bool priority = kind != PriorityKind::None;
+    const bool extended = ExtendCandidateContact(true, modified, caller, priority, measured, range);
+    if (priority && trace) {
         static thread_local ULONGLONG lastLog = 0;
         const auto now = GetTickCount64();
         if (now - lastLog >= 1000) {
             lastLog = now;
             char message[224];
             std::snprintf(message, sizeof(message),
-                "[QOL/Portal] Candidate contact: caller=0x%llX distance=%d configured=%u native=%d extended=%d.",
-                static_cast<unsigned long long>(caller), measured, range, nativeContact, extended);
+                "[QOL/Priority] Candidate contact: kind=%u caller=0x%llX distance=%d configured=%u native=%d extended=%d.",
+                static_cast<unsigned>(kind), static_cast<unsigned long long>(caller), measured, range, nativeContact, extended);
             context->LogInfo(message);
         }
     }
@@ -131,9 +173,10 @@ bool PreparePortalScore(void* controller, void* player, void* candidate, int pro
 
 float __fastcall ScoreUnit(void* controller, void* player, void* candidate, int profile) {
     const float nativeScore = originalUnitScore(controller, player, candidate, profile);
-    if (!active.load() || ControllerQoL::IsGroundPickupActive(modifier)) return nativeScore;
+    if (!active.load() || ModifiedLoot()) return nativeScore;
     int measured = -1;
-    if (!ReadPortalDistance(player, candidate, measured)) return nativeScore;
+    const auto kind = ReadPriorityObjectDistance(player, candidate, measured);
+    if (kind == PriorityKind::None) return nativeScore;
     float result = nativeScore, oldLimit = 0, newLimit = 0;
     bool retried = false;
     if (WithinPriorityDistance(measured, range) && std::isfinite(nativeScore) && nativeScore < 0) {
@@ -155,8 +198,8 @@ float __fastcall ScoreUnit(void* controller, void* player, void* candidate, int 
             lastLog = now;
             char message[256];
             std::snprintf(message, sizeof(message),
-                "[QOL/Portal] Candidate score: distance=%d configured=%u profile=%d native=%.3f result=%.3f retry=%d centerLimit=%.2f->%.2f.",
-                measured, range, profile, nativeScore, result, retried, oldLimit, newLimit);
+                "[QOL/Priority] Candidate score: kind=%u distance=%d configured=%u profile=%d native=%.3f result=%.3f retry=%d centerLimit=%.2f->%.2f.",
+                static_cast<unsigned>(kind), measured, range, profile, nativeScore, result, retried, oldLimit, newLimit);
             context->LogInfo(message);
         }
     }
@@ -173,9 +216,9 @@ bool Qualify(Selection* state, void* candidate, bool& prefer, RangeOverride& win
         const auto currentType = *state->selected ? *static_cast<const uint32_t*>(*state->selected) : UINT32_MAX;
         const auto candidateType = *static_cast<const uint32_t*>(candidate);
         if (candidateType != 2) return false;
-        if (ControllerQoL::IsGroundPickupActive(modifier)) return false;
+        if (ModifiedLoot()) return false;
         int measured = -1;
-        if (!ReadPortalDistance(*state->player, candidate, measured)) return false;
+        if (ReadPriorityObjectDistance(*state->player, candidate, measured) == PriorityKind::None) return false;
         if (!WithinPriorityDistance(measured, range)) return false;
         prefer = currentType == 4;
         window = {*state->player, candidate, measured, range};
@@ -205,13 +248,21 @@ bool __fastcall InteractionRange(void* player, void* candidate, int allowance) {
 }
 
 // Scope exclusion to the same proven Interact comparison, not UI A presses.
-bool CaptureLootPortalSelection(Selection* state,void* candidate,void*& selected,float& best) noexcept {
+bool CaptureProtectedSelection(Selection* state,void* candidate,void*& selected,float& best) noexcept {
     __try {
         if(!active.load() || !state || !state->skill || !state->selected || !state->bestScore ||
             !state->player || !*state->player || !candidate ||
-            *state->skill!=InteractSkill || !ControllerQoL::IsGroundPickupActive(modifier)) return false;
-        int distance=-1;
-        if(!LootOwnsPortalSelection(true,true,*state->skill,ReadPortalDistance(*state->player,candidate,distance))) return false;
+            *state->skill!=InteractSkill) return false;
+        const bool modified = ModifiedLoot();
+        if (modified) {
+            int distance=-1;
+            if (ReadPriorityObjectDistance(*state->player,candidate,distance)==PriorityKind::None) return false;
+        } else {
+            if (*static_cast<const uint32_t*>(candidate) != 4 || !*state->selected) return false;
+            int distance=-1;
+            if (ReadPriorityObjectDistance(*state->player,*state->selected,distance)==PriorityKind::None ||
+                !WithinPriorityDistance(distance,range)) return false;
+        }
         selected=*state->selected;best=*state->bestScore;return true;
     } __except(EXCEPTION_EXECUTE_HANDLER) {return false;}
 }
@@ -226,7 +277,7 @@ void __fastcall Compare(Selection* state, void* candidate, float score, int targ
     // cause a duplicate call; fault containment is only around our reads.
     void* previousSelection=nullptr;
     float previousScore=0;
-    if(CaptureLootPortalSelection(state,candidate,previousSelection,previousScore)) {
+    if(CaptureProtectedSelection(state,candidate,previousSelection,previousScore)) {
         RangeScope scope(rangeOverride,{});
         original(state,candidate,score,targetType);
         RestoreLootPortalSelection(state,candidate,previousSelection,previousScore);
@@ -249,7 +300,7 @@ void __fastcall Compare(Selection* state, void* candidate, float score, int targ
         if (now - lastLog >= 1000) {
             lastLog = now;
             char message[192];
-            std::snprintf(message, sizeof(message), "[QOL/Portal] Interact comparison: distance=%d configured=%u accepted=%d boosted=%d.",
+            std::snprintf(message, sizeof(message), "[QOL/Priority] Interact comparison: distance=%d configured=%u accepted=%d boosted=%d.",
                 window.distance, range, *state->selected == candidate, changed);
             context->LogInfo(message);
         }
@@ -257,9 +308,16 @@ void __fastcall Compare(Selection* state, void* candidate, float score, int targ
 }
 }
 
-void Initialize(const D2RL::PluginContext* ctx, bool enabled, bool debug,
+void Initialize(const D2RL::PluginContext* ctx, bool enabled, bool directLootEnabled,
+    bool prioritizePortals, bool prioritizeStash, bool prioritizeWaypoints,
+    bool prioritizeShrines, bool prioritizeChests, bool debug,
     const char* groundModifier, uint32_t radius) noexcept {
     if (!ctx || !enabled) return;
+    bool sharedClassDetour = false;
+    if (!AdmitClassGetter(ctx, sharedClassDetour)) {
+        ctx->LogWarn("[QOL/Priority] Class getter entry is neither original nor a bounded executable E9 detour; priority disabled.");
+        return;
+    }
     for (const auto& site : PortalNative::Sites) {
         if (!ctx->CheckExpectedBytes(site.rva, site.bytes, site.size)) {
             ctx->LogWarn("[QOL/Portal] Native profile mismatch; portal priority disabled and normal targeting preserved.");
@@ -268,6 +326,14 @@ void Initialize(const D2RL::PluginContext* ctx, bool enabled, bool debug,
     }
     context = ctx;
     trace = debug;
+    directLoot = directLootEnabled;
+    portals = prioritizePortals;
+    stash = prioritizeStash;
+    waypoints = prioritizeWaypoints;
+    shrines = prioritizeShrines;
+    chests = prioritizeChests;
+    if (sharedClassDetour)
+        ctx->LogInfo("[QOL/Priority] Shared class getter E9 detour admitted; current entry retained and called, reviewed tail unchanged.");
     range = radius;
     if (groundModifier) {
         std::strncpy(modifier, groundModifier, sizeof(modifier)-1);
@@ -285,7 +351,7 @@ void Initialize(const D2RL::PluginContext* ctx, bool enabled, bool debug,
     }
     active.store(true);
     char message[160];
-    std::snprintf(message, sizeof(message), "[QOL/Portal] Three contact CALL patches (shared entry untouched), scoring and Interact range enabled within %u native units; diagnostics=%d.", range, trace);
+    std::snprintf(message, sizeof(message), "[QOL/Priority] portal=%d stash=%d waypoint=%d shrine=%d chest=%d; contact/scoring/range enabled within %u native units; diagnostics=%d.", portals, stash, waypoints, shrines, chests, range, trace);
     ctx->LogInfo(message);
 }
 void Shutdown() noexcept { active.store(false); }
