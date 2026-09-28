@@ -3,146 +3,167 @@
 **Made by PyreFly for D2RLoader**  
 Version **1.3.1+rev.48** | Windows x64 | Diablo II: Resurrected
 
-Pick the loot you want directly from its ground label. Controller QOL Updates gives nearby items their own controller shortcuts, keeps those assignments stable while you loot, and respects the active loot filter. Inventory, Cube, stash, potion and shop shortcuts extend the same LB-based controls to item management.
+Controller QOL Updates adds direct controller looting, contextual item actions,
+stash and Cube transfers, belt management, clearer controller prompts, and
+controller-friendly menu navigation. It preserves the game's native item,
+storage, vendor, and interaction rules.
 
-## Direct controller looting
+Xbox button names are used below. On a PlayStation-style controller, LB/RB are
+L1/R1, LT/RT are L2/R2, and A/X/Y/B are Cross/Square/Triangle/Circle.
 
-1. Stand near the items you want to collect and **hold LB**.
-2. Up to **seven eligible nearby ground items** receive button indicators on their labels.
-3. Keep holding LB and press the button shown beside the item to pick up that specific item.
+## Shortcuts
 
-The available shortcuts are **LB+A, LB+X, LB+Y, LB+B, LB+RB, LB+RT and LB+LT**. These are ground-looting controls; inventory and storage screens use the contextual actions below. On a PlayStation-style controller, LB is L1; A/X/Y/B correspond to Cross/Square/Triangle/Circle.
+The default shortcut modifier is **LB**. Change `modifier` for item-management
+actions or `ground_pickup_button` for direct ground looting.
 
-- **Choose an item by its label.** You do not need to cycle ground targets to reach the item assigned to a shortcut.
-- **Stable assignments while holding LB.** An item keeps its shortcut while it remains eligible. Vacant slots refill as you collect items or move; pressing LB again refreshes the assignments.
-- **Priority and range.** Available slots are assigned by item type/quality priority, then distance. Candidates must be within pickup range and pass the collision check. The default range is 6 game distance units.
-- **Loot-filter awareness.** Only items with active visible labels are assigned shortcuts. With the default `block_filtered_pickup = true`, native pickup attempts for items without an active label are blocked too.
-- **Persistent filtered labels.** The integrated label handling keeps filtered ground labels visible and prevents the modifier from dismissing them. Releasing LB removes the shortcut overlays.
+### World and ground-loot controls
 
-Holding or releasing LB alone does **not** automatically collect items. This plugin uses your existing loot filter; it does not provide a filter editor.
+| Shortcut | Context | Action |
+|---|---|---|
+| Hold LB | Near labeled ground items | Show and refresh up to seven direct-loot assignments |
+| LB + A | Ground-loot assignments visible | Pick up the item labeled A |
+| LB + X | Ground-loot assignments visible | Pick up the item labeled X |
+| LB + Y | Ground-loot assignments visible | Pick up the item labeled Y |
+| LB + B | Ground-loot assignments visible | Pick up the item labeled B |
+| LB + RB | Ground-loot assignments visible | Pick up the item labeled RB |
+| LB + RT | Ground-loot assignments visible | Pick up the item labeled RT |
+| LB + LT | Ground-loot assignments visible | Pick up the item labeled LT |
+| A | Normal world interaction | Prefer an eligible nearby portal, stash, waypoint, shrine/well, or enabled chest over ground loot |
 
-### Neutral A: nearby portal priority
+Direct-loot assignments are stable while the modifier is held. Empty slots are
+refilled as items are collected or the player moves. Only nearby, reachable
+items with an active visible ground label are assigned. Releasing the modifier
+removes the shortcut overlays and does not pick anything up automatically.
 
-With `prioritize_portals`, `prioritize_stash_boxes`, `prioritize_waypoints`, and `prioritize_shrines` enabled by default, the native Interact target comparison prefers those eligible nearby objects—including wells—over ground loot. `prioritize_chests = false` is an opt-in for ordinary chests only. `portal_priority_distance = 10` remains the shared priority range (default **10 game units**, inclusive; supported values 1-20); `ground_pickup_distance` remains independent. Actual object use remains native, including visibility, angle and eligibility checks. `portal_diagnostics = false` controls optional priority tracing independently of general debug logging. Restart after editing the TOML. Bare A still picks up items when no eligible priority object wins; enabled **LB+A and the other direct-loot chords remain unchanged**. Quest chests, hidden stashes, NPCs and other objects keep native ranking. Each priority-object family can be disabled independently.
+Bare **A** remains the normal native interaction button. It is not an LB
+shortcut: when no enabled priority object wins, native item pickup and world
+interaction continue normally. With `block_filtered_pickup = true`, items whose
+labels are filtered out cannot be collected accidentally with bare A.
 
-`identify_all = true` controls the batch action offered on an Identify Tome without disabling single-item Identify. `quick_deposit = true` controls modifier+L3 Stash All without disabling ordinary modifier+X transfers. Both default true for backward compatibility; disabling either also removes its controller hint.
+### Item, storage, Cube, belt, and shop controls
 
-## Inventory, storage and shop controls
+| Shortcut | Focus/context | Action |
+|---|---|---|
+| LB + A | Unidentified item | Identify the focused item using an allowed Identify Tome or scroll |
+| LB + A | Identify Tome | Identify all unidentified items in main inventory and the Horadric Cube when `identify_all` is enabled |
+| LB + A | Supported potion | Move the focused potion to the belt |
+| LB + X | Inventory with storage open | Transfer the focused item to the active storage context |
+| LB + X | Personal, Shared, custom, or Cube item | Transfer the focused item back to inventory |
+| LB + X | Gems, Materials, or Runes page | Store eligible items in advanced storage; send other inventory items to the embedded Cube |
+| LB + X | Inventory item with NPC shop open | Sell through the game's native vendor path |
+| LB + Y | Eligible carried or stored item | Transfer directly to the Horadric Cube |
+| LB + R3 | Potion in inventory, Cube, or supported open storage | Fill available belt slots |
+| LB + R3 | Merchant potion | Refill the belt and buy missing potions where native rules allow |
+| LB + L3 | Stash open | Deposit all eligible materials, gems, runes, and rejuvenation potions from inventory when `quick_deposit` is enabled |
 
-| Shortcut | Action |
-|---|---|
-| LB + A | Identify the focused item using an available identify charge; on an Identify Tome, identify all unidentified main-inventory items |
-| LB + X | Transfer the focused item between inventory and the open storage context; sell an inventory item when an NPC shop is open |
-| LB + Y | Transfer an item using the existing inventory/Cube action |
-| LB + R3 | Refill belt potions, including supported stash rejuvenation sources |
-| LB + LT / LB + RT | Previous / next Shared stash sub-page |
-| LT / RT | Switch main stash tabs |
+The focused-item tooltip and controller header show only actions currently
+available for that item and screen. Shared-stash transfers retain the selected
+page and exact item identity. A failed advanced-storage deposit does not spill
+the item into another container.
 
-Gems and Materials LB+X use smart storage for eligible items and the embedded Horadric Cube for other items. Shared stash transfers use the active page and preserve the focused item's identity. Selling uses the game's native eligibility, pricing and transaction path. Controller glyphs and menu navigation are also included.
+### Menu and stash navigation
+
+| Shortcut | Screen | Action |
+|---|---|---|
+| LT / RT | Main menu pages | Previous / next main page |
+| LB / RB | Skill Tree | Previous / next skill tab |
+| LB / RB | Quest Log | Previous / next act tab |
+| LB / RB | Chronicle | Previous / next inner Chronicle tab |
+| LB / RB | Options | Previous / next inner Options tab |
+| LB / RB | Loot-filter rule editor | Switch Equipment / Items inner tabs |
+| LB + LT / LB + RT | Shared stash | Previous / next Shared stash page |
+| RB | Item tooltip | Show native roll ranges while the remap is available |
+| Down | Focused loot-filter rule tab | Enter the lower rule list when native focus is missing |
+
+Main-page triggers remain available while the inner Skill, Quest, Chronicle,
+Options, and loot-filter tabs use bumpers. Ground-loot chords are suppressed on
+these menus so navigation cannot queue a world pickup.
+
+## Other behavior
+
+- Guided Arrow controller ground casts use a farther target point so the
+  skill's native target acquisition and homing can operate like keyboard and
+  mouse casting. Target-selected casts, other skills, and mouse input are not
+  changed.
+- Filtered ground labels remain visible in controller mode while the direct-loot
+  system is active.
+- Controller glyphs follow the device artwork selected by the game.
+- Item transfers, identification, selling, belt filling, and object interaction
+  continue through native game or D2RLoader transaction paths.
+
+## Configuration
+
+Edit `d2rloader/config/controller-qol-updates.toml` while the game is closed.
+All settings live under `[qol]` and are read when the plugin loads.
+
+| Variable | Default | Purpose |
+|---|---:|---|
+| `enabled` | `true` | Master switch for Controller QOL actions and input handling |
+| `quick_identify` | `true` | Enable focused-item identification with the configured modifier + A |
+| `identify_all` | `true` | Enable modifier + A on an Identify Tome to identify all eligible inventory/Cube items |
+| `native_identify` | `false` | Use the slower native hold-A identification sequence instead of SDK-first edits |
+| `quick_move` | `true` | Enable contextual transfer, Cube, belt, vendor, and bulk-deposit shortcuts |
+| `quick_deposit` | `true` | Enable modifier + L3 bulk advanced-storage deposit while the stash is open |
+| `require_tome_or_scroll` | `true` | Require an eligible Identify Tome or scroll before identifying an item |
+| `consume_tome_or_scroll` | `true` | Consume and verify one identify charge for each identified item |
+| `require_modifier` | `true` | Require `modifier` for A-button identify/item-interaction actions; X/Y/R3 and L3 remain explicit chords |
+| `modifier` | `"bumper"` | Item-action modifier. Common values: `bumper`/`lb`/`l1`, `trigger`/`lt`/`l2`, `rb`, `rt`, `l3`, `any`, or a supported key/paddle alias |
+| `trigger_threshold` | `30` | Analog trigger threshold reserved by the configuration; the current build uses 30 |
+| `ground_pickup` | `true` | Enable direct ground-label assignments and pickup chords |
+| `ground_pickup_button` | `"bumper"` | Direct-loot modifier. Supports `lb`, `rb`, `lt`, `rt`, `l3`, `r3`, bracket/paddle aliases, or a single keyboard letter/number |
+| `ground_pickup_distance` | `6` | Direct-loot search distance, clamped to 1–20 game units |
+| `block_filtered_pickup` | `true` | Prevent native pickup of ground items without an active visible label |
+| `prioritize_portals` | `true` | Prefer eligible portals over ground loot for neutral A |
+| `prioritize_stash_boxes` | `true` | Prefer the town stash over ground loot for neutral A |
+| `prioritize_waypoints` | `true` | Prefer eligible waypoints over ground loot for neutral A |
+| `prioritize_shrines` | `true` | Prefer shrines and supported wells/fountains over ground loot for neutral A |
+| `prioritize_chests` | `false` | Prefer supported ordinary chests over ground loot for neutral A |
+| `portal_priority_distance` | `10` | Shared priority-object range, clamped to 1–20 game units |
+| `debug_logging` | `false` | Enable general diagnostic logging |
+| `portal_diagnostics` | `false` | Enable targeted, throttled object-priority diagnostics independently of general debug logging |
+
+`modifier` controls item actions; `ground_pickup_button` independently controls
+the seven world-loot chords. Keeping both at LB gives the default layout shown
+above.
 
 ## Install or update
 
-1. Close Diablo II: Resurrected.
-2. Back up the old DLL and configuration. **Move the old `QOL.dll` out of the plugins directory** before installing this renamed release; it has a new plugin ID, so leaving both DLLs there would load both.
-3. Copy `d2rloader/plugins/Controller QOL Updates.dll` into the active loader's plugins directory. The current installation uses the game's global `d2rloader/plugins` folder; use a mod-specific folder only when that loader configuration actually loads it.
-4. For an existing installation, rename `d2rloader/config/qol.toml` to **`controller-qol-updates.toml`** to preserve your settings. Keep the `[qol]` section inside the file unchanged. If the destination already exists, back it up and merge your settings instead of overwriting it.
-5. For a new installation, launch through D2RLoader: it creates `d2rloader/config/controller-qol-updates.toml` from the embedded defaults if missing. A loose default copy is supplied under `configuration/controller-qol-updates.toml` for reference or manual installation.
+1. Close Diablo II: Resurrected and D2RLoader.
+2. Back up the existing DLL and configuration.
+3. Remove or disable any older `QOL.dll` so only one Controller QOL plugin is
+   active.
+4. Copy `d2rloader/plugins/Controller QOL Updates.dll` into the loader's active
+   plugins directory.
+5. Launch through D2RLoader. A missing configuration file is created from the
+   embedded defaults.
 
-D2RLoader requires lowercase plugin IDs without spaces and derives configuration filenames from those IDs. The DLL uses the full display name; the loader ID and configuration use `controller-qol-updates`. The native loader still creates, reads and preserves configuration files. If you explicitly configured a loader load-order entry for `qol`, update that entry to `controller-qol-updates`.
+The plugin ID is `controller-qol-updates`, so its configuration file is
+`controller-qol-updates.toml`. If upgrading from the older `qol` identity,
+rename `qol.toml` and update any explicit loader ordering entry that names it.
+Do not overwrite an existing customized configuration with the loose reference
+copy included in the release ZIP.
 
-## Defaults and configuration
+## Requirements and support information
 
-**Debug logging is OFF by default: `debug_logging = false`.** This is true of both the supplied TOML and the copy embedded in the DLL. Renaming an existing configuration preserves its current value; set it to `false` if that file still has debugging enabled.
+- D2RLoader plugin ABI 4
+- Windows x64 Diablo II: Resurrected client
+- Restart the game after changing the DLL or configuration; hot reload is not
+  supported
 
-Ground looting, quick identify, quick move and filtered-pickup blocking are enabled by default. The modifier is LB (`"bumper"`); identify requires and consumes an available identify charge. Edit `controller-qol-updates.toml` with the game closed. The `[qol]` section remains for settings compatibility.
-
-## Compatibility and verification
-
-Requires D2RLoader. Earlier gameplay features were developed and manually qualified with the current Reimagined installation. Native code profiles target that tested game build; other patches and mod configurations have not been qualified. Item roll-range display is separate research and is not included.
-
-Rev.48 retains the user-validated Guided Arrow controller targeting correction and makes the Runes page use the same advanced-storage-first, embedded-Cube fallback as Gems and Materials. All 21 automated suites pass, including materials routing, Guided Arrow isolation and DLL artifact checks; the user confirmed the merged behavior in game. See `docs/PRODUCTION-1.3.1-rev.48.md` for the current validation boundary. `SHA256SUMS` lists package hashes.
-
-The monorepo references a shared, pinned SDK submodule and includes tests and patch-recovery documents. Start with `docs/README.md` for the research map. See `docs/PORTAL-PRIORITY.md` for the new hook and patch recovery, `docs/PACKAGING.md` for naming evidence, and the feature-specific documents for native contracts. `docs/LEGACY-REIMAGINED-MIGRATION.md` records the extraction from the former Reimagined working tree and the evidence distilled from excluded local logs. Historical documents retain their original filenames and version-specific observations. The 1.5.13 and 1.5.19 golden checkpoints remain separate.
+Detailed validation boundaries, native contracts, and engineering records are
+kept under [`docs/`](docs/README.md). See
+[`PRODUCTION-1.3.1-rev.48.md`](docs/PRODUCTION-1.3.1-rev.48.md) for the current
+release record and `SHA256SUMS` in the release archive for file verification.
 
 ## Build from source
 
 Use an x64 Visual Studio Developer Prompt with CMake 3.29+ and the Windows SDK:
 
-    cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-    cmake --build build --config Release
-    ctest --test-dir build -C Release --output-on-failure
+```powershell
+cmake -S plugins/controller-qol -B build/controller-qol -A x64
+cmake --build build/controller-qol --config Release
+ctest --test-dir build/controller-qol -C Release --output-on-failure
+```
 
-The output is **`Controller QOL Updates.dll`**. `tools/build_local.py` is the developer machine's compiler-discovery helper. See `docs/NPC-SELLING.md`, `docs/SHARED-DEPOSIT.md` and the other feature-specific research for native contracts.
-
-### Plugin cooperation in 1.5.20
-
-QOL leaves the shared action table available to RuffnecKk Potion Auto Pickup 1.3.3, honors direct plugin pickup requests, and recognizes its reviewed belt hook. Game-originated pickups retain QOL filtering. Optional label-limit observations now report modified code without a misleading patch-failure error (including the report associated with Stash Search). See docs/POTION-AUTO-PICKUP-COMPATIBILITY.md for evidence, addresses, scope and remaining runtime checks. Neither third-party plugin needs editing.
-
-
-### 1.5.21 startup compatibility test build
-
-Private D2RCore controller calls now share the exact-build guard used by navigation. Unknown loader builds use physical XInput instead of old core addresses. Native navigation/label/glyph features that fail existing guards remain disabled; this build does not claim full 1.3.1 feature compatibility. Ten automated suites cover the startup fallback and existing contracts; game startup confirmation is pending.
-
-For a launch with no active mod, install in the game's **d2rloader/plugins** folder and use **d2rloader/config/controller-qol-updates.toml**. This test deployment preserves the global configuration and leaves mods/Reimagined untouched.
-
-### 1.3.1+rev.4 focused potion refill
-
-Highlight a potion stack in Materials and press LB+R3 to refill from that exact stack. It does not switch to another potion type when stock runs out. Fill Belt appears only on potions. Existing inventory refill remains available. See docs/FOCUSED-REFILL-1.5.25.md.
-
-See docs/PRODUCTION-1.3.1-rev.48.md for the current production snapshot and version policy.
-
-XInput hardening: see docs/XINPUT-HARDENING-1.3.1.1.md. Shutdown retains a transparent hook until process exit; restart to change DLL versions.
-
-1.3.1.2: holding the ground-loot modifier excludes portals from Interact selection; neutral A retains portal priority.
-
-1.3.1.3 moves controller prompt text interception into widget call sites, preserving the renderer entry checked by Stash Search. See docs/GLYPH-CALLS-1.3.1.3.md.
-
-Version policy: `1.3.1+rev.N` identifies the qualified loader target and the independent plugin revision. Build metadata does not participate in SemVer precedence. Native fingerprints remain authoritative.
-
-### Native controller input in 1.3.1+rev.5
-
-The qualified D2RLoader 1.3.1 build uses the game's normalized controller input for loot modifiers, shortcuts and Shared page chords. Steam translation is not required for a controller the game itself recognizes. QOL applies shortcut suppression at that same native layer and does not install XInput hooks when the native hook is admitted. An unsupported/conflicting native profile falls back to XInput with an explicit coverage warning; native navigation guards remain independent. Digital native triggers follow the game's pressed state rather than a raw analog threshold. See [native input evidence and verification](docs/NATIVE-INPUT-1.3.1-rev.5.md). Production validation: Battle.net DualShock with Steam closed, Steam Controller on Steam, and DualShock on Steam, all tested by the user with Stash Search and Potion Auto Pickup enabled. See [production release notes](docs/PRODUCTION-1.3.1-rev.5.md) for scope and remaining risks.
-
-### Production 1.3.1+rev.7
-
-Ground-label and portal-contact interception now uses scoped call sites, leaving their shared entries available to other plugins. See [release notes](docs/PRODUCTION-1.3.1-rev.7.md) for validation and compatibility limits. Version-specific sections above describe historical changes.
-
-## Latest compatibility improvements
-
-Charm Inventory menu switching and LB+X transfers now cooperate with the
-loader's registered custom page. Item shortcut hints appear only in controller
-mode. These changes reuse native routing and transfer semantics; custom-page
-transfers add no hooks. See [current release record](docs/PRODUCTION-1.3.1-rev.11.md)
-for build requirements, validation scope and limitations.
-
-Rev.11 removes synchronous per-item identification logging, validates the exact
-item and consumables in one game-thread scan, and reports distinct failure
-reasons without enabling verbose logging. See docs/IDENTIFY-REV11.md.
-
-### Identification (rev.36 candidate)
-
-Hold LB and tap A on an unidentified item to identify it, or on a Tome of Identify
-to identify all unidentified items already in main inventory and the Horadric Cube. The batch uses only
-the highlighted tome and always consumes one verified charge per item. Cube and
-Shared Stash tomes are excluded; inventory and open Personal Stash tomes are supported.
-
-`native_identify = false` is the default: SDK item edits consume and verify a
-charge before identifying, without entering the targeting cursor. Bulk work yields
-between game updates and stops on depletion, changed item identity, or failure.
-Set `native_identify = true` and restart to use the slower native hold-A sequence
-for compatibility. SDK failures never automatically retry natively, since a charge
-may already have changed. Native bulk mode was confirmed working in rev.34;
-rev.35 SDK speed and navigation were confirmed working. Cube targets use SDK mode;
-native compatibility mode remains inventory-only. Rev.36 Cube behavior needs an in-game check.
-
-L1/LB no longer changes directional inventory navigation or skips empty cells.
-The usual transfer, identify and belt shortcuts remain available.
-
-### Bulk quick stash (rev.38+)
-
-With the stash open, hold **LB and tap L3** to deposit eligible materials, gems,
-runes and rejuvenation potions from inventory using the game's existing smart-stash
-rules. Other inventory items remain in place. Cube contents and belt potions are
-not included. Eligible items are submitted together in one game update, then verified as a batch.
-Further submissions stop on refusal or changed identity; no ordinary stash
-fallback is used. Normal L3 still opens the Cube outside this chord.
+The output is `Controller QOL Updates.dll`. The repository pins the D2RLoader
+PluginSDK as a submodule; clone with submodules or initialize it before building.
