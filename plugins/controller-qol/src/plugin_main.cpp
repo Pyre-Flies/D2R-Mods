@@ -28,6 +28,7 @@
 #include "portal_policy.h"
 #include "policy.h"
 #include "ground_action_hooks.h"
+#include "guided_arrow_projection.h"
 #include "placard_call.h"
 #include "pickup_calls.h"
 #include "placard_text.h"
@@ -146,7 +147,7 @@ static constexpr D2RL::PluginInfo ControllerQoLPluginInfo {
     .abiVersion  = D2RL_PLUGIN_ABI_VERSION,
     .id          = "controller-qol-updates",
     .name        = "Controller QOL Updates",
-    .version     = "1.3.1+rev.46",
+    .version     = "1.3.1+rev.48",
     .author      = "PyreFly",
     .description = "Direct controller looting with filtered labels, inventory shortcuts, and stash navigation.",
     .flags       = D2RL::PluginFlags::Shared | D2RL::PluginFlags::NativeHooks,
@@ -1261,6 +1262,7 @@ namespace GroundLoot {
     using CollisionFn = std::int32_t(__fastcall*)(void*, void*, std::uint32_t);
     using PickupFn = bool(__fastcall*)(void*, std::uint32_t, bool, std::uint32_t, bool, bool);
     using GetItemCodeFn = std::uint32_t(__fastcall*)(void*);
+    using GetSelectedSkillFn = void*(__fastcall*)(void*);
 
     static uint8_t* s_Base = nullptr;
     static bool s_FingerprintValid = false;
@@ -1279,6 +1281,50 @@ namespace GroundLoot {
     static PickupFn s_Pickup = nullptr;
     static std::atomic<bool> s_PickupCallsActive{false};
     static GetItemCodeFn s_GetItemCode = nullptr;
+    static GetSelectedSkillFn s_GetSelectedSkill = nullptr;
+
+    static bool ProjectGuidedArrowPacket(void* player, const void* packet,
+        int32_t size, std::array<uint8_t,5>& projectedPacket) noexcept {
+        if (!player || !packet || size != static_cast<int32_t>(projectedPacket.size()) ||
+            !s_GetSelectedSkill)
+            return false;
+
+        __try {
+            std::memcpy(projectedPacket.data(), packet, projectedPacket.size());
+            if (projectedPacket[0] != 0x05) return false;
+
+            void* const selectedSkill = s_GetSelectedSkill(player);
+            void* const skillRecord = selectedSkill
+                ? *reinterpret_cast<void**>(selectedSkill)
+                : nullptr;
+            void* const path = *reinterpret_cast<void**>(
+                static_cast<uint8_t*>(player) + 0x38);
+            if (!skillRecord || !path) return false;
+
+            const auto skillId = *reinterpret_cast<uint16_t*>(skillRecord);
+            const auto playerX = *reinterpret_cast<uint16_t*>(
+                static_cast<uint8_t*>(path) + 0x02);
+            const auto playerY = *reinterpret_cast<uint16_t*>(
+                static_cast<uint8_t*>(path) + 0x06);
+            uint16_t targetX{};
+            uint16_t targetY{};
+            std::memcpy(&targetX, projectedPacket.data() + 1, sizeof(targetX));
+            std::memcpy(&targetY, projectedPacket.data() + 3, sizeof(targetY));
+
+            uint16_t projectedX{};
+            uint16_t projectedY{};
+            if (!GuidedArrowProjection::TryProject(
+                    playerX, playerY, targetX, targetY, skillId,
+                    projectedX, projectedY))
+                return false;
+
+            std::memcpy(projectedPacket.data() + 1, &projectedX, sizeof(projectedX));
+            std::memcpy(projectedPacket.data() + 3, &projectedY, sizeof(projectedY));
+            return true;
+        } __except (EXCEPTION_EXECUTE_HANDLER) {
+            return false;
+        }
+    }
 
     __declspec(noinline) bool __fastcall HookPickup(void* player, uint32_t guid, bool arg3, uint32_t dist, bool arg5, bool arg6) {
         if (!s_Pickup) return false;
@@ -1921,11 +1967,30 @@ namespace GroundLoot {
     }
 
     static bool InstallHooks(const D2RL::PluginContext* context, uint8_t*) noexcept {
-        return QolCompat::ActionHooks::Install(context, &ObserveTrigger);
+        s_GetSelectedSkill = nullptr;
+        QolCompat::ActionHooks::Projector projector = nullptr;
+        bool guidedArrowGuardMatched = false;
+        if (context && context->CheckExpectedBytes(
+                QolCompat::Native::ControllerSelectedSkill.rva,
+                QolCompat::Native::ControllerSelectedSkill.bytes,
+                sizeof(QolCompat::Native::ControllerSelectedSkill.bytes))) {
+            s_GetSelectedSkill = reinterpret_cast<GetSelectedSkillFn>(
+                context->exeBase + QolCompat::Native::ControllerSelectedSkill.rva);
+            projector = &ProjectGuidedArrowPacket;
+            guidedArrowGuardMatched = true;
+        } else if (context) {
+            context->LogWarn("[ControllerQoL] Guided Arrow selected-skill guard mismatch; projection disabled, other controller features retained.");
+        }
+        const bool installed = QolCompat::ActionHooks::Install(
+            context, &ObserveTrigger, projector);
+        if (installed && guidedArrowGuardMatched && context)
+            context->LogInfo("[ControllerQoL] Guided Arrow controller projection enabled at 20 tiles.");
+        return installed;
     }
     static void UninstallHooks(const D2RL::PluginContext*) noexcept {
         s_PickupCallsActive.store(false);
         QolCompat::ActionHooks::Shutdown();
+        s_GetSelectedSkill = nullptr;
         s_ActivePlayer = nullptr;
         s_ActiveGame = nullptr;
     }
@@ -2787,7 +2852,7 @@ D2RL_PLUGIN_EXPORT auto D2RLoaderLoadPlugin(const D2RL::PluginContext* context) 
         g_Settings.prioritizeWaypoints, g_Settings.prioritizeShrines, g_Settings.prioritizeChests,
         g_Settings.debugLogging || g_Settings.portalDiagnostics,
         g_Settings.groundPickupButton, g_Settings.portalPriorityDistance);
-    context->LogInfo("[QOL] QOL v1.3.1+rev.46 loaded: controller item features and integrated v0.6 navigation/label hooks.");
+    context->LogInfo("[QOL] QOL v1.3.1+rev.48 loaded: controller item features and integrated v0.6 navigation/label hooks.");
     return true;
 }
 

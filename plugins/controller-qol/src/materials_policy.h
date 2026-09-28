@@ -7,7 +7,8 @@ constexpr bool AdvancedProxyCandidate(D2RL::Items::ItemContainer source) noexcep
     return source==C::Cursor || source==C::SharedStash || source==C::CustomPage;
 }
 constexpr bool UseMaterialsRoute(uint32_t tab, D2RL::Items::ItemContainer source) noexcept {
-    return (tab==2 || tab==3) && source==D2RL::Items::ItemContainer::Inventory;
+    return (tab==2 || tab==3 || tab==4) &&
+        source==D2RL::Items::ItemContainer::Inventory;
 }
 constexpr bool UseStashDeposit(D2RL::Items::ItemContainer source, D2RL::Items::ItemContainer destination, bool stashOpen) noexcept {
     using C=D2RL::Items::ItemContainer;

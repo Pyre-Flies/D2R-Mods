@@ -56,8 +56,8 @@ int main() {
     Check(QolShared::SameItem(focus,candidate),"unknown UI page still requires exact runtime identity");
     Check(!AdvancedProxyCandidate(C::Cube) && !AdvancedProxyCandidate(C::Inventory) && !AdvancedProxyCandidate(C::PersonalStash),"ordinary grids bypass advanced handler");
     Check(AdvancedProxyCandidate(C::Cursor) && AdvancedProxyCandidate(C::SharedStash),"observed advanced proxy containers retained");
-    Check(UseMaterialsRoute(2,C::Inventory) && UseMaterialsRoute(3,C::Inventory),"Gems/Materials inventory action uses shared Cube/storage route without history");
-    Check(!UseMaterialsRoute(4,C::Inventory) && !UseMaterialsRoute(3,C::Cube) && !UseMaterialsRoute(2,C::Cube) && !UseMaterialsRoute(1,C::Inventory) && !UseMaterialsRoute(0xFFFFFFFF,C::Inventory),"other tabs and Cube withdrawal do not enter storage deposit");
+    Check(UseMaterialsRoute(2,C::Inventory) && UseMaterialsRoute(3,C::Inventory) && UseMaterialsRoute(4,C::Inventory),"Gems/Materials/Runes inventory action uses shared Cube/storage route without history");
+    Check(!UseMaterialsRoute(4,C::Cube) && !UseMaterialsRoute(3,C::Cube) && !UseMaterialsRoute(2,C::Cube) && !UseMaterialsRoute(1,C::Inventory) && !UseMaterialsRoute(0xFFFFFFFF,C::Inventory),"other tabs and Cube withdrawal do not enter storage deposit");
     Check(!UseStashDeposit(C::Inventory,C::Cube,true),"open stash cannot hijack explicit Cube destination");
     Check(UseStashDeposit(C::Inventory,C::PersonalStash,true) && !UseStashDeposit(C::Cube,C::Inventory,true),"stash deposit limited to requested stash route");
     int item{},owner{};

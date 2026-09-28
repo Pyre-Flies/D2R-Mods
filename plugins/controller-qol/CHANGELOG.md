@@ -1,3 +1,16 @@
+# Rev.48 Runes embedded-Cube routing
+
+- Treat selected stash tab 4 (Runes) like the existing Gems and Materials pages for inventory LB+X: try native advanced-storage deposit first, then send noneligible items to the embedded Horadric Cube.
+- Preserve native Rune eligibility, Cube-source withdrawal, ordinary Personal/Shared stash routing, and the explicit LB+Y Cube action. No hook, RVA, packet, or native ABI changes.
+- All 21 automated suites pass. The user confirmed the byte-identical installed build behaves correctly in game.
+
+# Rev.47 Guided Arrow controller targeting
+
+- Project Guided Arrow's controller-only adjacent ground coordinate to 20 tiles while preserving its direction, allowing the native acquisition and homing logic to search at a useful distance.
+- Reuse Controller QOL's existing guarded action `0x05` hook. Other skills, mouse casts, target-selected casts, already-distant points and the original packet remain unchanged.
+- Guard the selected-skill accessor independently. A mismatch disables only this projection and retains all other Controller QOL behavior.
+- All 21 automated suites pass, including projection policy, action-hook isolation and DLL artifact verification. The user confirmed the merged controller ground-shot acquisition and homing behavior in game.
+
 # Rev.46 well-priority classification candidate
 
 - Extend the existing default-on `prioritize_shrines` family to the 14 environmental Fountain/Well classes that use OperateFn 22 but do not carry the shrine SubClass bit. The allowlist is exact to the inspected active ObjectsTxt table and avoids promoting unrelated SubClass-0 or SubClass-32 objects.

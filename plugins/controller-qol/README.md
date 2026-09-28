@@ -1,7 +1,7 @@
 # Controller QOL Updates
 
 **Made by PyreFly for D2RLoader**  
-Version **1.3.1+rev.46** | Windows x64 | Diablo II: Resurrected
+Version **1.3.1+rev.48** | Windows x64 | Diablo II: Resurrected
 
 Pick the loot you want directly from its ground label. Controller QOL Updates gives nearby items their own controller shortcuts, keeps those assignments stable while you loot, and respects the active loot filter. Inventory, Cube, stash, potion and shop shortcuts extend the same LB-based controls to item management.
 
@@ -60,7 +60,7 @@ Ground looting, quick identify, quick move and filtered-pickup blocking are enab
 
 Requires D2RLoader. Earlier gameplay features were developed and manually qualified with the current Reimagined installation. Native code profiles target that tested game build; other patches and mod configurations have not been qualified. Item roll-range display is separate research and is not included.
 
-All 20 automated suites pass for rev.46, including policy tests and DLL ABI/export/version verification. Later live testing confirmed the SDK identification and bulk-stash iterations, and the expanded interaction priority was reported substantially improved. The environmental-well addition in rev.46 still needs a focused visible retest. Earlier native-controller validation covered Battle.net DualShock without Steam and Steam Controller/DualShock on Steam, with Stash Search and Potion Auto Pickup. See `docs/PRODUCTION-1.3.1-rev.46.md` for the current validation boundary. `SHA256SUMS` lists package hashes.
+Rev.48 retains the user-validated Guided Arrow controller targeting correction and makes the Runes page use the same advanced-storage-first, embedded-Cube fallback as Gems and Materials. All 21 automated suites pass, including materials routing, Guided Arrow isolation and DLL artifact checks; the user confirmed the merged behavior in game. See `docs/PRODUCTION-1.3.1-rev.48.md` for the current validation boundary. `SHA256SUMS` lists package hashes.
 
 The monorepo references a shared, pinned SDK submodule and includes tests and patch-recovery documents. Start with `docs/README.md` for the research map. See `docs/PORTAL-PRIORITY.md` for the new hook and patch recovery, `docs/PACKAGING.md` for naming evidence, and the feature-specific documents for native contracts. `docs/LEGACY-REIMAGINED-MIGRATION.md` records the extraction from the former Reimagined working tree and the evidence distilled from excluded local logs. Historical documents retain their original filenames and version-specific observations. The 1.5.13 and 1.5.19 golden checkpoints remain separate.
 
@@ -89,7 +89,7 @@ For a launch with no active mod, install in the game's **d2rloader/plugins** fol
 
 Highlight a potion stack in Materials and press LB+R3 to refill from that exact stack. It does not switch to another potion type when stock runs out. Fill Belt appears only on potions. Existing inventory refill remains available. See docs/FOCUSED-REFILL-1.5.25.md.
 
-See docs/PRODUCTION-1.3.1-rev.46.md for the current production snapshot and version policy.
+See docs/PRODUCTION-1.3.1-rev.48.md for the current production snapshot and version policy.
 
 XInput hardening: see docs/XINPUT-HARDENING-1.3.1.1.md. Shutdown retains a transparent hook until process exit; restart to change DLL versions.
 

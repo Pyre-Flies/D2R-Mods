@@ -95,6 +95,10 @@ target_compile_definitions(qol-compatibility-tests PRIVATE WIN32_LEAN_AND_MEAN N
 add_dependencies(qol-compatibility-tests qol-compatibility-fixture)
 add_test(NAME qol-compatibility COMMAND qol-compatibility-tests "$<TARGET_FILE:qol-compatibility-fixture>")
 
+add_executable(qol-guided-arrow-tests tests/guided_arrow_projection_tests.cpp)
+target_include_directories(qol-guided-arrow-tests PRIVATE src)
+add_test(NAME qol-guided-arrow COMMAND qol-guided-arrow-tests)
+
 add_executable(qol-core-guard-tests tests/core_guard_tests.cpp src/controller_input.cpp)
 target_include_directories(qol-core-guard-tests PRIVATE src include "${PLUGIN_SDK}/include")
 target_compile_definitions(qol-core-guard-tests PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
@@ -156,7 +160,7 @@ add_executable(qol-artifact-tests tests/artifact_tests.cpp)
 target_include_directories(qol-artifact-tests PRIVATE "${PLUGIN_SDK}/include")
 target_compile_definitions(qol-artifact-tests PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 add_dependencies(qol-artifact-tests controller-qol)
-add_test(NAME qol-artifact COMMAND qol-artifact-tests "$<TARGET_FILE:controller-qol>" "1.3.1+rev.46")
+add_test(NAME qol-artifact COMMAND qol-artifact-tests "$<TARGET_FILE:controller-qol>" "1.3.1+rev.48")
 
 add_executable(qol-shared-sdk-tests tests/shared_sdk_tests.cpp)
 target_include_directories(qol-shared-sdk-tests PRIVATE src "${PLUGIN_SDK}/include")

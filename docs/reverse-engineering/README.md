@@ -12,6 +12,7 @@ Cross-project summaries:
 
 - [Autosort transaction research](autosort-transactions.md)
 - [Controller QOL native-contract registry](controller-qol-native-contracts.md)
+- [Guided Arrow controller targeting candidate](guided-arrow-controller-targeting.md)
 
 ## Tested compatibility profiles
 

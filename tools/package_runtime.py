@@ -92,8 +92,8 @@ mismatch. Close D2R before installing or replacing the DLL.
         "README.md": require_file(controller / "README.md"),
         "CHANGELOG.md": require_file(controller / "CHANGELOG.md"),
         "COMPATIBILITY.txt": controller_compatibility,
-        "docs/PRODUCTION-1.3.1-rev.46.md": require_file(
-            controller / "docs" / "PRODUCTION-1.3.1-rev.46.md"
+        "docs/PRODUCTION-1.3.1-rev.48.md": require_file(
+            controller / "docs" / "PRODUCTION-1.3.1-rev.48.md"
         ),
     }
     controller_files["docs/IDENTIFY-REV11.md"] = require_file(controller / "docs" / "IDENTIFY-REV11.md")

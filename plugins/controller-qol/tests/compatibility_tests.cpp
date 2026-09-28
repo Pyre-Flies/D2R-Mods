@@ -8,8 +8,10 @@
 static void Check(bool value,const char* message) { if(!value){std::fprintf(stderr,"FAIL: %s\n",message);std::exit(1);} }
 using QolCompat::ActionHooks;
 static std::array<ActionHooks::Handler,18> installed{};
-static int installs{}, nativeCalls{}, observations{}, lastNative{}, lastObserved{}, failAt=-1;
-template<size_t I> int64_t __fastcall Native(void*,void*,void*,int32_t) { ++nativeCalls;lastNative=int(I+1);return 1000+I; }
+static int installs{}, nativeCalls{}, observations{}, projections{}, lastNative{}, lastObserved{}, failAt=-1;
+static void* lastPacket{};
+static uint8_t lastPacketByte{};
+template<size_t I> int64_t __fastcall Native(void*,void*,void* packet,int32_t) { ++nativeCalls;lastNative=int(I+1);lastPacket=packet;lastPacketByte=packet?static_cast<uint8_t*>(packet)[1]:0;return 1000+I; }
 template<size_t...I> auto Originals(std::index_sequence<I...>) { return std::array<ActionHooks::Handler,18>{&Native<I>...}; }
 static const auto originals=Originals(std::make_index_sequence<18>{});
 static bool __cdecl Match(const D2RL::PluginContext*,uint64_t rva,const void* bytes,uint32_t size) noexcept {
@@ -24,6 +26,11 @@ static bool __cdecl Install(const D2RL::PluginContext*,const D2RL::InlineHookReg
     *h->original=reinterpret_cast<void*>(originals[i]);return true;
 }
 static void Observe(uint8_t opcode,void*,void*,void*,int32_t) noexcept {++observations;lastObserved=opcode;}
+static bool Project(void*,const void* packet,int32_t size,std::array<uint8_t,5>& output) noexcept {
+    ++projections;
+    if(!packet || size!=5)return false;
+    std::memcpy(output.data(),packet,5);output[1]=99;return true;
+}
 int main(int argc,char** argv) {
     Check(argc==2,"fixture argument");
     D2RL::PluginApi api{};api.apiSize=D2RL::PluginApiSize;api.checkExpectedBytes=&Match;api.installInlineHook=&Install;
@@ -34,13 +41,19 @@ int main(int argc,char** argv) {
         for(size_t i=0;i<18;++i) table[i]=expected[i]=0x140000000+QolCompat::Native::Actions[i].rva;
         if(potionFirst) table.fill(0x12345678);
         const auto before=table;installs=0;failAt=-1;
-        Check(ActionHooks::Install(&ctx,&Observe),"QOL hooks install in either table-owner order");
+        Check(ActionHooks::Install(&ctx,&Observe,&Project),"QOL hooks install in either table-owner order");
         Check(table==before,"QOL never mutates another plugin's table");
         if(!potionFirst) {Check(table==expected,"Potion native table fingerprint still passes after QOL");table.fill(0x12345678);}
         for(size_t i=0;i<18;++i) {
-            nativeCalls=observations=0;
-            Check(installed[i](nullptr,nullptr,nullptr,0)==1000+i,"native result forwarded including malformed packet");
+            nativeCalls=observations=projections=0;
+            uint8_t packet[5]{5,1,2,3,4};
+            Check(installed[i](nullptr,nullptr,packet,5)==1000+i,"native result forwarded");
             Check(nativeCalls==1 && observations==1 && lastNative==i+1 && lastObserved==i+1,"correct per-handler trampoline and exactly one observer");
+            if(i==4) {
+                Check(projections==1 && lastPacket!=packet && lastPacketByte==99,
+                    "controller coordinate handler receives private projected packet");
+                Check(packet[1]==1,"original controller packet remains unchanged");
+            } else Check(projections==0 && lastPacket==packet,"unrelated handlers bypass projection");
         }
         ActionHooks::Shutdown();observations=nativeCalls=0;
         installed[0](nullptr,nullptr,nullptr,0);
