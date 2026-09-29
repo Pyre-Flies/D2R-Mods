@@ -63,6 +63,8 @@ before carrying a hook or layout to another D2R or D2RCore build.
 The accompanying [RVA and interception workflow](docs/reverse-engineering/RVA-AND-INTERCEPTION-WORKFLOW.md)
 documents how those locations were discovered and how future findings must be
 qualified and recorded.
+For a compact map of the evidence and validation boundaries, start with the
+[research handoff](docs/AI-HANDOFF.md).
 
 ## Releases and contributions
 
