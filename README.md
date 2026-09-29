@@ -27,6 +27,7 @@ third_party/
   D2RLoader-PluginSDK/  Pinned upstream build-time SDK submodule
 docs/
   reverse-engineering/  Cross-project RVA and native-contract registry
+skills/                 Reusable D2R engineering and gameplay skill source
 .github/                CI, issue forms, and pull-request template
 ```
 

@@ -9,6 +9,11 @@ be represented here.
 
 ## Where to start
 
+For general working procedure, read the versioned
+[D2R skills](../skills/README.md): the engineering skill covers guarded native
+plugin work and the gameplay skill covers variant-aware player behavior. Their
+reference files are useful to AI systems that do not load Codex skills.
+
 | Work | Canonical record | What it establishes |
 |---|---|---|
 | D2R/D2RCore locations and shared contracts | [Reverse-engineering registry](reverse-engineering/README.md), [RVA workflow](reverse-engineering/RVA-AND-INTERCEPTION-WORKFLOW.md) | Build identity, RVA conventions, byte witnesses, and discovery method |

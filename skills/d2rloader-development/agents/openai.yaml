@@ -1,0 +1,4 @@
+interface:
+  display_name: "D2RLoader Development"
+  short_description: "Guarded D2RLoader plugin engineering workflow"
+  default_prompt: "Use $d2rloader-development to investigate and implement this D2RLoader plugin change safely."
