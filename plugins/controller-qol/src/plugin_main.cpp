@@ -1,5 +1,7 @@
 #include "identify_bulk.h"
 #include "bulk_stash.h"
+#include "aim/controller_aim.h"
+#include "aim/config_sections.h"
 #include <D2RLPlugin/api.h>
 #include "controller_input.h"
 #include "physical_input.h"
@@ -147,7 +149,7 @@ static constexpr D2RL::PluginInfo ControllerQoLPluginInfo {
     .abiVersion  = D2RL_PLUGIN_ABI_VERSION,
     .id          = "controller-qol-updates",
     .name        = "Controller QOL Updates",
-    .version     = "1.3.1+rev.48",
+    .version     = "1.3.1+rev.50",
     .author      = "PyreFly",
     .description = "Direct controller looting with filtered labels, inventory shortcuts, and stash navigation.",
     .flags       = D2RL::PluginFlags::Shared | D2RL::PluginFlags::NativeHooks,
@@ -156,14 +158,18 @@ static constexpr D2RL::PluginInfo ControllerQoLPluginInfo {
 static void LoadConfiguration(const D2RL::PluginContext* context) noexcept {
     if (!context) return;
 
-    char buffer[2048]{};
+    char buffer[16384]{};
     uint32_t reqSize = 0;
     if (!context->ReadConfig(buffer, sizeof(buffer) - 1, &reqSize)) {
         context->LogInfo("[ControllerQoL] Using default settings (no custom toml found).");
         return;
     }
 
-    std::string toml(buffer);
+    std::string toml;
+    if(!QolAim::Section(buffer,"qol",toml)) {
+        context->LogWarn("[ControllerQoL] Duplicate qol section; using QOL defaults.");
+        return;
+    }
     auto parseBool = [&toml](const char* key, bool& target) {
         auto pos = toml.find(key);
         if (pos != std::string::npos) {
@@ -1302,6 +1308,7 @@ namespace GroundLoot {
             if (!skillRecord || !path) return false;
 
             const auto skillId = *reinterpret_cast<uint16_t*>(skillRecord);
+            if (skillId==GuidedArrowProjection::SkillId && QolAim::OwnsGuidedArrow()) return false;
             const auto playerX = *reinterpret_cast<uint16_t*>(
                 static_cast<uint8_t*>(path) + 0x02);
             const auto playerY = *reinterpret_cast<uint16_t*>(
@@ -2852,11 +2859,14 @@ D2RL_PLUGIN_EXPORT auto D2RLoaderLoadPlugin(const D2RL::PluginContext* context) 
         g_Settings.prioritizeWaypoints, g_Settings.prioritizeShrines, g_Settings.prioritizeChests,
         g_Settings.debugLogging || g_Settings.portalDiagnostics,
         g_Settings.groundPickupButton, g_Settings.portalPriorityDistance);
-    context->LogInfo("[QOL] QOL v1.3.1+rev.48 loaded: controller item features and integrated v0.6 navigation/label hooks.");
+    if(!QolAim::Initialize(context,g_Settings.enabled))
+        context->LogWarn("[QOL/Aim] Aim unavailable; other QOL features remain loaded.");
+    context->LogInfo("[QOL] QOL v1.3.1+rev.50 loaded: controller item features and integrated v0.6 navigation/label hooks.");
     return true;
 }
 
 D2RL_PLUGIN_EXPORT void D2RLoaderUnloadPlugin() noexcept {
+    QolAim::Shutdown();
     g_PollingRunning.store(false);
     if (g_PollingThread.joinable()) {
         g_PollingThread.join();

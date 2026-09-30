@@ -25,3 +25,29 @@ prioritize_chests = false
 portal_priority_distance = 10
 # Targeted, throttled portal selection diagnostics; separate from general debug.
 portal_diagnostics = false
+
+[aim]
+# Opt-in controller cursor/snapping; requires restart.
+enabled = false
+# Radial dead zone, fraction of full stick travel (0.0..0.9).
+deadzone = 0.22
+# Speeds in world tiles/second at full stick tilt (0.1..100).
+# Light tilt slows movement further with a squared response curve.
+initial_speed = 4.0
+maximum_speed = 28.0
+# Time to reach maximum speed while held (0.0..5.0).
+# Higher = gentler acceleration. Zero = immediate maximum speed.
+acceleration_seconds = 0.65
+
+# All settings load on restart. Disabling the overlay does not disable aiming.
+snapping_enabled = true
+snap_radius = 6.0 # world tiles, 0.5..15
+switch_advantage = 1.5 # closer by this many tiles to steal the target, 0..15
+overlay_enabled = true
+debug_overlay = false # verbose HUD, outer range circle, ticks and LAST CAST
+projection_hz = 60.0 # ground projection sampling, 10..120; actual rate <= UI rate
+overlay_smoothing_ms = 35.0 # display-only smoothing, 0..150; zero disables
+
+# Whirlwind: false snaps onto the enemy without extending past it.
+whirlwind_pass_through_enabled = true
+whirlwind_pass_through_distance = 1.5 # world tiles beyond enemy, 0..15

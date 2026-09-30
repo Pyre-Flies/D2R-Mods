@@ -5,6 +5,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <string_view>
+#include "aim/aim_config.h"
 
 static void check(bool ok,const char* message) {
     if(!ok) {std::fprintf(stderr,"FAIL: %s (Win32=%lu)\n",message,GetLastError());std::exit(1);}
@@ -40,6 +41,10 @@ int main(int argc,char** argv) {
     check(config.find("prioritize_portals = true")!=config.npos,"portal priority defaults on");
     check(config.find("portal_priority_distance = 10")!=config.npos,"portal priority range defaults to ten");
     check(config.find("portal_diagnostics = false")!=config.npos,"portal diagnostics default off");
+    Aim::MotionSettings aim{}; bool aimEnabled=true;
+    check(Aim::ParseQolSettings(config,aim,aimEnabled) && !aimEnabled,"embedded aim settings parse and default off");
+    check(aim.whirlwindPassThrough && aim.whirlwindPassThroughDistance==1.5f && !aim.debugOverlay,"merged aim defaults preserve reviewed behavior");
+    check(!GetProcAddress(dll,"D2RControllerAimOwnsGuidedArrowV1"),"prototype ownership export replaced by internal interface");
     // Do not call the plugin load export: this process has no game or loader services.
     FreeLibrary(dll);
     std::puts("Merged DLL identity, exports, ABI, dependencies, and embedded defaults passed.");

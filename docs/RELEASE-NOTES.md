@@ -1,19 +1,42 @@
-## Controller QOL Updates 1.3.1+rev.48
+## Controller QOL Updates 1.3.1+rev.50
 
-- Restore Guided Arrow's native acquisition and homing behavior for controller ground casts by projecting only its adjacent target point to 20 tiles. Mouse casts, selected targets, other skills and the original packet remain unchanged.
-- Reuse Controller QOL's existing guarded controller action hook; no additional shared hook is installed. The selected-skill guard fails open without disabling other Controller QOL features.
-- Treat the Reimagined Runes page like Gems and Materials: inventory LB+X tries native advanced storage first, then sends noneligible items to the embedded Horadric Cube.
-- Preserve the rev.46 identification, bulk-stash, filtered-pickup, interaction-priority, navigation, transfer, potion, label and controller-header behavior.
+- Integrate the controller aim prototype into QOL as an optional right-stick cursor,
+  circular enemy snapping and subtle ground/enemy reticles.
+- Support Teleport, Meteor, Blizzard, Hydra, Fire Wall, Guided Arrow, Multi Shot,
+  Teeth, Leap and Whirlwind. Teleport/Leap remain ground-only; their idle marker
+  previews the next snap-capable spell. Whirlwind supports configurable retained
+  enemy pass-through, including an off toggle and extension distance.
+- Preserve the existing QOL shortcuts and Guided Arrow correction when aim is off.
+  Aim owns short-distance Guided Arrow coordinates only while active.
+- Gate aim behind `[aim] enabled = true` in `controller-qol-updates.toml`.
+  **Default is disabled.** Cursor response, snapping, overlay and pass-through are
+  configurable. Invalid aim settings disable only aim; exact native guards remain.
 
-All 21 Controller QOL suites pass locally, including Guided Arrow policy/isolation, Runes routing and DLL ABI/export/version checks. The user confirmed the merged Guided Arrow behavior and the Runes embedded-Cube correction in game. Static and automated coverage does not imply validation on unreviewed game builds.
+## Validation
+
+Local automated suites pass: Controller QOL **23/23**, Item Roll Ranges **5/5**,
+Map Assistance **2/2**. Prototype gameplay, reticles and post-Teleport lock preview
+were user-tested. The newly integrated runtime still needs in-game validation;
+automated checks do not establish compatibility with unreviewed game builds.
 
 ## Included unchanged
 
 - Item Roll Ranges 1.3.1+rev.13
 - Map Assistance 1.3.1+rev.1
 
-## Installation
+## Installation and prototype migration
 
-Close the game and loader, back up existing DLLs, and extract the desired ZIPs into the game directory for a global installation. Preserve existing configuration and keep only one active copy of each plugin. Debug logging defaults remain off. Item Roll Ranges requires `d2rcore.items.item_stat_ranges = true`.
+Close the game and loader, back up existing DLLs/configuration, and extract the
+wanted runtime ZIPs into the game directory. Keep one active copy of each plugin.
+Preserve customized configuration; the ZIP's `configuration/` file is a reference.
 
-Target: Windows x64, D2RLoader 1.3.1 / ABI4; SDK pinned to v0.3.0. Native features retain build-specific guards. See the bundled rev.48 production record for compatibility limits. Hot reload is unsupported.
+For optional aim, add an `[aim]` section with `enabled = true` to
+`d2rloader/config/controller-qol-updates.toml`; see the README for all tuning keys.
+If migrating from Controller Aim Test, disable its DLL and copy its `[aim]` values
+into QOL's configuration, adding `enabled = true`. Do not run both aim versions.
+The old prototype config is no longer read. F8 toggles aim, F9 recenters, and F10
+inverts Y when the feature is configured on. Restart after configuration edits.
+
+Target: Windows x64, D2RLoader 1.3.1 / ABI4; pinned SDK v0.3.0. See the bundled
+rev.50 production record for exact-build guards and validation limits. Hot reload
+is unsupported. Item Roll Ranges requires `d2rcore.items.item_stat_ranges = true`.

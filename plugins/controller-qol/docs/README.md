@@ -8,6 +8,8 @@ Keep detailed feature evidence here and cross-project summaries there.
 
 ## Current status and validation
 
+- [PRODUCTION-1.3.1-rev.50.md](PRODUCTION-1.3.1-rev.50.md) - opt-in integrated aim, configuration migration and validation boundary.
+
 - [VALIDATION.md](VALIDATION.md) - build, artifact, deployment, automated-test and live-test status. Keep automated and live evidence separate.
 - [HOOK-INVENTORY.md](HOOK-INVENTORY.md) - native hook ownership and compatibility map.
 - [PRODUCTION-1.3.1-rev.7.md](PRODUCTION-1.3.1-rev.7.md) - qualified production scope and remaining limits.

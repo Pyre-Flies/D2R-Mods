@@ -4,7 +4,7 @@
 
 2026-09-26 global Controller QOL rev.11 with mod-scoped Charm Inventory 1.0.1,
 BNetSimulation and other ReimaginedLadder plugins; global Chronicle Ground Flag,
-Stash Search and Potion Auto Pickup. Canonical source is I:/D2R-Mods.
+Stash Search and Potion Auto Pickup. Canonical source is this repository.
 Core SHA256: 2A868D013D2E0830BD2D9E04B918B19E46A73CF726C833E70D089B948FDEB5A2.
 Global QOL logs, rather than the mod log directory, contain its transfer evidence.
 

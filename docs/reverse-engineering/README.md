@@ -13,6 +13,7 @@ Cross-project summaries:
 - [Autosort transaction research](autosort-transactions.md)
 - [Controller QOL native-contract registry](controller-qol-native-contracts.md)
 - [Guided Arrow controller targeting candidate](guided-arrow-controller-targeting.md)
+- [Integrated controller aim](../../plugins/controller-qol/docs/PRODUCTION-1.3.1-rev.50.md): opt-in cursor/snapping, native guards, render projection and archived prototype evidence; combined-runtime validation pending.
 
 ## Tested compatibility profiles
 

@@ -354,5 +354,8 @@ void Initialize(const D2RL::PluginContext* ctx, bool enabled, bool directLootEna
     std::snprintf(message, sizeof(message), "[QOL/Priority] portal=%d stash=%d waypoint=%d shrine=%d chest=%d; contact/scoring/range enabled within %u native units; diagnostics=%d.", portals, stash, waypoints, shrines, chests, range, trace);
     ctx->LogInfo(message);
 }
+bool OwnsContactDestination(std::uintptr_t destination) noexcept {
+    return originalContact && destination==reinterpret_cast<std::uintptr_t>(&CandidateContact);
+}
 void Shutdown() noexcept { active.store(false); }
 }

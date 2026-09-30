@@ -29,6 +29,7 @@ add_library(controller-qol SHARED
     src/belt_compatibility.cpp
     src/vendor_buy.cpp
     src/belt_actions.cpp
+    src/aim/controller_aim.cpp
     src/plugin_main.cpp
     src/controller_input.cpp
     src/d2r_memory.cpp
@@ -157,10 +158,10 @@ add_test(NAME qol-belt-compatibility COMMAND qol-belt-compatibility-tests)
 
 # Keep the shipped resource/exports/defaults in the routine regression run.
 add_executable(qol-artifact-tests tests/artifact_tests.cpp)
-target_include_directories(qol-artifact-tests PRIVATE "${PLUGIN_SDK}/include")
+target_include_directories(qol-artifact-tests PRIVATE src "${PLUGIN_SDK}/include")
 target_compile_definitions(qol-artifact-tests PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 add_dependencies(qol-artifact-tests controller-qol)
-add_test(NAME qol-artifact COMMAND qol-artifact-tests "$<TARGET_FILE:controller-qol>" "1.3.1+rev.48")
+add_test(NAME qol-artifact COMMAND qol-artifact-tests "$<TARGET_FILE:controller-qol>" "1.3.1+rev.50")
 
 add_executable(qol-shared-sdk-tests tests/shared_sdk_tests.cpp)
 target_include_directories(qol-shared-sdk-tests PRIVATE src "${PLUGIN_SDK}/include")
@@ -170,3 +171,17 @@ add_test(NAME qol-shared-sdk COMMAND qol-shared-sdk-tests)
 add_executable(qol-bulk-stash-tests tests/bulk_stash_tests.cpp)
 target_include_directories(qol-bulk-stash-tests PRIVATE src "${PLUGIN_SDK}/include")
 add_test(NAME qol-bulk-stash COMMAND qol-bulk-stash-tests)
+
+# Integrated aim policy and configuration isolation regression coverage.
+add_executable(qol-aim-tests tests/aim_policy_tests.cpp)
+target_include_directories(qol-aim-tests PRIVATE src/aim)
+target_compile_options(qol-aim-tests PRIVATE /W4 /WX)
+add_test(NAME qol-aim COMMAND qol-aim-tests)
+set_source_files_properties(src/aim/controller_aim.cpp PROPERTIES COMPILE_OPTIONS "/W4;/WX")
+
+add_executable(qol-aim-gating-tests tests/aim_gating_tests.cpp src/aim/controller_aim.cpp)
+target_include_directories(qol-aim-gating-tests PRIVATE src "${PLUGIN_SDK}/include")
+target_compile_definitions(qol-aim-gating-tests PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_compile_options(qol-aim-gating-tests PRIVATE /W4 /WX)
+target_link_libraries(qol-aim-gating-tests PRIVATE bcrypt)
+add_test(NAME qol-aim-gating COMMAND qol-aim-gating-tests)

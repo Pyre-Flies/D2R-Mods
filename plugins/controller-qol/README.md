@@ -85,6 +85,8 @@ these menus so navigation cannot queue a world pickup.
   skill's native target acquisition and homing can operate like keyboard and
   mouse casting. Target-selected casts, other skills, and mouse input are not
   changed.
+- With integrated controller aim enabled in a session, its cursor controls
+  Guided Arrow distance. Turning aim off restores QOL's usual correction.
 - Filtered ground labels remain visible in controller mode while the direct-loot
   system is active.
 - Controller glyphs follow the device artwork selected by the game.
@@ -126,6 +128,72 @@ All settings live under `[qol]` and are read when the plugin loads.
 the seven world-loot chords. Keeping both at LB gives the default layout shown
 above.
 
+## Optional controller aim
+
+Set `[aim] enabled = true` in `d2rloader/config/controller-qol-updates.toml`
+and restart. The feature defaults off and also requires `[qol] enabled = true`.
+It adds a right-stick cursor within 30 world tiles. Tilt controls speed, holding
+accelerates, and release stops cursor movement. Unsupported skills keep native
+controller targeting; mouse/keyboard casts retain their normal route.
+
+| Class | Skills | Targeting |
+| --- | --- | --- |
+| Sorceress | Teleport | Ground only |
+| Sorceress | Meteor, Blizzard, Hydra, Fire Wall | Enemy snap with ground fallback |
+| Amazon | Guided Arrow, Multi Shot | Enemy snap with ground fallback |
+| Necromancer | Teeth | Enemy snap with ground fallback |
+| Barbarian | Leap | Ground only; Leap Attack is excluded |
+| Barbarian | Whirlwind | Retained enemy snap, optional pass-through |
+
+Cast a supported skill once to establish the cursor. Circular snapping uses
+fresh native-eligible candidates near it. Native character turning, landing and
+collision checks remain. Idle after Teleport/Leap, the marker previews a candidate
+for the next snap-capable cast; the ground skills themselves never snap.
+Whirlwind retains an eligible enemy across a spin so the next cast can pass back
+through it. Moving the stick releases retention. Pass-through extends beyond the
+enemy by the configured distance, with a 30-tile total cap. Disabling pass-through
+keeps direct enemy snapping; disabling snapping uses only the ground cursor.
+
+| Aim control | Action |
+| --- | --- |
+| Right stick | Move cursor; release to stop |
+| F8 | Toggle aim for this session (only when enabled in configuration) |
+| F9 | Recenter 20 tiles along character facing and release target |
+| F10 | Invert right-stick Y for this session |
+
+Bindings appear under Controller QOL Aim in the loader controls menu. The normal
+bone reticle marks the cursor, brass corners mark the enemy, and a separate bone
+ring marks a Whirlwind pass-through endpoint. Debug mode restores diagnostic
+lines/circles/text. These are aim indicators, not skill area-of-effect outlines.
+
+### Aim configuration
+
+All keys below belong in `[aim]`, separately from `[qol]`. Restart after edits.
+Missing values use defaults; an invalid aim section disables aim and logs a warning
+without disabling other QOL features. Overlay settings do not affect targeting.
+
+| Key | Default | Purpose / allowed values |
+| --- | --- | --- |
+| `enabled` | `false` | Opt in to aim hooks, controls and overlay |
+| `deadzone` | `0.22` | Radial stick dead zone, 0-0.9 |
+| `initial_speed` | `4.0` | Initial full-tilt speed, 0.1-100 tiles/sec |
+| `maximum_speed` | `28.0` | Held speed, initial_speed-100 tiles/sec |
+| `acceleration_seconds` | `0.65` | Time to maximum speed, 0-5; zero is immediate |
+| `snapping_enabled` | `true` | Snap attack skills; false uses ground cursor |
+| `snap_radius` | `6.0` | Acquisition radius around cursor, 0.5-15 tiles |
+| `switch_advantage` | `1.5` | Competitor must be this much closer, 0-15 tiles |
+| `overlay_enabled` | `true` | Show aiming graphics |
+| `debug_overlay` | `false` | Show detailed HUD, lines and submitted-cast marker |
+| `projection_hz` | `60.0` | Ground projection sampling, 10-120; limited by UI rate |
+| `overlay_smoothing_ms` | `35.0` | Display-only smoothing, 0-150 ms |
+| `whirlwind_pass_through_enabled` | `true` | Extend Whirlwind beyond retained enemy |
+| `whirlwind_pass_through_distance` | `1.5` | Extension, 0-15 tiles; zero targets enemy directly |
+
+Disable/remove the standalone `Controller Aim Test.dll` before enabling this
+feature. Its old TOML is not read by QOL. For migration, copy its `[aim]` values
+into QOL's config and add `enabled = true`; retain both old DLLs/configs for rollback.
+Do not load the integrated and standalone aim implementations together.
+
 ## Install or update
 
 1. Close Diablo II: Resurrected and D2RLoader.
@@ -152,8 +220,8 @@ copy included in the release ZIP.
 
 Detailed validation boundaries, native contracts, and engineering records are
 kept under [`docs/`](docs/README.md). See
-[`PRODUCTION-1.3.1-rev.48.md`](docs/PRODUCTION-1.3.1-rev.48.md) for the current
-release record and `SHA256SUMS` in the release archive for file verification.
+[`PRODUCTION-1.3.1-rev.50.md`](docs/PRODUCTION-1.3.1-rev.50.md) for the current
+integration record and `SHA256SUMS` in the release archive for file verification.
 
 ## Build from source
 

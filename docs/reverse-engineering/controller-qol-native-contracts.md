@@ -95,3 +95,9 @@ See `plugins/controller-qol/docs/PORTAL-PRIORITY.md`, `STASH-WAYPOINT-PRIORITY-R
 - Keep UI categories, SDK containers, native storage pages and mod-visible sub-pages as distinct namespaces.
 - Treat native submission, authoritative state, client visibility and persistence as separate evidence levels.
 - Update this index and the authoritative plugin evidence together whenever a reusable contract changes.
+# Integrated aim (rev.50)
+
+The former standalone aim.20 hooks now belong to opt-in Controller QOL. Exact
+internal contact-wrapper identity replaces prototype QOL-DLL hash admission;
+no new native sites. The canonical [integration record](../../plugins/controller-qol/docs/PRODUCTION-1.3.1-rev.50.md)
+documents gates, configuration migration and live-validation limits.

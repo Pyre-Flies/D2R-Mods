@@ -107,3 +107,10 @@ Rev.22 adds SDK inline hook game+0x13CA70 (native controller button query), scop
 Rev.26 candidate: inventory native tome-use adapter adds no hooks/slot patches. See IDENTIFY-NATIVE-REV26.md for guarded hold-A/grid activation calls and pending live validation.
 
 Rev.37 bulk stash adds no hooks or slot writes. Existing LB+X eligibility/deposit helpers are reused through SDK native-item access, with per-batch byte admission. See BULK-STASH-REV37.md for reused addresses, guard provenance and live-validation limits.
+
+## Rev.50 optional controller aim
+
+Adds five opt-in SDK inline hooks: 0x190440, 0x1919F0, 0x18AF30, 0x4FDB40,
+0x18DDE0. Source: src/aim/controller_aim.cpp and native_profile.h. Same sites as
+standalone aim.20, now owned by QOL. Exact guards, internal contact-relay ownership,
+configuration gating and live-validation limits: [rev.50](PRODUCTION-1.3.1-rev.50.md).

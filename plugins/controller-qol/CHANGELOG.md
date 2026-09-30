@@ -1,3 +1,30 @@
+# Rev.49 Controller Aim Test coexistence
+
+## 1.3.1+rev.50 - 2026-09-30
+
+- Integrate aim.20 into QOL as an opt-in `[aim]` module: right-stick cursor,
+  ten explicit skills, circular snapping, Whirlwind pass-through, subtle reticles
+  and idle lock preview after Teleport/Leap. All reviewed tuning keys are retained.
+- Default aim off; the global QOL switch also gates initialization. Invalid aim
+  configuration disables only aim. Separate TOML sections and a larger config
+  buffer prevent aim settings from affecting QOL's existing settings.
+- Replace inter-DLL Guided Arrow ownership with an internal query; validate
+  existing contact relays against QOL's exact wrapper address. No new native sites.
+- Preserve disabled/failed-init pass-through and SDK-owned callback/hook cleanup.
+  Refuse aim initialization if the standalone prototype is loaded.
+- All 23 suites pass, including merged artifact/defaults, section isolation and
+  disabled/invalid-config zero-service-registration checks. Standalone aim.20's
+  post-Teleport marker was user-confirmed; merged runtime remains unverified.
+
+
+- Let the enabled, installed Controller Aim Test prototype own Guided Arrow's
+  coordinate distance. The existing adjacent-point-to-20-tile correction remains
+  active when the prototype is absent, disabled, outside a session or uninstalled.
+- Query its private versioned ownership export while holding a temporary module
+  reference; no cached function pointer, new native hook, address or game-data edit.
+- All 21 automated suites pass. Active coexistence and short-range Guided Arrow
+  placement require live validation with aim.14.
+
 # Rev.48 Runes embedded-Cube routing
 
 - Treat selected stash tab 4 (Runes) like the existing Gems and Materials pages for inventory LB+X: try native advanced-storage deposit first, then send noneligible items to the embedded Horadric Cube.
