@@ -113,14 +113,14 @@ All settings live under `[qol]` and are read when the plugin loads.
 | `trigger_threshold` | `30` | Analog trigger threshold reserved by the configuration; the current build uses 30 |
 | `ground_pickup` | `true` | Enable direct ground-label assignments and pickup chords |
 | `ground_pickup_button` | `"bumper"` | Direct-loot modifier. Supports `lb`, `rb`, `lt`, `rt`, `l3`, `r3`, bracket/paddle aliases, or a single keyboard letter/number |
-| `ground_pickup_distance` | `6` | Direct-loot search distance, clamped to 1–20 game units |
+| `ground_pickup_distance` | `6` | Direct-loot search distance, clamped to 1â€“20 game units |
 | `block_filtered_pickup` | `true` | Prevent native pickup of ground items without an active visible label |
 | `prioritize_portals` | `true` | Prefer eligible portals over ground loot for neutral A |
 | `prioritize_stash_boxes` | `true` | Prefer the town stash over ground loot for neutral A |
 | `prioritize_waypoints` | `true` | Prefer eligible waypoints over ground loot for neutral A |
 | `prioritize_shrines` | `true` | Prefer shrines and supported wells/fountains over ground loot for neutral A |
 | `prioritize_chests` | `false` | Prefer supported ordinary chests over ground loot for neutral A |
-| `portal_priority_distance` | `10` | Shared priority-object range, clamped to 1–20 game units |
+| `portal_priority_distance` | `10` | Shared priority-object range, clamped to 1â€“20 game units |
 | `debug_logging` | `false` | Enable general diagnostic logging |
 | `portal_diagnostics` | `false` | Enable targeted, throttled object-priority diagnostics independently of general debug logging |
 
@@ -128,10 +128,11 @@ All settings live under `[qol]` and are read when the plugin loads.
 the seven world-loot chords. Keeping both at LB gives the default layout shown
 above.
 
-## Optional controller aim
+## Controller aim
 
-Set `[aim] enabled = true` in `d2rloader/config/controller-qol-updates.toml`
-and restart. The feature defaults off and also requires `[qol] enabled = true`.
+Controller aim defaults on and also requires `[qol] enabled = true`. Set
+`[aim] enabled = false` in `d2rloader/config/controller-qol-updates.toml` and
+restart to disable it. Explicit existing false values remain respected.
 It adds a right-stick cursor within 30 world tiles. Tilt controls speed, holding
 accelerates, and release stops cursor movement. Unsupported skills keep native
 controller targeting; mouse/keyboard casts retain their normal route.
@@ -174,7 +175,7 @@ without disabling other QOL features. Overlay settings do not affect targeting.
 
 | Key | Default | Purpose / allowed values |
 | --- | --- | --- |
-| `enabled` | `false` | Opt in to aim hooks, controls and overlay |
+| `enabled` | `true` | Enable aim hooks, controls and overlay |
 | `deadzone` | `0.22` | Radial stick dead zone, 0-0.9 |
 | `initial_speed` | `4.0` | Initial full-tilt speed, 0.1-100 tiles/sec |
 | `maximum_speed` | `28.0` | Held speed, initial_speed-100 tiles/sec |
@@ -220,7 +221,7 @@ copy included in the release ZIP.
 
 Detailed validation boundaries, native contracts, and engineering records are
 kept under [`docs/`](docs/README.md). See
-[`PRODUCTION-1.3.1-rev.50.md`](docs/PRODUCTION-1.3.1-rev.50.md) for the current
+[`PRODUCTION-1.3.1-rev.51.md`](docs/PRODUCTION-1.3.1-rev.51.md) for the current
 integration record and `SHA256SUMS` in the release archive for file verification.
 
 ## Build from source

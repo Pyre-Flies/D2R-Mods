@@ -12,7 +12,7 @@ inline bool ParseSettings(std::string_view text,MotionSettings& output,bool* ena
         return first==s.npos ? std::string_view{} : s.substr(first,s.find_last_not_of(" \t\r")-first+1);
     };
     MotionSettings parsed{};
-    bool parsedEnabled=false;
+    bool parsedEnabled=true;
     unsigned seen=0;
     bool inAim=false;
     while(!text.empty()) {

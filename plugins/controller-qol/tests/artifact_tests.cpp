@@ -42,7 +42,7 @@ int main(int argc,char** argv) {
     check(config.find("portal_priority_distance = 10")!=config.npos,"portal priority range defaults to ten");
     check(config.find("portal_diagnostics = false")!=config.npos,"portal diagnostics default off");
     Aim::MotionSettings aim{}; bool aimEnabled=true;
-    check(Aim::ParseQolSettings(config,aim,aimEnabled) && !aimEnabled,"embedded aim settings parse and default off");
+    check(Aim::ParseQolSettings(config,aim,aimEnabled) && aimEnabled,"embedded aim settings parse and default on");
     check(aim.whirlwindPassThrough && aim.whirlwindPassThroughDistance==1.5f && !aim.debugOverlay,"merged aim defaults preserve reviewed behavior");
     check(!GetProcAddress(dll,"D2RControllerAimOwnsGuidedArrowV1"),"prototype ownership export replaced by internal interface");
     // Do not call the plugin load export: this process has no game or loader services.

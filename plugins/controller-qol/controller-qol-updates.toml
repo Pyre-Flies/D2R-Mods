@@ -27,8 +27,8 @@ portal_priority_distance = 10
 portal_diagnostics = false
 
 [aim]
-# Opt-in controller cursor/snapping; requires restart.
-enabled = false
+# Controller cursor/snapping enabled by default; requires restart.
+enabled = true
 # Radial dead zone, fraction of full stick travel (0.0..0.9).
 deadzone = 0.22
 # Speeds in world tiles/second at full stick tilt (0.1..100).

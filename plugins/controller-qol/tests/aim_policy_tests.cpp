@@ -12,7 +12,7 @@ void Check(bool b,const char* message) {
 int main() {
     using namespace Aim;
     MotionSettings integrated{}; bool enabled=true;
-    Check(ParseQolSettings("[qol]\nenabled=true",integrated,enabled) && !enabled,"missing aim section stays opt-in");
+    Check(ParseQolSettings("[qol]\nenabled=true",integrated,enabled) && enabled,"missing aim section defaults enabled");
     Check(ParseQolSettings("[qol]\nenabled=true\n[aim]\nenabled=false",integrated,enabled) && !enabled,"qol enabled cannot enable aim");
     Check(ParseQolSettings("[aim]\nenabled=true\ninitial_speed=25\nmaximum_speed=100\nacceleration_seconds=0.05\n[qol]\nenabled=false",integrated,enabled) && enabled && integrated.initialSpeed==25,"aim parsed independently of later qol section");
     Check(!ParseQolSettings("[aim]\nenabled=true\nenabled=false",integrated,enabled),"duplicate aim enable rejected");

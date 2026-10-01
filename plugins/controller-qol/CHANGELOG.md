@@ -149,6 +149,14 @@
 
 # Changelog
 
+## 1.3.1+rev.51 - 2026-09-30
+
+- Enable controller aim by default in embedded configuration and when the aim
+  section/key is absent. Explicit aim.enabled=false and qol.enabled=false still
+  disable it. Invalid aim configuration continues to fail closed for aim only.
+- No targeting or visual behavior changes. Updated configuration/default tests.
+
+
 All notable changes to Controller QOL Updates are recorded here. Versions before
 the GitHub migration are reconstructed from release and validation records.
 

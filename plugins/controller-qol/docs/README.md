@@ -8,6 +8,8 @@ Keep detailed feature evidence here and cross-project summaries there.
 
 ## Current status and validation
 
+- [PRODUCTION-1.3.1-rev.51.md](PRODUCTION-1.3.1-rev.51.md) - aim defaults enabled; explicit off remains supported.
+
 - [PRODUCTION-1.3.1-rev.50.md](PRODUCTION-1.3.1-rev.50.md) - opt-in integrated aim, configuration migration and validation boundary.
 
 - [VALIDATION.md](VALIDATION.md) - build, artifact, deployment, automated-test and live-test status. Keep automated and live evidence separate.
