@@ -114,3 +114,12 @@ Adds five opt-in SDK inline hooks: 0x190440, 0x1919F0, 0x18AF30, 0x4FDB40,
 0x18DDE0. Source: src/aim/controller_aim.cpp and native_profile.h. Same sites as
 standalone aim.20, now owned by QOL. Exact guards, internal contact-relay ownership,
 configuration gating and live-validation limits: [rev.50](PRODUCTION-1.3.1-rev.50.md).
+
+
+## Rev.54 optional Cast observer
+
+Cast at 0x4FDB40 is now optional, enabled by default. A byte mismatch or SDK
+hook refusal retains the four essential aim hooks; cast_observer_enabled=false
+leaves that entry free. All other profile guards remain required. See
+[AIM-CAST-OBSERVER-COMPATIBILITY.md](AIM-CAST-OBSERVER-COMPATIBILITY.md) for admission,
+reset fallback and automated/live validation boundaries.

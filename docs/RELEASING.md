@@ -37,6 +37,11 @@ python tools/package_runtime.py `
   --output dist
 ```
 
+Runtime configs install at `d2rloader/config/*.toml` and DLLs at
+`d2rloader/plugins/*.dll`. Extract the archive into the game directory; there is
+no separate `configuration/` directory. When updating, preserve customized configs
+or merge new defaults instead of overwriting personal settings.
+
 Each ZIP contains its own `SHA256SUMS` for installed files. The adjacent release
 `SHA256SUMS` covers the three ZIP assets themselves.
 

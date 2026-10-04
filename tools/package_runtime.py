@@ -20,6 +20,11 @@ def read_version(source: Path, pattern: str) -> str:
 
 
 def make_archive(path: Path, files: dict[str, bytes]) -> None:
+    for name in files:
+        if name.endswith(".toml") and not name.startswith("d2rloader/config/"):
+            raise SystemExit(f"Config is outside the installable layout: {name}")
+        if name.endswith(".dll") and not name.startswith("d2rloader/plugins/"):
+            raise SystemExit(f"DLL is outside the installable layout: {name}")
     checksums = "".join(
         f"{hashlib.sha256(data).hexdigest()}  {name}\n"
         for name, data in sorted(files.items())
@@ -86,7 +91,7 @@ mismatch. Close D2R before installing or replacing the DLL.
 """.encode("utf-8")
     controller_files = {
         "d2rloader/plugins/Controller QOL Updates.dll": require_file(args.controller_dll),
-        "configuration/controller-qol-updates.toml": require_file(
+        "d2rloader/config/controller-qol-updates.toml": require_file(
             controller / "controller-qol-updates.toml"
         ),
         "README.md": require_file(controller / "README.md"),
@@ -99,7 +104,9 @@ mismatch. Close D2R before installing or replacing the DLL.
     controller_files["docs/IDENTIFY-REV11.md"] = require_file(controller / "docs" / "IDENTIFY-REV11.md")
     # Include the release's focused compatibility and native-contract records.
     for name in (
-        "PRODUCTION-1.3.1-rev.50.md", "AIM-NATIVE-HISTORY.md", "PRODUCTION-1.3.1-rev.47.md",
+        "PRODUCTION-1.3.1-rev.60.md", "SKILL-TREE-AIM-TOGGLE.md",
+        "SKILL-CATALOG.md", "AIM-CAST-OBSERVER-COMPATIBILITY.md",
+        "IMPLEMENTATION-1.3.1-rev.52.md", "PRODUCTION-1.3.1-rev.50.md", "AIM-NATIVE-HISTORY.md", "PRODUCTION-1.3.1-rev.47.md",
         "LADDER-CONFLICTS-REV12.md", "LABEL-REFRESH-REV13.md", "LABEL-MODE-REV14.md",
         "IDENTIFY-STAT70-REV15.md", "AUTO-BELT-COMPATIBILITY-REV16.md",
         "VENDOR-BELT-REV17.md", "SHARED-SDK-REV18.md", "CHRONICLE-NAVIGATION-REV19.md",
@@ -134,7 +141,7 @@ before installing or replacing the DLL.
 
     map_assistance_files = {
         "d2rloader/plugins/Map Assistance.dll": require_file(args.map_assistance_dll),
-        "configuration/map-assistance.toml": require_file(
+        "d2rloader/config/map-assistance.toml": require_file(
             map_assistance / "map-assistance.toml"
         ),
         "README.md": require_file(map_assistance / "DISTRIBUTION-README.md"),

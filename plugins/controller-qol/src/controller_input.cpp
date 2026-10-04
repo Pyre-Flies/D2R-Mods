@@ -295,6 +295,11 @@ void SetAutoFillBeltCallback(AutoFillBeltCallback callback) noexcept {
 
 static uint16_t s_PrevDpadButtons[8] = {};
 static uint16_t s_PrevRawButtons[8] = {};
+static std::atomic<uint64_t> s_RightStickPresses{};
+bool NativeRightStickPresses(uint64_t& sequence) noexcept {
+    if(!NativeInputInstalled())return false;
+    sequence=s_RightStickPresses.load();return true;
+}
 static bool s_QuickMoveTriggeredX[8] = {};
 static bool s_QuickMoveTriggeredY[8] = {};
 static bool s_AutoFillBeltTriggered[8] = {};
@@ -527,6 +532,7 @@ static void __fastcall HookNativeEvent(unsigned key,bool pressed) noexcept {
     s_InputGate.Run([&] {
         std::lock_guard lock(s_NativeMutex);
         SeedNativeTracking(index);
+        if(key==XINPUT_GAMEPAD_RIGHT_THUMB && pressed && !(s_NativeRaw&key))s_RightStickPresses.fetch_add(1);
         if(pressed) s_NativeRaw|=key;else s_NativeRaw&=~key;
         ProcessNativeState(key,pressed);processed=true;
     });

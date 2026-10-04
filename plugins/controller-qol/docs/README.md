@@ -8,6 +8,16 @@ Keep detailed feature evidence here and cross-project summaries there.
 
 ## Current status and validation
 
+- [PRODUCTION-1.3.1-rev.60.md](PRODUCTION-1.3.1-rev.60.md) - current production release, skill settings, indicators and installable ZIP layout.
+
+- [SKILL-TREE-AIM-TOGGLE.md](SKILL-TREE-AIM-TOGGLE.md) - rev.56 R3 per-skill toggle, guarded focused skill ID and persistence.
+
+- [AIM-CAST-OBSERVER-COMPATIBILITY.md](AIM-CAST-OBSERVER-COMPATIBILITY.md) - rev.54 optional cast observer, guarded fallback and Whirlwind coexistence boundaries.
+
+- [SKILL-CATALOG.md](SKILL-CATALOG.md) - rev.53 full class skill catalog, review defaults and source/deployment validation.
+
+- [IMPLEMENTATION-1.3.1-rev.52.md](IMPLEMENTATION-1.3.1-rev.52.md) - right-stick intent, per-skill isolation and numeric custom skill configuration; live validation pending.
+
 - [PRODUCTION-1.3.1-rev.51.md](PRODUCTION-1.3.1-rev.51.md) - aim defaults enabled; explicit off remains supported.
 
 - [PRODUCTION-1.3.1-rev.50.md](PRODUCTION-1.3.1-rev.50.md) - opt-in integrated aim, configuration migration and validation boundary.

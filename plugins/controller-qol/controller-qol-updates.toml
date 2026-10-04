@@ -44,10 +44,533 @@ snapping_enabled = true
 snap_radius = 6.0 # world tiles, 0.5..15
 switch_advantage = 1.5 # closer by this many tiles to steal the target, 0..15
 overlay_enabled = true
+# Reticle colors: quoted #RRGGBB or #RRGGBBAA (optional opacity).
+ground_reticle_color = "#C2B596"
+lock_reticle_color = "#CC9C52F2"
+reticle_thickness = 1.0 # line-width multiplier, 0.5..4; 2.0 doubles strokes
 debug_overlay = false # verbose HUD, outer range circle, ticks and LAST CAST
+# Optional observer at 0x4FDB40: diagnostics, Teleport samples, cast-time reset.
+# true keeps full functionality when available; conflicts auto-skip only this hook.
+cast_observer_enabled = true
+# R3 on a highlighted base-catalog skill toggles/saves its aim setting.
+skill_tree_toggle_enabled = true
 projection_hz = 60.0 # ground projection sampling, 10..120; actual rate <= UI rate
 overlay_smoothing_ms = 35.0 # display-only smoothing, 0..150; zero disables
 
 # Whirlwind: false snaps onto the enemy without extending past it.
 whirlwind_pass_through_enabled = true
 whirlwind_pass_through_distance = 1.5 # world tiles beyond enemy, 0..15
+
+# Class headings are readability only; IDs apply on any character.
+# true enables aim; false is off but R3-toggleable; "disabled" locks off.
+# Passive entries default "disabled"; other untested skills default false.
+# Vanilla names below are labels only; mods may replace an ID's behavior.
+
+[aim.amazon]
+# Magic Arrow — directional target; untested
+"6" = false
+# Fire Arrow — directional target; untested
+"7" = false
+# Inner Sight — self/buff/automatic; keep native
+"8" = false
+# Critical Strike — passive; keep native
+"9" = "disabled"
+# Jab — melee/unit target; untested
+"10" = false
+# Cold Arrow — directional target; untested
+"11" = false
+# Multi Shot — tested snap aim
+"12" = true
+# Dodge — passive; keep native
+"13" = "disabled"
+# Power Strike — melee/unit target; untested
+"14" = false
+# Poison Javelin — directional target; untested
+"15" = false
+# Exploding Arrow — directional target; untested
+"16" = false
+# Slow Missiles — self/buff/automatic; keep native
+"17" = false
+# Avoid — passive; keep native
+"18" = "disabled"
+# Impale — melee/unit target; untested
+"19" = false
+# Lightning Bolt — directional target; untested
+"20" = false
+# Ice Arrow — directional target; untested
+"21" = false
+# Guided Arrow — tested snap aim
+"22" = true
+# Penetrate — passive; keep native
+"23" = "disabled"
+# Charged Strike — melee/unit target; untested
+"24" = false
+# Plague Javelin — directional target; untested
+"25" = false
+# Strafe — directional target; untested
+"26" = false
+# Immolation Arrow — directional target; untested
+"27" = false
+# Dopplezon — summon/placement; untested
+"28" = false
+# Evade — passive; keep native
+"29" = "disabled"
+# Fend — melee/unit target; untested
+"30" = false
+# Freezing Arrow — directional target; untested
+"31" = false
+# Valkyrie — summon/placement; untested
+"32" = false
+# Pierce — passive; keep native
+"33" = "disabled"
+# Lightning Strike — melee/unit target; untested
+"34" = false
+# Lightning Fury — directional target; untested
+"35" = false
+
+[aim.sorceress]
+# Fire Bolt — directional target; untested
+"36" = false
+# Warmth — passive; keep native
+"37" = "disabled"
+# Charged Bolt — directional target; untested
+"38" = false
+# Ice Bolt — directional target; untested
+"39" = false
+# Frozen Armor — self/buff/automatic; keep native
+"40" = false
+# Inferno — directional target; untested
+"41" = false
+# Static Field — self/buff/automatic; keep native
+"42" = false
+# Telekinesis — directional target; untested
+"43" = false
+# Frost Nova — self-centered area; keep native
+"44" = false
+# Ice Blast — directional target; untested
+"45" = false
+# Blaze — self/buff/automatic; keep native
+"46" = false
+# Fire Ball — directional target; untested
+"47" = false
+# Nova — self-centered area; keep native
+"48" = false
+# Lightning — directional target; untested
+"49" = false
+# Shiver Armor — self/buff/automatic; keep native
+"50" = false
+# Fire Wall — tested snap aim
+"51" = true
+# Enchant — self/buff/automatic; keep native
+"52" = false
+# Chain Lightning — directional target; untested
+"53" = false
+# Teleport — tested ground aim
+"54" = true
+# Glacial Spike — directional target; untested
+"55" = false
+# Meteor — tested snap aim
+"56" = true
+# Thunder Storm — self/buff/automatic; keep native
+"57" = false
+# Energy Shield — self/buff/automatic; keep native
+"58" = false
+# Blizzard — tested snap aim
+"59" = true
+# Chilling Armor — self/buff/automatic; keep native
+"60" = false
+# Fire Mastery — passive; keep native
+"61" = "disabled"
+# Hydra — tested snap aim
+"62" = true
+# Lightning Mastery — passive; keep native
+"63" = "disabled"
+# Frozen Orb — directional target; untested
+"64" = false
+# Cold Mastery — passive; keep native
+"65" = "disabled"
+
+[aim.necromancer]
+# Amplify Damage — curse/area target; untested
+"66" = false
+# Teeth — tested snap aim
+"67" = true
+# Bone Armor — self/buff/automatic; keep native
+"68" = false
+# Skeleton Mastery — passive; keep native
+"69" = "disabled"
+# Raise Skeleton — corpse target; keep native
+"70" = false
+# Dim Vision — curse/area target; untested
+"71" = false
+# Weaken — curse/area target; untested
+"72" = false
+# Poison Dagger — melee/unit target; untested
+"73" = false
+# Corpse Explosion — corpse target; keep native
+"74" = false
+# Clay Golem — summon/placement; untested
+"75" = false
+# Iron Maiden — curse/area target; untested
+"76" = false
+# Terror — curse/area target; untested
+"77" = false
+# Bone Wall — ground placement; untested
+"78" = false
+# Golem Mastery — passive; keep native
+"79" = "disabled"
+# Raise Skeletal Mage — corpse target; keep native
+"80" = false
+# Confuse — curse/area target; untested
+"81" = false
+# Life Tap — curse/area target; untested
+"82" = false
+# Poison Explosion — corpse target; keep native
+"83" = false
+# Bone Spear — directional target; untested
+"84" = false
+# Blood Golem — summon/placement; untested
+"85" = false
+# Attract — curse/area target; untested
+"86" = false
+# Decrepify — curse/area target; untested
+"87" = false
+# Bone Prison — summon/placement; untested
+"88" = false
+# Summon Resist — passive; keep native
+"89" = "disabled"
+# Iron Golem — summon/placement; untested
+"90" = false
+# Lower Resist — curse/area target; untested
+"91" = false
+# Poison Nova — self-centered area; keep native
+"92" = false
+# Bone Spirit — directional target; untested
+"93" = false
+# Fire Golem — summon/placement; untested
+"94" = false
+# Revive — corpse target; keep native
+"95" = false
+
+[aim.paladin]
+# Sacrifice — melee/unit target; untested
+"96" = false
+# Smite — melee/unit target; untested
+"97" = false
+# Might — aura; keep native
+"98" = false
+# Prayer — aura; keep native
+"99" = false
+# Resist Fire — aura; keep native
+"100" = false
+# Holy Bolt — directional target; untested
+"101" = false
+# Holy Fire — aura; keep native
+"102" = false
+# Thorns — aura; keep native
+"103" = false
+# Defiance — aura; keep native
+"104" = false
+# Resist Cold — aura; keep native
+"105" = false
+# Zeal — melee/unit target; untested
+"106" = false
+# Charge — native behavior; review before enabling
+"107" = false
+# Blessed Aim — aura; keep native
+"108" = false
+# Cleansing — aura; keep native
+"109" = false
+# Resist Lightning — aura; keep native
+"110" = false
+# Vengeance — melee/unit target; untested
+"111" = false
+# Blessed Hammer — native behavior; review before enabling
+"112" = false
+# Concentration — aura; keep native
+"113" = false
+# Holy Freeze — aura; keep native
+"114" = false
+# Vigor — aura; keep native
+"115" = false
+# Conversion — melee/unit target; untested
+"116" = false
+# Holy Shield — self/buff/automatic; keep native
+"117" = false
+# Holy Shock — aura; keep native
+"118" = false
+# Sanctuary — aura; keep native
+"119" = false
+# Meditation — aura; keep native
+"120" = false
+# Fist of the Heavens — directional target; untested
+"121" = false
+# Fanaticism — aura; keep native
+"122" = false
+# Conviction — aura; keep native
+"123" = false
+# Redemption — aura; keep native
+"124" = false
+# Salvation — aura; keep native
+"125" = false
+
+[aim.barbarian]
+# Bash — melee/unit target; untested
+"126" = false
+# Blade Mastery — passive; keep native
+"127" = "disabled"
+# Axe Mastery — passive; keep native
+"128" = "disabled"
+# Mace Mastery — passive; keep native
+"129" = "disabled"
+# Howl — self/buff/automatic; keep native
+"130" = false
+# Find Potion — corpse target; keep native
+"131" = false
+# Leap — tested ground aim
+"132" = true
+# Double Swing — melee/unit target; untested
+"133" = false
+# Pole Arm Mastery — passive; keep native
+"134" = "disabled"
+# Throwing Mastery — passive; keep native
+"135" = "disabled"
+# Spear Mastery — passive; keep native
+"136" = "disabled"
+# Taunt — native behavior; review before enabling
+"137" = false
+# Shout — self/buff/automatic; keep native
+"138" = false
+# Stun — melee/unit target; untested
+"139" = false
+# Double Throw — directional target; untested
+"140" = false
+# Increased Stamina — passive; keep native
+"141" = "disabled"
+# Find Item — corpse target; keep native
+"142" = false
+# Leap Attack — native behavior; review before enabling
+"143" = false
+# Concentrate — melee/unit target; untested
+"144" = false
+# Iron Skin — passive; keep native
+"145" = "disabled"
+# Battle Cry — self/buff/automatic; keep native
+"146" = false
+# Frenzy — melee/unit target; untested
+"147" = false
+# Increased Speed — passive; keep native
+"148" = "disabled"
+# Battle Orders — self/buff/automatic; keep native
+"149" = false
+# Grim Ward — corpse target; keep native
+"150" = false
+# Whirlwind — tested snap aim
+"151" = true
+# Berserk — melee/unit target; untested
+"152" = false
+# Natural Resistance — passive; keep native
+"153" = "disabled"
+# War Cry — self/buff/automatic; keep native
+"154" = false
+# Battle Command — self/buff/automatic; keep native
+"155" = false
+
+[aim.druid]
+# Raven — summon/placement; untested
+"221" = false
+# Poison Creeper — summon/placement; untested
+"222" = false
+# Werewolf — self/buff/automatic; keep native
+"223" = false
+# Lycanthropy — passive; keep native
+"224" = "disabled"
+# Firestorm — directional target; untested
+"225" = false
+# Oak Sage — summon/placement; untested
+"226" = false
+# Summon Spirit Wolf — summon/placement; untested
+"227" = false
+# Werebear — self/buff/automatic; keep native
+"228" = false
+# Molten Boulder — directional target; untested
+"229" = false
+# Arctic Blast — directional target; untested
+"230" = false
+# Carrion Vine — summon/placement; untested
+"231" = false
+# Feral Rage — melee/unit target; untested
+"232" = false
+# Maul — melee/unit target; untested
+"233" = false
+# Fissure — ground placement; untested
+"234" = false
+# Cyclone Armor — self/buff/automatic; keep native
+"235" = false
+# Heart of Wolverine — summon/placement; untested
+"236" = false
+# Summon Dire Wolf — summon/placement; untested
+"237" = false
+# Rabies — melee/unit target; untested
+"238" = false
+# Fire Claws — melee/unit target; untested
+"239" = false
+# Twister — directional target; untested
+"240" = false
+# Solar Creeper — summon/placement; untested
+"241" = false
+# Hunger — melee/unit target; untested
+"242" = false
+# Shock Wave — directional target; untested
+"243" = false
+# Volcano — ground placement; untested
+"244" = false
+# Tornado — directional target; untested
+"245" = false
+# Spirit of Barbs — summon/placement; untested
+"246" = false
+# Summon Grizzly — summon/placement; untested
+"247" = false
+# Fury — melee/unit target; untested
+"248" = false
+# Armageddon — self/buff/automatic; keep native
+"249" = false
+# Hurricane — self/buff/automatic; keep native
+"250" = false
+
+[aim.assassin]
+# Fire Blast — point/directional target; untested
+"251" = false
+# Claw Mastery — passive; keep native
+"252" = "disabled"
+# Psychic Hammer — directional target; untested
+"253" = false
+# Tiger Strike — melee/unit target; untested
+"254" = false
+# Dragon Talon — melee/unit target; untested
+"255" = false
+# Shock Web — point/directional target; untested
+"256" = false
+# Blade Sentinel — summon/placement; untested
+"257" = false
+# Burst of Speed — self/buff/automatic; keep native
+"258" = false
+# Fists of Fire — melee/unit target; untested
+"259" = false
+# Dragon Claw — melee/unit target; untested
+"260" = false
+# Charged Bolt Sentry — summon/placement; untested
+"261" = false
+# Wake of Fire — summon/placement; untested
+"262" = false
+# Weapon Block — passive; keep native
+"263" = "disabled"
+# Cloak of Shadows — native behavior; review before enabling
+"264" = false
+# Cobra Strike — melee/unit target; untested
+"265" = false
+# Blade Fury — directional target; untested
+"266" = false
+# Fade — self/buff/automatic; keep native
+"267" = false
+# Shadow Warrior — summon/placement; untested
+"268" = false
+# Claws of Thunder — melee/unit target; untested
+"269" = false
+# Dragon Tail — melee/unit target; untested
+"270" = false
+# Lightning Sentry — summon/placement; untested
+"271" = false
+# Wake of Inferno — summon/placement; untested
+"272" = false
+# Mind Blast — directional target; untested
+"273" = false
+# Blades of Ice — melee/unit target; untested
+"274" = false
+# Dragon Flight — point/directional target; untested
+"275" = false
+# Death Sentry — summon/placement; untested
+"276" = false
+# Blade Shield — self/buff/automatic; keep native
+"277" = false
+# Venom — self/buff/automatic; keep native
+"278" = false
+# Shadow Master — summon/placement; untested
+"279" = false
+# Phoenix Strike — melee/unit target; untested
+"280" = false
+
+[aim.warlock]
+# Summon Goatman — summon/placement; untested
+"373" = false
+# Demonic Mastery — passive; keep native
+"374" = "disabled"
+# Death Mark — native behavior; review before enabling
+"375" = false
+# Summon Tainted — summon/placement; untested
+"376" = false
+# Summon Defiler — summon/placement; untested
+"377" = false
+# Blood Oath — passive; keep native
+"378" = "disabled"
+# Engorge — corpse target; keep native
+"379" = false
+# Blood Boil — native behavior; review before enabling
+"380" = false
+# Consume — native behavior; review before enabling
+"381" = false
+# Bind Demon — native behavior; review before enabling
+"382" = false
+# Levitate — passive; keep native
+"383" = "disabled"
+# Eldritch Blast — directional target; untested
+"384" = false
+# Hex Bane — native behavior; review before enabling
+"385" = false
+# Hex Siphon — native behavior; review before enabling
+"386" = false
+# Psychic Ward — native behavior; review before enabling
+"387" = false
+# Echoing Strike — directional target; untested
+"388" = false
+# Hex Purge — native behavior; review before enabling
+"389" = false
+# Blade Warp — point/directional target; untested
+"390" = false
+# Cleave — directional target; untested
+"391" = false
+# Mirrored Blades — point/directional target; untested
+"392" = false
+# Sigil of Lethargy — native behavior; review before enabling
+"393" = false
+# Ring of Fire — native behavior; review before enabling
+"394" = false
+# Miasma Bolt — directional target; untested
+"395" = false
+# Sigil of Rancor — native behavior; review before enabling
+"396" = false
+# Enhanced Entropy — passive; keep native
+"397" = "disabled"
+# Flame Wave — directional target; untested
+"398" = false
+# Miasma Chains — directional target; untested
+"399" = false
+# Sigil of Death — native behavior; review before enabling
+"400" = false
+# Apocalypse — native behavior; review before enabling
+"401" = false
+# Abyss — native behavior; review before enabling
+"402" = false
+
+# Additional IDs outside the class catalog; use the active mod's skills table.
+# true enables snap aim; false is off; "disabled" locks off. Maximum 32 IDs (1..65534).
+[aim.custom]
+# "357" = true
+# "358" = false
+# "359" = "disabled"
+
+# Optional targeting overrides for built-in or declared custom IDs.
+# Changes targeting only; does not enable a skill.
+[aim.targeting]
+# "357" = "ground"
+# "54" = "snap"

@@ -42,8 +42,20 @@ int main(int argc,char** argv) {
     check(config.find("portal_priority_distance = 10")!=config.npos,"portal priority range defaults to ten");
     check(config.find("portal_diagnostics = false")!=config.npos,"portal diagnostics default off");
     Aim::MotionSettings aim{}; bool aimEnabled=true;
-    check(Aim::ParseQolSettings(config,aim,aimEnabled) && aimEnabled,"embedded aim settings parse and default on");
+    Aim::SkillSettings skills{};
+    check(Aim::ParseQolSettings(config,aim,aimEnabled,&skills) && aimEnabled,"embedded aim settings parse and default on");
+    check(config.find("[aim.amazon]")!=config.npos && config.find("[aim.custom]")!=config.npos && config.find("[aim.targeting]")!=config.npos,"class-organized and custom-ID configuration is embedded");
+    check(config.find("# Guided Arrow")!=config.npos && config.find("\"22\" = true")!=config.npos && config.find("\"Guided Arrow\" =")==config.npos,"built-in skill defaults show numeric IDs and readable name comments");
+    check(skills.Snaps(Aim::MultiShot) && skills.Snaps(Aim::GuidedArrow) && skills.Mode(Aim::Teleport)==Aim::TargetMode::Ground && !skills.Enabled(357),"named defaults preserved; example custom IDs stay disabled");
+    check(!skills.CanToggle(9) && !skills.Enabled(9) && skills.CanToggle(12),"stock Critical Strike is locked off while attack skills remain toggleable");
+    unsigned enabledCount=0;
+    for(const auto& skill:Aim::SkillCatalog) enabledCount+=skills.Enabled(skill.id)?1u:0u;
+    check(enabledCount==10 && !skills.Enabled(48) && !skills.Enabled(74) && !skills.Enabled(92),"only ten tested class skills default on; Nova/corpse skills stay native");
+    for(const auto& skill:Aim::SkillCatalog) check(config.find("\""+std::to_string(skill.id)+"\" = ")!=config.npos,"all 240 class IDs included in embedded configuration");
     check(aim.whirlwindPassThrough && aim.whirlwindPassThroughDistance==1.5f && !aim.debugOverlay,"merged aim defaults preserve reviewed behavior");
+    check(aim.reticleThickness==1 && config.find("ground_reticle_color = \"#C2B596\"")!=config.npos && config.find("lock_reticle_color = \"#CC9C52F2\"")!=config.npos,"reticle color and thickness defaults included in shipped config");
+    check(aim.skillTreeToggle && config.find("skill_tree_toggle_enabled = true")!=config.npos,"skill-tree toggle default included in shipped configuration");
+    check(aim.castObserver && config.find("cast_observer_enabled = true")!=config.npos,"optional cast observer defaults enabled for full functionality");
     check(!GetProcAddress(dll,"D2RControllerAimOwnsGuidedArrowV1"),"prototype ownership export replaced by internal interface");
     // Do not call the plugin load export: this process has no game or loader services.
     FreeLibrary(dll);

@@ -1,4 +1,121 @@
-# Rev.49 Controller Aim Test coexistence
+# Controller QOL changelog
+
+## 1.3.1+rev.60 - 2026-10-04
+
+- Package the default TOML at `d2rloader/config/` beside `d2rloader/plugins/`
+  so runtime ZIPs extract directly into the game directory.
+
+- Use `true`, `false`, and `"disabled"` for custom skill enable settings. Enabled
+  custom IDs default to snap targeting; legacy ground/snap strings remain readable.
+- Add optional `[aim.targeting]` ground/snap overrides for catalog and declared
+  custom IDs. Overrides retain enable/lock state and survive R3 off/on cycles.
+- Preserve targeting entries during R3 config saves; reject duplicate, malformed
+  and undeclared targeting IDs. No native hook or skill-tree admission changes.
+- Automated validation covers parser compatibility, override independence and
+  R3 persistence; live testing remains separate.
+
+## 1.3.1+rev.59 - 2026-10-04
+
+- Accept `"disabled"` in class skill sections to lock a skill's aim off and ignore
+  R3. `false` remains off but toggleable; `true` remains enabled. Locked skills
+  display `Auto-aim: DISABLED` and have no icon marker or R3 hint.
+- Lock the 30 cataloged passive skills off in the default config. Existing configs
+  retain their choices; local migration converts only passive entries set false.
+- Validate locked-state parsing, native routing, refusal of R3 document changes,
+  runtime override protection and preservation during other skill toggles.
+  Automated checks and live-game validation are reported separately.
+
+## 1.3.1+rev.58 - 2026-10-04
+
+- Fix first R3 presses being discarded when entering/re-entering skill focus.
+  Observe rising R3 events in the existing admitted normalized-input hook, with
+  a monotonic sequence consumed once on the UI thread. Polling fallback retains
+  button history across focus gaps and does not treat stale input as release.
+- Brighten and slightly strengthen the skill-tree crosshair markers. Add quoted
+  hex `ground_reticle_color`, `lock_reticle_color` and a 0.5..4
+  `reticle_thickness` multiplier for gameplay reticle strokes and outlines.
+- Preserve hashes inside quoted config values while stripping actual comments,
+  including during R3 saves. Add edge/focus, color, thickness and preservation
+  checks; live first-press and appearance validation remains separate.
+
+## 1.3.1+rev.57 - 2026-10-04
+
+- Show a small brass crosshair inside the upper-right corner of each enabled
+  visible skill icon. Disabled skills have no marker. Use actual icon bounds,
+  ancestor scale and visibility; hidden tabs are excluded rather than using a
+  fixed class/grid layout.
+- Move highlighted-skill Auto-aim ON/OFF and R3 toggle instructions into the
+  existing control strip. Draw through the SDK overlay without new hooks or
+  native icon/text edits. Layout mismatch disables these indicators only.
+- Record the read-only layout contracts and native-observed geometry fixture.
+  Automated geometry/build checks and live visual validation are separate.
+
+## 1.3.1+rev.56 - 2026-10-04
+
+- Add R3 per-skill aim toggling while a catalog skill is highlighted in the
+  controller skill tree. Show an Aim ON/OFF hint and save the numeric setting
+  through the SDK, preserving comments and other configuration choices.
+- Apply saved toggles immediately through atomic per-skill modes. Reject unknown
+  mod IDs and ambiguous configuration; holding R3 never repeats the toggle.
+  Add `skill_tree_toggle_enabled=false` to disable the shortcut.
+- Guard the newly inspected focus path independently; mismatch disables only
+  this shortcut. Live ID tracking confirmed for Magic Arrow and Multi Shot;
+  UI toggle/persistence behavior remains pending a test of the new build.
+
+## 1.3.1+rev.55 - 2026-10-04
+
+- Fix idle Selected target queries clearing right-stick intent and hiding the
+  reticle. Query IDs are no longer treated as evidence of an unsupported cast.
+  Active unsupported skills and the optional cast observer retain their resets;
+  disabled/mismatched queries continue returning the original native target.
+- Add regression coverage across disabled catalog entries. Automated validation
+  and deployment are recorded in the cast observer compatibility document; live
+  reticle recovery and rapid skill transitions still require confirmation.
+
+## 1.3.1+rev.54 - 2026-10-04
+
+- Make the cast observer at `0x4FDB40` optional. Keep it enabled by default;
+  changed bytes or hook ownership reject only the observer, retaining cursor,
+  snapping and reticles. Add `cast_observer_enabled=false` to leave the site free
+  regardless of load order. Preserve Whirlwind and other skill settings.
+- Extend disabled-skill intent reset through the existing Selected target-request
+  path while idle, alongside active-skill/UI checks. The original getter still
+  runs once; native casts remain unchanged. Observer fallback omits actual-cast
+  diagnostics, LAST CAST and Teleport displacement samples.
+- Test real installer control flow against copied signature fixtures: clean cast
+  site, foreign prefix, explicit opt-out, SDK hook refusal and essential guard
+  failure. Full 23-suite validation and local installation recorded separately;
+  live interaction with the Whirlwind rework remains unverified.
+
+## 1.3.1+rev.53 - 2026-10-03
+
+- Expand numeric class sections to all 240 class skills, including Warlock.
+  Preserve the ten tested default enables; the remaining 230 default false for
+  review, including Corpse Explosion, Nova and Poison Nova. Add readable names
+  and preliminary behavior comments without claiming new runtime compatibility.
+- Class toggles accept all catalog IDs, with provisional ground/snap modes when
+  explicitly enabled. Keep class grouping cosmetic, duplicate-ID rejection,
+  legacy ten-skill name migration and 32 additional custom-mode entries.
+- Increase both configuration read buffers to 64 KiB so the complete commented
+  catalog does not exceed the former 16 KiB limit. No new native sites or ABI.
+- Full-catalog/defaults, extended-buffer and duplicate/mode policy tests added;
+  live behavior of newly enabled skills still requires individual validation.
+
+## 1.3.1+rev.52 - 2026-10-03
+
+- Activate manual aim through deliberate right-stick input. Preserve the cursor
+  after release; disabled/unlisted skill casts release custom locks and restore
+  native targeting, with release/retilt required to resume manual aiming.
+- Add class-organized numeric skill toggles with name comments, without character-class restrictions,
+  and explicit numeric custom skill entries with ground/snap/disabled modes.
+  Keep existing ten-skill defaults; unknown skills are never enabled implicitly.
+  Legacy name keys remain readable for migration; additional IDs require explicit
+  targeting modes in the custom section.
+- Remove idle native score overrides. Idle lock markers use native observations
+  only; native-excluded candidates may acquire a marker when the cast begins.
+  Keep the existing Guided Arrow correction until manual aiming actually owns it.
+- Automated policy/configuration and build validation recorded in the rev.52
+  implementation note. Live aiming and custom skill compatibility remain pending.
 
 ## 1.3.1+rev.50 - 2026-09-30
 

@@ -1,3 +1,8 @@
+# Packaging update - 2026-10-04
+
+- Put the shipped TOML at `d2rloader/config/map-assistance.toml` so the runtime
+  ZIP extracts directly into the game directory. Plugin version is unchanged.
+
 # Changelog
 
 ## 1.3.1+rev.1 - 2026-09-26

@@ -74,13 +74,19 @@ struct Projection {
         return Finite(screen);
     }
 };
+struct ReticleColor { float red{},green{},blue{},alpha{1}; };
 struct MotionSettings {
     float deadzone=0.22f, initialSpeed=4, maximumSpeed=28, accelerationSeconds=0.65f;
     bool snapping=true, overlay=true, debugOverlay=false, whirlwindPassThrough=true;
+    bool castObserver=true;
+    bool skillTreeToggle=true;
+    ReticleColor groundReticleColor{0.76f,0.71f,0.59f,1},lockReticleColor{0.80f,0.61f,0.32f,0.95f};
+    float reticleThickness=1.0f;
     float whirlwindPassThroughDistance=1.5f;
     float snapRadius=6, switchAdvantage=1.5f, projectionHz=60, overlaySmoothingMs=35;
     bool Valid() const noexcept {
-        return std::isfinite(whirlwindPassThroughDistance) && whirlwindPassThroughDistance>=0 && whirlwindPassThroughDistance<=15 &&
+        return std::isfinite(reticleThickness) && reticleThickness>=0.5f && reticleThickness<=4 &&
+            std::isfinite(whirlwindPassThroughDistance) && whirlwindPassThroughDistance>=0 && whirlwindPassThroughDistance<=15 &&
             std::isfinite(deadzone) && deadzone>=0 && deadzone<=0.9f &&
             std::isfinite(initialSpeed) && initialSpeed>=0.1f && initialSpeed<=100 &&
             std::isfinite(maximumSpeed) && maximumSpeed>=initialSpeed && maximumSpeed<=100 &&

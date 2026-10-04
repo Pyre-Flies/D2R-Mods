@@ -6,6 +6,8 @@ namespace D2RL { struct PluginContext; struct ThreadService; }
 namespace ControllerQoL {
 bool InstallNativeInputHook(const D2RL::PluginContext* context,const D2RL::ThreadService* threads) noexcept;
 bool NativeInputInstalled() noexcept;
+// Monotonic R3 press sequence from the existing admitted native input path.
+bool NativeRightStickPresses(uint64_t& sequence) noexcept;
 void PumpNativeInput() noexcept;
 
 void InitControllerInput() noexcept;

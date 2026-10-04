@@ -146,10 +146,16 @@ controller targeting; mouse/keyboard casts retain their normal route.
 | Barbarian | Leap | Ground only; Leap Attack is excluded |
 | Barbarian | Whirlwind | Retained enemy snap, optional pass-through |
 
-Cast a supported skill once to establish the cursor. Circular snapping uses
-fresh native-eligible candidates near it. Native character turning, landing and
-collision checks remain. Idle after Teleport/Leap, the marker previews a candidate
-for the next snap-capable cast; the ground skills themselves never snap.
+Move the right stick beyond the configured dead zone to activate manual aim.
+Releasing it retains the cursor without a timeout. Casting an unsupported or
+configuration-disabled skill releases the lock and restores native targeting;
+release and tilt the right stick again to resume manual aim. No controller toggle
+button is required. Circular snapping uses fresh native-eligible candidates near
+the cursor. Native character turning, landing and collision checks remain.
+Idle markers only copy native candidate observations: they never change native
+targeting scores or selection caches. This means an enemy excluded by native idle
+targeting may acquire its marker only when the snap-capable cast begins. Teleport
+and Leap themselves never snap.
 Whirlwind retains an eligible enemy across a spin so the next cast can pass back
 through it. Moving the stick releases retention. Pass-through extends beyond the
 enemy by the configured distance, with a 30-tile total cap. Disabling pass-through
@@ -157,7 +163,7 @@ keeps direct enemy snapping; disabling snapping uses only the ground cursor.
 
 | Aim control | Action |
 | --- | --- |
-| Right stick | Move cursor; release to stop |
+| Right stick | Activate manual aim and move cursor; release to retain position |
 | F8 | Toggle aim for this session (only when enabled in configuration) |
 | F9 | Recenter 20 tiles along character facing and release target |
 | F10 | Invert right-stick Y for this session |
@@ -185,6 +191,7 @@ without disabling other QOL features. Overlay settings do not affect targeting.
 | `switch_advantage` | `1.5` | Competitor must be this much closer, 0-15 tiles |
 | `overlay_enabled` | `true` | Show aiming graphics |
 | `debug_overlay` | `false` | Show detailed HUD, lines and submitted-cast marker |
+| `cast_observer_enabled` | `true` | Optional cast diagnostics/reset observer; false leaves its hook site free |
 | `projection_hz` | `60.0` | Ground projection sampling, 10-120; limited by UI rate |
 | `overlay_smoothing_ms` | `35.0` | Display-only smoothing, 0-150 ms |
 | `whirlwind_pass_through_enabled` | `true` | Extend Whirlwind beyond retained enemy |
@@ -194,6 +201,81 @@ Disable/remove the standalone `Controller Aim Test.dll` before enabling this
 feature. Its old TOML is not read by QOL. For migration, copy its `[aim]` values
 into QOL's config and add `enabled = true`; retain both old DLLs/configs for rollback.
 Do not load the integrated and standalone aim implementations together.
+
+The observer at `0x4FDB40` remains enabled by default. If another plugin owns or
+changes that entry, aim skips only this optional hook and logs a warning; cursor,
+snapping and reticles remain active. Set `[aim] cast_observer_enabled = false`
+and restart to leave the entry free regardless of plugin load order. Essential
+aim hook guards remain required. In observer fallback, actual-cast diagnostics,
+the debug LAST CAST marker and Teleport displacement measurements are unavailable.
+Disabled-skill resets use admitted active-skill checks and native target requests;
+quick transitions that bypass both still need live validation. This does not
+guarantee compatibility between two plugins changing Whirlwind movement. QOL's
+Whirlwind toggle and pass-through settings are preserved; choose which plugin
+controls that skill if their behaviors compete.
+
+### Skills and mod extensions
+
+The config includes `[aim.amazon]`, `[aim.sorceress]`, `[aim.necromancer]`,
+`[aim.barbarian]`, `[aim.paladin]`, `[aim.druid]`, `[aim.assassin]` and
+`[aim.warlock]` headings, listing all 240 class skills (30 per class).
+They organize settings for readability only: an Amazon skill granted to another
+class still uses the same setting. The ten previously tested skill IDs default true;
+The 30 cataloged passive skills default to `"disabled"`; the other 200 newly
+cataloged skills default false for review. Corpse Explosion, Nova,
+Poison Nova, passives, auras and self-casts retain native behavior by default.
+Comments give a preliminary behavior/review category; they are not compatibility
+guarantees. Enabling a newly listed skill opts into its provisional ground or
+enemy-snap coordinate mode and requires testing. The list covers player class
+skills, including Warlock, not monster-only actions or item/utility internals.
+Set any skill to false to keep native targeting while allowing R3 to enable it.
+Set it to `"disabled"` to lock aim off and ignore the R3 shortcut for that skill.
+For example, `[aim.amazon]` with `"9" = "disabled"` locks Critical Strike off.
+Locked entries show `Auto-aim: DISABLED` with no toggle hint. Numeric IDs are quoted TOML keys;
+comments label their names. Legacy name keys remain readable for migration.
+Unlisted IDs in class sections, duplicate skill entries or malformed aim settings
+disable only the aim module with a warning. Restart after editing.
+
+See [the catalog provenance and validation notes](docs/SKILL-CATALOG.md) for
+ID sources, review categories and the distinction between listed and tested skills.
+
+```toml
+[aim.amazon]
+# Guided Arrow
+"22" = true
+# Multi Shot
+"12" = false
+
+[aim.custom]
+# Examples only: obtain the actual IDs from the active mod's skills table.
+"357" = true
+"358" = false
+"359" = "disabled"
+
+[aim.targeting]
+"357" = "ground"
+# Optional override for a built-in skill too:
+# "56" = "ground"
+```
+
+`[aim.custom]` accepts up to 32 additional unique numeric skill IDs (1..65534),
+including mod-added skills or otherwise unlisted base skills. Values are `true`,
+`false`, or `"disabled"`, as in class sections. Enabled custom skills default to
+circular enemy snapping with ground fallback. Catalog IDs belong in class
+sections and cannot be redefined here. Optional `[aim.targeting]` numeric entries
+select `"ground"` (cursor coordinates) or `"snap"` (enemy snapping with ground
+fallback) for either built-in or declared custom IDs. Overrides never enable a
+skill, unlock `"disabled"`, or bypass global `snapping_enabled = false`. They remain
+in effect when R3 disables/re-enables a catalog skill. Unknown custom IDs must be
+declared under `[aim.custom]` first. Legacy custom `"ground"` and `"snap"` values
+remain readable with their existing behavior; explicit targeting overrides win.
+Custom R3 toggling remains limited to the verified built-in skill-tree catalog.
+Names alone do not identify
+custom skills, and IDs must be checked against the active mod rather than an
+unrelated installation. Configuration does not prove compatibility with every
+native skill implementation: self-cast, aura, summon or unusual targeting paths
+may not consume these coordinates. Custom entries are explicit experiments;
+test each skill's landing, targeting and collision behavior in game.
 
 ## Install or update
 
@@ -221,7 +303,7 @@ copy included in the release ZIP.
 
 Detailed validation boundaries, native contracts, and engineering records are
 kept under [`docs/`](docs/README.md). See
-[`PRODUCTION-1.3.1-rev.51.md`](docs/PRODUCTION-1.3.1-rev.51.md) for the current
+[`PRODUCTION-1.3.1-rev.60.md`](docs/PRODUCTION-1.3.1-rev.60.md) for the current
 integration record and `SHA256SUMS` in the release archive for file verification.
 
 ## Build from source
@@ -236,3 +318,45 @@ ctest --test-dir build/controller-qol -C Release --output-on-failure
 
 The output is `Controller QOL Updates.dll`. The repository pins the D2RLoader
 PluginSDK as a submodule; clone with submodules or initialize it before building.
+
+### Skill-tree aim shortcut (rev.56)
+
+Highlight a skill in the controller skill tree and click R3 to toggle its aim
+setting. A control-strip `Auto-aim: ON/OFF` hint shows the highlighted skill's setting.
+The change takes effect immediately and is saved to its numeric config entry;
+comments, tuning and other skills remain intact. These are shared plugin settings,
+not character-specific preferences. Hold does not repeat; release before pressing
+again. A save failure leaves the runtime setting unchanged and shows an error.
+
+`[aim] skill_tree_toggle_enabled = true` enables this shortcut by default.
+Set it false to disable the shortcut. Catalog skill IDs are accepted regardless
+of character class; unknown mod IDs still require explicit `[aim.custom]` modes
+and cannot be toggled from the tree in this iteration. Enabling an untested skill
+does not establish that its provisional ground/snap behavior is appropriate.
+The shortcut reads the existing controller input snapshot on the UI thread and
+leaves native button delivery intact; R3 is currently blocked by the native tree.
+See [skill-tree compatibility evidence](docs/SKILL-TREE-AIM-TOGGLE.md).
+
+Rev.57 displays a small brass crosshair inside the upper-right corner of each
+enabled visible catalog skill icon. Disabled icons have no crosshair. The control
+strip shows the highlighted skill's `Auto-aim: ON/OFF | R3 to toggle` status.
+Indicators describe the saved per-skill configuration, not whether the right
+stick currently owns a cast. Icon bounds/visibility and ancestor scale determine
+placement independently of class or skill layout. No new hooks or native icon
+edits are added; the existing SDK overlay draws the marks. Layout guard failure
+retains aim/toggling and omits the new indicators. Live alignment on other classes,
+resolutions and custom trees remains to be checked.
+
+Reticle appearance can be adjusted under `[aim]` (restart to load):
+
+```toml
+ground_reticle_color = "#FFFFFF"   # bright white aim point
+lock_reticle_color = "#FFD166"     # bright gold enemy lock
+reticle_thickness = 2.0            # double the stroke/outline widths
+```
+
+Colors accept `"#RRGGBB"` or `"#RRGGBBAA"`; the last two digits set opacity.
+Thickness ranges from 0.5 to 4.0 and changes stroke width, not reticle size or
+snapping radius. Ground opacity still follows its contextual fade when locked.
+Defaults retain the original gameplay colors/widths. The tree marker uses a
+brighter gold and slightly thicker stroke independently of gameplay styling.

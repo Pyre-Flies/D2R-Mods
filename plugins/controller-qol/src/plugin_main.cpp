@@ -149,7 +149,7 @@ static constexpr D2RL::PluginInfo ControllerQoLPluginInfo {
     .abiVersion  = D2RL_PLUGIN_ABI_VERSION,
     .id          = "controller-qol-updates",
     .name        = "Controller QOL Updates",
-    .version     = "1.3.1+rev.51",
+    .version     = "1.3.1+rev.60",
     .author      = "PyreFly",
     .description = "Direct controller looting with filtered labels, inventory shortcuts, and stash navigation.",
     .flags       = D2RL::PluginFlags::Shared | D2RL::PluginFlags::NativeHooks,
@@ -158,7 +158,7 @@ static constexpr D2RL::PluginInfo ControllerQoLPluginInfo {
 static void LoadConfiguration(const D2RL::PluginContext* context) noexcept {
     if (!context) return;
 
-    char buffer[16384]{};
+    char buffer[65536]{};
     uint32_t reqSize = 0;
     if (!context->ReadConfig(buffer, sizeof(buffer) - 1, &reqSize)) {
         context->LogInfo("[ControllerQoL] Using default settings (no custom toml found).");
@@ -2861,7 +2861,7 @@ D2RL_PLUGIN_EXPORT auto D2RLoaderLoadPlugin(const D2RL::PluginContext* context) 
         g_Settings.groundPickupButton, g_Settings.portalPriorityDistance);
     if(!QolAim::Initialize(context,g_Settings.enabled))
         context->LogWarn("[QOL/Aim] Aim unavailable; other QOL features remain loaded.");
-    context->LogInfo("[QOL] QOL v1.3.1+rev.51 loaded: controller item features and integrated v0.6 navigation/label hooks.");
+    context->LogInfo("[QOL] QOL v1.3.1+rev.60 loaded: controller item features and integrated v0.6 navigation/label hooks.");
     return true;
 }
 
