@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.29)
-project(item-roll-ranges VERSION 1.3.1.13 LANGUAGES CXX RC ASM_MASM)
+project(item-roll-ranges VERSION 1.3.1.21 LANGUAGES CXX RC ASM_MASM)
 option(ITEM_ROLL_RANGES_COVERAGE_DIAGNOSTICS "Log bounded tooltip coverage evidence for Item Spawner audits" OFF)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)

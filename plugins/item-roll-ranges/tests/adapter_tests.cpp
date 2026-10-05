@@ -3,14 +3,8 @@
 #include <cstdio>
 #include <cstdlib>
 namespace {
-unsigned keyCalls{}, padCalls{};
-void* seenInput{};
-unsigned seenIndex{}, seenMask{};
-std::uint64_t __fastcall FakeKey() { ++keyCalls; return 0x1234567800000007ull; }
-std::uint64_t __fastcall FakePad(void* input, unsigned index, unsigned mask) {
-    ++padCalls; seenInput=input; seenIndex=index; seenMask=mask;
-    return 0xfedcba9876543210ull;
-}
+std::uint64_t __fastcall FakeKey() { return 7; }
+std::uint64_t __fastcall OtherKey() { return 9; }
 void check(bool value) { if (!value) std::exit(1); }
 void* testSlot{};
 void TestPropertyPasses();
@@ -18,9 +12,22 @@ void TestAffixRead();
 void TestRangeHelper();
 void TestSpecial();
 void TestUniqueRange();
+void TestHeaderDelegation();
+void TestCalculatedHeaders();
 
 }
 int main() {
+    unsigned char sourceUnit[0x90]{},cloneUnit[0x90]{};
+    const unsigned itemType=4;
+    std::memcpy(sourceUnit,&itemType,4);std::memcpy(cloneUnit,&itemType,4);
+    const void* nativeOverlay[2]={sourceUnit,cloneUnit};
+    check(RangeFromOverlay(nativeOverlay));
+    nativeOverlay[1]=nullptr;check(!RangeFromOverlay(nativeOverlay)); // Native off path.
+    nativeOverlay[1]=sourceUnit;check(!RangeFromOverlay(nativeOverlay));
+    nativeOverlay[1]=reinterpret_cast<void*>(1);check(!RangeFromOverlay(nativeOverlay));
+    nativeOverlay[1]=cloneUnit;cloneUnit[0]=1;check(!RangeFromOverlay(nativeOverlay));
+    check(!RangeFromOverlay(nullptr));
+    TestCalculatedHeaders();
     // Unique group IDs are not Properties indices. Expand only validated groups.
     unsigned char group[0xc8]{}, spec[16]{};
     std::uint32_t groupId=0x10000; std::memcpy(spec,&groupId,4);
@@ -93,35 +100,87 @@ int main() {
     TestRangeHelper();
     TestSpecial();
     TestUniqueRange();
-    originalKey=FakeKey; originalPad=FakePad;
-    keyReturn=0; padReturn=0; // None of this host's calls is the range caller.
-    active.store(true);
-    check(KeyAdapter()==0x1234567800000007ull && keyCalls==1);
-    auto input=reinterpret_cast<void*>(0x1234);
-    check(PadAdapter(input,7,0x9876)==0xfedcba9876543210ull);
-    check(padCalls==1 && seenInput==input && seenIndex==7 && seenMask==0x9876);
-    // A caller that fetched a pointer before unload can still delegate safely.
-    active.store(false);
-    check(KeyAdapter()==0x1234567800000007ull && keyCalls==2);
-    check(PadAdapter(input,3,8)==0xfedcba9876543210ull && padCalls==2);
+    TestHeaderDelegation();
     testSlot=reinterpret_cast<void*>(&FakeKey);
-    check(Exchange(&testSlot,reinterpret_cast<void*>(&FakeKey),reinterpret_cast<void*>(&KeyAdapter)));
-    check(!Exchange(&testSlot,reinterpret_cast<void*>(&FakeKey),reinterpret_cast<void*>(&PadAdapter)));
-    check(testSlot==reinterpret_cast<void*>(&KeyAdapter));
-    check(Exchange(&testSlot,reinterpret_cast<void*>(&KeyAdapter),reinterpret_cast<void*>(&FakeKey)));
+    check(Exchange(&testSlot,reinterpret_cast<void*>(&FakeKey),reinterpret_cast<void*>(&OtherKey)));
+    check(!Exchange(&testSlot,reinterpret_cast<void*>(&FakeKey),reinterpret_cast<void*>(&OtherKey)));
+    check(testSlot==reinterpret_cast<void*>(&OtherKey));
+    check(Exchange(&testSlot,reinterpret_cast<void*>(&OtherKey),reinterpret_cast<void*>(&FakeKey)));
     check(testSlot==reinterpret_cast<void*>(&FakeKey));
     check(!D2RLoaderLoadPlugin(nullptr));
     auto info=D2RLoaderGetPluginInfo();
     check(std::strcmp(info->id,"item-roll-ranges")==0);
-    check(std::strcmp(info->version,"1.3.1+rev.13")==0);
+    check(std::strcmp(info->version,"1.3.1+rev.21")==0);
     std::puts("Passed real adapter passthrough/ABI, inactive late calls, atomic slot conflict/restore, exported identity.");
 }
 
 namespace {
+NativeText headerFixture{"Defense: 2",10};
+NativeText* __fastcall FakeBuilder(void* a,void* b,void* c,void* item,int flags,
+    unsigned char d,unsigned char e,void* f,void* g) {
+    check(a==reinterpret_cast<void*>(1) && b==reinterpret_cast<void*>(2) &&
+        c==reinterpret_cast<void*>(3) && item==reinterpret_cast<void*>(4) && flags==5 &&
+        d==6 && e==7 && f==reinterpret_cast<void*>(8) && g==reinterpret_cast<void*>(9));
+    return &headerFixture;
+}
+void* __fastcall FakeAssign(NativeText* text,const char* data,std::size_t size) {
+    check(text==&headerFixture && data==headerFixture.data && size==headerFixture.size);
+    return reinterpret_cast<void*>(0x1234);
+}
+std::uint64_t __fastcall FakeDamage(unsigned char mode,void* item,char* output,void* context) {
+    check(mode==7 && item==reinterpret_cast<void*>(1) && output==reinterpret_cast<char*>(2) && context==reinterpret_cast<void*>(3));
+    return 0xfedcba9876543210ull;
+}
+const char* __fastcall FakeHeaderLookup(const NativeText*,const NativeText*,bool);
+void TestHeaderDelegation() {
+    originalDamage=FakeDamage; damageReturn=0;
+    check(DamageAdapter(7,reinterpret_cast<void*>(1),reinterpret_cast<char*>(2),reinterpret_cast<void*>(3))==0xfedcba9876543210ull);
+    lookupHeader=FakeHeaderLookup;
+    check(DefenseHeaderKey()==RangeText::Analyze("Defense: 2").key);
+    originalBuilder=FakeBuilder; builderReturn=0;
+    check(HeaderBuilderAdapter(reinterpret_cast<void*>(1),reinterpret_cast<void*>(2),
+        reinterpret_cast<void*>(3),reinterpret_cast<void*>(4),5,6,7,
+        reinterpret_cast<void*>(8),reinterpret_cast<void*>(9))==&headerFixture);
+    originalAssign=FakeAssign; assignReturn=0;
+    check(HeaderAssignAdapter(&headerFixture,headerFixture.data,headerFixture.size)==reinterpret_cast<void*>(0x1234));
+    std::puts("Verified all nine native tooltip arguments and unrelated header publication delegation.");
+}
+const char* __fastcall FakeHeaderLookup(const NativeText* resource,const NativeText* key,bool required) {
+    check(std::string_view(resource->data,resource->size)=="d2r");
+    check(std::string_view(key->data,key->size)=="ItemStats1h" && required);
+    return "Defense: %d";
+}
 unsigned char fakeTables[0x1618]{};
 const unsigned char* __fastcall FakeTables(unsigned char bank) { check(bank==2); return fakeTables; }
 int __fastcall FakeEligible(void*,const void*) { return 1; }
 template<class T> void put(unsigned char* p,std::size_t at,T value) { std::memcpy(p+at,&value,sizeof(value)); }
+void TestCalculatedHeaders() {
+    unsigned char unit[0x1be]{},data[0x80]{},stats[0xb8]{},row[0x1c0]{},primary[32]{},child[0x80]{},modifiers[16]{};
+    put(unit,0x88,stats+0); put(stats,0x1c,-1); put(stats,0x30,primary+0); put(stats,0x38,std::uint64_t{1});
+    put(primary,0,std::uint64_t{31}<<32); put(primary,8,2); put(row,0xd4,2); put(row,0xd8,2);
+    auto base=ArmorBaseRange(unit,data,row); check(base && *base==std::pair{2,2}); // Bloodrune, actual25.
+    put(primary,8,3); put(stats,0x90,child+0); put(child,0,unit+0); put(child,0x78,stats+0);
+    put(child,0x18,-1); put(child,0x1c,0x40); put(child,0x30,modifiers+0); put(child,0x38,std::uint64_t{1});
+    put(modifiers,0,std::uint64_t{16}<<32); put(modifiers,8,18);
+    base=ArmorBaseRange(unit,data,row); check(base && *base==std::pair{3,3}); // Generated Sturdy base.
+    put(data,0x18,0x400010u); put(primary,8,4);
+    base=ArmorBaseRange(unit,data,row); check(base && *base==std::pair{4,4}); // Ethereal Sturdy, actual5.
+    put(child,0x68,child+0); check(!ArmorBaseRange(unit,data,row)); // Cyclic ED provenance rejected.
+    put(child,0x68,static_cast<unsigned char*>(nullptr)); put(child,0x20,165); check(!ArmorBaseRange(unit,data,row));
+    put(child,0x20,0); put(data,0x18,0x10u); put(row,0xd4,29); put(row,0xd8,34); put(primary,8,30);
+    base=ArmorBaseRange(unit,data,row); check(base && *base==std::pair{29,34}); // Variable intrinsic armor rolls.
+    put(primary,8,40); check(!ArmorBaseRange(unit,data,row)); // No guessed custom base.
+    row[0x113]=9; row[0x114]=19; put(primary,0,std::uint64_t{23}<<32); put(primary,8,9);
+    put(primary,16,std::uint64_t{24}<<32); put(primary,24,19); put(stats,0x38,std::uint64_t{2});
+    base=WeaponBaseRange(unit,data,row,23,24,0x113,0x114); check(base && *base==std::pair{9,19});
+    // Base provenance is independent of proc, per-level, socket or ED sources.
+    put(child,0x20,165); put(data,0,7);
+    base=WeaponBaseRange(unit,data,row,23,24,0x113,0x114); check(base && *base==std::pair{9,19});
+    put(primary,24,20); check(!WeaponBaseRange(unit,data,row,23,24,0x113,0x114));
+    put(primary,8,13); put(primary,24,28); put(data,0x18,0x400010u);
+    base=WeaponBaseRange(unit,data,row,23,24,0x113,0x114); check(base && *base==std::pair{13,28});
+    std::puts("Verified intrinsic armor/weapon base ranges, ED generation, ethereal staging and unrelated-source independence.");
+}
 unsigned noCloneCalls{};
 std::uint64_t __fastcall FakeNoCloneProperties(void*,char* output,int cap,int,int,int,int,int,const void*,void*) {
     ++noCloneCalls;

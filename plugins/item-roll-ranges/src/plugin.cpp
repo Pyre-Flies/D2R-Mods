@@ -1,5 +1,4 @@
 #include <windows.h>
-#include <xinput.h>
 #include <intrin.h>
 #include <bcrypt.h>
 #include <D2RLPlugin/context.h>
@@ -15,20 +14,15 @@
 #include "source_profile.h"
 #include "special_profile.h"
 #include "unique_range_profile.h"
+#include "header_profile.h"
+#include "header_text.h"
+#include "base_ranges.h"
+#include "weapon_profile.h"
 #include <vector>
 
 namespace {
-using KeyFn = std::uint64_t(__fastcall*)();
-using PadFn = std::uint64_t(__fastcall*)(void*, unsigned, unsigned);
 using PanelFn = bool(__fastcall*)(int);
-using XInputFn = DWORD(WINAPI*)(DWORD, XINPUT_STATE*);
-KeyFn originalKey{};
-PadFn originalPad{};
 PanelFn testPanel{};
-XInputFn readPad{};
-void** keySlot{};
-void** padSlot{};
-std::uintptr_t keyReturn{}, padReturn{};
 std::atomic<bool> active{false};
 std::atomic<bool> loaded{false};
 using PropertiesFn=std::uint64_t(__fastcall*)(void*,char*,int,int,int,int,int,int,const void*,void*);
@@ -54,12 +48,42 @@ void** singleSlot{};
 std::uintptr_t singleReturn{};
 struct CapturedLine { std::string key; int stat{},layer{}; bool grouped{}; unsigned group{}; };
 thread_local std::vector<CapturedLine>* captureLines{};
-thread_local bool rangeRequested{};
-thread_local unsigned rangePad=XUSER_MAX_COUNT;
 thread_local bool rendering{};
 wchar_t diagnosticPath[MAX_PATH]{};
 std::atomic<unsigned> diagnostics{0};
 bool Readable(const void*,std::size_t) noexcept;
+struct NativeText { const char* data; std::size_t size; };
+using BuilderFn=NativeText*(__fastcall*)(void*,void*,void*,void*,int,unsigned char,unsigned char,void*,void*);
+using AssignFn=void*(__fastcall*)(NativeText*,const char*,std::size_t);
+using ArmorFn=const unsigned char*(__fastcall*)(unsigned char,unsigned);
+using LookupFn=const char*(__fastcall*)(const NativeText*,const NativeText*,bool);
+BuilderFn originalBuilder{};
+AssignFn originalAssign{};
+ArmorFn getArmor{};
+LookupFn lookupHeader{};
+void** builderSlot{}; void** assignSlot{};
+std::uintptr_t builderReturn{},assignReturn{};
+struct HeaderProof { NativeText* receiver{}; std::string actual,annotated; };
+thread_local HeaderProof pendingHeader;
+using DamageFn=std::uint64_t(__fastcall*)(unsigned char,void*,char*,void*);
+DamageFn originalDamage{};
+void** damageSlot{};
+std::uintptr_t damageReturn{};
+struct DamageCapture { void* source{}; std::string actual; };
+thread_local DamageCapture* captureDamage{};
+__declspec(noinline) std::uint64_t __fastcall DamageAdapter(unsigned char mode,void* item,char* output,void* context) noexcept {
+    const bool scoped=reinterpret_cast<std::uintptr_t>(_ReturnAddress())==damageReturn &&
+        captureDamage && captureDamage->source==item;
+    const auto result=originalDamage(mode,item,output,context);
+    if (scoped && Readable(output,1024)) {
+        try {
+            const auto size=strnlen(output,1024);
+            if (size<1024) captureDamage->actual.assign(output,size);
+        } catch (...) { }
+    }
+    return result;
+}
+bool Held() noexcept;
 bool AddUnobservedCompositeIdentities(std::vector<CapturedLine>& lines,std::string_view actual,
     std::span<const Affixes::Rolled> rolled,std::span<const Affixes::Property> properties,
     Affixes::LayerEncoding encoding,std::span<const Affixes::PropertyGroup> groups,
@@ -354,10 +378,21 @@ std::vector<RangeText::Label> AffixLabels(void* source,const std::vector<Capture
                         Affixes::NamedLabel(affix)});
                 }
                 if (!complete) label.parts.clear();
+                // A missing prefix is actionable only with a witnessed source
+                // that actually varies. Fixed/non-numeric lines stay quiet.
+                if (complete) for (const auto& part:label.parts)
+                    label.rangeExpected |= part.low<part.high;
                 if (!completePaired || label.pairedParts.size()<2) label.pairedParts.clear();
                 label.allowPartialNativeRange=complete && label.parts.size()>1 &&
                     (line.stat==17 || line.stat==18) && line.layer==0;
-                if (quality==7) label.fallbackRange=UniqueRange(source,line,rolled,properties,tables,actual);
+                if (quality==7) {
+                    label.fallbackRange=UniqueRange(source,line,rolled,properties,tables,actual);
+                    for (const auto& affix:rolled) {
+                        int lo{},hi{};
+                        if (Affixes::UniqueScalarBounds(affix,properties,line.stat,line.layer,lo,hi))
+                            label.rangeExpected=true;
+                    }
+                }
                 bool duplicate=false;
                 for (const auto& previous:labels) if (previous.key==label.key) {
                     // The same line can be observed in both actual/range passes,
@@ -370,6 +405,185 @@ std::vector<RangeText::Label> AffixLabels(void* source,const std::vector<Capture
         return labels;
     } catch (...) { return {}; }
 }
+bool TextReadable(const NativeText* text) noexcept {
+    return Readable(text,sizeof(NativeText)) && text->size>0 && text->size<=65536 && Readable(text->data,text->size);
+}
+std::string DefenseHeaderKey() {
+    NativeText resourceGroup{reinterpret_cast<const char*>(HeaderProfile::ResourceGroup),3}, name{"ItemStats1h",11};
+    const auto* format=lookupHeader(&resourceGroup,&name,true);
+    if (!Readable(format,128)) return {};
+    const auto length=strnlen(format,128);
+    const std::string_view pattern(format,length);
+    const auto number=pattern.find("%d");
+    if (length==128 || number==pattern.npos || pattern.find('%',number+2)!=pattern.npos ||
+        pattern.find('%')!=number) return {};
+    return RangeText::Analyze(std::string(pattern.substr(0,number))+"0"+std::string(pattern.substr(number+2))).key;
+}
+std::optional<int> RawDefense(const unsigned char* stats,unsigned at) {
+    const auto* entries=Affixes::Read<const unsigned char*>(stats,at);
+    const auto count=Affixes::Read<std::uint64_t>(stats,at+8);
+    if (count>4096 || (count && !Readable(entries,static_cast<std::size_t>(count)*16))) return {};
+    std::optional<int> value;
+    for (std::size_t n=0;n<count;++n) if (Affixes::Read<std::uint64_t>(entries+n*16,0)==(std::uint64_t{31}<<32)) {
+        if (value) return {};
+        value=Affixes::Read<int>(entries+n*16,8);
+    }
+    return value;
+}
+std::optional<int> RawOperand(const unsigned char* stats,unsigned at,unsigned stat) {
+    const auto* entries=Affixes::Read<const unsigned char*>(stats,at);
+    const auto count=Affixes::Read<std::uint64_t>(stats,at+8);
+    if (count>4096 || (count && !Readable(entries,static_cast<std::size_t>(count)*16))) return {};
+    int value=0; bool found=false;
+    for (std::size_t n=0;n<count;++n) if (Affixes::Read<std::uint64_t>(entries+n*16,0)==(std::uint64_t{stat}<<32)) {
+        if (found) return {};
+        found=true; value=Affixes::Read<int>(entries+n*16,8);
+    }
+    return value;
+}
+std::optional<int> ModifierOperand(const unsigned char* unit,unsigned stat) {
+    const auto* parent=Affixes::Read<const unsigned char*>(unit,0x88);
+    if (!Readable(parent,0xb8) || Affixes::Read<int>(parent,0x1c)>=0) return {};
+    auto* child=Affixes::Read<const unsigned char*>(parent,0x90);
+    std::array<const unsigned char*,64> visited{};
+    unsigned count=0; long long total=0;
+    while (child) {
+        if (count==visited.size() || !Readable(child,0x80) ||
+            std::find(visited.begin(),visited.begin()+count,child)!=visited.begin()+count ||
+            Affixes::Read<const unsigned char*>(child,0)!=unit ||
+            Affixes::Read<const unsigned char*>(child,0x78)!=parent ||
+            Affixes::Read<int>(child,0x1c)<0 || Affixes::Read<int>(child,0x18)!=-1 ||
+            Affixes::Read<unsigned>(child,0x20)!=0) return {};
+        visited[count++]=child;
+        const auto value=RawOperand(child,0x30,stat);
+        if (!value) return {};
+        total+=*value;
+        if (total<0 || total>1000000) return {};
+        child=Affixes::Read<const unsigned char*>(child,0x68);
+    }
+    return static_cast<int>(total);
+}
+std::optional<std::pair<int,int>> ArmorBaseRange(const unsigned char* unit,const unsigned char* data,
+    const unsigned char* row) {
+    const auto* stats=Affixes::Read<const unsigned char*>(unit,0x88);
+    if (!Readable(stats,0xb8) || !Readable(row,0xdc)) return {};
+    const auto intrinsic=RawDefense(stats,0x30);
+    const int low=Affixes::Read<int>(row,0xd4),high=Affixes::Read<int>(row,0xd8);
+    if (!intrinsic || low<0 || high<low || high==INT_MAX || !high) return {};
+    const bool ethereal=(Affixes::Read<unsigned>(data,0x18)&0x00400000)!=0;
+    const auto baseLow=BaseRanges::Intrinsic(low,ethereal),baseHigh=BaseRanges::Intrinsic(high,ethereal);
+    if (!baseLow || !baseHigh) return {};
+    if (*intrinsic>=*baseLow && *intrinsic<=*baseHigh) return std::pair{*baseLow,*baseHigh};
+    // Generated ED armor has a fixed maxac+1 intrinsic base. Upgraded and
+    // custom cases must still agree with one of the witnessed base shapes.
+    const auto percent=ModifierOperand(unit,16);
+    const auto enhancedBase=BaseRanges::Intrinsic(high+1,ethereal);
+    if (percent && *percent>0 && enhancedBase && *intrinsic==*enhancedBase)
+        return std::pair{*intrinsic,*intrinsic};
+    return {};
+}
+std::string DamageHeaderKey(std::string_view name) {
+    NativeText group{reinterpret_cast<const char*>(HeaderProfile::ResourceGroup),3},key{name.data(),name.size()};
+    const auto* format=lookupHeader(&group,&key,true);
+    if (!Readable(format,256)) return {};
+    const auto size=strnlen(format,256);
+    if (size==256) return {};
+    std::string pattern(format,size);
+    unsigned count=0;
+    for (std::size_t at=0;(at=pattern.find('%',at))!=pattern.npos;) {
+        if (pattern.substr(at,2)!="%d") return {};
+        pattern.replace(at,2,"0"); ++count; ++at;
+    }
+    return count==2?RangeText::Analyze(pattern).key:std::string{};
+}
+std::optional<std::pair<int,int>> WeaponBaseRange(const unsigned char* unit,const unsigned char* data,
+    const unsigned char* row,unsigned minimum,unsigned maximum,unsigned minOffset,unsigned maxOffset) {
+    const auto* stats=Affixes::Read<const unsigned char*>(unit,0x88);
+    if (!Readable(stats,0xb8) || !Readable(row,0x115) || !row[minOffset] || row[minOffset]>row[maxOffset]) return {};
+    const bool ethereal=(Affixes::Read<unsigned>(data,0x18)&0x00400000)!=0;
+    const auto low=BaseRanges::Intrinsic(row[minOffset],ethereal),high=BaseRanges::Intrinsic(row[maxOffset],ethereal);
+    const auto observedLow=RawOperand(stats,0x30,minimum),observedHigh=RawOperand(stats,0x30,maximum);
+    if (!low || !high || !observedLow || !observedHigh || *low!=*observedLow || *high!=*observedHigh) return {};
+    return std::pair{*low,*high};
+}
+std::string AnnotateWeaponHeader(std::string_view text,std::string_view actual,const unsigned char* unit,
+    const unsigned char* data,const unsigned char* row) {
+    struct Mode { const char* key; unsigned minimum,maximum,minOffset,maxOffset; };
+    constexpr Mode modes[]={{"ItemStats1l",21,22,0x10f,0x110},{"ItemStats1m",23,24,0x113,0x114},
+        {"strItemStatThrowDamageRange",159,160,0x111,0x112}};
+    std::string result(text);
+    for (const auto& mode:modes) {
+        const auto key=DamageHeaderKey(mode.key);
+        if (key.empty()) continue;
+        unsigned count=0;
+        for (const auto line:RangeText::Lines(actual)) if (RangeText::Analyze(line).key==key) {
+            ++count;
+        }
+        if (count!=1) continue;
+        result=HeaderText::Damage(result,actual,key,WeaponBaseRange(unit,data,row,mode.minimum,mode.maximum,
+            mode.minOffset,mode.maxOffset));
+    }
+    return result;
+}
+__declspec(noinline) NativeText* __fastcall HeaderBuilderAdapter(void* a,void* b,void* c,void* item,
+    int flags,unsigned char d,unsigned char e,void* f,void* g) noexcept {
+    const bool scoped=reinterpret_cast<std::uintptr_t>(_ReturnAddress())==builderReturn && Held();
+    if (scoped) pendingHeader={};
+    // Frame is qualified byte-for-byte; derive its address before the native
+    // call. No frame, item or definition memory is written by this adapter.
+    const auto* frame=static_cast<const unsigned char*>(_AddressOfReturnAddress())+8+0x80;
+    DamageCapture damage{scoped?item:nullptr,{}};
+    NativeText* result;
+    {
+        struct CaptureGuard {
+            DamageCapture* previous;
+            explicit CaptureGuard(DamageCapture* capture):previous(captureDamage) { captureDamage=capture; }
+            ~CaptureGuard(){captureDamage=previous;}
+        } guard(scoped?&damage:nullptr);
+        result=originalBuilder(a,b,c,item,flags,d,e,f,g);
+    }
+    if (!scoped || !TextReadable(result) || !Readable(frame+0x18b0,1)) return result;
+    try {
+        const auto* unit=static_cast<const unsigned char*>(item);
+        if (!Readable(unit,0x1be) || Affixes::Read<unsigned>(unit,0)!=4 || unit[0x1bd]>=4) return result;
+        const auto* armor=getArmor(unit[0x1bd],Affixes::Read<unsigned>(unit,4));
+        if (!Readable(armor,0xdc)) return result; // Shared base-item row getter.
+        const auto* data=Affixes::Read<const unsigned char*>(unit,0x10);
+        if (!Readable(data,0x1c) || !(Affixes::Read<unsigned>(data,0x18)&0x10)) return result;
+        if (!damage.actual.empty()) {
+            const auto changed=AnnotateWeaponHeader({result->data,result->size},damage.actual,unit,data,armor);
+            if (changed.size()<=65536 && changed!=std::string_view(result->data,result->size))
+                originalAssign(result,changed.data(),changed.size());
+        }
+        const auto key=DefenseHeaderKey();
+        if (key.empty()) return result;
+        const auto baseRange=ArmorBaseRange(unit,data,armor);
+        const auto value=HeaderText::Value({result->data,result->size},key);
+        const auto changed=HeaderText::Fixed({result->data,result->size},key,baseRange.has_value(),baseRange);
+        if (frame[0x18b0]) {
+            // Core will publish its range replacement next. Keep only an owned
+            // text proof and receiver identity; no item/stat/table pointers.
+            if (value && changed.size()<=65536) pendingHeader={result,std::string(result->data,result->size),changed};
+            return result;
+        }
+        if (changed.size()<=65536 && changed!=std::string_view(result->data,result->size))
+            originalAssign(result,changed.data(),changed.size());
+    } catch (...) { /* Keep native output if observation/allocation fails. */ }
+    return result;
+}
+__declspec(noinline) void* __fastcall HeaderAssignAdapter(NativeText* text,const char* data,std::size_t size) noexcept {
+    if (reinterpret_cast<std::uintptr_t>(_ReturnAddress())==assignReturn && Held() &&
+        TextReadable(text) && size>0 && size<=65536 && Readable(data,size)) {
+        try {
+            auto proof=std::move(pendingHeader); pendingHeader={};
+            if (proof.receiver==text && proof.actual==std::string_view(text->data,text->size))
+                return originalAssign(text,proof.annotated.data(),proof.annotated.size());
+            const auto changed=HeaderText::Merge({text->data,text->size},{data,size});
+            if (changed.size()<=65536) return originalAssign(text,changed.data(),changed.size());
+        } catch (...) { }
+    }
+    return originalAssign(text,data,size);
+}
 void* SourceFromOverlay(const void* overlay,void* item) noexcept {
     if (!Readable(overlay,16)) return nullptr;
     void* source{}; void* clone{};
@@ -381,16 +595,27 @@ void* SourceFromOverlay(const void* overlay,void* item) noexcept {
     if (source==clone || clone!=item) return nullptr;
     return Readable(source,0x90)?source:nullptr;
 }
-void* SourceItem(void* item) noexcept {
-    // Mirrors Core's own FormatItemPropertiesWithTooltipOverlay TLS lookup.
+const void* NativeOverlay() noexcept {
+    // Mirrors Core's existing range formatter TLS lookup.
     if (!coreBase || !Readable(coreBase+0x7df224,4)) return nullptr;
-    std::uint32_t index{}; std::memcpy(&index,coreBase+0x7df224,4);
+    const auto index=Affixes::Read<std::uint32_t>(coreBase,0x7df224);
     if (index>=1088) return nullptr;
     auto slots=reinterpret_cast<void**>(__readgsqword(0x58));
     if (!Readable(slots+index,8)) return nullptr;
     const auto block=static_cast<const unsigned char*>(slots[index]);
     if (!block || !Readable(block+0x1840,8)) return nullptr;
-    void* overlay{}; std::memcpy(&overlay,block+0x1840,8);
+    return Affixes::Read<const void*>(block,0x1840);
+}
+bool RangeFromOverlay(const void* overlay) noexcept {
+    if (!Readable(overlay,16)) return false;
+    const auto* bytes=static_cast<const unsigned char*>(overlay);
+    const auto* source=Affixes::Read<const unsigned char*>(bytes,0);
+    const auto* clone=Affixes::Read<const unsigned char*>(bytes,8);
+    return source && clone && source!=clone && Readable(source,0x90) && Readable(clone,0x90) &&
+        Affixes::Read<unsigned>(source,0)==4 && Affixes::Read<unsigned>(clone,0)==4;
+}
+void* SourceItem(void* item) noexcept {
+    const auto* overlay=NativeOverlay();
     return overlay?SourceFromOverlay(overlay,item):item;
 }
 void TraceProperties(unsigned annotated,unsigned unmatched,const char* actual,const char* result,const char* ranged="",
@@ -412,7 +637,7 @@ void TraceProperties(unsigned annotated,unsigned unmatched,const char* actual,co
     try { seen.emplace_back(actual); } catch (...) { return; }
     char message[14000]{};
     const int n=std::snprintf(message,sizeof(message),
-        "v1.3.1+rev.13 properties annotated=%u unmatched=%u labeled=%u captured=%u\r\nACTUAL: %.4095s\r\nRANGED: %.4095s\r\nRESULT: %.4095s\r\n",annotated,unmatched,labeled,captured,actual,ranged,result);
+        "v1.3.1+rev.21 properties annotated=%u unmatched=%u labeled=%u captured=%u\r\nACTUAL: %.4095s\r\nRANGED: %.4095s\r\nRESULT: %.4095s\r\n",annotated,unmatched,labeled,captured,actual,ranged,result);
     if (n<=0 || n>=static_cast<int>(sizeof(message))) return;
     HANDLE file=CreateFileW(diagnosticPath,FILE_APPEND_DATA,FILE_SHARE_READ|FILE_SHARE_WRITE,nullptr,OPEN_ALWAYS,FILE_ATTRIBUTE_NORMAL,nullptr);
     if (file==INVALID_HANDLE_VALUE) return;
@@ -453,11 +678,9 @@ bool Allowed() noexcept {
     return RollRanges::Allowed(true, {testPanel(0x1), testPanel(0x18), testPanel(0x19), testPanel(0xb)});
 }
 bool Held() noexcept {
-    if (!rangeRequested || !Allowed()) return false;
-    if (rangePad==XUSER_MAX_COUNT) return (GetAsyncKeyState(VK_CONTROL)&0x8000)!=0;
-    XINPUT_STATE state{};
-    return readPad && readPad(rangePad,&state)==ERROR_SUCCESS &&
-        (state.Gamepad.wButtons&XINPUT_GAMEPAD_RIGHT_SHOULDER)!=0;
+    // Core creates a distinct range clone only after its native input decision.
+    // Leave Ctrl/RT queries untouched so Controller QOL can remap them normally.
+    return Allowed() && RangeFromOverlay(NativeOverlay());
 }
 std::uint64_t RenderProperties(void* source,void* item,char* output,int capacity,int mode,
     int state1,int state2,int flags,int extra,const void* definitions,void* count) noexcept {
@@ -526,24 +749,6 @@ __declspec(noinline) std::uint64_t __fastcall PropertiesAdapter(void* item,char*
         return originalProperties(item,output,capacity,mode,state1,state2,flags,extra,definitions,count);
     return RenderProperties(source,item,output,capacity,mode,state1,state2,flags,extra,definitions,count);
 }
-__declspec(noinline) std::uint64_t __fastcall KeyAdapter() noexcept {
-    const bool tooltip = reinterpret_cast<std::uintptr_t>(_ReturnAddress()) == keyReturn;
-    const auto result = originalKey();
-    if (!tooltip || !active.load(std::memory_order_acquire)) return result;
-    rangePad=XUSER_MAX_COUNT;
-    rangeRequested=Allowed() && (GetAsyncKeyState(VK_CONTROL)&0x8000)!=0;
-    return RollRanges::Keyboard(result,true,rangeRequested,rangeRequested);
-}
-__declspec(noinline) std::uint64_t __fastcall PadAdapter(void* input, unsigned index, unsigned mask) noexcept {
-    const bool tooltip = reinterpret_cast<std::uintptr_t>(_ReturnAddress()) == padReturn;
-    if (!tooltip || !active.load(std::memory_order_acquire)) return originalPad(input, index, mask);
-    XINPUT_STATE state{};
-    const bool allowed = Allowed();
-    const bool connected = allowed && index < XUSER_MAX_COUNT && readPad && readPad(index, &state) == ERROR_SUCCESS;
-    rangePad=index;
-    rangeRequested=allowed && connected && (state.Gamepad.wButtons & XINPUT_GAMEPAD_RIGHT_SHOULDER)!=0;
-    return static_cast<std::uint64_t>(rangeRequested);
-}
 bool Executable(const void* address) noexcept {
     MEMORY_BASIC_INFORMATION info{};
     if (!address || !VirtualQuery(address, &info, sizeof(info)) || info.State != MEM_COMMIT || (info.Protect & PAGE_GUARD)) return false;
@@ -599,12 +804,13 @@ bool Exchange(void** slot, void* expected, void* replacement) noexcept {
 }
 void Restore() noexcept {
     active.store(false, std::memory_order_release);
+    if (damageSlot) Exchange(damageSlot,reinterpret_cast<void*>(&DamageAdapter),reinterpret_cast<void*>(originalDamage));
+    if (assignSlot) Exchange(assignSlot,reinterpret_cast<void*>(&HeaderAssignAdapter),reinterpret_cast<void*>(originalAssign));
+    if (builderSlot) Exchange(builderSlot,reinterpret_cast<void*>(&HeaderBuilderAdapter),reinterpret_cast<void*>(originalBuilder));
     if (specialSlot) Exchange(specialSlot,reinterpret_cast<void*>(&SpecialAdapter),reinterpret_cast<void*>(originalSpecial));
     if (rangeHelperSlot) Exchange(rangeHelperSlot,reinterpret_cast<void*>(&RangeHelperAdapter),reinterpret_cast<void*>(originalRangeHelper));
     if (singleSlot) Exchange(singleSlot,reinterpret_cast<void*>(&SingleAdapter),reinterpret_cast<void*>(originalSingle));
     if (propertiesSlot) Exchange(propertiesSlot,reinterpret_cast<void*>(&PropertiesAdapter),reinterpret_cast<void*>(originalProperties));
-    if (padSlot) Exchange(padSlot, reinterpret_cast<void*>(&PadAdapter), reinterpret_cast<void*>(originalPad));
-    if (keySlot) Exchange(keySlot, reinterpret_cast<void*>(&KeyAdapter), reinterpret_cast<void*>(originalKey));
 }
 bool Install(const D2RL::PluginContext* context) noexcept {
     const auto core = GetModuleHandleW(L"D2RCore.dll");
@@ -631,6 +837,36 @@ bool Install(const D2RL::PluginContext* context) noexcept {
     if (!Readable(base+0x702ae0, 8) || !Readable(base+0x6fe3b0, 8) || !Readable(base+0x6fe470, 8) || !Readable(base+0x704490,8)) return false;
     coreBase=base;
     const auto* game=reinterpret_cast<const unsigned char*>(context->exeBase);
+    for (const auto& witness:HeaderProfile::Witnesses)
+        if (!Match(witness.core?base:game,witness.rva,witness.bytes,witness.size)) {
+            context->LogError("Item Roll Ranges: Defense header instruction witness mismatch."); return false;
+        }
+    for (const auto& witness:WeaponProfile::Witnesses)
+        if (!Match(witness.core?base:game,witness.rva,witness.bytes,witness.size)) {
+            context->LogError("Item Roll Ranges: weapon header instruction witness mismatch."); return false;
+        }
+    if (!Readable(base+0x7044e8,8)) return false;
+    damageSlot=reinterpret_cast<void**>(base+0x7044e8);
+    originalDamage=reinterpret_cast<DamageFn>(*damageSlot);
+    damageReturn=reinterpret_cast<std::uintptr_t>(base)+0x816936;
+    if (reinterpret_cast<const void*>(originalDamage)!=game+0x2c0fb0) {
+        context->LogError("Item Roll Ranges: weapon damage formatter slot conflict."); return false;
+    }
+    if (!Readable(base+0x704430,8) || !Readable(base+0x6fdbd8,8) || !Readable(base+0x702230,8)) return false;
+    builderSlot=reinterpret_cast<void**>(base+0x704430);
+    assignSlot=reinterpret_cast<void**>(base+0x6fdbd8);
+    originalBuilder=reinterpret_cast<BuilderFn>(*builderSlot);
+    originalAssign=reinterpret_cast<AssignFn>(*assignSlot);
+    getArmor=*reinterpret_cast<ArmorFn*>(base+0x702230);
+    lookupHeader=reinterpret_cast<LookupFn>(base+0x387d60);
+    if (reinterpret_cast<const void*>(originalBuilder)!=game+0x2bd480 ||
+        reinterpret_cast<const void*>(originalAssign)!=game+0x80cf0 ||
+        reinterpret_cast<const void*>(getArmor)!=game+0x314110 ||
+        !Executable(reinterpret_cast<void*>(lookupHeader))) {
+        context->LogError("Item Roll Ranges: Defense header slot conflict."); return false;
+    }
+    builderReturn=reinterpret_cast<std::uintptr_t>(base)+0x81a360;
+    assignReturn=reinterpret_cast<std::uintptr_t>(base)+0x81a6bd;
     for (const auto& witness:AffixProfile::Witnesses)
         if (!Match(game,witness.rva,witness.bytes,witness.size)) { context->LogError("Item Roll Ranges: game affix/formatter instruction witness mismatch."); return false; }
     for (const auto& witness:SourceProfile::Witnesses)
@@ -666,22 +902,14 @@ bool Install(const D2RL::PluginContext* context) noexcept {
     propertiesSlot=reinterpret_cast<void**>(base+0x704490);
     originalProperties=reinterpret_cast<PropertiesFn>(*propertiesSlot);
     propertiesReturn=reinterpret_cast<std::uintptr_t>(base)+0x81d53b;
-    keySlot = reinterpret_cast<void**>(base+0x6fe3b0);
-    padSlot = reinterpret_cast<void**>(base+0x6fe470);
-    originalKey = reinterpret_cast<KeyFn>(*keySlot);
-    originalPad = reinterpret_cast<PadFn>(*padSlot);
     testPanel = *reinterpret_cast<PanelFn*>(base+0x702ae0);
-    if (!Executable(reinterpret_cast<void*>(originalProperties)) || !Executable(reinterpret_cast<void*>(originalKey)) || !Executable(reinterpret_cast<void*>(originalPad)) ||
+    if (!Executable(reinterpret_cast<void*>(originalProperties)) ||
         !Executable(reinterpret_cast<void*>(testPanel))) return false;
-    const auto xi = LoadLibraryExW(L"xinput1_4.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
-    if (!xi) return false;
-    readPad = reinterpret_cast<XInputFn>(GetProcAddress(xi, "XInputGetState"));
-    if (!readPad) { FreeLibrary(xi); return false; }
     // A delayed caller can have fetched our pointer before Restore. Pinning
     // keeps code/original targets available until process exit after unload.
     HMODULE pinned{};
     if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_PIN,
-        reinterpret_cast<LPCWSTR>(&KeyAdapter), &pinned)) { FreeLibrary(xi); return false; }
+        reinterpret_cast<LPCWSTR>(&PropertiesAdapter), &pinned)) return false;
     wchar_t modulePath[MAX_PATH]{};
     const DWORD pathLength=GetModuleFileNameW(pinned,modulePath,MAX_PATH);
     if (pathLength && pathLength<MAX_PATH) {
@@ -692,28 +920,27 @@ bool Install(const D2RL::PluginContext* context) noexcept {
             swprintf_s(diagnosticPath,L"%s\\logs\\item-roll-ranges-format.log",modulePath);
         }
     }
-    keyReturn = reinterpret_cast<std::uintptr_t>(base)+0x8195e0;
-    padReturn = reinterpret_cast<std::uintptr_t>(base)+0x81995a;
     if (!Exchange(specialSlot,reinterpret_cast<void*>(originalSpecial),reinterpret_cast<void*>(&SpecialAdapter)) ||
+        !Exchange(damageSlot,reinterpret_cast<void*>(originalDamage),reinterpret_cast<void*>(&DamageAdapter)) ||
+        !Exchange(builderSlot,reinterpret_cast<void*>(originalBuilder),reinterpret_cast<void*>(&HeaderBuilderAdapter)) ||
+        !Exchange(assignSlot,reinterpret_cast<void*>(originalAssign),reinterpret_cast<void*>(&HeaderAssignAdapter)) ||
         !Exchange(rangeHelperSlot,reinterpret_cast<void*>(originalRangeHelper),reinterpret_cast<void*>(&RangeHelperAdapter)) ||
         !Exchange(singleSlot,reinterpret_cast<void*>(originalSingle),reinterpret_cast<void*>(&SingleAdapter)) ||
-        !Exchange(propertiesSlot,reinterpret_cast<void*>(originalProperties),reinterpret_cast<void*>(&PropertiesAdapter)) ||
-        !Exchange(keySlot, reinterpret_cast<void*>(originalKey), reinterpret_cast<void*>(&KeyAdapter)) ||
-        !Exchange(padSlot, reinterpret_cast<void*>(originalPad), reinterpret_cast<void*>(&PadAdapter))) {
+        !Exchange(propertiesSlot,reinterpret_cast<void*>(originalProperties),reinterpret_cast<void*>(&PropertiesAdapter))) {
         context->LogError("Item Roll Ranges: pointer publication failed; restoring owned slots.");
         Restore();
         return false;
     }
     active.store(true, std::memory_order_release);
-    context->LogInfo("Item Roll Ranges 1.3.1+rev.13 by PyreFly: Ctrl / R1(RB); inventory, stash, Cube and vendor only. Actual values, native ranges, named P/S tiers and guarded stacked-damage details. Unsupported or ambiguous provenance is omitted.");
+    context->LogInfo("Item Roll Ranges 1.3.1+rev.21 by PyreFly: Ctrl / RT(R2), or QOL range override; inventory, stash, Cube and vendor only. Actual values, native ranges, named P/S tiers and guarded stacked-damage details. Unsupported or ambiguous provenance is omitted.");
     return true;
 }
 }
 
 D2RL_PLUGIN_EXPORT const D2RL::PluginInfo* __cdecl D2RLoaderGetPluginInfo() noexcept {
     static const D2RL::PluginInfo info{sizeof(D2RL::PluginInfo), D2RL_PLUGIN_ABI_VERSION,
-        "item-roll-ranges", "Item Roll Ranges", "1.3.1+rev.13", "PyreFly",
-        "Hold Ctrl or R1/RB for native item stat ranges in item-management screens.",
+        "item-roll-ranges", "Item Roll Ranges", "1.3.1+rev.21", "PyreFly",
+        "Hold Ctrl or RT/R2 (R1/RB with Controller QOL) for native item stat ranges in item-management screens.",
         D2RL::PluginFlags::Client | D2RL::PluginFlags::NativeHooks, {}};
     return &info;
 }

@@ -1,40 +1,37 @@
-## Controller QOL Updates 1.3.1+rev.60
+## Item Roll Ranges 1.3.1+rev.21
 
-- Scope right-stick aim to enabled skills; other skills retain native targeting.
-- Include all 240 class skill IDs with readable comments. Ten tested skills default
-  enabled; passives are locked off and other untested skills default off.
-- Press R3 on a highlighted catalog skill to enable/disable aim and save the
-  setting. Enabled icons show brass crosshairs; the control strip shows status.
-  `"disabled"` locks a skill off and ignores R3. First-press handling is improved.
-- Configure ground/lock reticle hex colors and line thickness (default 1.0).
-- Custom numeric IDs use true/false/"disabled". Optional `[aim.targeting]` entries
-  override built-in or declared custom IDs to ground or snap independently of
-  enable state. Existing custom ground/snap entries remain supported.
-- Fix reticle persistence and make the cast observer optional for hook coexistence.
-  Essential aim hooks still require exact compatibility guards.
+- Keep actual Defense and physical damage values and show the underlying base:
+  `Two-Hand Damage: 32 to 69 (Base: 9 - 19)` and Bloodrune
+  `Defense: 25 (Base: 2 - 2)`. Armor and belts use the same display.
+- Make fixed ranges explicit. Account for ethereal base scaling and native
+  Enhanced Defense base generation. Keep modifier roll ranges on their own lines.
+- Show `(?) Range Unavailable - Please report item affixes` for unresolved
+  expected ranges. Unrelated proc/per-level modifiers do not block a known base.
+- Follow Core's native input decision without keyboard/controller query
+  overrides or physical input polling: Ctrl and RT/R2 normally; Controller QOL's
+  existing active menu/range remap selects R1/RB. No QOL update is required.
+- Preserve exact compatibility guards, original formatter values and slot
+  ownership checks. Other plugins changing the same tooltip functions can
+  still conflict; unsupported paths fail open.
 
-## Extract directly into the game directory
+## Installation
 
-Runtime ZIPs now contain `d2rloader/config/<plugin>.toml` and
-`d2rloader/plugins/<plugin>.dll`; no separate configuration directory is used.
-Close the game and loader before installing. Back up existing files, extract the
-wanted ZIPs into the game directory, and keep one active copy of each plugin.
-For upgrades, preserve customized TOML files or merge new defaults rather than
-replacing your settings. Restart after manual config changes. Disable the former
-Controller Aim Test DLL if migrating; its config is no longer read.
+Extract the wanted runtime ZIP into the game directory. DLLs install under
+`d2rloader/plugins/`; supplied configs install under `d2rloader/config/`.
+Close the game and loader first, back up existing files, and preserve customized
+TOML files. Keep one active copy of each plugin and restart after updates.
+Item Roll Ranges requires `d2rcore.items.item_stat_ranges = true`.
 
 ## Validation and compatibility
 
-Local automated suites: Controller QOL 23/23, Item Roll Ranges 5/5, Map Assistance
-2/2. User reports the current Controller QOL runtime is working well, including
-improved R3 handling. This is not exhaustive validation of every catalog/custom
-skill, mod, plugin combination, class layout or resolution. New skill opt-ins and
-targeting overrides need individual gameplay testing.
+Local automated suites: Controller QOL23/23, Item Roll Ranges5/5 and Map
+Assistance2/2. The Base display was user-confirmed on tested belts and bows.
+Revision21's native input/coexistence path passed automated context tests;
+dedicated live controller checks remain pending. These checks do not establish
+compatibility with every item family, localization or plugin combination.
 
-Target: Windows x64, D2RLoader 1.3.1 / ABI4, SDK v0.3.0. Exact native guards retain
-fail-open behavior. See the rev.60 production record and bundled compatibility
-notes. Hot reload is unsupported. Item Roll Ranges requires
-`d2rcore.items.item_stat_ranges = true`.
+Target: Windows x64, D2RLoader1.3.1 / ABI4 and the qualified D2RCore/game build
+listed in the bundled compatibility notes. Hot reload is unsupported.
 
-Included unchanged plugin binaries: Item Roll Ranges 1.3.1+rev.13 and Map Assistance
-1.3.1+rev.1. Map Assistance receives the same ZIP layout correction.
+Included unchanged source versions: Controller QOL1.3.1+rev.60 and Map
+Assistance1.3.1+rev.1. This release changes Item Roll Ranges only.

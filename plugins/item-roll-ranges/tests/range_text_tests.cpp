@@ -1,4 +1,5 @@
 #include "range_text.h"
+#include "header_text.h"
 #include <cstdio>
 #include <cstdlib>
 void check(bool v) { if (!v) { std::fputs("range text failure\n",stderr); std::exit(1); } }
@@ -134,5 +135,48 @@ int main() {
     check(result.annotated==1 && result.text.find("[5% - 10%]")!=std::string::npos && result.text.find("[Unique]")!=std::string::npos);
     result=RangeText::Merge("+6% Faster Run/Walk","+"+range("(1-20)")+"% Faster Run/Walk",512,unique);
     check(result.text.find("[+1 - +20]")!=std::string::npos && result.text.find("[5% - 10%]")==std::string::npos);
-    std::puts("Passed reverse visual order, gray source rows, unique endpoint ranges, native precedence and bounded fallbacks.");
+    check(HeaderText::Merge("Defense: 5\n+28% Enhanced Defense",
+        "Defense: "+range("(3-5)")+"\n+28% Enhanced Defense").find("Defense: 5 \xee\x81\xbe" "U(3-5)")!=std::string::npos);
+    const auto defenseKey=RangeText::Analyze("Defense: 2").key;
+    const auto weaponKey=RangeText::Analyze("One-Hand Damage: 12 to 25").key;
+    const auto damage=HeaderText::Damage("One-Hand Damage: 12 to 25","One-Hand Damage: 12 to 25",weaponKey,
+        std::pair{9,19});
+    check(damage.find("12 to 25")!=std::string::npos && damage.find("Base: 9 - 19")!=std::string::npos);
+    check(HeaderText::Damage("One-Hand Damage: "+range("(10 to 28)"),"One-Hand Damage: 12 to 25",weaponKey,
+        std::pair{9,19}).find("12 to 25")!=std::string::npos);
+    const auto missingDamage=HeaderText::Damage("One-Hand Damage: 12 to 25","One-Hand Damage: 12 to 25",weaponKey,{});
+    check(missingDamage.find(HeaderText::Footer)!=std::string::npos);
+    check(HeaderText::Damage("One-Hand Damage: 12 to 25\nOne-Hand Damage: 12 to 25",
+        "One-Hand Damage: 12 to 25",weaponKey,{})=="One-Hand Damage: 12 to 25\nOne-Hand Damage: 12 to 25");
+    check(HeaderText::Damage("Einhandschaden: 12 bis 25","Einhandschaden: 12 bis 25",
+        RangeText::Analyze("Einhandschaden: 0 bis 0").key,std::pair{9,19}).find("Base:")!=std::string::npos);
+    check(HeaderText::Fixed("Defense: 2",defenseKey,true).find("U(Base: 2 - 2)")!=std::string::npos);
+    check(HeaderText::Fixed("Defense: 3",defenseKey,true).find("U(Base: 3 - 3)")!=std::string::npos);
+    check(HeaderText::Value("Defense: 25",defenseKey)==25);
+    check(HeaderText::Fixed("Defense: 25",defenseKey,true,std::pair{2,2}).find("U(Base: 2 - 2)")!=std::string::npos);
+    check(HeaderText::Fixed("Defense: 25",defenseKey,false).find(HeaderText::Footer)!=std::string::npos);
+    check(HeaderText::Fixed("Defense: 2\nDefense: 3",defenseKey,true)=="Defense: 2\nDefense: 3");
+    check(HeaderText::Fixed("Verteidigung: 2",RangeText::Analyze("Verteidigung: 0").key,true).find("U(Base: 2 - 2)")!=std::string::npos);
+    auto missing=unique; missing[0].fallbackRange.clear(); missing[0].rangeExpected=true;
+    result=RangeText::Merge("+6% Faster Run/Walk","+6% Faster Run/Walk",1024,missing);
+    check(result.text.find("(?) Range Unavailable - Please report item affixes")!=std::string::npos);
+    check(result.text.find("+6% Faster Run/Walk \xee\x81\xbe" "5(?)")!=std::string::npos);
+    check(RangeText::Merge("+6% Faster Run/Walk","+6% Faster Run/Walk",20,missing).text=="+6% Faster Run/Walk");
+    result=RangeText::Merge("+6% Faster Run/Walk","+"+range("(5-10)")+"% Faster Run/Walk",1024,missing);
+    check(result.text.find("Unavailable")==std::string::npos);
+    // Defense header is distinct from the flat modifier, even with the same
+    // stat ID. A fixed base has no range, but its actual line must survive.
+    result=RangeText::Merge("Defense: 2\n+30 Defense\n",
+        "Defense: 2\n+"+range("(20-40)")+" Defense\n",1024);
+    check(result.annotated==1 && result.text.starts_with("Defense: 2\n"));
+    check(result.text.find("[+20 - +40]")!=std::string::npos && result.text.find("+30 Defense")!=std::string::npos);
+    check(RangeText::Merge("Defense: 2","Defense: 2",1024).text=="Defense: 2");
+    result=RangeText::Merge("Defense: 34\n+30 Defense\n+50% Enhanced Defense\n",
+        "Defense: "+range("(29-34)")+"\n+"+range("(20-40)")+" Defense\n+"+range("(40-60)")+"% Enhanced Defense\n",2048);
+    check(result.annotated==3 && result.text.find("Defense: 34")!=std::string::npos);
+    check(result.text.find("+30 Defense")!=std::string::npos && result.text.find("+50% Enhanced Defense")!=std::string::npos);
+    // Even a missing ranged header cannot erase an available actual header.
+    result=RangeText::Merge("Defense: 2\n+30 Defense\n","+30 Defense\n",1024);
+    check(result.text=="Defense: 2\n+30 Defense\n");
+    std::puts("Passed Defense header/modifier separation and fixed-value retention; native header production is outside this fixture.");
 }

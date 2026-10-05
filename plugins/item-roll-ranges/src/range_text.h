@@ -126,6 +126,7 @@ struct Label {
     std::string fallbackRange{};
     std::vector<std::string> unknownSources{};
     std::vector<PairedContribution> pairedParts{};
+    bool rangeExpected{};
 };
 // Compare two native scalar renders; preserve localized wording and signs.
 inline std::string EndpointRange(std::string_view actual,std::string_view low,std::string_view high) {
@@ -330,6 +331,7 @@ struct Result { std::string text; unsigned annotated{}, unmatched{}, labeled{}; 
 inline Result Merge(std::string_view actual,std::string_view ranged,std::size_t capacity,
                     const std::vector<Label>& labels={}) {
     const auto originals=Lines(actual), ranges=Lines(ranged);
+    bool unavailable=false;
     std::vector<Analysis> a,r;
     for (auto line: originals) a.push_back(Analyze(line));
     for (auto line: ranges) r.push_back(Analyze(line));
@@ -376,12 +378,21 @@ inline Result Merge(std::string_view actual,std::string_view ranged,std::size_t 
         }
         result.text+=prefix;
         result.text+=originals[i];
+        if (prefix.empty() && actualCount==1 && labelCount==1 && label && label->rangeExpected) {
+            result.text+=" \xee\x81\xbe" "5(?)\xee\x81\xbe" "3";
+            unavailable=true;
+        }
         if (actualCount==1 && labelCount==1 && label && !label->text.empty()) {
             const std::string marker=match && !match->marker.empty()?match->marker:"\xee\x81\xbe";
             result.text+=' '; result.text+=marker+"U"+label->text+marker+"3";
             ++result.labeled;
         }
         if (i+1<originals.size() || actual.ends_with('\n')) result.text+='\n';
+    }
+    if (unavailable) {
+        // Tooltip property buffers are laid out bottom-to-top: the first
+        // emitted line is the footer. Emit it once for the entire block.
+        result.text="\xee\x81\xbe" "5(?) Range Unavailable - Please report item affixes\xee\x81\xbe" "3\n"+result.text;
     }
     if (result.text.size()>=capacity) { result.text=actual; result.annotated=0; result.labeled=0; }
     return result;

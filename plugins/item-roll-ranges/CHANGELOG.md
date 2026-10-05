@@ -3,6 +3,109 @@
 All notable changes to Item Roll Ranges are recorded here. Versions before the
 GitHub migration are reconstructed from release and validation records.
 
+## [1.3.1+rev.21] - 2026-10-05
+
+- Remove keyboard/controller query adapters and physical key/XInput polling.
+  Follow Core's native range-clone context for display enhancements, preserving
+  native Ctrl and RT/R2 and Controller QOL's existing active R1/RB override.
+- Keep focused panel gating and native formatter passthrough. No changes to
+  Controller QOL, no input consumption and no new interoperability export.
+- User confirmed revision20 Base displays look good. Revision21 input behavior
+  requires live validation before publication.
+
+## [1.3.1+rev.20] - 2026-10-05
+
+- Preserve current native Defense/damage and label the underlying intrinsic
+  range `Base:` instead of displaying calculated total roll intervals. For
+  example, `32 to 69 (Base: 9 - 19)` and Bloodrune `25 (Base: 2 - 2)`.
+- Apply the same display to armor, belts, and one-hand/two-hand/throw damage.
+  Keep fixed endpoints explicit and account for ethereal scaling and the native
+  Enhanced Defense maximum-plus-one generation rule.
+- Verify base table bounds against primary item stats independently of unrelated
+  proc, per-level, and other affix sources. Those sources no longer cause an
+  unavailable header marker when the base is known. Individual affix ranges
+  retain their existing reporting behavior.
+- Five automated suites pass. Live revision20 tooltip validation remains pending.
+
+## [1.3.1+rev.19] - 2026-10-05
+
+- Fix Enhanced Defense/Damage operands being consumed from the aggregate stat
+  vector. Read only validated permanent, state-zero child modifier lists and
+  compare computed endpoints against both the aggregate total and native header.
+- Recognize native property function2 for Enhanced Defense and unrelated copied
+  resistance/elemental endpoint functions. Their presence no longer blocks an
+  otherwise qualified total. Keep unknown/conditional/timed/source contexts closed.
+- User reported revision18 Sturdy Sash remained unavailable; live inspection
+  confirmed child ED18 but no aggregate ED16. Bloodrune remains user-confirmed.
+  The reported bow has a per-level maximum-damage modifier, which remains
+  unsupported and correctly displays the unavailable marker.
+- Five suites pass with consumed-operand, Sturdy/Balance, ethereal Four Seasons,
+  raw-total agreement, cycle and conditional-state regressions. Live revision19
+  display and deployment pending.
+
+## [1.3.1+rev.18] - 2026-10-05
+
+- Calculate total Defense intervals for identified, socket-free normal/magic/
+  rare/direct-unique armor with fully resolved positive Enhanced Defense and
+  independently verified intrinsic base and native displayed value. Truncate
+  ethereal scaling before applying the percentage. A Sturdy Sash with 10-20%
+  ED now shows its actual Defense beside `(Total: 3-3)`.
+- Preserve native actual one-hand, two-hand and throw damage headers and append
+  `(Total: minLow-minHigh / maxLow-maxHigh)` when loaded source bounds and raw
+  operands completely explain the native endpoints. Ethereal scaling, on-weapon
+  ED and flat min/max additions use separate integer stages.
+- Keep `(?)` and the report footer for unresolved sources, sockets/runewords,
+  unsupported qualities/functions, contextual damage, clamp-crossing intervals
+  or mismatched intrinsic/current values. Combined ED plus flat Defense remains
+  unqualified; Bloodrune's existing additive Defense path is retained.
+- Five automated suites pass, including arithmetic, source/value guards, native
+  adapter delegation and artifact admission. Live revision18 validation pending.
+
+## [1.3.1+rev.17] - 2026-10-05
+
+- Label independently verified additive Defense header intervals `Total:`, for
+  example `Defense: 25 (Total: 17-27)`, to distinguish them from affix bounds.
+  Core-provided intervals retain their existing label pending arithmetic
+  qualification; fixed and unavailable indicators retain their current display.
+- User confirmed Bloodrune's revision16 total interval and revision17 label in game.
+
+## [1.3.1+rev.16] - 2026-10-05
+
+- Recover total Defense header intervals for fixed-base, non-ethereal unique
+  armor with independently witnessed base/aggregate Defense and direct additive
+  flat Defense sources. Bloodrune's base2 plus +15-25 yields total17-27.
+- Refuse guessed totals for ED/contextual functions, property groups, sockets,
+  runewords, variable bases, ethereal items or mismatched native/display values.
+  Those retain the unavailable indicator when Core supplies no interval.
+- User confirmed revision15's fixed/unavailable header display works. Revision16
+  arithmetic passes automated regression checks; live confirmation is pending.
+
+## [1.3.1+rev.15] - 2026-10-05
+
+- Corrected the Defense localization resource group from `eng` to the native
+  `d2r` group. The wrong group caused revision14 to skip fixed intervals and
+  unavailable-header markers; variable-header value preservation was unaffected.
+- Added a byte witness for the native group literal and a regression that
+  verifies the resource group, key and required-lookup flag.
+- User confirmed actual Defense stays visible beside variable ranges in
+  revision14. Fixed ranges and unavailable-header markers still need a
+  revision15 in-game check.
+
+## [1.3.1+rev.14] - 2026-10-05
+
+- Preserve actual Defense beside Core's variable header interval while Ctrl or
+  RB is held, for example `Defense: 5 (3-5)`.
+- Show equal endpoints for verified fixed Defense, including ordinary and
+  ethereal sashes. Incomplete source/socket evidence produces `(?)` instead of
+  a guessed fixed interval.
+- Mark unresolved expected variable modifier ranges with a gray `(?)` and
+  show `(?) Range Unavailable - Please report item affixes` once per tooltip.
+  Non-rollable lines do not trigger the hint.
+- Added exact-build header caller/function guards and ownership-checked slot
+  teardown. Input remains query-result substitution; no key/button is consumed.
+- Automated regression/build/artifact checks and read-only native qualification
+  are separate from visible in-game validation, which remains pending.
+
 ## [1.3.1+rev.13] - 2026-09-26
 
 ### Changed

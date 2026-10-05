@@ -1,6 +1,6 @@
 # Item Roll Ranges
 
-Experimental 1.3.1+rev.13, PyreFly. Separate client plugin for the installed D2RLoader.
+Experimental 1.3.1+rev.21, PyreFly. Separate client plugin for the installed D2RLoader.
 
 Light-blue `[P] [Name] [Tn]` / `[S] [Name] [Tn]` labels identify verified rolled
 magic/rare/crafted affix contributions, including fixed-value affixes. Repeated
@@ -11,7 +11,7 @@ adds `[Unique]` / `[Base]` source labels. Original values remain intact.
 See [the source audit](docs/SOURCE-AUDIT-0.4.2.md) for current coverage, evidence
 and limitations. All five test suites pass; 0.4.2 visual checks remain pending.
 
-Hold **Ctrl** or controller **R1/RB** in inventory, stash, Cube or vendor to show
+Hold **Ctrl** or controller **RT/R2** (**R1/RB** when Controller QOL range remapping is active) in inventory, stash, Cube or vendor to show
 native roll ranges as light-blue prefixes beside actual item properties, e.g.
 `[+80 - +120] +118 Defense`. Release returns to the usual tooltip.
 
@@ -50,10 +50,34 @@ Ctrl/right-trigger behavior. The DLL pins itself after successful preflight so
 already-fetched callbacks remain mapped during loader unload. Hot reload is
 unsupported; use a cold restart for updates.
 
-R1/RB is read from the selected XInput user, not from every connected pad. This
-candidate requires XInput (including Steam's controller translation). Other
-input backends and native R1 side effects are unqualified. No input is consumed
-or synthesized, and the loader's existing hint text is not changed yet.
+Revision21 leaves the native Ctrl and selected-controller RT/R2 queries intact.
+It applies display enhancements only when Core's guarded render context contains
+its distinct range clone. No physical key or XInput polling overrides that
+native decision. Controller QOL's existing active RT-to-RB tooltip remap
+therefore takes precedence without a QOL update.
+
+Only eligible, focused item-management screens receive this plugin's display
+changes. No input events are consumed or synthesized. The loader's hint text
+remains native. See [the Defense and input audit](docs/DEFENSE-COVERAGE-AUDIT.md)
+for contracts and validation boundaries.
+
+Revision 20 preserves the native current value and adds the verified underlying
+base range: `Two-Hand Damage: 32 to 69 (Base: 9 - 19)` or
+`Defense: 25 (Base: 2 - 2)` for Bloodrune. Fixed endpoints remain explicit.
+Armor, belts, and one-hand, two-hand and throw weapon lines use this display.
+Affix roll ranges remain on their individual modifier lines.
+
+Base values include ethereal scaling. Armor generated with Enhanced Defense
+uses its native maximum base Defense plus one before ethereal scaling; a
+non-ethereal Sturdy Sash therefore shows `(Base: 3 - 3)`. These are intrinsic
+values before affix percentage and flat additions, rather than possible total
+roll outcomes. Table bounds and the item's primary stat values must agree.
+
+Unrelated triggered skills and per-level modifiers do not prevent a verified
+base from displaying. An unresolved header base still gets a gray `(?)` and
+`(?) Range Unavailable - Please report item affixes`. Ordinary non-rollable
+properties do not trigger the footer. Separate unresolved affix ranges can
+still request a report.
 
 ## Build
 
@@ -77,7 +101,7 @@ with separate ACTUAL, RANGED and RESULT text, annotation counts and unmatched co
 No original SDK context, item pointer or rendered text is retained between calls.
 
 0.3.3 changes the keyboard hold from ALT to Ctrl (either left or right Ctrl).
-Controller remains R1/RB. Panel/focus gating and light-blue range formatting
+Historical revision13 controller binding was R1/RB; revision21 restores native RT/R2. Panel/focus gating and light-blue range formatting
 are unchanged. Historical 0.3.2 validation above used ALT.
 
 
