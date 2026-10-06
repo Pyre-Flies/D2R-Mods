@@ -81,6 +81,9 @@ View published{}, lastLookup{};
 struct CastMarker { bool valid{}; unsigned playerId{}; Aim::Point position{}; std::uint64_t tick{}; };
 CastMarker lastCastMarker{};
 std::atomic<unsigned> candidateCount{}, previewCandidateReports{};
+std::atomic<unsigned> activeSnapTraceReports{}, idleSnapTraceReports{};
+struct CandidateTrace { bool active{}; unsigned calls{}; float nativeScore{-1}, returnedScore{-1}; };
+thread_local CandidateTrace candidateTrace{};
 struct PendingTeleport {
     bool active{};
     unsigned sequence{}, playerId{};
@@ -229,7 +232,9 @@ void __fastcall Lookup(void* controller,void* player,bool adjust,float* x,float*
     View view{};
     if(!x || !y || !ReadView(player,view)) return;
     previewSkill.store(view.skill);
+    View preview{};
     AcquireSRWLockExclusive(&stateLock);
+    preview=published;
     ResolveSelection(view);
     lastLookup=view;
     ReleaseSRWLockExclusive(&stateLock);
@@ -237,6 +242,12 @@ void __fastcall Lookup(void* controller,void* player,bool adjust,float* x,float*
     __except(EXCEPTION_EXECUTE_HANDLER) { return; }
     const auto count=lookupCount.fetch_add(1)+1;
     if(count<=128) {
+        char trace[320];
+        std::snprintf(trace,sizeof(trace),"[QOL/AimTrace] lookup=%u skill=%d previewSkill=%d previewActive=%d previewId=%u previewAge=%llu chosenId=%u player=(%.2f,%.2f) facing=(%.3f,%.3f).",
+            count,view.skill,preview.skill,preview.activeSkill,preview.targetId,
+            static_cast<unsigned long long>(preview.valid && view.tick>=preview.tick?view.tick-preview.tick:999999),
+            view.targetId,view.player.x,view.player.y,view.facing.x,view.facing.y);
+        ctx->LogInfo(trace);
         char message[256];
         std::snprintf(message,sizeof(message),"[QOL/Aim] lookup #%u skill=%d range=%.2f center=(%.2f,%.2f) destination=(%.2f,%.2f) target=%s id=%u.",
             count,view.skill,view.distance,view.center.x,view.center.y,view.destination.x,view.destination.y,view.target?"monster":"ground",view.targetId);
@@ -272,9 +283,10 @@ bool __fastcall UnitTest(void* controller,void* player,void* candidate) noexcept
         (skillSettings.Snaps(view.activeSkill)?Aim::ObservationMode::MeteorCircle:
         (view.activeSkill==-1?Aim::ObservationMode::MeteorPreviewCircle:Aim::ObservationMode::None)):Aim::ObservationMode::None;
     const bool observe=mode!=Aim::ObservationMode::None && ReadMonster(candidate,position,id);
-    // Idle preview copies native observations without changing geometry. The
-    // native enumeration owns selection caches, so idle scoring must pass through.
-    if(observe && Aim::OverrideScoring(manualAim.load(),view.activeSkill,skillSettings)) {
+    // Acquire around the armed reticle before Lookup needs the first target.
+    // Natural enumeration still validates candidates; idle monster ranking is
+    // changed deliberately. Active ground/disabled skills do not inherit it.
+    if(observe && Aim::OverrideScoring(manualAim.load(),view.activeSkill,skillSettings,view.skill)) {
         Aim::Point scoringCenter=view.center;
         // Retain only the same freshly observed enemy, not every nearby unit.
         AcquireSRWLockShared(&stateLock);
@@ -288,7 +300,11 @@ bool __fastcall UnitTest(void* controller,void* player,void* candidate) noexcept
             scoringCenter=position;
         scoringWindow={true,true,player,scoringCenter};
     }
+    const auto previousTrace=candidateTrace;
+    candidateTrace={observe,0,-1,-1};
     const bool result=originalUnitTest(controller,player,candidate);
+    const auto trace=candidateTrace;
+    candidateTrace=previousTrace;
     scoringWindow=previous;
     if(observe) {
         unsigned currentId{};
@@ -299,6 +315,16 @@ bool __fastcall UnitTest(void* controller,void* player,void* candidate) noexcept
         ReleaseSRWLockExclusive(&stateLock);
         const auto count=candidateCount.fetch_add(1)+1;
         const bool previewNear=mode==Aim::ObservationMode::MeteorPreviewCircle && Aim::Score(view.center,position,motionSettings.snapRadius)>=0;
+        auto& traceReports=view.activeSkill>=0?activeSnapTraceReports:idleSnapTraceReports;
+        if(Aim::Score(view.center,position,motionSettings.snapRadius)>=0 && traceReports.fetch_add(1)<128) {
+            const float facingDot=(position.x-view.player.x)*view.facing.x+(position.y-view.player.y)*view.facing.y;
+            char detail[384];
+            std::snprintf(detail,sizeof(detail),"[QOL/AimTrace] candidate=%u active=%d previewSkill=%d override=%u eligible=%u scoreCalls=%u native=%.3f returned=%.3f facingDot=%.3f centerDistance=%.2f tick=%llu.",
+                id,view.activeSkill,view.skill,Aim::OverrideScoring(manualAim.load(),view.activeSkill,skillSettings,view.skill),eligible,
+                trace.calls,trace.nativeScore,trace.returnedScore,facingDot,
+                std::sqrt(Aim::DistanceSquared(view.center,position)),static_cast<unsigned long long>(view.tick));
+            ctx->LogInfo(detail);
+        }
         const bool reportPreview=previewNear && previewCandidateReports.fetch_add(1)<24;
         if(reportPreview || (count<=64 && (eligible || count<=8))) {
             char message[192];
@@ -312,6 +338,7 @@ bool __fastcall UnitTest(void* controller,void* player,void* candidate) noexcept
 
 float __fastcall PointScore(void* controller,void* player,const float* position,int category,int profile) noexcept {
     const float nativeScore=originalPointScore(controller,player,position,category,profile);
+    if(candidateTrace.active) { ++candidateTrace.calls; candidateTrace.nativeScore=nativeScore; candidateTrace.returnedScore=nativeScore; }
     if(!installed.load() || !enabled.load() || !inSession.load() || !manualAim.load() || !scoringWindow.active || scoringWindow.player!=player) return nativeScore;
     // Replace geometry only in native Meteor candidate enumeration. Native
     // visibility, hostility/category and skill validation still execute.
@@ -319,6 +346,7 @@ float __fastcall PointScore(void* controller,void* player,const float* position,
     __try {
         if(scoringWindow.monster && position) score=Aim::Score(scoringWindow.center,{position[0],position[1]},motionSettings.snapRadius);
     } __except(EXCEPTION_EXECUTE_HANDLER) { return nativeScore; }
+    if(candidateTrace.active) candidateTrace.returnedScore=score;
     const auto count=scoringCount.fetch_add(1)+1;
     if(count<=8) {
         char message[160];

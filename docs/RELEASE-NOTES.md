@@ -1,16 +1,18 @@
-## Controller QOL 1.3.1+rev.62
+## Controller QOL 1.3.1+rev.63
 
-- Refresh normalized controller input and ground-label display on the client UI
-  scheduler, which is available to remote TCP/IP clients. Previously these
-  refreshes depended on the authoritative game scheduler, unavailable remotely.
-- Keep the controller-only label filter separate from ground-modifier handling.
-  Mouse pickup remains unaffected by filtered-label blocking.
-- The updated DLL was tested offline and reported working by the user.
+- Restore target acquisition around the armed reticle before the first snap-skill
+  cast. An enemy behind the character can be acquired before the first Fireball
+  turns the character, rather than only becoming available for the next shot.
+- Preserve active ground-only and disabled-skill targeting gates and remaining
+  native candidate checks. Idle native monster ranking changes deliberately.
+- Keep bounded candidate/lookup diagnostics for future targeting investigations.
 
-Remote Ladder validation is pending. This update may improve LB input detection
-and labels; it does not add remote support for direct ground-loot or SDK item
-mutations that require host authority. Signed Ladder packages must include this
-DLL through their normal revision process.
+The user confirmed improved Fireball snapping, Teleport remaining ground-targeted,
+and disabled aim skills retaining native targeting in offline play.
+
+Rev.62's client UI scheduler update remains included. Remote Ladder validation
+is pending; direct ground-loot and SDK item mutations still require host authority.
+Signed Ladder packages must include the DLL through their normal revision process.
 
 ## Installation
 
@@ -23,8 +25,9 @@ Item Roll Ranges requires `d2rcore.items.item_stat_ranges = true`.
 ## Validation and compatibility
 
 Local Release builds and automated suites: Controller QOL 23/23,
-Item Roll Ranges 5/5, Map Assistance 2/2. Offline behavior was user-confirmed
-with the UI scheduler update; remote Ladder behavior remains unverified.
+Item Roll Ranges 5/5, Map Assistance 2/2. Live checks cover the reported offline
+Fireball sequence, Teleport, and disabled aim skills, not every spell or remote
+Ladder session.
 
 Target: Windows x64, D2RLoader 1.3.1 / ABI 4 and the qualified D2RCore/game
 build listed in the bundled compatibility notes. Hot reload is unsupported.

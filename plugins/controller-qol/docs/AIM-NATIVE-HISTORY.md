@@ -780,3 +780,88 @@ active ground-skill exclusion, unsupported skills and opt-in boundary.
 Both suites pass; installed after process-absence check with aim.19 rollback.
 Configuration/QOL unchanged. Built/deployed SHA256 `997E57E0B7EA9F9412C859A58CEBA6448BBF8054477675F6E5B49C8065F3DDD1`.
 Visible idle-after-Teleport preview remains pending live validation.
+
+
+## Rev.62 facing-dependent snap investigation (2026-10-05)
+
+User reports a preview snap behind the character can cast at the unsnapped cursor.
+The 22:38-22:39 offline log records skill 36 lookups 1-11 using ground with no
+fresh eligible candidates, while lookup 12 selects monster 29 and cast 12 agrees
+within 0.71 tiles (integer coordinate rounding). These samples establish rejection
+before coordinate submission, not an overwritten snapped coordinate or proof of
+a vision-cone predicate. Earlier near-circle preview candidates were rejected.
+
+History comparison identifies a rev.52 change from unconditional observed-candidate
+circle scoring to OverrideScoring requiring an active enabled snap skill.
+IMPLEMENTATION-1.3.1-rev.52.md documents native selection-cache isolation as its
+reason. Rev.61/62 did not change aim geometry. Idle rejection and active-cast
+rejection must be investigated separately; do not broadly override eligibility.
+
+The diagnostic build adds bounded AimTrace records without changing targeting:
+near-circle candidate ID, active/preview skill, override state, PointScore call
+count and final observed scores, unnormalized facing dot product, circle distance,
+and tick. Zero score calls indicates rejection before the hooked PointScore;
+positive circle score followed by native rejection indicates another native check.
+If multiple PointScore calls occur, scores describe the last call, not every call.
+Lookup also records the prior published preview ID/age and chosen ID; existing
+cast logs retain temporal coordinate correlation. Preview snapshots can originate
+from UI publication or an earlier lookup and are not transaction identifiers.
+No new RVAs, native calls, layouts or guards are introduced. Native UnitTest and
+PointScore still run once per natural invocation; no forced predicate reruns.
+
+Live test: fresh launch, one enabled snap spell, aim near an enemy behind the
+character while standing still, cast twice, then face that enemy and repeat.
+Preserve ground-only and disabled-skill behavior. Capture the matching candidate,
+lookup and cast sequence. Existing automated suites do not prove facing behavior.
+
+
+### Fireball trace result: first lookup precedes active circle acceptance
+
+2026-10-05 22:50-22:51, diagnostic DLL
+SHA256 `939797C6322891D0FC520D8D063316A8706D453AAB3EF3F7A07D7F701DBE2607`.
+User aimed behind while stationary with Fireball (skill 36); first cast turned the
+character and the lock appeared afterward.
+
+At 22:50:46-47, candidate 16 was within 1.25-3.60 tiles of the reticle center,
+with facingDot -15.262, active -1, override 0, two PointScore calls returning -1,
+and eligible 0. At 22:50:50.162 lookup 1 had previewId 0, chosenId 0 and no fresh
+eligible observations; cast 1 at .196 used the ground coordinate (error 0.70).
+Only afterward, at .247, candidate 16 was accepted with active 36, override 1,
+native score -1 and returned circle score 31.526, despite facingDot -4.702.
+At .299 it remained accepted after facingDot became positive 16.805.
+Lookup 2 at 22:50:53.362 selected candidate 16; cast 2 agreed within 0.77 tiles.
+Lookup/cast 4 similarly precede candidate 18 acceptance behind at 22:51:03.813;
+lookup/cast 5 then snap to 18.
+
+This demonstrates that active circle scoring can accept a behind-character
+candidate, but its observation arrives after the first coordinate lookup in
+these sequences. Idle native rejection leaves the book empty before that lookup.
+The cast is not discarding an already chosen snap in these examples. Do not
+claim all native rejection is facing-related, or invoke the stateful native
+predicate from Lookup to force an early result. A correction needs pre-cast
+reticle-circle acquisition without leaking geometry into native selection caches
+for other skills. Live examples with an actual preview lock lost at lookup remain
+separate and are not established by this run.
+
+
+### First-cast acquisition correction
+
+Restore the established aim.12 pre-cast circle-scoring behavior for deliberate
+manual aim with an enabled idle preview. Active ground/disabled skills remain
+excluded; Lookup/Selected still require an actual enabled, matching cast skill.
+Native UnitTest is invoked once through its natural caller and remaining native
+eligibility checks remain intact. No forced re-enumeration or cast rewriting.
+
+This deliberately changes idle monster candidate ranking in native caches,
+as aim.12 did; it does NOT claim full native cache isolation. It replaces the
+rev.52 idle-geometry restriction responsible for the observed acquisition delay.
+The shared cursor can prepare a later snap after an enabled ground preview.
+Tests cover armed idle acquisition, absent/disabled preview rejection, active
+ground/disabled isolation and refusal of idle coordinate routing. Live validation
+must confirm the first stationary behind-character Fireball snaps, and that
+Teleport and disabled-skill casts still use their intended targeting.
+
+Live correction validation: the user reported improved first-cast snapping and
+confirmed Teleport remains ground-targeted and disabled aim skills retain native
+targeting. This is validation of the tested offline Fireball sequence and those
+cross-skill checks, not every spell or remote Ladder behavior. Shipped as rev.63.

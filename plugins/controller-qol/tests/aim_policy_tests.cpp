@@ -136,6 +136,10 @@ int main() {
     Check(!CoordinateRoute(false,Meteor,Meteor,skills) && CoordinateRoute(true,Meteor,Meteor,skills),"supported casts remain native until stick activation");
     Check(!CoordinateRoute(true,143,143,skills) && !CoordinateRoute(true,Meteor,Teleport,skills),"unsupported and mismatched casts remain native");
     Check(!OverrideScoring(true,-1,skills) && !OverrideScoring(false,Meteor,skills) && !OverrideScoring(true,Teleport,skills) && OverrideScoring(true,Meteor,skills),"idle, unarmed and ground-only enumeration never changes native scoring");
+    Check(OverrideScoring(true,-1,skills,Meteor) && OverrideScoring(true,-1,skills,Teleport),"armed enabled preview acquires around the shared cursor before the first cast");
+    Check(!OverrideScoring(false,-1,skills,Meteor) && !OverrideScoring(true,-1,skills,143),"unarmed or disabled preview cannot replace native geometry");
+    Check(!OverrideScoring(true,Teleport,skills,Meteor) && !OverrideScoring(true,143,skills,Meteor),"active ground and disabled skills cannot inherit preview geometry");
+    Check(!CoordinateRoute(true,Meteor,-1,skills),"idle acquisition never authorizes a cast coordinate route");
     Check(!DeliberateStick({0.1f,0.1f},0.22f) && DeliberateStick({0.23f,0},0.22f),"activation uses radial deadzone");
     std::string extensions="[aim.custom]\n";
     for(int id=300;id<332;++id) extensions+='"'+std::to_string(id)+"\"=\"snap\"\n";

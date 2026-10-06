@@ -1,5 +1,17 @@
 # Controller QOL changelog
 
+## 1.3.1+rev.63 - 2026-10-05
+
+- Restore armed idle reticle-circle acquisition before the first snap-skill
+  lookup, addressing the reproduced behind-character Fireball fallback. Preserve
+  active ground/disabled skill gates and native candidate checks. Idle native
+  monster ranking changes deliberately. The user confirmed improved Fireball
+  snapping, ground-targeted Teleport and native targeting for disabled aim skills.
+
+- Add bounded candidate/preview/lookup diagnostics for facing-dependent snap
+  reports. The trace confirmed active circle acceptance occurred after the first
+  lookup; the correction restores pre-cast acquisition. All 23 suites passed.
+
 ## 1.3.1+rev.62 - 2026-10-05
 
 - Refresh normalized controller input and label display on the client UI

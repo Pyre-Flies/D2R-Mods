@@ -121,8 +121,11 @@ inline bool ParseSkills(std::string_view text,SkillSettings& output) {
 inline bool DeliberateStick(Point stick,float deadzone) noexcept {
     return Finite(stick) && std::hypot(stick.x,stick.y)>deadzone;
 }
-inline bool OverrideScoring(bool armed,int activeSkill,const auto& settings) noexcept {
-    return armed && settings.Snaps(activeSkill); // Never idle preview.
+inline bool OverrideScoring(bool armed,int activeSkill,const auto& settings,int previewSkill=-1) noexcept {
+    // Prepare the shared reticle before the first cast. Idle has no requested
+    // cast skill; preview authorization must never authorize coordinate routing.
+    return armed && (settings.Snaps(activeSkill) ||
+        (activeSkill==-1 && settings.Enabled(previewSkill)));
 }
 inline bool CoordinateRoute(bool armed,int requestedSkill,int activeSkill,const auto& settings) noexcept {
     return armed && requestedSkill==activeSkill && settings.Enabled(activeSkill);
