@@ -149,7 +149,7 @@ static constexpr D2RL::PluginInfo ControllerQoLPluginInfo {
     .abiVersion  = D2RL_PLUGIN_ABI_VERSION,
     .id          = "controller-qol-updates",
     .name        = "Controller QOL Updates",
-    .version     = "1.3.1+rev.60",
+    .version     = "1.3.1+rev.61",
     .author      = "PyreFly",
     .description = "Direct controller looting with filtered labels, inventory shortcuts, and stash navigation.",
     .flags       = D2RL::PluginFlags::Shared | D2RL::PluginFlags::NativeHooks,
@@ -1335,7 +1335,7 @@ namespace GroundLoot {
 
     __declspec(noinline) bool __fastcall HookPickup(void* player, uint32_t guid, bool arg3, uint32_t dist, bool arg5, bool arg6) {
         if (!s_Pickup) return false;
-        if (!s_PickupCallsActive.load())
+        if (!s_PickupCallsActive.load() || !ControllerQoL::IsControllerUiActive())
             return s_Pickup(player, guid, arg3, dist, arg5, arg6);
 
         const bool shortcutsEnabled = Probe::GroundShortcutsEnabled(g_Settings.enabled, g_Settings.groundPickup);
@@ -2861,7 +2861,7 @@ D2RL_PLUGIN_EXPORT auto D2RLoaderLoadPlugin(const D2RL::PluginContext* context) 
         g_Settings.groundPickupButton, g_Settings.portalPriorityDistance);
     if(!QolAim::Initialize(context,g_Settings.enabled))
         context->LogWarn("[QOL/Aim] Aim unavailable; other QOL features remain loaded.");
-    context->LogInfo("[QOL] QOL v1.3.1+rev.60 loaded: controller item features and integrated v0.6 navigation/label hooks.");
+    context->LogInfo("[QOL] QOL v1.3.1+rev.61 loaded: controller item features and integrated v0.6 navigation/label hooks.");
     return true;
 }
 

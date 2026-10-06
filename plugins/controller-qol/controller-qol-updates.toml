@@ -16,6 +16,7 @@ ground_pickup = true
 ground_pickup_button = "bumper"
 ground_pickup_distance = 6
 debug_logging = false
+# Only while the controller UI is active; mouse and keyboard pickup is unaffected.
 block_filtered_pickup = true
 prioritize_portals = true
 prioritize_stash_boxes = true

@@ -1,5 +1,14 @@
 # Controller QOL changelog
 
+## 1.3.1+rev.61 - 2026-10-05
+
+- Apply native filtered-item pickup blocking only while D2R's controller UI is
+  active. Mouse and keyboard pickup bypasses the guard even with
+  `block_filtered_pickup = true`; a connected idle controller does not enable it.
+- Release build and all 23 existing automated suites passed. The user confirmed
+  mouse pickup works with placards off after installing the fix. Controller
+  filtering and input-switching validation remain outstanding.
+
 ## 1.3.1+rev.60 - 2026-10-04
 
 - Package the default TOML at `d2rloader/config/` beside `d2rloader/plugins/`

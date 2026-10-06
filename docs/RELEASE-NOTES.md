@@ -1,18 +1,10 @@
-## Item Roll Ranges 1.3.1+rev.21
+## Controller QOL 1.3.1+rev.61
 
-- Keep actual Defense and physical damage values and show the underlying base:
-  `Two-Hand Damage: 32 to 69 (Base: 9 - 19)` and Bloodrune
-  `Defense: 25 (Base: 2 - 2)`. Armor and belts use the same display.
-- Make fixed ranges explicit. Account for ethereal base scaling and native
-  Enhanced Defense base generation. Keep modifier roll ranges on their own lines.
-- Show `(?) Range Unavailable - Please report item affixes` for unresolved
-  expected ranges. Unrelated proc/per-level modifiers do not block a known base.
-- Follow Core's native input decision without keyboard/controller query
-  overrides or physical input polling: Ctrl and RT/R2 normally; Controller QOL's
-  existing active menu/range remap selects R1/RB. No QOL update is required.
-- Preserve exact compatibility guards, original formatter values and slot
-  ownership checks. Other plugins changing the same tooltip functions can
-  still conflict; unsupported paths fail open.
+- Apply `block_filtered_pickup = true` only while D2R's controller UI is active.
+  Mouse and keyboard pickup works with item placards off, including when an idle
+  controller remains connected.
+- Preserve native pickup when the guarded controller state is unavailable.
+  Controller filtering retains its existing visible-label policy.
 
 ## Installation
 
@@ -24,14 +16,13 @@ Item Roll Ranges requires `d2rcore.items.item_stat_ranges = true`.
 
 ## Validation and compatibility
 
-Local automated suites: Controller QOL23/23, Item Roll Ranges5/5 and Map
-Assistance2/2. The Base display was user-confirmed on tested belts and bows.
-Revision21's native input/coexistence path passed automated context tests;
-dedicated live controller checks remain pending. These checks do not establish
-compatibility with every item family, localization or plugin combination.
+Local Release builds and automated suites passed: Controller QOL 23/23,
+Item Roll Ranges 5/5, and Map Assistance 2/2. The user confirmed mouse pickup
+with placards off using the installed fix. Controller filtering and switching
+between input modes still require live validation.
 
-Target: Windows x64, D2RLoader1.3.1 / ABI4 and the qualified D2RCore/game build
-listed in the bundled compatibility notes. Hot reload is unsupported.
+Target: Windows x64, D2RLoader 1.3.1 / ABI 4 and the qualified D2RCore/game
+build listed in the bundled compatibility notes. Hot reload is unsupported.
 
-Included unchanged source versions: Controller QOL1.3.1+rev.60 and Map
-Assistance1.3.1+rev.1. This release changes Item Roll Ranges only.
+Included unchanged: Item Roll Ranges 1.3.1+rev.21 and Map Assistance
+1.3.1+rev.1. This release changes Controller QOL only.

@@ -48,6 +48,15 @@ native CALL return address, argument registers and stack arguments.
 
 ## Validation boundary
 
+Controller-only policy update (2026-10-05): the pickup wrapper passes through
+before reading labels or modifiers unless `ControllerQoL::IsControllerUiActive()`
+succeeds. This reuses the admitted native input profile and `NativeActiveIndex()`
+in `src/controller_input.cpp`, which requires active controller UI and a valid
+pad index. An unavailable profile or read failure preserves native pickup.
+No new RVAs, layouts, or CALL patches were introduced. Live validation must
+check mouse pickup with hidden labels, controller bare A with visible/filtered
+items, and switching input modes with a pad connected.
+
 Automated tests verify all seven original CALL displacements resolve to
 `0x471950`, relay displacement encoding/overflow behavior, filtered-only policy
 gating, artifact versioning, and the existing plugin suites. Live validation

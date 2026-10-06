@@ -38,7 +38,9 @@ removes the shortcut overlays and does not pick anything up automatically.
 Bare **A** remains the normal native interaction button. It is not an LB
 shortcut: when no enabled priority object wins, native item pickup and world
 interaction continue normally. With `block_filtered_pickup = true`, items whose
-labels are filtered out cannot be collected accidentally with bare A.
+labels are filtered out cannot be collected accidentally with bare A. This guard
+applies only while D2R's controller UI is active. Mouse and keyboard pickup
+continues normally, even when this setting is enabled.
 
 ### Item, storage, Cube, belt, and shop controls
 
@@ -114,7 +116,7 @@ All settings live under `[qol]` and are read when the plugin loads.
 | `ground_pickup` | `true` | Enable direct ground-label assignments and pickup chords |
 | `ground_pickup_button` | `"bumper"` | Direct-loot modifier. Supports `lb`, `rb`, `lt`, `rt`, `l3`, `r3`, bracket/paddle aliases, or a single keyboard letter/number |
 | `ground_pickup_distance` | `6` | Direct-loot search distance, clamped to 1â€“20 game units |
-| `block_filtered_pickup` | `true` | Prevent native pickup of ground items without an active visible label |
+| `block_filtered_pickup` | `true` | Prevent controller pickup of ground items without an active visible label; mouse and keyboard pickup is unaffected |
 | `prioritize_portals` | `true` | Prefer eligible portals over ground loot for neutral A |
 | `prioritize_stash_boxes` | `true` | Prefer the town stash over ground loot for neutral A |
 | `prioritize_waypoints` | `true` | Prefer eligible waypoints over ground loot for neutral A |
