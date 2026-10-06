@@ -1,5 +1,20 @@
 # Controller QOL changelog
 
+## 1.3.1+rev.62 - 2026-10-05
+
+- Refresh normalized controller input and label display on the client UI
+  scheduler. Remote TCP/IP clients have no authoritative game scheduler, so the
+  previous refresh could leave LB snapshots invalid and labels unrecovered.
+  Direct ground-loot and SDK item mutation paths still require local authority;
+  this change does not make those paths supported on remote Ladder clients.
+  The user confirmed the updated DLL works offline. Live Ladder validation
+  remains pending; signed packages are unchanged.
+
+- Narrow the controller UI check to filtered-label blocking, preserving the
+  existing ground-modifier suppression path independently. Mouse pickup remains
+  unaffected by filtered-label blocking. Release build and 23 automated suites
+  passed; offline behavior was user-confirmed.
+
 ## 1.3.1+rev.61 - 2026-10-05
 
 - Apply native filtered-item pickup blocking only while D2R's controller UI is

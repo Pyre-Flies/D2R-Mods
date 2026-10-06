@@ -499,7 +499,7 @@ static void ResetNativeTracking() noexcept {
 static void SeedNativeTracking(unsigned index) noexcept {
     if(index==s_NativeIndex) return;
     ResetNativeTracking();s_NativeIndex=index;
-    // Game-thread only, before this provider has filtered any event for this pad.
+    // Client input/UI thread, before this provider has filtered any event for this pad.
     auto read=reinterpret_cast<NativeButtonFn>(s_NativeGame+QolNativeProfile::ButtonRva);
     auto input=reinterpret_cast<void*>(s_NativeGame+QolNativeProfile::InputObjectRva);
     for(unsigned key=1;key<=0x8000;key<<=1) if(read(input,index,key)) s_NativeRaw|=key;
@@ -550,7 +550,7 @@ static void __fastcall HookNativeReset(void* controller) noexcept {
 }
 void PumpNativeInput() noexcept {
     if(!NativeInputInstalled() || s_NativeTaskPending.exchange(true)) return;
-    const auto result=s_NativeThreads->runOnGameThread(s_NativeContext,
+    const auto result=s_NativeThreads->runOnUiThread(s_NativeContext,
         [](const D2RL::PluginContext*,void*) noexcept {
             s_NativeTaskPending.store(false);
             if(!NativeInputInstalled() || s_InsideNative) return;
@@ -581,7 +581,7 @@ static bool CheckNativeProfile(uintptr_t game,uintptr_t core) noexcept {
 }
 bool InstallNativeInputHook(const D2RL::PluginContext* context,const D2RL::ThreadService* threads) noexcept {
     if(NativeInputInstalled()) return true;
-    if(!context || !threads || !D2RL::HasThreadServiceField(threads,D2RL::ThreadServiceRequiredSize) || !threads->runOnGameThread) return false;
+    if(!context || !threads || !D2RL::HasThreadServiceField(threads,D2RL::ThreadServiceRequiredSize) || !threads->runOnUiThread) return false;
     const auto core=GetModuleHandleW(L"D2RCore.dll");
     if(!QolCore::VerifyFileHash(core,QolNativeProfile::CoreHash) ||
         !CheckNativeProfile(context->exeBase,reinterpret_cast<uintptr_t>(core))) {

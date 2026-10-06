@@ -872,11 +872,11 @@ bool QolNavigation::ChronicleRemapEnabled() noexcept {
 
 void QolNavigation::PumpLabels(const D2RL::PluginContext* context,const D2RL::ThreadService* threads) noexcept {
     std::lock_guard lock(stateMutex);
-    if(!ctx || ctx!=context || !threads || !threads->runOnGameThread || !labelRecoveryReady || !enabled || !useL1 || labelRecoveryQueued)return;
+    if(!ctx || ctx!=context || !threads || !threads->runOnUiThread || !labelRecoveryReady || !enabled || !useL1 || labelRecoveryQueued)return;
     const auto now=GetTickCount64();
     if(now-lastLabelCheck<250)return;
     lastLabelCheck=now;labelRecoveryQueued=true;
-    if(threads->runOnGameThread(context,[](const D2RL::PluginContext* owner,void*) noexcept {
+    if(threads->runOnUiThread(context,[](const D2RL::PluginContext* owner,void*) noexcept {
         std::lock_guard taskLock(stateMutex);
         labelRecoveryQueued=false;
         if(!ctx || ctx!=owner || updatingLabels)return;

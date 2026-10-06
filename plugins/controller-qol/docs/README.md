@@ -8,6 +8,8 @@ Keep detailed feature evidence here and cross-project summaries there.
 
 ## Current status and validation
 
+- [LADDER-CONTROLLER-SCHEDULING.md](LADDER-CONTROLLER-SCHEDULING.md) - remote TCP/IP input/label scheduler mismatch and remaining authoritative item-action limitations.
+
 - [PRODUCTION-1.3.1-rev.60.md](PRODUCTION-1.3.1-rev.60.md) - current production release, skill settings, indicators and installable ZIP layout.
 
 - [SKILL-TREE-AIM-TOGGLE.md](SKILL-TREE-AIM-TOGGLE.md) - rev.56 R3 per-skill toggle, guarded focused skill ID and persistence.
