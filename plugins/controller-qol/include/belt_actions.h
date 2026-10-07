@@ -5,7 +5,7 @@ namespace QolBelt {
 bool Initialize(const D2RL::PluginContext* context) noexcept;
 void Shutdown() noexcept;
 bool Busy() noexcept;
-bool RequestSingle(D2RL::PlayerHandle player, const D2RL::Items::ItemInfo& item) noexcept;
+bool RequestSingle(D2RL::PlayerHandle player, const D2RL::Items::ItemInfo& item,bool bindSharedFocus=false) noexcept;
 bool RequestRefill(bool includeStash) noexcept;
 bool RequestVendorRefill(const D2RL::PluginContext*, const D2RL::Items::ItemInfo&,
     bool (*shopOpen)() noexcept) noexcept;

@@ -59,10 +59,14 @@ def require_file(path: Path) -> bytes:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--controller-dll", type=Path, required=True)
-    parser.add_argument("--ranges-dll", type=Path, required=True)
-    parser.add_argument("--map-assistance-dll", type=Path, required=True)
+    parser.add_argument("--ranges-dll", type=Path)
+    parser.add_argument("--map-assistance-dll", type=Path)
+    parser.add_argument("--controller-only", action="store_true",
+                        help="Package only Controller QOL (for focused prereleases).")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
+    if not args.controller_only and (not args.ranges_dll or not args.map_assistance_dll):
+        parser.error("--ranges-dll and --map-assistance-dll are required unless --controller-only is set")
     args.output.mkdir(parents=True, exist_ok=True)
 
     controller = REPOSITORY / "plugins" / "controller-qol"
@@ -114,12 +118,22 @@ mismatch. Close D2R before installing or replacing the DLL.
         "LOOT-FILTER-EDITOR-INVESTIGATION.md", "IDENTIFY-NATIVE-REV26.md",
         "BULK-STASH-REV37.md", "AUTO-DEPOSIT-PICKUP-COMPATIBILITY-REV42.md",
         "STASH-WAYPOINT-PRIORITY-REV43.md", "SHRINE-CHEST-PRIORITY-REV44.md",
+        "REMOTE-GROUND-LOOT.md", "REMOTE-ID-TRANSFER-TRACE.md",
+        "REVIEW-2026-10-06.md", "CRASH-TRIAGE-2026-10-07.md",
+        "BELT-NATIVE-CONTRACT.md", "LADDER-CONTROLLER-SCHEDULING.md",
     ):
         controller_files[f"docs/{name}"] = require_file(controller / "docs" / name)
     controller_zip = args.output / (
         f"Controller-QOL-Updates-{controller_version}-PyreFly.zip"
     )
     make_archive(controller_zip, controller_files)
+    if args.controller_only:
+        (args.output / "SHA256SUMS").write_text(
+            f"{hashlib.sha256(controller_zip.read_bytes()).hexdigest()}  {controller_zip.name}\n",
+            encoding="utf-8", newline="\n")
+        print(controller_zip)
+        print(args.output / "SHA256SUMS")
+        return
 
     ranges_compatibility = f"""Item Roll Ranges by PyreFly
 Plugin version: {ranges_version}

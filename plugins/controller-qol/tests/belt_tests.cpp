@@ -4,6 +4,7 @@
 #include <cstdlib>
 using namespace QolBelt;
 int checks{}, calls{};
+uint8_t expectedPage{};
 void Check(bool ok, const char* why) {
     ++checks;
     if (!ok) { std::fprintf(stderr, "FAIL: %s\n", why); std::exit(1); }
@@ -11,7 +12,7 @@ void Check(bool ok, const char* why) {
 void __fastcall Place(void* item, void* player, uint8_t page, uint8_t flag, void* state) noexcept {
     ++calls;
     Check(item != player, "item and player are distinct arguments");
-    Check(page == 0 && flag == 1, "stored inventory route, not cursor route");
+    Check(page == expectedPage && flag == 1, "source page preserved on stored route");
     auto* placement = static_cast<D2R::Native::BeltPlacementState*>(state);
     Check(placement && placement->targetSlot == 7 && placement->engaged == 1, "validated slot and optional engagement passed");
     placement->engaged = 0; // Native function clears it; this is NOT a failure/success signal.
@@ -41,6 +42,12 @@ int main() {
     Check(!SubmitStoredPlacement(nullptr, &item, &player, 7), "missing function never submits");
     Check(!SubmitStoredPlacement(Place, nullptr, &player, 7), "missing item never submits");
     Check(calls == 1, "refusals leave native game untouched");
+    for(uint8_t page:{3,4}) {
+        expectedPage=page;
+        Check(SubmitStoredPlacement(Place,&item,&player,7,page),"Cube and ordinary stash use native stored placement");
+    }
+    for(uint8_t page:{1,2,255})Check(!SubmitStoredPlacement(Place,&item,&player,7,page),"unsupported native page refused");
+    Check(calls==3,"page refusals do not send requests");
     D2RL::Items::ItemInfo a{};
     a.runtimeId=42; a.code=D2RL::Items::MakeItemCode("hp5"); a.itemSeed=123;
     a.container=Container::Inventory; a.inventoryPage=0; a.x=3; a.y=2;
@@ -64,9 +71,25 @@ int main() {
     Check(Observe(Phase::AwaitBelt,Container::Unknown,false,false)==Observation::Wait, "temporary handle absence is not success");
     Check(Observe(Phase::AwaitBelt,Container::Unknown,false,true)==Observation::TimedOut, "missing item cannot retry forever");
     Check(Observe(Phase::AwaitBelt,Container::Cursor,true,false)==Observation::Invalid, "manual cursor movement cancels");
-    Check(!SupportedSource(Container::CustomPage) && !SupportedSource(Container::Cube), "unsupported source routes excluded");
-    for (auto code : {D2RL::Items::MakeItemCode("hp5"),D2RL::Items::MakeItemCode("mp6"),D2RL::Items::MakeItemCode("rvl"),D2RL::Items::MakeItemCode("isc")})
-        Check(BeltCandidate(code), "standard, modded tier, rejuv and scroll candidates");
+    Check(!SupportedSource(Container::CustomPage) && SupportedSource(Container::Cube), "ordinary Cube supported without admitting custom pages");
+    Check(ClientBeltSource(Container::Inventory,0),"remote stored inventory may request belt placement");
+    Check(ClientBeltSource(Container::PersonalStash,0) && ClientBeltSource(Container::SharedStash,1) && ClientBeltSource(Container::Cube,3),"remote stored sources admitted for guarded native placement");
+    Check(!ClientBeltSource(Container::Inventory,3) && !ClientBeltSource(Container::Cursor,0),"wrong page and cursor rejected remotely");
+    for (auto code : {D2RL::Items::MakeItemCode("hp5"),D2RL::Items::MakeItemCode("mp6"),D2RL::Items::MakeItemCode("rvl"),D2RL::Items::MakeItemCode("yps")})
+        Check(BeltCandidate(code), "standard, modded tier, rejuv and utility potion candidates");
+    for(auto code:{D2RL::Items::MakeItemCode("isc"),D2RL::Items::MakeItemCode("tsc"),D2RL::Items::MakeItemCode("ibk"),D2RL::Items::MakeItemCode("tbk")})
+        Check(!BeltCandidate(code),"scrolls and tomes must never enter potion refill");
     Check(!BeltCandidate(D2RL::Items::MakeItemCode("r01")), "runes not potion candidates");
+    const auto potion=D2RL::Items::MakeItemCode("rvl");
+    Check(SharedInputCandidate(Container::SharedStash,1,potion),"normal Shared potion may use early A handler");
+    Check(!SharedInputCandidate(Container::SharedStash,3,potion) && !SharedInputCandidate(Container::SharedStash,UINT32_MAX,potion),"advanced and unknown tabs cannot use ordinary Shared belt handler");
+    Check(!SharedInputCandidate(Container::Inventory,1,potion) && !SharedInputCandidate(Container::Cube,1,potion),"other stored item input paths retain their handlers");
+    Check(!SharedInputCandidate(Container::SharedStash,1,D2RL::Items::MakeItemCode("isc")),"Shared scroll cannot enter potion handler");
+    a.container=Container::SharedStash;a.sharedStashPage=UINT32_MAX;
+    b=a;b.sharedStashPage=2;b.inventoryPage=1;
+    Check(!SameSource(a,b) && BindShared(a,b,2,true),"initial binding canonicalizes tooltip metadata only with exact selected identity");
+    Check(!BindShared(a,b,2,false) && !BindShared(a,b,3,true),"empty focus or wrong selected page cannot bind");
+    ++b.runtimeId;Check(!BindShared(a,b,2,true),"same-code replacement cannot bind");
+    b=a;b.container=Container::Belt;Check(!BindShared(a,b,0,true),"already-moved item cannot rebind as Shared source");
     std::printf("Belt contract/policy: %d checks passed.\n", checks);
 }

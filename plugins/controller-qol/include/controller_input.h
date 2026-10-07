@@ -53,6 +53,8 @@ bool IsAnyControllerConnected() noexcept;
 
 using TriggerPassThroughPredicate = bool(*)() noexcept;
 void SetTriggerPassThroughPredicate(TriggerPassThroughPredicate predicate) noexcept;
+// Must be lock-free: called inside the native input gate, before game dispatch.
+void SetGroundPickupPredicate(TriggerPassThroughPredicate predicate) noexcept;
 
 using QuickMoveCallback = void(*)();
 void SetQuickMoveCallback(QuickMoveCallback callback) noexcept;
@@ -62,6 +64,7 @@ void SetQuickMoveCubeCallback(QuickMoveCubeCallback callback) noexcept;
 
 using BulkStashCallback = bool(*)() noexcept;
 void SetBulkStashCallback(BulkStashCallback callback) noexcept;
+void SetAdvancedBeltCallback(BulkStashCallback callback) noexcept;
 
 using AutoFillBeltCallback = void(*)();
 void SetAutoFillBeltCallback(AutoFillBeltCallback callback) noexcept;

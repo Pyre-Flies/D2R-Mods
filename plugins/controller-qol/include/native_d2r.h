@@ -59,8 +59,8 @@ namespace Native {
         return false;
     }
 
-    inline bool DepositToAdvancedStash(uintptr_t exeBase, void* item, void* player) noexcept {
-        if (!exeBase || !item || !player) return false;
+    inline bool DepositToAdvancedStash(uintptr_t exeBase, void* item, void* player,uint8_t sourcePage=0) noexcept {
+        if (!exeBase || !item || !player || (sourcePage!=0 && sourcePage!=3)) return false;
         __try {
             auto fnGetDest  = reinterpret_cast<GetAdvancedStashDestinationFn>(exeBase + GetAdvancedStashDestinationRva);
             auto fnTransfer = reinterpret_cast<TransferItemToInventoryPageFn>(exeBase + TransferItemToInventoryPageRva);
@@ -69,7 +69,7 @@ namespace Native {
                 void* dest = fnGetDest(player);
                 if (dest) {
                     std::array<uint8_t, 16> placement{};
-                    bool transferred = fnTransfer(item, dest, 4, 0, true, placement.data());
+                    bool transferred = fnTransfer(item, dest, 4, sourcePage, true, placement.data());
                     if (fnFinish) fnFinish(3, nullptr, 0, 0, false);
                     return transferred;
                 }

@@ -287,6 +287,9 @@ void SetQuickMoveCubeCallback(QuickMoveCubeCallback callback) noexcept {
 static BulkStashCallback s_BulkStashCallback=nullptr;
 static QolBulkStash::Gesture s_BulkStashGesture[8]{};
 void SetBulkStashCallback(BulkStashCallback cb) noexcept {s_BulkStashCallback=cb;}
+static BulkStashCallback s_AdvancedBeltCallback=nullptr;
+static QolNativeInput::AcceptedPress s_AdvancedBeltGesture[8]{};
+void SetAdvancedBeltCallback(BulkStashCallback cb) noexcept {s_AdvancedBeltCallback=cb;}
 static AutoFillBeltCallback s_AutoFillBeltCallback = nullptr;
 
 void SetAutoFillBeltCallback(AutoFillBeltCallback callback) noexcept {
@@ -303,6 +306,9 @@ bool NativeRightStickPresses(uint64_t& sequence) noexcept {
 static bool s_QuickMoveTriggeredX[8] = {};
 static bool s_QuickMoveTriggeredY[8] = {};
 static bool s_AutoFillBeltTriggered[8] = {};
+static QolNativeInput::GroundAPress s_GroundAPress[8]{};
+static TriggerPassThroughPredicate s_GroundPickupPredicate=nullptr;
+void SetGroundPickupPredicate(TriggerPassThroughPredicate predicate) noexcept {s_GroundPickupPredicate=predicate;}
 
 struct SyntheticHoldEngine {
     bool active = false;
@@ -351,6 +357,10 @@ static void ProcessGamepadShortcuts(DWORD dwUserIndex, XINPUT_STATE* pState) noe
     s_PrevRawButtons[dwUserIndex] = rawButtons;
 
     const bool modHeld = IsActiveModifierHeldForPad(dwUserIndex, pState);
+    // Advanced counters and some Shared grid actions bypass ItemInteraction.
+    // Own A only after a recently validated cell accepts its belt mailbox request.
+    if(s_AdvancedBeltGesture[dwUserIndex].Update(modHeld,(rawButtons&XINPUT_GAMEPAD_A)!=0,
+        []() noexcept {return s_AdvancedBeltCallback && s_AdvancedBeltCallback();}))buttons&=~XINPUT_GAMEPAD_A;
 
     // Keep L3 suppressed until release, even if the stash closes during the batch.
     if(s_BulkStashGesture[dwUserIndex].Update(modHeld,(rawButtons&XINPUT_GAMEPAD_LEFT_THUMB)!=0,
@@ -414,8 +424,10 @@ static void ProcessGamepadShortcuts(DWORD dwUserIndex, XINPUT_STATE* pState) noe
     }
 
     // When modifier is held:
-    // DO NOT mask out Button A! D2R must see A so D2RLoader's OnItemInteraction fires,
-    // where quick-identify identifies the item and returns Decision::Consume to prevent pickup.
+    // Inventory A must reach OnItemInteraction. A world-loot chord is owned by
+    // the slot dispatcher instead; otherwise native highlighted pickup also runs.
+    if(s_GroundAPress[dwUserIndex].Update((rawButtons&XINPUT_GAMEPAD_A)!=0,
+        s_GroundPickupPredicate && s_GroundPickupPredicate()))buttons&=~XINPUT_GAMEPAD_A;
     // Suppress chorded face buttons and shoulders (B, X, Y, RB, RT, LT, R3) so D2R does NOT
     // cast spells, swap weapons, or drop items while looting ground items or managing inventory!
     PhysicalInput filterInput;
@@ -493,6 +505,8 @@ static void ResetNativeTracking() noexcept {
         s_PrevDpadButtons[n]=s_PrevRawButtons[n]=0;
         s_QuickMoveTriggeredX[n]=s_QuickMoveTriggeredY[n]=s_AutoFillBeltTriggered[n]=false;
         s_BulkStashGesture[n]={};
+        s_GroundAPress[n]={};
+        s_AdvancedBeltGesture[n]={};
     }
     s_HoldEngine={};
 }
@@ -563,7 +577,17 @@ void PumpNativeInput() noexcept {
                 ProcessNativeState();
             });
         },nullptr);
-    if(result!=D2RL::Threads::Result::Success) s_NativeTaskPending.store(false);
+    if(result!=D2RL::Threads::Result::Success) {
+        s_NativeTaskPending.store(false);
+        static ULONGLONG lastReport=0;
+        const auto now=GetTickCount64();
+        if(s_NativeContext && now-lastReport>=5000) {
+            lastReport=now;
+            char message[128];
+            std::snprintf(message,sizeof(message),"[QOL/RemoteTrace] controller UI scheduling failed result=%u",static_cast<unsigned>(result));
+            s_NativeContext->LogWarn(message);
+        }
+    }
 }
 static bool CheckNativeProfile(uintptr_t game,uintptr_t core) noexcept {
     __try {

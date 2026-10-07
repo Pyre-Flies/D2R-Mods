@@ -1,7 +1,7 @@
 # Controller QOL Updates
 
 **Made by PyreFly for D2RLoader**  
-Version **1.3.1+rev.48** | Windows x64 | Diablo II: Resurrected
+Version **1.3.1+rev.64-beta.1 (beta)** | Windows x64 | Diablo II: Resurrected
 
 Controller QOL Updates adds direct controller looting, contextual item actions,
 stash and Cube transfers, belt management, clearer controller prompts, and
@@ -10,6 +10,10 @@ storage, vendor, and interaction rules.
 
 Xbox button names are used below. On a PlayStation-style controller, LB/RB are
 L1/R1, LT/RT are L2/R2, and A/X/Y/B are Cross/Square/Triangle/Circle.
+
+This beta includes private-server and Ladder compatibility changes. Unexpected
+client crashes in the full Ladder setup remain under investigation, and the
+final beta needs an offline smoke test. See the included crash-triage record.
 
 ## Shortcuts
 
@@ -54,14 +58,42 @@ continues normally, even when this setting is enabled.
 | LB + X | Gems, Materials, or Runes page | Store eligible items in advanced storage; send other inventory items to the embedded Cube |
 | LB + X | Inventory item with NPC shop open | Sell through the game's native vendor path |
 | LB + Y | Eligible carried or stored item | Transfer directly to the Horadric Cube |
+| LB + A | Rejuvenation on the Materials page | Withdraw one potion directly to an available belt slot |
+| LB + Y | Rune, gem, or material counter | Withdraw one item directly to the carried Horadric Cube |
 | LB + R3 | Potion in inventory, Cube, or supported open storage | Fill available belt slots |
 | LB + R3 | Merchant potion | Refill the belt and buy missing potions where native rules allow |
+| LB + R3 | Merchant Identify / Town Portal scroll | Fill a matching Inventory tome through native Shift-buy |
 | LB + L3 | Stash open | Deposit all eligible materials, gems, runes, and rejuvenation potions from inventory when `quick_deposit` is enabled |
 
 The focused-item tooltip and controller header show only actions currently
 available for that item and screen. Shared-stash transfers retain the selected
 page and exact item identity. A failed advanced-storage deposit does not spill
 the item into another container.
+
+In remote multiplayer, Identify All covers main inventory only and requires the
+highlighted Identify Tome in Inventory or open Personal Stash. It sends one native
+request at a time, consuming and confirming one charge per item. Cube contents
+are not included in the remote batch. Offline Identify All retains its existing
+inventory/Cube support.
+
+Remote single-item ID supports Inventory and open Personal Stash targets, using
+a charged tome or loose Identify scroll from either container. Inventory supplies
+are preferred within each type, and charged tomes are preferred over scrolls.
+Cube/Shared Stash supplies and modded scroll stacks remain excluded.
+
+Remote LB+L3 deposits eligible items from one Inventory snapshot sequentially,
+waiting for each source to disappear. A changed stash tab, changed item, session
+exit or timeout stops the batch. Source removal alone does not prove the stored
+counter total; check destination totals during testing.
+
+LB+X on the Cube grid beside Gems/Materials/Runes deposits eligible items
+directly into advanced storage. Ineligible items stay in the Cube. LB+X in the
+standalone Cube screen still moves to Inventory.
+
+LB+A supports ordinary potions in either Cube view, Personal Stash and the selected
+normal Shared Stash page. Remote placement passes the native source page
+directly. LB+R3 retains its Inventory/Materials scope and does not drain ordinary
+stash or Cube contents.
 
 ### Menu and stash navigation
 
@@ -94,6 +126,10 @@ these menus so navigation cannot queue a world pickup.
 - Controller glyphs follow the device artwork selected by the game.
 - Item transfers, identification, selling, belt filling, and object interaction
   continue through native game or D2RLoader transaction paths.
+
+Vendor scroll refill requires a matching non-full tome in Inventory. It sends one
+native purchase request and observes charge growth; missing/full tomes cause no
+purchase. Native gold and capacity rules apply. This addition awaits live testing.
 
 ## Configuration
 
@@ -362,3 +398,12 @@ Thickness ranges from 0.5 to 4.0 and changes stroke width, not reticle size or
 snapping radius. Ground opacity still follows its contextual fade when locked.
 Defaults retain the original gameplay colors/widths. The tree marker uses a
 brighter gold and slightly thicker stroke independently of gameplay styling.
+
+### Ladder plugin coexistence
+
+The candidate supports the reviewed Global Chat request-sender hook and Maps
+stat-reader hook while retaining both plugins' forwarding behavior. Standard
+offline and non-Ladder installations keep their original paths and require
+neither plugin. Compatibility is tied to the reviewed plugin builds; unknown
+hooks are refused. See [the compatibility record](docs/REMOTE-ID-TRANSFER-TRACE.md#2026-10-07-ladder-forwarding-compatibility-candidate)
+for evidence and the remaining live checks.

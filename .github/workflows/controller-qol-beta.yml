@@ -1,0 +1,44 @@
+name: controller-qol-beta
+
+on:
+  push:
+    tags:
+      - "beta-controller-qol-*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-package-prerelease:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Configure
+        run: cmake -S plugins/controller-qol -B build/controller-qol -A x64
+      - name: Build
+        run: cmake --build build/controller-qol --config Release --parallel
+      - name: Test
+        run: ctest --test-dir build/controller-qol -C Release --output-on-failure
+      - name: Package Controller QOL only
+        run: >-
+          python tools/package_runtime.py --controller-only
+          --controller-dll "build/controller-qol/Release/Controller QOL Updates.dll"
+          --output dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Controller-QOL-${{ github.ref_name }}
+          path: dist/*
+          if-no-files-found: error
+      - name: Publish beta
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Controller QOL rev.64-beta.1
+          prerelease: true
+          make_latest: "false"
+          body_path: docs/CONTROLLER-QOL-BETA.md
+          fail_on_unmatched_files: true
+          files: |
+            dist/*.zip
+            dist/SHA256SUMS

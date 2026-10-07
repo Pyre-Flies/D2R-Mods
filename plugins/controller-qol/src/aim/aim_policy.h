@@ -122,11 +122,14 @@ struct CursorMotion {
     }
     bool Advance(Point stick,const Projection& projection,bool invertY,float seconds,const MotionSettings& settings,Point& offset) noexcept {
         Point direction{};
-        if(!settings.Valid() || !Finite(offset) || !std::isfinite(seconds) || seconds<=0 || seconds>0.1f ||
+        if(!settings.Valid() || !Finite(offset) || !std::isfinite(seconds) || seconds<0 || seconds>0.1f ||
             !StickDirection(stick,projection,invertY,settings.deadzone,direction)) { *this={}; return false; }
         // Large direction changes restart fine control instead of carrying fast motion.
         if(direction.x*previousDirection.x+direction.y*previousDirection.y<0.5f) heldSeconds=0;
         previousDirection=direction;
+        // GetTickCount64 can repeat across frames. No elapsed time means no
+        // movement, not a released stick; preserve the accumulated ramp.
+        if(seconds==0) return false;
         const float nextTime=heldSeconds+seconds;
         const float strength=(std::min(std::hypot(stick.x,stick.y),1.0f)-settings.deadzone)/(1-settings.deadzone);
         const float travel=strength*strength*(settings.initialSpeed*seconds+(settings.maximumSpeed-settings.initialSpeed)*

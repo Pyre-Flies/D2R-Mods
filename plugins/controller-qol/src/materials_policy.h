@@ -14,7 +14,14 @@ constexpr bool UseStashDeposit(D2RL::Items::ItemContainer source, D2RL::Items::I
     using C=D2RL::Items::ItemContainer;
     return stashOpen && source==C::Inventory && (destination==C::PersonalStash || destination==C::SharedStash);
 }
-enum class Destination : uint8_t { Inventory = 1, Belt = 3 };
+enum class Destination : uint8_t { Inventory = 1, Cube = 2, Belt = 3 };
+constexpr D2RL::Items::ItemContainer DestinationContainer(Destination d) noexcept {
+    using C=D2RL::Items::ItemContainer;
+    return d==Destination::Belt?C::Belt:d==Destination::Cube?C::Cube:C::Inventory;
+}
+constexpr const char* DestinationName(Destination d) noexcept {
+    return d==Destination::Belt?"belt":d==Destination::Cube?"cube":"inventory";
+}
 constexpr const char* Category(uint32_t tab) noexcept {
     return tab == 2 ? "advancedstash_gems" : tab == 3 ? "advancedstash_materials" :
            tab == 4 ? "advancedstash_runes" : nullptr;

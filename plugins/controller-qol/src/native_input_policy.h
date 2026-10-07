@@ -5,6 +5,22 @@ namespace QolNativeInput {
 // Verified game-normalized keys: XInput-compatible buttons plus digital LT/RT.
 inline constexpr unsigned TriggerLeft=0x400, TriggerRight=0x800;
 inline constexpr unsigned Provider=0x100;
+struct AcceptedPress {
+    bool attempted{},consumed{};
+    template<class Request> bool Update(bool modifier,bool down,Request request) noexcept {
+        if(!down){attempted=consumed=false;return false;}
+        if(modifier && !attempted){attempted=true;consumed=request();}
+        return consumed; // Releasing/repressing LB cannot repeat a held A.
+    }
+};
+struct GroundAPress {
+    bool consumed{};
+    bool Update(bool down,bool groundChord) noexcept {
+        if(!down)consumed=false;
+        else if(groundChord)consumed=true;
+        return consumed; // Never synthesize an A press when LB is released first.
+    }
+};
 inline ControllerQoL::PhysicalInput Decode(unsigned keys) noexcept {
     ControllerQoL::PhysicalInput r;
     r.valid=true; r.providers=Provider;

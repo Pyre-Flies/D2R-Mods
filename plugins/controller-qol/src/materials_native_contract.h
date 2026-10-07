@@ -9,6 +9,12 @@ inline bool SubmitInventory(WithdrawWidgetFn fn,void* widget) noexcept {
     fn(widget,cell,0); // widget page 0 is mapped by native code to destination 1
     return true;
 }
+inline bool SubmitCube(WithdrawWidgetFn fn,void* widget) noexcept {
+    if (!fn || !widget) return false;
+    const int32_t cell[2]{};
+    fn(widget,cell,3); // widget page 3 maps to withdrawal destination 2
+    return true;
+}
 inline bool SubmitBelt(WithdrawOneFn fn,void* item,void* owner) noexcept {
     if (!fn || !item || !owner) return false;
     fn(item,owner,3); // native advanced-stash destination 3; no fake cursor item

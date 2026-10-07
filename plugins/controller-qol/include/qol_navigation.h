@@ -13,5 +13,6 @@ bool ChronicleRemapEnabled() noexcept;
 bool LootFilterRemapEnabled() noexcept;
 bool RangesRemapEnabled() noexcept;
 bool GroundShortcutsAllowed() noexcept;
+bool GroundInputActive() noexcept; // lock-free, UI-published world-only context
 void Shutdown() noexcept;
 }

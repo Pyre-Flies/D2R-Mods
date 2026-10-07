@@ -15,6 +15,17 @@ inline bool BlockNativePickup(bool shortcutsEnabled,bool modifierHeld,
 inline bool GroundShortcutsAllowed(unsigned dedicated,unsigned submenus) noexcept {
     return dedicated==0 && submenus==0;
 }
+inline unsigned WorldBlockingPanelBit(std::string_view name) noexcept {
+    if(name=="PlayerInventoryExpansionLayout")return 1;
+    if(name=="PlayerInventoryOriginalLayout")return 2;
+    if(name=="CharacterStatsPanel")return 4;
+    if(name=="NpcDialogPanel")return 8;
+    if(name=="HireMenuPanel")return 16;
+    return 0;
+}
+inline bool WorldGroundInput(bool inGame,bool hud,unsigned dedicated,unsigned submenus,unsigned panels) noexcept {
+    return inGame && hud && panels==0 && GroundShortcutsAllowed(dedicated,submenus);
+}
 inline bool BatchFeatureEnabled(bool masterEnabled,bool featureEnabled) noexcept {
     return masterEnabled && featureEnabled;
 }

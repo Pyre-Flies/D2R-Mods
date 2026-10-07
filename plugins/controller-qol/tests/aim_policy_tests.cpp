@@ -247,6 +247,22 @@ int main() {
     };
     Check(std::abs(travel(60,{1,0})-travel(120,{1,0}))<0.002f,"acceleration independent of frame rate");
     Check(std::abs(travel(60,{1,0})-20.2f)<0.002f,"one second hold integrates configured ramp");
+    CursorMotion quantized{}; Point quantizedOffset{};
+    for(int i=0;i<64;++i) {
+        quantized.Advance({1,0},projection,false,1.0f/64,settings,quantizedOffset);
+        const auto saved=quantizedOffset; const auto held=quantized.heldSeconds;
+        Check(!quantized.Advance({1,0},projection,false,0,settings,quantizedOffset) &&
+            DistanceSquared(saved,quantizedOffset)==0 && quantized.heldSeconds==held,
+            "duplicate timestamp preserves acceleration without movement");
+    }
+    Check(std::abs(std::hypot(quantizedOffset.x,quantizedOffset.y)-20.2f)<0.002f,
+        "quantized clock reaches same one-second travel");
+    Check(!quantized.Advance({0,0},projection,false,0,settings,quantizedOffset) && quantized.heldSeconds==0,
+        "release at duplicate timestamp still resets acceleration");
+    quantized.Advance({1,0},projection,false,0.05f,settings,quantizedOffset);
+    Check(!quantized.Advance({-1,0},projection,false,0,settings,quantizedOffset) && quantized.heldSeconds==0,
+        "direction reversal at duplicate timestamp restarts fine control");
+
     Check(std::abs(travel(60,{0.61f,0})/travel(60,{1,0})-0.25f)<0.001f,"half usable tilt has quarter speed");
     Check(std::abs(travel(60,{1,1})-travel(60,{1,0}))<0.002f,"diagonal movement no faster");
     offset={29,0}; motion={};

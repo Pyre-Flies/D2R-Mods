@@ -5,6 +5,17 @@
 #define CHECK(x) do {if(!(x)) {std::printf("Failed line %d: %s\n",__LINE__,#x);return 1;}} while(0)
 int main() {
     using namespace QolNativeInput;
+    AcceptedPress advancedA;unsigned requests=0;bool eligible=false;
+    auto single=[&]() noexcept {++requests;return eligible;};
+    CHECK(!advancedA.Update(false,true,single) && requests==0);
+    CHECK(!advancedA.Update(true,true,single) && requests==1); // ordinary A preserved
+    CHECK(!advancedA.Update(true,true,single) && requests==1);
+    advancedA.Update(false,false,single);eligible=true;
+    CHECK(advancedA.Update(true,true,single) && requests==2);
+    CHECK(advancedA.Update(false,true,single)); // release LB first
+    CHECK(advancedA.Update(true,true,single) && requests==2); // no second potion
+    CHECK(!advancedA.Update(false,false,single));
+    CHECK(advancedA.Update(true,true,single) && requests==3);
     // Real DualShock observation: L1+Square must remain visible to QOL,
     // while the native consumer must not also drop/cast with Square.
     auto raw=Decode(0x100|0x4000);
@@ -17,6 +28,13 @@ int main() {
         CHECK(Encode(FilterModified(Decode(0x100|direction),true,false))==(0x100|direction));
     // Neutral Cross, including modifier+Cross, remains a native interaction.
     CHECK(Encode(FilterModified(Decode(0x1100),true,false))==0x1100);
+    // Inventory A remains native; world A is delivered only to the slot poller.
+    GroundAPress groundA;
+    CHECK(!groundA.Update(true,false)); // inventory LB+A
+    CHECK(groundA.Update(true,true)); // ground LB+A
+    CHECK(groundA.Update(true,false)); // LB released first: no native pickup leaks
+    CHECK(!groundA.Update(false,false));
+    CHECK(!groundA.Update(true,false)); // next neutral A works
     // Trigger keys are distinct from buttons; Shared needs both digital edges.
     raw=Decode(0xd00);
     CHECK(raw.buttons==0x100 && raw.leftTrigger==255 && raw.rightTrigger==255);
@@ -35,6 +53,17 @@ int main() {
     unsigned delivered=0;
     std::vector<std::pair<unsigned,bool>> events;
     auto emit=[&](unsigned key,bool down){events.emplace_back(key,down);};
+    const auto captured=Decode(0x1100);
+    auto game=captured;groundA={};
+    if(groundA.Update((game.buttons&0x1000)!=0,true))game.buttons&=~0x1000;
+    Deliver(delivered,Encode(game),0x1000,true,emit);
+    CHECK(captured.buttons==0x1100 && events.size()==1 && events[0]==std::make_pair(0x100u,true));
+    game=Decode(0x1000);
+    if(groundA.Update(true,false))game.buttons&=~0x1000;
+    Deliver(delivered,Encode(game),0x100,false,emit);
+    CHECK(events.size()==2 && events.back()==std::make_pair(0x100u,false));
+    CHECK(!groundA.Update(false,false));
+    events.clear();delivered=0;
     Deliver(delivered,0x100,0x100,true,emit);
     CHECK(events.size()==1 && events.back()==std::make_pair(0x100u,true));
     Deliver(delivered,0x100,0x4000,true,emit);

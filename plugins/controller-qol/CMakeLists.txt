@@ -25,9 +25,11 @@ add_library(controller-qol SHARED
     src/custom_page_actions.cpp
     src/identify_stat.cpp
     src/native_identify.cpp
+    src/client_transfer.cpp
     src/bulk_stash.cpp
     src/belt_compatibility.cpp
     src/vendor_buy.cpp
+    src/client_loot.cpp
     src/belt_actions.cpp
     src/aim/controller_aim.cpp
     src/plugin_main.cpp
@@ -69,6 +71,16 @@ set_target_properties(controller-qol PROPERTIES
 option(CONTROLLER_QOL_BUILD_TESTS "Build belt contract tests" ON)
 if(CONTROLLER_QOL_BUILD_TESTS)
     enable_testing()
+    add_executable(qol-client-identify-tests tests/client_identify_tests.cpp)
+    target_include_directories(qol-client-identify-tests PRIVATE src)
+    add_test(NAME qol-client-identify COMMAND qol-client-identify-tests)
+    add_executable(qol-client-transfer-tests tests/client_transfer_tests.cpp)
+    target_include_directories(qol-client-transfer-tests PRIVATE src "${PLUGIN_SDK}/include")
+    target_compile_definitions(qol-client-transfer-tests PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+    add_test(NAME qol-client-transfer COMMAND qol-client-transfer-tests)
+    add_executable(qol-client-loot-tests tests/client_loot_tests.cpp)
+    target_include_directories(qol-client-loot-tests PRIVATE src)
+    add_test(NAME qol-client-loot COMMAND qol-client-loot-tests)
     add_executable(qol-belt-tests tests/belt_tests.cpp)
     target_include_directories(qol-belt-tests PRIVATE src include "${PLUGIN_SDK}/include")
     target_compile_definitions(qol-belt-tests PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
@@ -146,6 +158,16 @@ add_executable(qol-identify-tests tests/identify_tests.cpp)
 target_include_directories(qol-identify-tests PRIVATE src "${PLUGIN_SDK}/include")
 add_test(NAME qol-identify COMMAND qol-identify-tests)
 
+add_executable(qol-owned-payloads-tests tests/owned_payloads_tests.cpp)
+target_include_directories(qol-owned-payloads-tests PRIVATE src)
+add_test(NAME qol-owned-payloads COMMAND qol-owned-payloads-tests)
+
+add_executable(qol-plugin-coexistence-tests tests/plugin_coexistence_tests.cpp)
+target_include_directories(qol-plugin-coexistence-tests PRIVATE src)
+target_compile_definitions(qol-plugin-coexistence-tests PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_link_libraries(qol-plugin-coexistence-tests PRIVATE bcrypt)
+add_test(NAME qol-plugin-coexistence COMMAND qol-plugin-coexistence-tests)
+
 add_executable(qol-move-identity-tests tests/move_identity_tests.cpp)
 target_include_directories(qol-move-identity-tests PRIVATE src "${PLUGIN_SDK}/include")
 add_test(NAME qol-move-identity COMMAND qol-move-identity-tests)
@@ -161,7 +183,7 @@ add_executable(qol-artifact-tests tests/artifact_tests.cpp)
 target_include_directories(qol-artifact-tests PRIVATE src "${PLUGIN_SDK}/include")
 target_compile_definitions(qol-artifact-tests PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 add_dependencies(qol-artifact-tests controller-qol)
-add_test(NAME qol-artifact COMMAND qol-artifact-tests "$<TARGET_FILE:controller-qol>" "1.3.1+rev.63")
+add_test(NAME qol-artifact COMMAND qol-artifact-tests "$<TARGET_FILE:controller-qol>" "1.3.1+rev.64-beta.1")
 
 add_executable(qol-shared-sdk-tests tests/shared_sdk_tests.cpp)
 target_include_directories(qol-shared-sdk-tests PRIVATE src "${PLUGIN_SDK}/include")

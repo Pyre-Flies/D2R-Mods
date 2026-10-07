@@ -51,3 +51,13 @@ If GitHub Actions is unavailable, build, test, and run the same packaging script
 locally. On the repository's GitHub page, open **Releases**, choose **Draft a
 new release**, select or create the suite tag, and drag the three ZIPs plus
 `SHA256SUMS` into the release assets area. Do not commit them to `main`.
+
+## Controller QOL beta prereleases
+
+Use an annotated `beta-controller-qol-*` tag for a QOL-only beta. The separate
+`controller-qol-beta` workflow builds/tests QOL and publishes one runtime ZIP
+plus `SHA256SUMS`, with GitHub `prerelease: true` and `make_latest: false`.
+It does not invoke the stable `release-*` workflow or publish other plugins.
+Update the QOL version/resources, changelog and `docs/CONTROLLER-QOL-BETA.md`
+before tagging. For local packaging use `tools/package_runtime.py
+--controller-only --controller-dll <path> --output <directory>`.

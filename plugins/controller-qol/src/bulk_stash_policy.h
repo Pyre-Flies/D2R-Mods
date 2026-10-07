@@ -1,5 +1,6 @@
 #pragma once
 #include "identify_action.h"
+#include "client_transfer_policy.h"
 #include <array>
 namespace QolBulkStash {
 using Info=D2RL::Items::ItemInfo;
@@ -26,5 +27,12 @@ struct Plan {
 enum class Check { Missing, Changed, Ready };
 inline Check Validate(const Info& expected,const Info* actual) noexcept {
     return !actual?Check::Missing:!Source(*actual)||!QolIdentify::Same(expected,*actual)?Check::Changed:Check::Ready;
+}
+enum class RemoteStep { Ready, Wait, Removed, Stop };
+inline RemoteStep CheckRemote(const Info& expected,const Info* actual,bool submitted,bool expired) noexcept {
+    if(!actual)return submitted?RemoteStep::Removed:RemoteStep::Stop;
+    if(!Source(*actual) || !QolClientTransfer::Source(expected,*actual))return RemoteStep::Stop;
+    if(!submitted)return RemoteStep::Ready;
+    return expired?RemoteStep::Stop:RemoteStep::Wait;
 }
 }

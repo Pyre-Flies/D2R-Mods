@@ -23,6 +23,11 @@ int main() {
     for(unsigned mask : {16U,32U,64U}) Check(!Probe::GroundShortcutsAllowed(0,mask),"loot editor excludes world shortcuts");
 
     Check(Probe::GroundShortcutsAllowed(0,0),"world loot allowed outside menus");
+    Check(Probe::WorldGroundInput(true,true,0,0,0),"live HUD owns ground chords");
+    Check(!Probe::WorldGroundInput(false,true,0,0,0) && !Probe::WorldGroundInput(true,false,0,0,0),"unknown/left session fails open");
+    for(const auto name:{"PlayerInventoryExpansionLayout","PlayerInventoryOriginalLayout","CharacterStatsPanel","NpcDialogPanel","HireMenuPanel"})
+        Check(!Probe::WorldGroundInput(true,true,0,0,Probe::WorldBlockingPanelBit(name)),"inventory/dialog A remains native");
+    Check(!Probe::WorldGroundInput(true,true,1,0,0) && !Probe::WorldGroundInput(true,true,0,4,0),"stash and settings A remain native");
     for(unsigned panel : {1U,2U,4U,8U}) Check(!Probe::GroundShortcutsAllowed(0,panel),"Quest Skills Options Chronicle bumpers cannot queue ground loot");
     Check(!Probe::GroundShortcutsAllowed(1,0),"dedicated stash panel excludes world loot");
     Check(Probe::SubPanelBit("ChroniclePanel")==8,"Chronicle lifecycle isolated");

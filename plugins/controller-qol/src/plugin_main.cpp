@@ -1,4 +1,5 @@
 #include "identify_bulk.h"
+#include "owned_payloads.h"
 #include "bulk_stash.h"
 #include "aim/controller_aim.h"
 #include "aim/config_sections.h"
@@ -16,9 +17,12 @@
 #include "custom_page_actions.h"
 #include "identify_action.h"
 #include "native_identify.h"
+#include "client_transfer.h"
+#include "storage_focus.h"
 #include "identify_stat.h"
 #include "move_identity.h"
 #include "materials_policy.h"
+#include "materials_signatures.h"
 #include "shared_owner_compatibility.h"
 #include "shared_item_policy.h"
 #include "shared_sdk_transfer.h"
@@ -33,6 +37,7 @@
 #include "guided_arrow_projection.h"
 #include "placard_call.h"
 #include "pickup_calls.h"
+#include "client_loot.h"
 #include "placard_text.h"
 #include "plugin_compatibility.h"
 #include <xinput.h>
@@ -104,6 +109,8 @@ static std::atomic<ULONGLONG> s_FocusedTick{0};
 static std::mutex s_FocusIdentityMutex;
 static D2RL::Items::ItemInfo s_FocusIdentity{};
 static ULONGLONG s_FocusIdentityTick{};
+static std::atomic<ULONGLONG> s_AdvancedBeltFocusTick{};
+static std::atomic<ULONGLONG> s_SharedBeltFocusTick{};
 static bool ReadFocusIdentity(D2RL::Items::ItemInfo& info) noexcept {
     std::lock_guard lock(s_FocusIdentityMutex);
     if(!s_FocusIdentity.handle || GetTickCount64()-s_FocusIdentityTick>1000)return false;
@@ -149,7 +156,7 @@ static constexpr D2RL::PluginInfo ControllerQoLPluginInfo {
     .abiVersion  = D2RL_PLUGIN_ABI_VERSION,
     .id          = "controller-qol-updates",
     .name        = "Controller QOL Updates",
-    .version     = "1.3.1+rev.63",
+    .version     = "1.3.1+rev.64-beta.1",
     .author      = "PyreFly",
     .description = "Direct controller looting with filtered labels, inventory shortcuts, and stash navigation.",
     .flags       = D2RL::PluginFlags::Shared | D2RL::PluginFlags::NativeHooks,
@@ -271,9 +278,31 @@ struct IdentifyRequest {
     ULONGLONG queuedAt{};
 };
 static std::atomic<bool> s_IdentifyPending{false};
+static std::recursive_mutex s_IdentifyMutex;
+static IdentifyRequest s_IdentifyRequest{};
+static uint64_t s_IdentifyGeneration{};
+static bool s_IdentifySessionEvents{};
+static void CancelOwnedRequests() noexcept;
+static void __cdecl IdentifySessionChanged(const D2RL::PluginContext*,const D2RL::Lifecycle::GameplayEvent*,void*) noexcept {
+    std::lock_guard lock(s_IdentifyMutex);++s_IdentifyGeneration;s_IdentifyPending=false;s_IdentifyRequest={};
+    CancelOwnedRequests();
+}
+static void InitializeIdentifyQueue(const D2RL::PluginContext* ctx) noexcept {
+    IdentifySessionChanged(nullptr,nullptr,nullptr);s_IdentifySessionEvents=false;
+    const D2RL::LifecycleService* lifecycle{};
+    if(ctx->QueryService(&lifecycle)!=D2RL::ServiceQueryResult::Success ||
+       !D2RL::HasLifecycleServiceField(lifecycle,D2RL::LifecycleServiceRequiredSize) || !lifecycle->registerGameplayEventListener)return;
+    s_IdentifySessionEvents=true;
+    for(auto kind:{D2RL::Lifecycle::GameplayEventKind::GameJoined,D2RL::Lifecycle::GameplayEventKind::GameLeft}) {
+        const D2RL::Lifecycle::GameplayEventListener listener{D2RL::Lifecycle::GameplayEventListenerSize,0,kind,0,IdentifySessionChanged,nullptr};
+        D2RL::Lifecycle::ListenerHandle handle{};
+        if(lifecycle->registerGameplayEventListener(ctx,&listener,&handle)!=D2RL::Lifecycle::Result::Success)s_IdentifySessionEvents=false;
+    }
+}
 static void __cdecl ExecuteIdentifyTask(const D2RL::PluginContext* context,void* userData) noexcept {
-    auto* req=static_cast<IdentifyRequest*>(userData);
-    if(!req) {s_IdentifyPending.store(false);return;}
+    std::lock_guard lock(s_IdentifyMutex);
+    if(!s_IdentifyPending || reinterpret_cast<uintptr_t>(userData)!=s_IdentifyGeneration)return;
+    const auto* req=&s_IdentifyRequest;
     const auto started=GetTickCount64();
     if(context && g_Settings.enabled && started-req->queuedAt<=2000) {
         const auto result=QolIdentify::Execute(context,g_Items,g_Inventory,req->action,QolIdentifyStat::Read,g_Settings.nativeIdentify?QolNativeIdentify::Request:nullptr);
@@ -290,7 +319,7 @@ static void __cdecl ExecuteIdentifyTask(const D2RL::PluginContext* context,void*
             if(result.status==QolIdentify::Status::Success || result.status==QolIdentify::Status::NativePending)context->LogInfo(message);else context->LogWarn(message);
         }
     }
-    delete req;s_IdentifyPending.store(false);
+    s_IdentifyPending.store(false);
 }
 
 enum D2RUiMode : int {
@@ -304,44 +333,15 @@ enum D2RUiMode : int {
 using TestUiModeFn = bool(__fastcall*)(int mode);
 
 static TestUiModeFn GetTestUiModeFn() noexcept {
-    static TestUiModeFn s_pfnTestUiMode = nullptr;
-    static bool s_resolved = false;
-    if (s_resolved) return s_pfnTestUiMode;
-    s_resolved = true;
-
-    HMODULE hCore = GetModuleHandleA("D2RCore.dll");
-    if (!hCore) return nullptr;
-
-    const uint8_t* base = reinterpret_cast<const uint8_t*>(hCore);
-    const auto* dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(base);
-    const auto* nt = reinterpret_cast<const IMAGE_NT_HEADERS*>(base + dos->e_lfanew);
-    const DWORD textRva = nt->OptionalHeader.BaseOfCode;
-    const DWORD textSize = nt->OptionalHeader.SizeOfCode;
-    const uint8_t* text = base + textRva;
-
-    // Pattern in D2RCore.dll: B9 19 00 00 00 FF 15 [disp32] 90 84 C0 74
-    for (DWORD i = 0; i + 16 < textSize; ++i) {
-        if (text[i] == 0xB9 && text[i+1] == 0x19 && text[i+2] == 0x00 && text[i+3] == 0x00 && text[i+4] == 0x00 &&
-            text[i+5] == 0xFF && text[i+6] == 0x15 &&
-            text[i+11] == 0x90 && text[i+12] == 0x84 && text[i+13] == 0xC0 && text[i+14] == 0x74) {
-            int32_t disp = *reinterpret_cast<const int32_t*>(&text[i+7]);
-            uintptr_t rip = reinterpret_cast<uintptr_t>(&text[i+11]);
-            uintptr_t targetPtr = rip + disp;
-            s_pfnTestUiMode = *reinterpret_cast<TestUiModeFn*>(targetPtr);
-            break;
-        }
-    }
-
-    if (!s_pfnTestUiMode) {
-        uintptr_t targetPtr = reinterpret_cast<uintptr_t>(hCore) + 0x680330;
-        __try {
-            s_pfnTestUiMode = *reinterpret_cast<TestUiModeFn*>(targetPtr);
-        } __except (EXCEPTION_EXECUTE_HANDLER) {
-            s_pfnTestUiMode = nullptr;
-        }
-    }
-
-    return s_pfnTestUiMode;
+    if(!g_PluginContext || !g_PluginContext->exeBase)return nullptr;
+    // Reuse the complete getter witness already admitted by materials actions.
+    // The old unguarded D2RCore+0x680330 fallback is not a stable function slot.
+    __try {
+        const auto address=g_PluginContext->exeBase+0xce500;
+        if(std::memcmp(reinterpret_cast<const void*>(address),QolMaterials::Signatures::UiMode,
+                       sizeof(QolMaterials::Signatures::UiMode)))return nullptr;
+        return reinterpret_cast<TestUiModeFn>(address);
+    } __except(EXCEPTION_EXECUTE_HANDLER) {return nullptr;}
 }
 
 static bool TestUiMode(int mode) noexcept {
@@ -408,6 +408,10 @@ struct MoveRequest {
     D2RL::Items::ItemInfo identity{};
 };
 
+static QolTasks::Payloads<MoveRequest> s_MoveRequests;
+struct CubePending { D2RL::Items::ItemInfo info; bool materials; };
+static QolTasks::Payloads<CubePending> s_CubeRequests;
+
 // Capture the chosen normal page and player before scheduling across threads.
 static bool CaptureSharedRequest(const D2RL::PluginContext* ctx,MoveRequest& req) noexcept {
     if (!QolSharedSdk::Supported(g_Items)) return true; // Older loader retains its reviewed native path.
@@ -424,12 +428,11 @@ static void ReportSharedMove(const D2RL::PluginContext* ctx,const QolSharedSdk::
     if(result.committed)ctx->LogInfo(msg);else ctx->LogWarn(msg);
 }
 
-static void __cdecl ExecuteMoveTask(const D2RL::PluginContext* context, void* userData) noexcept {
-    auto* req = static_cast<MoveRequest*>(userData);
+static void ExecuteMove(const D2RL::PluginContext* context, MoveRequest* req) noexcept {
     if (!req) return;
 
     if (!context || !g_Items) {
-        delete req;
+
         return;
     }
 
@@ -447,7 +450,7 @@ static void __cdecl ExecuteMoveTask(const D2RL::PluginContext* context, void* us
         if (!g_Inventory || g_Inventory->getLocalPlayer(context,&livePlayer)!=D2RL::Inventory::Result::Success ||
             !livePlayer || livePlayer!=req->player || GetTickCount64()-req->sharedRequestedAt>3000 ||
             !QolSharedSdk::SameSelection(req->sharedSelection,QolSharedSdk::Selected(context->exeBase))) {
-            context->LogWarn("[QOL/SharedSDK] Player/page changed or request expired; cancelled.");delete req;return;
+            context->LogWarn("[QOL/SharedSDK] Player/page changed or request expired; cancelled.");return;
         }
         player=livePlayer;
     }
@@ -469,7 +472,7 @@ static void __cdecl ExecuteMoveTask(const D2RL::PluginContext* context, void* us
         // on the same Shared page is eligible, never a matching cell/code.
         if (req->sharedIdentity.structSize!=D2RL::Items::ItemInfoSize || !TestUiMode(UI_MODE_STASH)) {
             context->LogWarn("[QOL/Shared] Missing UI identity or closed stash; withdrawal refused.");
-            delete req; return;
+             return;
         }
         if (g_Items->getItemInfo(context,activeTarget,&checkInfo)!=D2RL::Items::Result::Success ||
             !QolShared::SameItem(req->sharedIdentity,checkInfo)) {
@@ -487,17 +490,17 @@ static void __cdecl ExecuteMoveTask(const D2RL::PluginContext* context, void* us
                 req->sharedIdentity.runtimeId,req->sharedIdentity.sharedStashPage,req->sharedIdentity.code,find.scanned,
                 static_cast<unsigned long long>(activeTarget)); context->LogInfo(msg);
         }
-        if (activeTarget==D2RL::InvalidItemHandle) { delete req; return; }
+        if (activeTarget==D2RL::InvalidItemHandle) {  return; }
     } else {
         // Never resolve a stale handle by a cell/code in another container.
         if(req->identity.structSize!=D2RL::Items::ItemInfoSize ||
-            req->identity.container!=req->sourceContainer) {delete req;return;}
+            req->identity.container!=req->sourceContainer) {return;}
         activeTarget=QolMove::Resolve(context,g_Items,g_Inventory,player,req->identity);
     }
 
     if (activeTarget == D2RL::InvalidItemHandle) {
         context->LogWarn("[ControllerQoL] Could not resolve live handle for move target item!");
-        delete req;
+
         return;
     }
 
@@ -506,20 +509,22 @@ static void __cdecl ExecuteMoveTask(const D2RL::PluginContext* context, void* us
 
     // Materials LB+X shares the LB+Y queue and executor, with the existing
     // advanced-storage predicate/deposit tried first inside scoped native access.
-    if (req->materialsFirst && req->sourceContainer==D2RL::Items::ItemContainer::Inventory) {
-        if (!TestUiMode(UI_MODE_STASH)) { delete req; return; }
-        struct Deposit { uintptr_t base; void* player; bool inspected{},eligible{},submitted{}; } deposit{exeBase,playerUnit};
+    if (req->materialsFirst && (req->sourceContainer==D2RL::Items::ItemContainer::Inventory || req->sourceContainer==D2RL::Items::ItemContainer::Cube)) {
+        if (!TestUiMode(UI_MODE_STASH)) {  return; }
+        const bool fromCube=req->sourceContainer==D2RL::Items::ItemContainer::Cube;
+        if(fromCube && !QolClientTransfer::AdvancedTab(D2R::Native::GetActiveStashTabIndex(exeBase))) {return;}
+        struct Deposit { uintptr_t base; void* player; uint8_t page; bool inspected{},eligible{},submitted{}; } deposit{exeBase,playerUnit,static_cast<uint8_t>(fromCube?3:0)};
         g_Items->editNativeItem(context,activeTarget,[](const D2RL::PluginContext*,void* item,void* user) noexcept {
             auto& d=*static_cast<Deposit*>(user);
             d.inspected=item!=nullptr;
             d.eligible=D2R::Native::CanDepositToAdvancedStash(d.base,item);
-            if (d.eligible && d.player) d.submitted=D2R::Native::DepositToAdvancedStash(d.base,item,d.player);
+            if (d.eligible && d.player) d.submitted=D2R::Native::DepositToAdvancedStash(d.base,item,d.player,d.page);
         },&deposit);
-        if (!deposit.inspected || deposit.eligible) {
+        if (!deposit.inspected || deposit.eligible || fromCube) {
             context->LogInfo(deposit.submitted ? "[QOL/Materials] Existing smart-deposit helper submitted storage move." :
                 "[QOL/Materials] Storage inspection/deposit refused; no Cube or Personal Stash fallback.");
             if (deposit.submitted) { s_FocusedItem.store(D2RL::InvalidItemHandle); s_FocusedCode.store(0); }
-            delete req; return;
+             return;
         }
         context->LogInfo("[QOL/Materials] Not advanced-storage eligible; continuing existing LB+Y Cube move.");
     }
@@ -527,18 +532,20 @@ static void __cdecl ExecuteMoveTask(const D2RL::PluginContext* context, void* us
     // 2. Inventory -> Stash: Smart deposit to Advanced Stash or active Stash tab
     const bool isStashOpen = TestUiMode(UI_MODE_STASH);
     if (QolMaterials::UseStashDeposit(req->sourceContainer,req->primaryDestination,isStashOpen)) {
-        void* nativeItem = nullptr;
+        struct Deposit { uintptr_t base; void* player; bool eligible{},submitted{}; } deposit{exeBase,playerUnit};
         g_Items->editNativeItem(context, activeTarget, [](const D2RL::PluginContext*, void* item, void* userData) noexcept {
-            *static_cast<void**>(userData) = item;
-        }, &nativeItem);
+            auto& d=*static_cast<Deposit*>(userData);
+            d.eligible=item && d.player && D2R::Native::CanDepositToAdvancedStash(d.base,item);
+            if(d.eligible)d.submitted=D2R::Native::DepositToAdvancedStash(d.base,item,d.player);
+        }, &deposit);
 
         // A. Smart deposit check for Advanced Stash (runes, gems, stackables, essences)
-        if (nativeItem && playerUnit && D2R::Native::CanDepositToAdvancedStash(exeBase, nativeItem)) {
-            if (D2R::Native::DepositToAdvancedStash(exeBase, nativeItem, playerUnit)) {
+        if (deposit.eligible) {
+            if (deposit.submitted) {
                 context->LogInfo("[ControllerQoL] Quick Move: Successfully deposited to Advanced Stash (smart deposit)!");
                 s_FocusedItem.store(D2RL::InvalidItemHandle);
                 s_FocusedCode.store(0);
-                delete req;
+
                 return;
             } else {
                 context->LogWarn("[ControllerQoL] Advanced Stash deposit failed; routing to active stash tab...");
@@ -554,7 +561,7 @@ static void __cdecl ExecuteMoveTask(const D2RL::PluginContext* context, void* us
 
         if (activeTabIndex==0xFFFFFFFF || activeTabIndex>1) {
             context->LogWarn("[QOL/Stash] No ordinary stash destination selected; refusing Personal fallback.");
-            delete req; return;
+             return;
         }
         if (activeTabIndex == 1) {
             if (req->sdkSharedRequest) {
@@ -564,16 +571,16 @@ static void __cdecl ExecuteMoveTask(const D2RL::PluginContext* context, void* us
                     ReportSharedMove(context,result,req->sharedSelection.page,true);
                     if(result.committed){s_FocusedItem.store(D2RL::InvalidItemHandle);s_FocusedCode.store(0);}
                 }
-                delete req;return;
+                return;
             }
             if (QolSharedSdk::Supported(g_Items) && !(req->sharedSelection.valid && req->sharedSelection.previousSeason)) {
-                context->LogWarn("[QOL/SharedSDK] No captured normal destination; native fallback refused.");delete req;return;
+                context->LogWarn("[QOL/SharedSDK] No captured normal destination; native fallback refused.");return;
             }
             if (!QolShared::ValidateOwner(exeBase) ||
                 !context->CheckExpectedBytes(0x2EF880,SharedOwnerIdBytes,sizeof(SharedOwnerIdBytes)) ||
                 !context->CheckExpectedBytes(0x09A5D0,SharedUnitLookupBytes,sizeof(SharedUnitLookupBytes))) {
                 context->LogWarn("[QOL/Stash] Selected Shared owner profile mismatch; deposit refused.");
-                delete req; return;
+                 return;
             }
             // Shared Stash tab: use native client transfer with resolved shared stash container unit
             struct SharedDeposit { uintptr_t base; bool submitted{}; } shared{exeBase};
@@ -585,11 +592,11 @@ static void __cdecl ExecuteMoveTask(const D2RL::PluginContext* context, void* us
                 context->LogInfo("[ControllerQoL] Quick Move: Submitted deposit to selected Shared Stash page.");
                 s_FocusedItem.store(D2RL::InvalidItemHandle);
                 s_FocusedCode.store(0);
-                delete req;
+
                 return;
             } else {
                 context->LogWarn("[ControllerQoL] Quick Move: Failed to deposit into Shared Stash tab (tab full or error).");
-                delete req;
+
                 return;
             }
         } else {
@@ -616,14 +623,14 @@ static void __cdecl ExecuteMoveTask(const D2RL::PluginContext* context, void* us
                 context->LogInfo("[ControllerQoL] Quick Move: Successfully deposited to Personal Stash via transaction!");
                 s_FocusedItem.store(D2RL::InvalidItemHandle);
                 s_FocusedCode.store(0);
-                delete req;
+
                 return;
             } else {
                 char msg[128];
                 std::snprintf(msg, sizeof(msg), "[ControllerQoL] Quick Move: Personal Stash transaction failed (code %u, failIdx %u)",
                     static_cast<uint32_t>(txnRes), res.failureIndex);
                 context->LogWarn(msg);
-                delete req;
+
                 return;
             }
         }
@@ -638,10 +645,10 @@ static void __cdecl ExecuteMoveTask(const D2RL::PluginContext* context, void* us
                 ReportSharedMove(context,result,req->sharedSelection.page,false);
                 if(result.committed){s_FocusedItem.store(D2RL::InvalidItemHandle);s_FocusedCode.store(0);}
             }
-            delete req;return;
+            return;
         }
         if (QolSharedSdk::Supported(g_Items) && !(req->sharedSelection.valid && req->sharedSelection.previousSeason)) {
-            context->LogWarn("[QOL/SharedSDK] No captured normal source; native fallback refused.");delete req;return;
+            context->LogWarn("[QOL/SharedSDK] No captured normal source; native fallback refused.");return;
         }
         struct Withdrawal { uintptr_t base; void* player; bool submitted{}; } withdrawal{exeBase,playerUnit};
         g_Items->editNativeItem(context,activeTarget,[](const D2RL::PluginContext*,void* item,void* user) noexcept {
@@ -655,7 +662,7 @@ static void __cdecl ExecuteMoveTask(const D2RL::PluginContext* context, void* us
         } else {
             context->LogWarn("[ControllerQoL] Quick Move: Shared Stash withdrawal refused; no fallback.");
         }
-        delete req;
+
         return;
     }
 
@@ -714,7 +721,21 @@ static void __cdecl ExecuteMoveTask(const D2RL::PluginContext* context, void* us
         context->LogWarn("[ControllerQoL] Quick-move failed for all candidate destinations.");
     }
 
-    delete req;
+
+}
+
+static void __cdecl ExecuteMoveTask(const D2RL::PluginContext* ctx,void* token) noexcept {
+    auto request=s_MoveRequests.Take(reinterpret_cast<uintptr_t>(token));
+    if(request)ExecuteMove(ctx,request.get());
+}
+static D2RL::Threads::Result QueueMoveTask(const D2RL::PluginContext* ctx,MoveRequest* raw) noexcept {
+    std::unique_ptr<MoveRequest> request(raw);
+    if(!s_IdentifySessionEvents)return D2RL::Threads::Result::Unavailable;
+    const auto token=s_MoveRequests.Put(std::move(request));
+    if(!token)return D2RL::Threads::Result::Busy;
+    const auto result=g_Threads->runOnGameThread(ctx,ExecuteMoveTask,reinterpret_cast<void*>(token));
+    if(result!=D2RL::Threads::Result::Success)(void)s_MoveRequests.Take(token);
+    return result;
 }
 
 static void QueueLegacyQuickMove(const D2RL::Items::ItemInfo& info,bool cubeDestination) noexcept {
@@ -731,7 +752,11 @@ static void QueueLegacyQuickMove(const D2RL::Items::ItemInfo& info,bool cubeDest
     req->identity=info;req->sharedIdentity=info;
     if (!cube && TestUiMode(UI_MODE_STASH) && D2R::Native::GetActiveStashTabIndex(g_PluginContext->exeBase)==1 &&
         !CaptureSharedRequest(g_PluginContext,*req)) {delete req;return;}
-    if(g_Threads->runOnGameThread(g_PluginContext,ExecuteMoveTask,req)!=D2RL::Threads::Result::Success)delete req;
+    const auto scheduled=QueueMoveTask(g_PluginContext,req);
+    if(scheduled!=D2RL::Threads::Result::Success) {
+        if(scheduled==D2RL::Threads::Result::Unavailable)
+            (void)QolClientTransfer::Request(g_PluginContext,info,cube);
+    }
 }
 
 static void QueueQuickMoveToCube(bool materialsFirst) noexcept;
@@ -745,7 +770,7 @@ static void TriggerQuickMoveOnFocusedItem() noexcept {
     // Advanced slots are UI-owned proxies: route them before entering the
     // authoritative legacy resolver, which cannot resolve that proxy handle.
     (void)g_Threads->runOnUiThread(g_PluginContext, [](const D2RL::PluginContext* ctx,void*) noexcept {
-        if (QolBelt::Busy() || QolMaterials::Busy() || QolBulkStash::Busy()) return;
+        if (QolBelt::Busy() || QolMaterials::Busy() || QolBulkStash::Busy() || QolNativeIdentify::Busy() || QolClientTransfer::Busy()) return;
         const auto tab=QolMaterials::SelectedStashTab(ctx);
         if (TestUiMode(UI_MODE_STASH) && tab==0xFFFFFFFF) {
             ctx->LogWarn("[QOL/Stash] Selected tab unavailable; refusing an ordinary stash fallback.");
@@ -759,6 +784,10 @@ static void TriggerQuickMoveOnFocusedItem() noexcept {
             if (g_Items->getItemInfo(ctx,s_FocusedItem.load(),&info)==D2RL::Items::Result::Success) {
                 source=info.container;focused=info;hasFocused=true;
                 if (GetTickCount64()-s_FocusedTick.load()>1000) return;
+                if(TestUiMode(UI_MODE_STASH) && !QolStorageFocus::Matches(ctx,info)) {
+                    ctx->LogInfo("[QOL/Stash] Controller selection is empty, changed, or unsupported; ignored stale tooltip transfer.");
+                    return;
+                }
                 if (QolMove::CustomRoute(TestUiMode(UI_MODE_STASH),TestUiMode(UI_MODE_CUBE),IsVendorPanelOpen()) &&
                     QolCustomPage::TryTransfer(ctx,info)) return;
                 if (QolVendor::Context(IsVendorPanelOpen(),TestUiMode(UI_MODE_STASH),TestUiMode(UI_MODE_CUBE),source)) {
@@ -773,7 +802,10 @@ static void TriggerQuickMoveOnFocusedItem() noexcept {
                     req->primaryDestination=D2RL::Items::ItemContainer::Inventory;
                     req->sharedIdentity=info;
                     if (!CaptureSharedRequest(ctx,*req)) {delete req;return;}
-                    if (g_Threads->runOnGameThread(ctx,ExecuteMoveTask,req)!=D2RL::Threads::Result::Success) delete req;
+                    const auto scheduled=QueueMoveTask(ctx,req);
+                    if(scheduled!=D2RL::Threads::Result::Success) {
+                        if(scheduled==D2RL::Threads::Result::Unavailable)(void)QolClientTransfer::Request(ctx,info,false);
+                    }
                     return;
                 }
             }
@@ -785,6 +817,9 @@ static void TriggerQuickMoveOnFocusedItem() noexcept {
             return;
         }
         if (source==D2RL::Items::ItemContainer::Cube) {
+            if(QolClientTransfer::EmbeddedCube(TestUiMode(UI_MODE_STASH),tab,source)) {
+                QueueQuickMoveToCube(true);return;
+            }
             TriggerQuickMoveToCubeOnFocusedItem(); return;
         }
         if (QolMaterials::UseMaterialsRoute(tab,source)) {
@@ -835,6 +870,7 @@ static bool PlayerHasCube(const D2RL::PluginContext* context, D2RL::PlayerHandle
 
 static void QueueQuickMoveToCube(bool materialsFirst) noexcept {
     if (!g_PluginContext || !g_Threads || !g_Settings.quickMove) return;
+    if(QolNativeIdentify::Busy() || QolClientTransfer::Busy())return;
 
     static std::atomic<ULONGLONG> s_LastQuickMoveCubeTick{0};
     const ULONGLONG now = GetTickCount64();
@@ -845,10 +881,13 @@ static void QueueQuickMoveToCube(bool materialsFirst) noexcept {
 
     D2RL::Items::ItemInfo focused{};
     if(!ReadFocusIdentity(focused))return;
-    struct Pending { D2RL::Items::ItemInfo info; bool materials; };
-    auto* pending=new Pending{focused,materialsFirst};
+    if(!s_IdentifySessionEvents)return;
+    const auto token=s_CubeRequests.Put(std::make_unique<CubePending>(CubePending{focused,materialsFirst}));
+    if(!token)return;
     const auto scheduled=g_Threads->runOnGameThread(g_PluginContext, [](const D2RL::PluginContext* context, void* user) noexcept {
-        const auto pending=*static_cast<Pending*>(user);delete static_cast<Pending*>(user);
+        auto owned=s_CubeRequests.Take(reinterpret_cast<uintptr_t>(user));
+        if(!owned)return;
+        const auto pending=*owned;
         const auto& identity=pending.info;
         const bool materialsFirst=pending.materials;
         D2RL::PlayerHandle player{};
@@ -890,13 +929,46 @@ static void QueueQuickMoveToCube(bool materialsFirst) noexcept {
             .identity             = identity,
         };
 
-        ExecuteMoveTask(context, req);
-    }, pending);
-    if(scheduled!=D2RL::Threads::Result::Success)delete pending;
+        std::unique_ptr<MoveRequest> ownedMove(req);
+        ExecuteMove(context,ownedMove.get());
+    }, reinterpret_cast<void*>(token));
+    if(scheduled!=D2RL::Threads::Result::Success) {
+        (void)s_CubeRequests.Take(token);
+        // Materials LB+X originates on the UI thread and captures its stash tab.
+        // The native eligibility check precedes any ineligible-item Cube route.
+        if(scheduled==D2RL::Threads::Result::Unavailable)
+            (void)QolClientTransfer::Request(g_PluginContext,focused,!materialsFirst);
+    }
 }
 
 static void TriggerQuickMoveToCubeOnFocusedItem() noexcept {
-    QueueQuickMoveToCube(false);
+    if(!g_PluginContext || !g_Threads || !g_Settings.enabled || !g_Settings.quickMove)return;
+    (void)g_Threads->runOnUiThread(g_PluginContext,[](const D2RL::PluginContext* ctx,void*) noexcept {
+        if(QolNativeIdentify::Busy() || QolClientTransfer::Busy() || QolBelt::Busy() || QolMaterials::Busy() || QolBulkStash::Busy())return;
+        D2RL::Items::ItemInfo info{};
+        if(!ReadFocusIdentity(info))return;
+        if(TestUiMode(UI_MODE_STASH)) {
+            if(!QolStorageFocus::Matches(ctx,info))return;
+            if(QolMaterials::TryWithdrawToCube(ctx,info))return;
+        }
+        QueueQuickMoveToCube(false);
+    },nullptr);
+}
+static bool TriggerAdvancedSingleBelt() noexcept {
+    const auto advancedStamp=s_AdvancedBeltFocusTick.load();
+    const auto sharedStamp=s_SharedBeltFocusTick.load();
+    const auto stamp=advancedStamp>sharedStamp?advancedStamp:sharedStamp;
+    if(!g_Settings.enabled || !g_Settings.quickMove || !stamp || GetTickCount64()-stamp>250 ||
+       !TestUiMode(UI_MODE_STASH) || QolNativeIdentify::Busy() || QolClientTransfer::Busy() || QolBelt::Busy() || QolBulkStash::Busy())return false;
+    D2RL::Items::ItemInfo info{};
+    if(!ReadFocusIdentity(info))return false;
+    if(sharedStamp && sharedStamp>=advancedStamp) {
+        // Shared grid activation can bypass ItemInteraction. The tooltip has
+        // qualified the real controller cell; the UI belt callback rechecks it.
+        if(info.container!=D2RL::Items::ItemContainer::SharedStash || !QolBelt::BeltCandidate(info.code))return false;
+        return QolBelt::RequestSingle(s_LastPlayerHandle.load(),info,true);
+    }
+    return QolMaterials::RequestSingleBelt(info);
 }
 
 static bool VendorRefillContext() noexcept {
@@ -905,14 +977,14 @@ static bool VendorRefillContext() noexcept {
 static void TriggerAutoFillBelt() noexcept {
     if (!g_PluginContext || !g_Settings.enabled || !g_Settings.quickMove || !g_Threads) return;
     (void)g_Threads->runOnUiThread(g_PluginContext,[](const D2RL::PluginContext* ctx,void*) noexcept {
-        if (QolBelt::Busy() || QolMaterials::Busy() || QolBulkStash::Busy()) return;
+        if (QolBelt::Busy() || QolMaterials::Busy() || QolBulkStash::Busy() || QolNativeIdentify::Busy() || QolClientTransfer::Busy()) return;
         const bool stash=TestUiMode(UI_MODE_STASH);
         if (VendorRefillContext()) {
             D2RL::Items::ItemInfo focus{};
             if (!ReadFocusIdentity(focus) || GetTickCount64()-s_FocusedTick.load()>1000) return;
             if (focus.container!=D2RL::Items::ItemContainer::Inventory) {
-                if (!IsPotionItem(focus.code) || !QolBelt::RequestVendorRefill(ctx,focus,VendorRefillContext))
-                    ctx->LogWarn("[QOL/VendorBelt] Highlighted merchant potion could not be bound; no purchase.");
+                if ((!IsPotionItem(focus.code) && !QolVendor::TomeForScroll(focus.code)) || !QolBelt::RequestVendorRefill(ctx,focus,VendorRefillContext))
+                    ctx->LogWarn("[QOL/VendorBelt] Highlighted merchant potion/scroll could not be bound; no purchase.");
                 return;
             }
         }
@@ -1040,27 +1112,40 @@ static auto __cdecl OnItemInteraction(
 
     g_LastInventoryInteractionTick.store(GetTickCount64());
 
+    if(modifierActive && (QolNativeIdentify::Busy() || QolClientTransfer::Busy()))
+        return D2RL::ItemInteractions::Decision::Consume;
+
+    if(g_Settings.quickMove && modifierActive && TestUiMode(UI_MODE_STASH) && QolBelt::BeltCandidate(itemInfo.code)) {
+        if(QolMaterials::Busy() || QolBelt::Busy() || QolBulkStash::Busy())return D2RL::ItemInteractions::Decision::Consume;
+        if(QolMaterials::TryWithdrawToBelt(context,itemInfo))return D2RL::ItemInteractions::Decision::Consume;
+    }
+
     if(Probe::BatchFeatureEnabled(g_Settings.quickIdentify,g_Settings.identifyAll) &&
        modifierActive && !btnX && QolIdentify::BulkTome(itemInfo)) {
-        (void)QolNativeIdentify::RequestAll(context,event->player,itemInfo,g_Settings.nativeIdentify);
+        if(QolClientTransfer::Busy() || QolBelt::Busy() || QolMaterials::Busy() || QolBulkStash::Busy())return D2RL::ItemInteractions::Decision::Consume;
+        (void)QolNativeIdentify::RequestAll(context,event->player,itemInfo,g_Settings.nativeIdentify,isController && g_Settings.consumeTomeOrScroll);
         return D2RL::ItemInteractions::Decision::Consume;
     }
     if (isUnidentified && g_Settings.quickIdentify && modifierActive) {
-        // UI events expose a copied/client-side item. Do not scan consumables
-        // here: authoritative enumeration and quantity validation happen once
-        // in the game-thread task, using this item's exact identity.
+        // Prefer authoritative SDK work. Only an Unavailable scheduler permits
+        // read-only client preparation and a native request on the UI thread.
+        if(QolNativeIdentify::Busy() || QolClientTransfer::Busy() || QolBelt::Busy() || QolMaterials::Busy() || QolBulkStash::Busy())return D2RL::ItemInteractions::Decision::Consume;
+        std::lock_guard lock(s_IdentifyMutex);
+        if(!s_IdentifySessionEvents)return D2RL::ItemInteractions::Decision::Continue;
         if(s_IdentifyPending.exchange(true))return D2RL::ItemInteractions::Decision::Consume;
-        auto* req=new IdentifyRequest{
+        s_IdentifyRequest={
             .action={event->player,itemInfo,g_Settings.requireTomeOrScroll,g_Settings.consumeTomeOrScroll,QolNativeIdentify::PersonalStashOpen()},
             .queuedAt=GetTickCount64(),
         };
 
-        const auto scheduleResult = g_Threads->runOnGameThread(context, ExecuteIdentifyTask, req);
+        const auto scheduleResult = g_Threads->runOnGameThread(context, ExecuteIdentifyTask, reinterpret_cast<void*>(++s_IdentifyGeneration));
         if (scheduleResult == D2RL::Threads::Result::Success) {
             return D2RL::ItemInteractions::Decision::Consume;
         } else {
-            delete req;
             s_IdentifyPending.store(false);
+            if(isController && scheduleResult==D2RL::Threads::Result::Unavailable && g_Settings.consumeTomeOrScroll &&
+               QolNativeIdentify::RequestRemote(context,event->player,itemInfo))return D2RL::ItemInteractions::Decision::Consume;
+            char line[160];std::snprintf(line,sizeof(line),"[QOL/Identify] scheduling=%u remote request unavailable; preserving native input.",static_cast<unsigned>(scheduleResult));context->LogWarn(line);
             return D2RL::ItemInteractions::Decision::Continue;
         }
     }
@@ -1095,6 +1180,8 @@ static void __cdecl OnItemTooltipCallback(
 ) noexcept {
     (void)userData;
     QolGlyphs::PublishHeader(nullptr,nullptr,nullptr,nullptr,nullptr);
+    s_AdvancedBeltFocusTick.store(0);
+    s_SharedBeltFocusTick.store(0);
     if (!g_Settings.enabled || !event) return;
 
     if (g_Items && event->item != D2RL::InvalidItemHandle) {
@@ -1116,6 +1203,14 @@ static void __cdecl OnItemTooltipCallback(
             const bool isUnidentified = ((info.stateFlags & D2RL::Items::ItemStateIdentified) == 0);
             const bool isCubeOpen     = TestUiMode(UI_MODE_CUBE);
             const bool isStashOpen    = TestUiMode(UI_MODE_STASH);
+            const auto stashTab=isStashOpen?QolMaterials::SelectedStashTab(context):UINT32_MAX;
+            const bool advancedFocus=isStashOpen && QolMaterials::AdvancedProxyCandidate(info.container) &&
+                QolMaterials::Category(stashTab) && QolStorageFocus::Matches(context,info);
+            const bool advancedPotion=advancedFocus &&
+                (info.code==QolMaterials::RejuvenationCode(0) || info.code==QolMaterials::RejuvenationCode(1));
+            if(advancedPotion)s_AdvancedBeltFocusTick.store(GetTickCount64());
+            if(QolBelt::SharedInputCandidate(info.container,stashTab,info.code) && QolStorageFocus::Matches(context,info))
+                s_SharedBeltFocusTick.store(GetTickCount64());
             const bool isVendorOpen   = IsVendorPanelOpen();
             // Merchant stock must not advertise player-storage transfers.
             const bool vendorStock=isVendorOpen && !isStashOpen && !isCubeOpen &&
@@ -1140,17 +1235,18 @@ static void __cdecl OnItemTooltipCallback(
             const bool canMoveToCube  = !vendorStock && g_Settings.quickMove && playerHasCube && (info.code != D2R::ITEM_CODE_BOX) && (!isCubeOpen) && (
                 info.container == D2RL::Items::ItemContainer::Inventory ||
                 info.container == D2RL::Items::ItemContainer::PersonalStash ||
-                info.container == D2RL::Items::ItemContainer::SharedStash
+                info.container == D2RL::Items::ItemContainer::SharedStash || advancedFocus
             );
 
             const bool isPotionItem   = QolBelt::BeltCandidate(info.code) && QolBelt::SupportedSource(info.container);
-            const bool canMoveToBelt  = !vendorStock && isPotionItem;
+            const bool canMoveToBelt  = !vendorStock && (isPotionItem || advancedPotion);
             const bool canIdentifyAll = !vendorStock &&
                 Probe::BatchFeatureEnabled(g_Settings.quickIdentify,g_Settings.identifyAll) && QolIdentify::BulkTome(info);
             const bool canIdentify    = !vendorStock && isUnidentified && g_Settings.quickIdentify;
-            const bool canAutoFill    = g_Settings.quickMove && IsPotionItem(info.code) && (vendorStock || isStashOpen || isCubeOpen || info.container == D2RL::Items::ItemContainer::Inventory ||
+            const bool vendorScroll=vendorStock && QolVendor::TomeForScroll(info.code)!=0;
+            const bool canAutoFill    = g_Settings.quickMove && (vendorScroll || (IsPotionItem(info.code) && (vendorStock || isStashOpen || isCubeOpen || info.container == D2RL::Items::ItemContainer::Inventory ||
                                          info.container == D2RL::Items::ItemContainer::PersonalStash ||
-                                         info.container == D2RL::Items::ItemContainer::SharedStash);
+                                         info.container == D2RL::Items::ItemContainer::SharedStash)));
 
             const bool canBulkStash=isStashOpen &&
                 Probe::BatchFeatureEnabled(g_Settings.quickMove,g_Settings.quickDeposit);
@@ -1182,7 +1278,7 @@ static void __cdecl OnItemTooltipCallback(
                 QolGlyphs::PublishHeader(g_Settings.requireModifier?modStr:"",
                     canIdentifyAll?"Identify All":canIdentify?"Identify":(canMoveToBelt?"To Belt":nullptr),
                     canMove?moveAction:nullptr,canMoveToCube?"To Cube":nullptr,
-                    canAutoFill?(vendorStock?"Refill / Buy":"Fill Belt"):nullptr,canBulkStash?"Stash All":nullptr);
+                    canAutoFill?(vendorScroll?"Fill Tome":vendorStock?"Refill / Buy":"Fill Belt"):nullptr,canBulkStash?"Stash All":nullptr);
                 int promptLen = 0;
                 auto appendLine = [&](const char* btn, const char* act) {
                     if (promptLen > 0 && promptLen < static_cast<int>(sizeof(prompt)) - 1) {
@@ -1214,7 +1310,7 @@ static void __cdecl OnItemTooltipCallback(
                     appendLine("Y", "To Cube");
                 }
                 if (canAutoFill) {
-                    appendLine("R3", vendorStock ? "Refill Belt / Buy Missing" : "Fill Belt");
+                    appendLine("R3", vendorScroll?"Fill Tome":vendorStock ? "Refill Belt / Buy Missing" : "Fill Belt");
                 }
 
                 const size_t len = std::strlen(prompt);
@@ -1816,6 +1912,9 @@ namespace GroundLoot {
                 forceRefresh ? "[ControllerQoL] L1 Hit - Refreshed Mappings (Rarity vs Distance): "
                              : "[ControllerQoL] Sticky Slots: ");
             for (size_t i = 0; i < NUM_STICKY_SLOTS; ++i) {
+                // snprintf returns the required length on truncation. Never use
+                // that value as the next pointer/remaining capacity unchecked.
+                if(offset<0 || static_cast<size_t>(offset)>=sizeof(logBuf)-1)break;
                 if (s_StickySlots[i].guid != 0) {
                     const char* qName = "Norm";
                     switch (s_StickySlots[i].quality) {
@@ -1966,7 +2065,7 @@ namespace GroundLoot {
             const int32_t pendingSlot = s_PendingPickupSlot.exchange(-1);
             if (pendingSlot >= 0 && player &&
                 Probe::GroundShortcutsEnabled(g_Settings.enabled,g_Settings.groundPickup) &&
-                QolNavigation::GroundShortcutsAllowed()) {
+                QolNavigation::GroundInputActive()) {
                 const uint32_t dist = std::max(g_Settings.groundPickupDistance, 10U);
                 PickupCandidateSlot(player, targetGame, static_cast<uint32_t>(pendingSlot), dist, g_PluginContext);
             }
@@ -2090,7 +2189,10 @@ namespace PlacardOverlay {
         if (guid == 0 || !textBuffer || bufferSize < 8) return;
         std::lock_guard<std::recursive_mutex> lock(s_PlacardMutex);
         for(auto it=s_TrackedPlacards.begin();it!=s_TrackedPlacards.end();) {
-            if(it->first!=guid && it->second.textBuffer==textBuffer) it=s_TrackedPlacards.erase(it);
+            if(it->first!=guid && it->second.textBuffer==textBuffer) {
+                QolClientLoot::Track(it->first,false);
+                it=s_TrackedPlacards.erase(it);
+            }
             else ++it;
         }
         s_TrackedPlacards[guid] = PlacardTrack{
@@ -2105,6 +2207,7 @@ namespace PlacardOverlay {
     inline void UnregisterPlacard(uint32_t guid) {
         if (guid == 0) return;
         std::lock_guard<std::recursive_mutex> lock(s_PlacardMutex);
+        QolClientLoot::Track(guid,false);
         s_TrackedPlacards.erase(guid);
     }
 
@@ -2163,7 +2266,8 @@ namespace PlacardOverlay {
 
         std::lock_guard<std::recursive_mutex> lock(s_PlacardMutex);
         for (size_t i = 0; i < GroundLoot::NUM_STICKY_SLOTS; ++i) {
-            const uint32_t guid = GroundLoot::s_StickySlots[i].guid;
+            const uint32_t guid = QolClientLoot::Active()
+                ? QolClientLoot::Slot(static_cast<unsigned>(i)).guid : GroundLoot::s_StickySlots[i].guid;
             if (guid == 0) continue;
 
             auto it = s_TrackedPlacards.find(guid);
@@ -2198,6 +2302,7 @@ namespace PlacardOverlay {
         if (guid == 0) return result;
 
         if (!HasVisiblePlacardText(textBuffer, bufferSize)) {
+            QolClientLoot::Track(guid,false);
             UnregisterPlacard(guid);
             return result;
         }
@@ -2206,12 +2311,14 @@ namespace PlacardOverlay {
         bool isWide = (rawBytes[0] != 0 && rawBytes[1] == 0);
 
         RegisterPlacard(guid, textBuffer, bufferSize, isWide);
+        QolClientLoot::Track(guid,true);
 
         // If ground pickup modifier is currently held down, apply the prefix immediately
         if (Probe::GroundShortcutsEnabled(g_Settings.enabled,g_Settings.groundPickup) &&
             ControllerQoL::IsGroundPickupActive(g_Settings.groundPickupButton)) {
             for (size_t i = 0; i < GroundLoot::NUM_STICKY_SLOTS; ++i) {
-                if (GroundLoot::s_StickySlots[i].guid == guid) {
+                if (QolClientLoot::Active() ? QolClientLoot::SlotFor(guid)==static_cast<int>(i)
+                    : GroundLoot::s_StickySlots[i].guid == guid) {
                     ApplyPlacardBuffer(s_TrackedPlacards.at(guid),
                         GroundLoot::s_SlotPrefixes[i].pfxW,
                         GroundLoot::s_SlotPrefixes[i].pfxA,
@@ -2269,7 +2376,7 @@ static void __cdecl ClearPlacardsTask(const D2RL::PluginContext* context, void* 
 static void __cdecl RefreshStickySlotsTask(const D2RL::PluginContext* context, void* userData) noexcept {
     (void)userData;
     if (!Probe::GroundShortcutsEnabled(g_Settings.enabled,g_Settings.groundPickup) ||
-        !QolNavigation::GroundShortcutsAllowed()) return;
+        !QolNavigation::GroundInputActive()) return;
     void* player = GroundLoot::s_ActivePlayer;
     // PlayerHandle is an opaque SDK ID, never a UnitAny pointer. Until a
     // native action supplies context, skip rather than reinterpret a handle.
@@ -2303,14 +2410,48 @@ static void __cdecl RefreshStickySlotsTask(const D2RL::PluginContext* context, v
 
 struct PickupTaskArgs {
     uint32_t slotIndex = 0;
+    QolClientLoot::Request clientRequest{};
 };
 
-static void __cdecl PickupGroundTask(const D2RL::PluginContext* context, void* userData) noexcept {
-    auto* args = static_cast<PickupTaskArgs*>(userData);
-    const uint32_t slot = args ? args->slotIndex : 0;
-    delete args;
+static QolTasks::Payloads<PickupTaskArgs> s_PickupRequests;
+namespace {
+static void CancelOwnedRequests() noexcept {
+    s_MoveRequests.Reset();s_CubeRequests.Reset();s_PickupRequests.Reset();
+}
+}
+
+static bool ClientGroundHeld() noexcept {
+    return g_PollingRunning.load() && Probe::GroundShortcutsEnabled(g_Settings.enabled,g_Settings.groundPickup) &&
+        ControllerQoL::IsControllerUiActive() && QolNavigation::GroundInputActive() &&
+        ControllerQoL::IsGroundPickupActive(g_Settings.groundPickupButton);
+}
+static std::atomic<bool> s_ClientLootRefreshQueued{false};
+static void __cdecl RefreshClientGroundTask(const D2RL::PluginContext*,void*) noexcept {
+    if(g_PollingRunning.load() && QolClientLoot::Active()) {
+        const bool held=ClientGroundHeld();
+        if(QolClientLoot::Refresh(std::max(g_Settings.groundPickupDistance,10U),held)) {
+            PlacardOverlay::ClearPlacardOverlays();
+            if(held)PlacardOverlay::ApplyPlacardOverlays();
+            QolNavigation::RefreshGroundLabels();
+        }
+    }
+    s_ClientLootRefreshQueued=false;
+}
+static void QueueClientGroundRefresh(const D2RL::PluginContext* context) noexcept {
+    if(!g_Threads || !g_Threads->runOnUiThread || s_ClientLootRefreshQueued.exchange(true))return;
+    if(g_Threads->runOnUiThread(context,RefreshClientGroundTask,nullptr)!=D2RL::Threads::Result::Success)
+        s_ClientLootRefreshQueued=false;
+}
+static void __cdecl PickupClientGroundTask(const D2RL::PluginContext*,void* userData) noexcept {
+    auto args=s_PickupRequests.Take(reinterpret_cast<uintptr_t>(userData));
+    if(args) {
+        QolClientLoot::Submit(args->clientRequest,std::max(g_Settings.groundPickupDistance,10U),ClientGroundHeld());
+    }
+}
+
+static void PickupGroundUnsafe(const D2RL::PluginContext* context,uint32_t slot) noexcept {
     if (!Probe::GroundShortcutsEnabled(g_Settings.enabled,g_Settings.groundPickup) ||
-        !QolNavigation::GroundShortcutsAllowed()) {GroundLoot::s_PendingPickupSlot.store(-1);return;}
+        !QolNavigation::GroundInputActive()) {GroundLoot::s_PendingPickupSlot.store(-1);return;}
 
     // Check if HookTrigger already consumed and executed this pending slot
     if (GroundLoot::s_PendingPickupSlot.load() == static_cast<int32_t>(slot)) {
@@ -2342,6 +2483,10 @@ static void __cdecl PickupGroundTask(const D2RL::PluginContext* context, void* u
 
     const uint32_t dist = std::max(g_Settings.groundPickupDistance, 10U);
     GroundLoot::PickupCandidateSlot(player, game, slot, dist, context);
+}
+static void __cdecl PickupGroundTask(const D2RL::PluginContext* context,void* userData) noexcept {
+    auto args=s_PickupRequests.Take(reinterpret_cast<uintptr_t>(userData));
+    if(args)PickupGroundUnsafe(context,args->slotIndex);
 }
 
 static void ScanDecryptedMemory(const D2RL::PluginContext* context, uint8_t* base) noexcept {
@@ -2615,6 +2760,8 @@ D2RL_PLUGIN_EXPORT auto D2RLoaderLoadPlugin(const D2RL::PluginContext* context) 
 
     QolIdentifyStat::Initialize(context);
     QolNativeIdentify::Initialize(context,g_Items,g_Threads);
+    InitializeIdentifyQueue(context);
+    if(!QolClientTransfer::Initialize(context))context->LogWarn("[QOL/ClientTransfer] Profile/services unavailable; remote transfers disabled.");
     (void)QolCustomPage::Initialize(context);
     if (!QolMaterials::Initialize(context))
         context->LogWarn("[QOL/Materials] Advanced withdrawals unavailable; inspect native admission diagnostics.");
@@ -2635,9 +2782,10 @@ D2RL_PLUGIN_EXPORT auto D2RLoaderLoadPlugin(const D2RL::PluginContext* context) 
     });
     QolBulkStash::Initialize(context,+[]() noexcept {
         return g_Settings.enabled && Probe::BatchFeatureEnabled(g_Settings.quickMove,g_Settings.quickDeposit) && ControllerQoL::IsControllerUiActive() &&
-            TestUiMode(UI_MODE_STASH) && !QolBelt::Busy() && !QolMaterials::Busy();
+            TestUiMode(UI_MODE_STASH) && !QolBelt::Busy() && !QolMaterials::Busy() && !QolNativeIdentify::Busy() && !QolClientTransfer::Busy();
     });
     ControllerQoL::SetBulkStashCallback(QolBulkStash::Request);
+    ControllerQoL::SetAdvancedBeltCallback(TriggerAdvancedSingleBelt);
     ControllerQoL::SetQuickMoveCallback(TriggerQuickMoveOnFocusedItem);
     ControllerQoL::SetQuickMoveCubeCallback(TriggerQuickMoveToCubeOnFocusedItem);
     ControllerQoL::SetAutoFillBeltCallback(TriggerAutoFillBelt);
@@ -2649,6 +2797,12 @@ D2RL_PLUGIN_EXPORT auto D2RLoaderLoadPlugin(const D2RL::PluginContext* context) 
     context->LogInfo(hookLog);
     if(!nativeInputOk) context->LogInfo(ControllerQoL::GetXInputHookReport());
 
+    QolClientLoot::Initialize(context,&GroundLoot::GetItemCodeRank);
+    ControllerQoL::SetGroundPickupPredicate([]() noexcept {
+        return Probe::GroundShortcutsEnabled(g_Settings.enabled,g_Settings.groundPickup) &&
+            QolClientLoot::Ready() && ControllerQoL::NativeInputInstalled() && ControllerQoL::IsControllerUiActive() &&
+            QolNavigation::GroundInputActive() && ControllerQoL::IsGroundPickupActive(g_Settings.groundPickupButton);
+    });
     // Start background controller polling thread for ground item pickup & inspection
     if (g_Settings.enabled) {
         g_PollingRunning.store(true);
@@ -2668,6 +2822,29 @@ D2RL_PLUGIN_EXPORT auto D2RLoaderLoadPlugin(const D2RL::PluginContext* context) 
 
                 ControllerQoL::PumpNativeInput();
                 QolNavigation::PumpLabels(context,g_Threads);
+                if(QolClientLoot::Active()) {
+                    static ULONGLONG lastClientLootRefresh=0;
+                    const auto now=GetTickCount64();
+                    if(now-lastClientLootRefresh>=100) {
+                        lastClientLootRefresh=now;
+                        QueueClientGroundRefresh(context);
+                    }
+                }
+                if(g_Settings.debugLogging) {
+                    static ULONGLONG lastInputReport=0;
+                    const auto now=GetTickCount64();
+                    if(now-lastInputReport>=5000) {
+                        lastInputReport=now;
+                        const auto input=ControllerQoL::ReadControllerInput();
+                        uint8_t lt{},rt{}; uint16_t buttons{}; uint64_t age{};
+                        ControllerQoL::GetCachedControllerState(lt,rt,buttons,age);
+                        char message[256];
+                        std::snprintf(message,sizeof(message),"[QOL/RemoteTrace] nativeInstalled=%d controllerUi=%d valid=%d providers=0x%X buttons=0x%04X cached=0x%04X age=%llu ms modifier=%d",
+                            ControllerQoL::NativeInputInstalled(),ControllerQoL::IsControllerUiActive(),input.valid,input.providers,input.buttons,buttons,
+                            static_cast<unsigned long long>(age),ControllerQoL::IsControllerModifierActive(g_Settings.modifier,g_Settings.triggerThreshold));
+                        context->LogInfo(message);
+                    }
+                }
                 QolBelt::Pump(context);
                 QolMaterials::Pump(context);
 
@@ -2723,9 +2900,6 @@ D2RL_PLUGIN_EXPORT auto D2RLoaderLoadPlugin(const D2RL::PluginContext* context) 
                     continue;
                 }
 
-                // Inventory shortcuts already ran above. Stash chords must not
-                // also queue ground-loot slot requests.
-                if (TestUiMode(UI_MODE_STASH)) continue;
                 const bool modBtn = ControllerQoL::IsGroundPickupActive(g_Settings.groundPickupButton);
                 const bool lt = ControllerQoL::IsLeftTriggerPressed(30);
                 const bool rb = ControllerQoL::IsRightBumperPressed();
@@ -2760,7 +2934,8 @@ D2RL_PLUGIN_EXPORT auto D2RLoaderLoadPlugin(const D2RL::PluginContext* context) 
                 s_LastRt = rt;
                 s_LastLt = lt;
 
-                if (!QolNavigation::GroundShortcutsAllowed()) {
+                if (!QolNavigation::GroundInputActive()) {
+                    s_LastMod=false; // Refresh mappings when returning to the world with LB held.
                     s_ModUsedWithFace=false;
                     GroundLoot::s_PendingPickupSlot.store(-1);
                     continue; // Track edges above, but menu bumpers must not queue world-loot work.
@@ -2779,7 +2954,16 @@ D2RL_PLUGIN_EXPORT auto D2RLoaderLoadPlugin(const D2RL::PluginContext* context) 
                     s_ModUsedWithFace = false;
                     // Modifier hit: Refresh sticky slot mappings based on rarity vs distance
                     if (g_Threads) {
-                        g_Threads->runOnGameThread(context, RefreshStickySlotsTask, nullptr);
+                        auto result=g_Threads->runOnGameThread(context, RefreshStickySlotsTask, nullptr);
+                        if(result==D2RL::Threads::Result::Unavailable && QolClientLoot::Activate()) {
+                            QueueClientGroundRefresh(context);
+                            result=D2RL::Threads::Result::Success;
+                        } else if(result==D2RL::Threads::Result::Success)QolClientLoot::Deactivate();
+                        if(result!=D2RL::Threads::Result::Success && g_Settings.debugLogging) {
+                            char message[128];
+                            std::snprintf(message,sizeof(message),"[QOL/RemoteTrace] ground slot refresh scheduling failed result=%u",static_cast<unsigned>(result));
+                            context->LogWarn(message);
+                        }
                     }
                 }
 
@@ -2804,7 +2988,8 @@ D2RL_PLUGIN_EXPORT auto D2RLoaderLoadPlugin(const D2RL::PluginContext* context) 
                 if (modUp) {
                     // Immediately clear placard overlays upon releasing modifier (never auto-pickup)
                     if (g_Threads) {
-                        g_Threads->runOnGameThread(context, ClearPlacardsTask, nullptr);
+                        if(QolClientLoot::Active())QueueClientGroundRefresh(context);
+                        else g_Threads->runOnGameThread(context, ClearPlacardsTask, nullptr);
                     }
                 }
 
@@ -2824,9 +3009,29 @@ D2RL_PLUGIN_EXPORT auto D2RLoaderLoadPlugin(const D2RL::PluginContext* context) 
                         }
                         context->LogInfo(trigMsg);
                     }
-                    if (g_Threads) {
-                        auto* args = new PickupTaskArgs{ .slotIndex = static_cast<uint32_t>(targetSlot) };
-                        g_Threads->runOnGameThread(context, PickupGroundTask, args);
+                    if (g_Threads && s_IdentifySessionEvents) {
+                        auto token=s_PickupRequests.Put(std::make_unique<PickupTaskArgs>(PickupTaskArgs{ .slotIndex = static_cast<uint32_t>(targetSlot) }));
+                        if(!token)continue;
+                        auto result=g_Threads->runOnGameThread(context,PickupGroundTask,reinterpret_cast<void*>(token));
+                        if(result==D2RL::Threads::Result::Unavailable && QolClientLoot::Activate()) {
+                            GroundLoot::s_PendingPickupSlot.store(-1);
+                            auto args=s_PickupRequests.Take(token);
+                            if(args) {
+                                args->clientRequest=QolClientLoot::Capture(args->slotIndex);
+                                token=s_PickupRequests.Put(std::move(args),token);
+                            } else token=0;
+                            result=token && g_Threads->runOnUiThread
+                                ? g_Threads->runOnUiThread(context,PickupClientGroundTask,reinterpret_cast<void*>(token))
+                                : D2RL::Threads::Result::Unavailable;
+                        }
+                        if(result!=D2RL::Threads::Result::Success) {
+                            (void)s_PickupRequests.Take(token);
+                            if(g_Settings.debugLogging) {
+                                char message[128];
+                                std::snprintf(message,sizeof(message),"[QOL/RemoteTrace] ground pickup scheduling failed result=%u",static_cast<unsigned>(result));
+                                context->LogWarn(message);
+                            }
+                        }
                     }
                 }
             }
@@ -2862,7 +3067,7 @@ D2RL_PLUGIN_EXPORT auto D2RLoaderLoadPlugin(const D2RL::PluginContext* context) 
         g_Settings.groundPickupButton, g_Settings.portalPriorityDistance);
     if(!QolAim::Initialize(context,g_Settings.enabled))
         context->LogWarn("[QOL/Aim] Aim unavailable; other QOL features remain loaded.");
-    context->LogInfo("[QOL] QOL v1.3.1+rev.63 loaded: controller item features and integrated v0.6 navigation/label hooks.");
+    context->LogInfo("[QOL] QOL v1.3.1+rev.64-beta.1 loaded: controller item features and integrated v0.6 navigation/label hooks.");
     return true;
 }
 
@@ -2873,10 +3078,15 @@ D2RL_PLUGIN_EXPORT void D2RLoaderUnloadPlugin() noexcept {
         g_PollingThread.join();
     }
     ControllerQoL::UninstallXInputHooks(); // Drain input before destroying callback dependencies.
+    ControllerQoL::SetGroundPickupPredicate(nullptr);
+    QolClientLoot::Shutdown();
     PlacardOverlay::Shutdown();
     QolBulkStash::Shutdown();
     ControllerQoL::SetBulkStashCallback(nullptr);
+    ControllerQoL::SetAdvancedBeltCallback(nullptr);
     QolNativeIdentify::Shutdown();
+    IdentifySessionChanged(nullptr,nullptr,nullptr);
+    QolClientTransfer::Shutdown();
     QolPortal::Shutdown();
     QolBelt::Shutdown();
     QolMaterials::Shutdown();

@@ -13,6 +13,13 @@ int main(){
     x=i;++x.x;Require(Validate(i,&x)==Check::Changed,"moved item refused");
     x=i;++x.runtimeId;Require(Validate(i,&x)==Check::Changed,"replacement refused");
     Require(Validate(i,nullptr)==Check::Missing,"absence distinct from changed source");
+    Require(CheckRemote(i,&i,false,false)==RemoteStep::Ready,"unchanged remote snapshot may submit once");
+    Require(CheckRemote(i,&i,true,false)==RemoteStep::Wait,"pending remote submission cannot submit again");
+    Require(CheckRemote(i,&i,true,true)==RemoteStep::Stop,"unobserved submission stops batch instead of retrying");
+    Require(CheckRemote(i,nullptr,false,false)==RemoteStep::Stop,"pre-submission removal cancels stale snapshot");
+    Require(CheckRemote(i,nullptr,true,false)==RemoteStep::Removed,"post-submission absence permits next snapshot item");
+    x=i;++x.x;Require(CheckRemote(i,&x,true,false)==RemoteStep::Stop,"manual movement during confirmation stops batch");
+    x=i;++x.itemSeed;Require(CheckRemote(i,&x,false,false)==RemoteStep::Stop,"remote source substitution rejected before sending");
     for(unsigned n=2;n<=257;++n){x=i;x.runtimeId=n;p.Observe(x);}Require(p.overflow && p.count==256,"overflow refuses partial batch");
     Plan batch{};for(unsigned n=1;n<=8;++n){x=i;x.runtimeId=n;batch.Observe(x);}
     for(unsigned n=0;n<batch.count;++n)batch.Submitted(n);

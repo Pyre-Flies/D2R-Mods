@@ -1,5 +1,160 @@
 # Controller QOL changelog
 
+## 1.3.1+rev.64-beta.1 - 2026-10-07
+
+- Publish as a beta prerelease while full-Ladder crashes remain under investigation
+  and final offline/persistence qualification is pending. The user confirmed the
+  current candidate's improvements and vendor tome refill after supplying gold;
+  the log records charge growth 91 -> 100. Earlier validation notes below describe
+  the sequence of candidates, not additional claims of final-build coverage.
+
+- Admit the reviewed Ladder Global Chat sender hook and Maps stat-reader hook
+  through exact artifact, code and forwarding-chain checks. Restore compatibility
+  admission for ID, stash/Cube requests and tome charge reads without bypassing
+  either plugin. Unknown hooks still refuse safely; original unhooked paths and
+  authoritative/offline scheduling are preserved. Includes vendor tome reads.
+- All 28 automated suites pass, including production unhooked guard checks
+  without Ladder plugins, forwarding-chain corruption cases and DLL ABI/exports.
+  Read-only Ladder inspection matches the new profiles and continuations; actual
+  ID/transfer behavior and final-build offline use still need live validation.
+- The user confirmed improved cursor behavior with the acceleration candidate.
+
+- Preserve right-stick acceleration across consecutive UI callbacks sharing the
+  same clock timestamp. Zero elapsed time causes no movement; release and large
+  direction changes still reset fine control. A regression test failed on the
+  previous implementation and passes after the correction; all 27 suites pass.
+  The user reports very slow constant motion in Ladder, including town. This
+  timing defect is reproduced automatically; live symptom resolution is pending.
+
+- Add vendor LB+R3 on Identify and Town Portal scrolls to request native
+  Shift-buy into matching carried tomes. Show "Fill Tome", require a non-full
+  Inventory tome, and observe charge growth without automatic retries. Scrolls
+  remain excluded from belt placement. Native pricing and capacity rules apply.
+- Own legacy move, Cube and ground-pickup payloads outside scheduler callbacks.
+  Session/unload cancellation frees discarded work; non-reused tokens prevent
+  late callbacks from claiming a new request, including remote fallback races.
+- Bind early Shared potion LB+A to a fresh inventory snapshot of the exact
+  controller-selected item before scheduling. Retain strict source checks after
+  binding and log metadata differences. The observed first-press refusal's
+  precise cause is not proven; this correction still needs live qualification.
+- The user confirmed the preceding embedded Cube/Shared potion candidate works.
+  The new cleanup and vendor-tome candidate passes all 27 automated suites,
+  including ownership/cancellation, exact Shared focus, scroll/tome policy and
+  DLL ABI/export checks. Vendor purchasing and first-press behavior remain
+  pending live validation.
+
+- Fix LB+X on the Cube grid embedded beside Gems/Materials/Runes: submit an
+  eligible item directly to advanced storage using native source page 3, with
+  Cube source observation and no Inventory fallback for ineligible items.
+  Standalone Cube LB+X retains its move-to-Inventory behavior.
+- Admit the embedded Cube view for LB+A potion placement without requiring the
+  standalone Cube UI flag. Handle normal Shared Stash potion LB+A before native
+  input because that view can pick up the item without emitting ItemInteraction.
+  Recheck the real selected item/page before submission; consume accepted A
+  until release. Add detailed belt refusal reasons for further qualification.
+  These fixes await live validation; all 26 automated suites pass.
+- User validation of the preceding candidate: LB+L3 deposits, identification,
+  Personal Stash potions and standalone Cube potions work. Embedded Cube actions
+  and normal Shared potion handling required the follow-up above.
+- Add remote LB+L3 deposit-all with an Inventory snapshot, sequential native
+  requests and source-removal observation. Stop on changed page/session/source
+  or timeout; never retry an uncertain deposit. Retain the offline batch path.
+- Extend direct remote ID to loose Identify scrolls and open Personal Stash
+  sources/targets. Identify All also accepts a Personal Stash tome, with remote
+  targets still limited to Inventory. Confirm loose-scroll disappearance
+  separately from tome charge consumption. Cube/Shared supplies and modded
+  scroll stacks remain excluded.
+- Add remote LB+A belt placement from ordinary Personal/normal Shared Stash and
+  open Cube slots, with native source-page and owner guards. Offline Cube uses
+  existing Inventory staging; existing offline stash/Inventory routes and LB+R3
+  scope are retained. All 26 automated suites pass, including new page ABI,
+  scroll confirmation and deposit cancellation checks. Live validation pending.
+- The user confirmed the preceding candidate's remote Identify All, Materials
+  single-potion belt withdrawal and advanced-tab Cube withdrawal working.
+- Add remote Identify All on an Inventory Identify Tome. Snapshot Inventory
+  targets, send one direct native request at a time, and advance only after the
+  target is identified and exactly one charge is consumed. Stop on changed
+  identities, empty tome, session change or timeout. Remote Cube contents remain
+  excluded; offline routes are unchanged.
+- Route LB+A on a Materials rejuvenation to a single native belt withdrawal,
+  including the counter widgets that do not emit ordinary item interactions.
+  Consume accepted A presses until release; LB+R3 keeps its refill behavior.
+- Route LB+Y on Rune/Gem/Materials counters through the native Cube withdrawal
+  wrapper. Require a carried Cube, current controller selection, unchanged
+  tab/season and destination quantity observation. No inventory staging or
+  resubmission after timeout. New single-withdraw callbacks expire and cancel
+  across sessions. These three additions await live validation.
+- The user confirmed the preceding candidate's advanced deposits and empty
+  Shared-cell protection working in the private-server session.
+- Add the missing remote LB+X deposit route for eligible runes, gems and
+  materials, including rejuvenations, from Inventory. Use the game's eligibility,
+  current advanced owner and single native transfer request on ordinary and
+  advanced tabs. Preserve the existing Cube route for ineligible items on an
+  advanced tab; never retry a submitted deposit. Observe source consumption
+  separately from destination confirmation, since counters change item identity.
+- Reject stash shortcuts when the controller's selected widget/cell does not
+  contain the tooltip target. This prevents an empty Shared cell from moving a
+  remembered Inventory item. Remote transfers recheck selection before sending.
+  All 26 automated suites pass and new guards match the live client; these two
+  fixes await live behavior testing. The preceding candidate's ordinary
+  Personal/Shared transfers and LB+Y Cube transfers are now user-confirmed.
+- Correct remote-transfer admission to recognize the already reviewed Core
+  relocation inside the Shared owner resolver. The previous exact-byte check
+  disabled the entire client-transfer module, including Personal Stash, before
+  any request could run. Live read-only inspection matches the existing guarded
+  wrapper contract; transfer behavior still needs retesting. Direct single-item
+  ID is now user-confirmed, with a logged target flag and tome charge 7 -> 6.
+- Add guarded remote single-item identification through the native request
+  builder, without entering tome targeting mode or activating the item grid.
+  Use one charged Inventory tome and one Inventory target; wait for the target
+  flag and exactly one consumed charge. Preserve offline SDK behavior and the
+  configured offline native route. Remote bulk ID, loose scrolls and other ID
+  containers remain unsupported by this candidate.
+- Add `Unavailable`-only native client requests for ordinary Personal/Shared
+  Stash transfers and explicit Cube transfers. Bind exact item identity and
+  selected normal Shared page, preserve native eligibility and placement, and
+  confirm the destination in client state. Cube deposits require a carried
+  Cube; advanced materials, previous-season pages and bulk moves keep their
+  existing routes. Never retry a submitted request or guess another destination.
+- Cancel identification and new client-transfer queues on session changes;
+  replace the single-ID heap payload with owned state and generation tokens so
+  discarded authoritative callbacks cannot leak the request or keep ID busy.
+  Release build and all 26 automated suites pass, including native ID argument,
+  quantity, transfer identity/page and callback lifetime cases. These new paths
+  await live validation; see [remote contracts](docs/REMOTE-ID-TRANSFER-TRACE.md).
+- Fix competing native A pickup during a controller ground-loot chord. Preserve
+  raw A for slot selection, consume game A until release, and exclude inventory,
+  stash and menu contexts. Mouse input and ordinary A remain unchanged. Remove
+  identify/portal scrolls from potion-to-belt and refill candidates.
+- Review corrections: keep smart-deposit native pointers inside their SDK
+  callback, stop sticky-slot log appends after truncation, and replace the
+  unguarded Core UI-state fallback with the existing guarded game getter.
+  All 24 automated suites pass; the new fixes await live validation. See
+  [review findings](docs/REVIEW-2026-10-06.md) for remaining remote scheduler and
+  session-cancellation issues.
+- Add an `Unavailable`-only client route for inventory potion-to-belt placement
+  and inventory belt refill. Use UI-thread SDK snapshots, guarded client unit
+  lookup and the existing native stored-item request; wait for the same item to
+  appear in the belt. Remote stash-source belt withdrawals remain unsupported.
+  The private-server log reproduced rejected belt scheduling; 24 automated
+  suites pass after this correction. The user confirmed inventory potion
+  placement, but also reproduced scroll refill; its correction awaits retest.
+- Add a guarded client ground-loot route when the authoritative game scheduler
+  returns `Unavailable`: populate A/X/Y/B/R1/R2/L2 from visible client placards
+  and submit the native client interaction request. Preserve offline scheduling,
+  rarity/distance ranking and stable assignments; revalidate item identity,
+  range, collision, visibility, hold/session and request age before submission.
+  Keep labels until client state reflects removal; do not claim pickup success
+  from native return or automatically retry. Inventory management is unchanged.
+  All 24 automated suites pass. The user reports LB ground labels/pickup now
+  appear to work; the 18:40 trace records two submitted requests followed by
+  their items leaving the assigned slots. Broader ground regression tests remain.
+- Add rate-limited diagnostics for remote controller snapshots, label UI refresh,
+  and controller UI scheduling failures. Live private-server traces confirm LB
+  capture and label UI refresh, but reject authoritative loot scheduling.
+- Log failed ground-loot scheduling when diagnostics are enabled and free the
+  pickup request when scheduling fails. Release build and all 23 suites passed.
+
 ## 1.3.1+rev.63 - 2026-10-05
 
 - Restore armed idle reticle-circle acquisition before the first snap-skill

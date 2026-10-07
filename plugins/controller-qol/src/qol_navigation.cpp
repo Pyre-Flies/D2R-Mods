@@ -145,6 +145,13 @@ using MenuMessageFn=void(__fastcall*)(void*,void*);
 MenuMessageFn originalMenuMessage=nullptr;
 bool menuHook=false,menuRemap=true;
 unsigned dedicatedPanels=0,subPanels=0;
+bool worldHudOpen=false;
+unsigned worldBlockingPanels=0;
+std::atomic<bool> groundInputActive{false};
+void PublishGroundInput() noexcept {
+    groundInputActive.store(ctx && enabled && isInGame &&
+        Probe::WorldGroundInput(isInGame(),worldHudOpen,dedicatedPanels,subPanels,worldBlockingPanels));
+}
 bool skillsHook=false;
 MenuMessageFn originalSkillsMessage=nullptr;
 uint64_t questTranslated=0,questReleased=0,skillsTranslated=0,skillsReleased=0;
@@ -690,13 +697,21 @@ auto OnMessage(const D2RL::PluginContext*,const D2RL::SharedEvents::UiMessageEve
         const std::string_view name=event->text;
         const unsigned bit=Probe::DedicatedPanelBit(name);
         const unsigned subBit=Probe::SubPanelBit(name);
+        const bool opening=command=="OpenPanel" || command=="OpenExclusivePanel";
+        const bool closing=command=="ClosePanel" || command=="UnloadPanel";
+        if(opening || closing) {
+            const auto worldBit=Probe::WorldBlockingPanelBit(name);
+            if(opening)worldBlockingPanels|=worldBit;else worldBlockingPanels&=~worldBit;
+            if(name=="HUDPanel")worldHudOpen=opening;
+        }
         if(command=="OpenPanel" || command=="OpenExclusivePanel") subPanels|=subBit;
         if(command=="ClosePanel" || command=="UnloadPanel") subPanels&=~subBit;
         if(command=="OpenPanel" || command=="OpenExclusivePanel") dedicatedPanels|=bit;
         if(command=="ClosePanel" || command=="UnloadPanel") dedicatedPanels&=~bit;
-        if(name=="HUDPanel" && (command=="ClosePanel" || command=="UnloadPanel")) {dedicatedPanels=0;subPanels=0;sharedPageGesture={};sharedPageInputActive.store(false);}
+        if(name=="HUDPanel" && (command=="ClosePanel" || command=="UnloadPanel")) {dedicatedPanels=0;subPanels=0;worldBlockingPanels=0;sharedPageGesture={};sharedPageInputActive.store(false);}
         if(bit==1 && (command=="ClosePanel" || command=="UnloadPanel")) {sharedPageGesture={};sharedPageInputActive.store(false);}
     }
+    PublishGroundInput();
     bool relevant=Probe::ShouldTrace(target,command);
     if(relevant) ++relevantMessages;
     if(Probe::IsControllerAction(target,command)) ++controllerMessages;
@@ -774,6 +789,7 @@ auto Command(D2R::Game::Client*,const D2RL::ConsoleCommandContext* cmd,void*) no
     } catch(...) {return D2RL::ConsoleCommandResult::Failed;}
 }
 void Cleanup() noexcept {
+    groundInputActive=false;worldHudOpen=false;worldBlockingPanels=0;
     ++filterRepairGeneration;filterRepair.remaining=0;filterUiThreads=nullptr;
     QolNativeRanges::Enable(false);
     sharedPageInputActive.store(false);
@@ -864,6 +880,7 @@ bool QolNavigation::GroundShortcutsAllowed() noexcept {
     std::lock_guard lock(stateMutex);
     return ctx && enabled && Probe::GroundShortcutsAllowed(dedicatedPanels,subPanels);
 }
+bool QolNavigation::GroundInputActive() noexcept {return groundInputActive.load();}
 
 bool QolNavigation::ChronicleRemapEnabled() noexcept {
     std::lock_guard lock(stateMutex);
@@ -880,9 +897,22 @@ void QolNavigation::PumpLabels(const D2RL::PluginContext* context,const D2RL::Th
         std::lock_guard taskLock(stateMutex);
         labelRecoveryQueued=false;
         if(!ctx || ctx!=owner || updatingLabels)return;
+        PublishGroundInput();
         // Re-entering controller mode must restore its labels even if Alt last
         // left them OFF. In keyboard mode EnsureLabels only marks refresh dirty.
-        if(!EnsureLabels())return;
+        const bool ensured=EnsureLabels();
+        if(trace) {
+            static ULONGLONG lastReport=0;
+            const auto now=GetTickCount64();
+            if(now-lastReport>=5000) {
+                lastReport=now;
+                char message[192];
+                std::snprintf(message,sizeof(message),"[QOL/RemoteTrace] labels uiCallback=1 inGame=%d controllerUi=%d filteredState=%d ensured=%d recoveryReady=%d",
+                    isInGame && isInGame(),ControllerQoL::IsControllerUiActive(),ReadFilteredLabelState(),ensured,labelRecoveryReady);
+                ctx->LogInfo(message);
+            }
+        }
+        if(!ensured)return;
         if(ControllerLabelsStale()) {
             labelRefreshNeeded=true;
             EnsureLabels();

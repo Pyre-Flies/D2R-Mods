@@ -1,3 +1,4 @@
+#include "plugin_coexistence.h"
 #include "identify_stat.h"
 #include "identify_stat_profile.h"
 #include "core_compatibility.h"
@@ -10,7 +11,7 @@ bool Guard(uintptr_t game) noexcept {
     using namespace QolIdentifyStatProfile;
     __try {
         return game && core && !std::memcmp(reinterpret_cast<void*>(game+0x2f5020),Entry,sizeof(Entry)) &&
-            *reinterpret_cast<const uintptr_t*>(game+0x3e2a218)==core+0x831de0 &&
+            QolCoexistence::StatSlot(game,core) &&
             !std::memcmp(reinterpret_cast<void*>(core+0x831de0),Wrapper,sizeof(Wrapper)) &&
             !std::memcmp(reinterpret_cast<void*>(core+0x3d8bd0),Body,sizeof(Body));
     } __except(EXCEPTION_EXECUTE_HANDLER) {return false;}

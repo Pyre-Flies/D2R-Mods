@@ -1,5 +1,49 @@
 # QOL potion placement: native contract and patch recovery
 
+## Remote client follow-up - 2026-10-06 candidate
+
+The root private-server log at 18:41:01.038 records controller activation on an
+inventory hp1 potion, with modifier active. At 18:41:01.095 (and repeated attempts
+at .606/.812 and 18:41:02.928), QOL cancels because authoritative scheduling is
+rejected. This is separate from the now initially working client ground-loot path.
+
+When, and only when, `runOnGameThread` returns `Unavailable`, a belt batch now
+uses the UI scheduler for copied SDK inventory snapshots and confirmation.
+The SDK inventory contract explicitly permits capturing the local player and
+reading/enumerating its inventory on the UI thread (`inventory.h:317`). The
+remote route never calls `editNativeItem` or `executeExistingItemTransaction`.
+It resolves the live client item by runtime ID using the existing guarded
+`0x09A5D0(id,4)` wrapper and compares type +0, class +4, ID +8, stored mode 0 at
++0xC, and packed item code from `0x36EF50`. These layout/lookup contracts are
+already recorded in REMOTE-GROUND-LOOT.md; exact lookup/code guards are reused
+from vendor_signatures.h. No new RVA or ABI is introduced.
+
+The existing belt function guards and reviewed stored-item sender ABI below
+remain in force. Only Inventory/page 0 may reach client native belt requests.
+Personal/Shared stash sources stop before preflight/withdrawal; they must not
+fall through to an authoritative SDK transaction. Inventory bulk refill scans
+only copied Inventory snapshots; Materials retains its existing separate UI
+request route. The original host/offline scheduler and SDK access remain intact.
+
+One request is submitted at a time, with the existing player/session token,
+exact source identity, native free-slot check and 1500 ms confirmation window.
+Only observing the same item in Belt advances the batch. Failure/timeout stops;
+no automatic resend or optimistic completion is added. Existing gameplay
+lifecycle callbacks reset client mode and reject old queued tokens.
+
+Automated validation: Release DLL builds; all 24 suites pass, including added
+remote-source guards and existing native argument/confirmation tests.
+The later candidate `AF78830BDFD0B1E44E80FA156CD1C18746F176016C0BC1EDB6809769805DEF61`
+produced user-confirmed LB+A potion placement: the 19:15:37.501 client log
+observed hp1 runtime ID 10 in belt slot 1. However, LB+R3 also selected an
+identify scroll (ID 9, packed code `0x20637369`, belt slot 2 at 19:16:41.643).
+`BeltCandidate` explicitly admitted `isc`/`tsc`; this was a candidate-selection
+error, not proof of an incorrect placement ABI. The correction excludes both
+scrolls and tomes from potion shortcuts and includes regression tests. Live
+refill with mixed scroll/potion inventory remains to retest.
+This does not yet qualify LB+X/Y transfers, identify, bulk stash or remote
+stash-source belt actions.
+
 Reviewed: 2026-09-23. Development build: **1.5.1-potions**. This is a test build on top of the user's 1.5.0 work, not a declaration of live-game qualification.
 
 ## Result and confidence
@@ -199,3 +243,63 @@ Look for `[QOL/Belt] Native contract admitted`, `Submitted ... awaiting SDK conf
 
 The user's 1.5.1 runtime evidence confirms ordinary belt moves; the retained timestamps and source-log hash are recorded in [LEGACY-REIMAGINED-MIGRATION.md](LEGACY-REIMAGINED-MIGRATION.md). Advanced stash counters require a separate native widget withdrawal route, documented in [MATERIALS-NATIVE-CONTRACT.md](MATERIALS-NATIVE-CONTRACT.md). The new route remains pending live qualification.
 
+
+## 2026-10-06: vendor scroll refill
+
+Scope: LB+R3 on vendor `isc` (Identify scroll) or `tsc` (Town Portal scroll)
+requests native Shift-buy for matching carried `ibk` / `tbk` tomes. Both scroll
+codes remain excluded from all belt candidates. This is a new test candidate,
+not a claim that the historical scroll-to-belt behavior above was correct.
+
+Provenance: reviewed local decrypted game capture `game-30812.exe`, SHA256
+`246DCB55785662194EE1103EF159ABD2DD37DCE66A7711BDC33CC519AE15FDFF`;
+Core 1.3.1-beta SHA256
+`2A868D013D2E0830BD2D9E04B918B19E46A73CF726C833E70D089B948FDEB5A2`.
+The capture is local evidence only, not a distributable asset. All RVAs below
+are relative to that game image and all contracts are build-specific.
+
+New native contract: `int32_t __fastcall MaximumStack(void* item)` at game
+`0x3719E0`. `vendor_tome_profile.h` guards all 183 bytes in
+`[0x3719E0,0x371A97)`, through the return at `0x371A96`.
+
+| Site | Reviewed meaning |
+| --- | --- |
+| `0x34B9D0` | Item unit type getter used by the maximum routine |
+| `0x371A36` -> `0x349860` | Obtain item class/row ID |
+| `0x371A40` -> `0x34A0E0` | Obtain item data flavor |
+| `0x371A4A` -> `0x314110` | Resolve item row from flavor and row ID |
+| `0x371A6A` | Read maximum-stack DWORD at item row `+0xF0` |
+| `0x371A7B` -> `0x2F5020` | Add item stat 254 (`0xFE`), layer zero |
+| `0x371A82..0x371A89` | Cap signed result at 511 (`0x1FF`) |
+
+A native stack/repair consumer at `0x110609..0x110630` checks stackability via
+`0x374660`, obtains quantity stat 70 at `0x11061F`, calls this maximum routine
+at `0x110629`, and compares quantity against maximum. This is capacity evidence,
+not a scroll-specific buying trace. The plugin does not hardcode a 20-charge
+limit; it refuses invalid quantities/maxima instead.
+
+The quantity bridge reuses the Identify stat profile: game `0x2F5020`, pointer
+slot `0x3E2A218` -> Core `0x831DE0`, reviewed wrapper/body at Core `0x3D8BD0`,
+and exact Core disk hash. The vendor, custom-grid and belt guards remain
+required. Each tome is rebound through ItemService and client unit lookup
+`0x9A5D0`, checking exact source identity/location, unit type/class/runtime ID,
+stored mode and native Inventory page zero before reading quantity/capacity.
+
+Purchase reuses the guarded `0x23FED0(panel, player, stock, false, true, true)`
+wrapper: buy, immediate, forced Shift. The existing `0x10D160` transaction
+forwards its Shift flag to `0x1114C0` at `0x10D72C..0x10D73A`. No new packet
+or local quantity edit is introduced. Stock is rebound to the visible vendor
+grid cell. Up to 32 matching Inventory tomes are captured, at least one must
+have room, and the aggregate charge count is recorded. A missing/full tome
+refuses the action before purchase. The request is sent once; a later UI
+snapshot observes charge growth within 1500 ms or ends unconfirmed without a
+retry. Native gold, book selection and purchase quantity remain game-owned.
+A charge increase alone does not prove every carried tome was filled.
+
+The tooltip says "Fill Tome". Existing R3 press latching and session-generation
+cancellation apply. Potion refill retains its existing path. Automated policy
+checks cover both scroll mappings, empty/full/modded capacities and forced-Shift
+arguments; all 27 suites pass, including DLL ABI/exports. These do not execute
+the native purchase. Live qualification is pending: both scroll types with
+partial/empty tomes, missing/full tomes, multiple tomes, insufficient gold,
+ordinary vendor potion refill, and offline/private-server operation.

@@ -12,6 +12,10 @@ void __fastcall Widget(void* widget,const int32_t* cell,uint8_t page) {
     ++calls; Check(widget && cell,"valid widget and synchronous coordinate storage");
     Check(cell[0]==0 && cell[1]==0 && page==0,"native inventory page must be zero, not destination enum one");
 }
+void __fastcall CubeWidget(void* widget,const int32_t* cell,uint8_t page) {
+    ++calls;Check(widget && cell,"Cube withdrawal has synchronous widget and coordinates");
+    Check(cell[0]==0 && cell[1]==0 && page==3,"Cube uses native page 3, not advanced destination 2");
+}
 void __fastcall One(void* item,void* owner,uint8_t destination) {
     ++calls; Check(item && owner && item!=owner,"proxy and stash owner are distinct");
     Check(destination==3,"advanced-stash request must select belt directly");
@@ -26,6 +30,11 @@ void __fastcall Buy(void* panel,void* player,void* item,bool sell,bool immediate
     Check(!sell && immediate && shift,"bulk purchase must force Shift without using sell flags");
 }
 int main() {
+    Check(QolVendor::TomeForScroll(D2RL::Items::MakeItemCode("isc"))==D2RL::Items::MakeItemCode("ibk"),"identify scroll fills identify tome");
+    Check(QolVendor::TomeForScroll(D2RL::Items::MakeItemCode("tsc"))==D2RL::Items::MakeItemCode("tbk"),"portal scroll fills portal tome");
+    Check(!QolVendor::TomeForScroll(D2RL::Items::MakeItemCode("hp5")) && !QolVendor::TomeForScroll(D2RL::Items::MakeItemCode("ibk")),"potions and tome stock do not take loose-scroll refill route");
+    Check(QolVendor::TomeRoom(0,20) && QolVendor::TomeRoom(99,100),"empty and modded-capacity tomes admit refill");
+    Check(!QolVendor::TomeRoom(20,20) && !QolVendor::TomeRoom(-1,20) && !QolVendor::TomeRoom(0,0) && !QolVendor::TomeRoom(0,512),"full and invalid tome quantities cannot purchase");
     using C=D2RL::Items::ItemContainer;
     int panel{},player{},saleItem{};
     const auto beforeBuy=buyCalls;
@@ -67,6 +76,11 @@ int main() {
     Check(!SubmitInventory(nullptr,&item) && !SubmitInventory(Widget,nullptr),"invalid inventory calls refused");
     Check(!SubmitBelt(One,&item,nullptr) && !SubmitBelt(nullptr,&item,&owner),"invalid belt calls refused");
     Check(calls==2,"refusal sends no request");
+    Check(SubmitCube(CubeWidget,&item),"advanced Cube withdrawal submits directly");
+    Check(calls==3,"one Cube withdrawal request");
+    Check(!SubmitCube(nullptr,&item) && !SubmitCube(CubeWidget,nullptr) && calls==3,"invalid Cube request cannot dispatch");
+    Check(DestinationContainer(Destination::Cube)==C::Cube && DestinationContainer(Destination::Belt)==C::Belt &&
+        DestinationContainer(Destination::Inventory)==C::Inventory,"confirm only requested destination, never another container increase");
     Check(Category(0)==nullptr && Category(1)==nullptr && Category(5)==nullptr,"ordinary/unknown tabs excluded");
     Check(std::strcmp(Category(2),"advancedstash_gems")==0,"gems layout mapping");
     Check(std::strcmp(Category(3),"advancedstash_materials")==0,"materials layout mapping");

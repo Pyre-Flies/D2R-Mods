@@ -4,6 +4,7 @@
 #include "materials_signatures.h"
 #include "plugin_compatibility.h"
 #include "native_d2r.h"
+#include "storage_focus.h"
 #include <windows.h>
 #include <mutex>
 #include <cstdio>
@@ -19,11 +20,17 @@ unsigned confirmed{}, family{};
 int64_t before{};
 ULONGLONG deadline{}, queuedAt{};
 D2RL::PlayerHandle player{};
+Destination destination{Destination::Inventory};
+D2RL::Items::ItemInfo requested{};
+uint64_t generation{};
+ULONGLONG requestedAt{};
 
 template<class T> T At(const D2RL::PluginContext* ctx, uintptr_t rva) noexcept {
     return reinterpret_cast<T>(ctx->exeBase+rva);
 }
 void Reset() noexcept {
+    ++generation;destination=Destination::Inventory;requested={};
+    requestedAt=GetTickCount64();
     active=queued=refill=waiting=seasonSet=false; confirmed=family=0; player=0; expectedTab=0; selectedRefillCode=0;
 }
 bool Validate(const D2RL::PluginContext* ctx) noexcept {
@@ -96,6 +103,17 @@ bool FocusMatches(const D2RL::PluginContext* ctx, const Slot& slot, const D2RL::
     } __except(EXCEPTION_EXECUTE_HANDLER) { return false; }
 }
 enum class Submission { Submitted, EmptyOrFull, Failed };
+bool HasCarriedCube(const D2RL::PluginContext* ctx) noexcept {
+    bool found=false;
+    const D2RL::Inventory::ItemFilter filter{D2RL::Inventory::ItemFilterSize,0,D2RL::Items::ContainerBit(D2RL::Items::ItemContainer::Inventory),0};
+    return inventory->forEachInventoryItem(ctx,player,&filter,
+        [](const D2RL::PluginContext*,const D2RL::Items::ItemInfo* item,void* user) noexcept {
+            if(item && QolIdentify::Code(item->code,D2RL::Items::MakeItemCode("box"))) {
+                *static_cast<bool*>(user)=true;return D2RL::Inventory::IterationAction::Stop;
+            }
+            return D2RL::Inventory::IterationAction::Continue;
+        },&found)==D2RL::Inventory::Result::Success && found;
+}
 Submission Submit(const D2RL::PluginContext* ctx, const Slot& slot, Destination destination) noexcept {
     if (!slot.widget || !slot.item) return Submission::EmptyOrFull;
     __try {
@@ -107,6 +125,9 @@ Submission Submit(const D2RL::PluginContext* ctx, const Slot& slot, Destination 
             // R8B=0 means inventory PAGE here; native wrapper maps it to
             // withdrawal DESTINATION 1, selects season owner, and finishes UI.
             if (!SubmitInventory(At<WithdrawWidgetFn>(ctx,0x2CF680),slot.widget)) return Submission::Failed;
+        } else if(destination==Destination::Cube) {
+            if(!HasCarriedCube(ctx))return Submission::EmptyOrFull;
+            if(!SubmitCube(At<WithdrawWidgetFn>(ctx,0x2CF680),slot.widget))return Submission::Failed;
         } else {
             void* local=D2R::Native::GetLocalPlayerUnit(ctx->exeBase);
             if (!local) return Submission::Failed;
@@ -128,7 +149,7 @@ Submission Submit(const D2RL::PluginContext* ctx, const Slot& slot, Destination 
 }
 bool Quantity(const D2RL::PluginContext* ctx, Destination destination, int64_t& value) noexcept {
     struct Sum { uint32_t code; int64_t quantity; } sum{code,0};
-    const auto container=destination==Destination::Belt ? D2RL::Items::ItemContainer::Belt : D2RL::Items::ItemContainer::Inventory;
+    const auto container=DestinationContainer(destination);
     const D2RL::Inventory::ItemFilter filter{D2RL::Inventory::ItemFilterSize,0,D2RL::Items::ContainerBit(container),0};
     const auto status=inventory->forEachInventoryItem(ctx,player,&filter,
         [](const D2RL::PluginContext*,const D2RL::Items::ItemInfo* info,void* user) noexcept {
@@ -139,9 +160,12 @@ bool Quantity(const D2RL::PluginContext* ctx, Destination destination, int64_t& 
     value=sum.quantity;
     return status==D2RL::Inventory::Result::Success;
 }
-void __cdecl Tick(const D2RL::PluginContext* ctx,void*) noexcept {
-    std::lock_guard lock(mutex); queued=false;
+void __cdecl Tick(const D2RL::PluginContext* ctx,void* token) noexcept {
+    std::lock_guard lock(mutex);
+    if(reinterpret_cast<uintptr_t>(token)!=generation)return;
+    queued=false;
     if (!ready || !active) return;
+    if(!refill && !waiting && GetTickCount64()-requestedAt>750) {Finish(ctx,"Cancelled: single withdrawal expired before submission");return;}
     D2RL::PlayerHandle current{};
     if (inventory->getLocalPlayer(ctx,&current)!=D2RL::Inventory::Result::Success || !current || (player && player!=current)) {
         Finish(ctx,"Cancelled: player/session changed"); return;
@@ -159,7 +183,6 @@ void __cdecl Tick(const D2RL::PluginContext* ctx,void*) noexcept {
     const bool previous=At<bool(__fastcall*)()>(ctx,0x23B980)();
     if (seasonSet && previous!=expectedPrevious) { Finish(ctx,"Stopped: stash season changed"); return; }
     expectedPrevious=previous; seasonSet=true;
-    const auto destination=refill?Destination::Belt:Destination::Inventory;
     if (waiting) {
         int64_t after{};
         if (!Quantity(ctx,destination,after)) { Finish(ctx,"Stopped: SDK observation unavailable"); return; }
@@ -167,7 +190,7 @@ void __cdecl Tick(const D2RL::PluginContext* ctx,void*) noexcept {
             ++confirmed; waiting=false;
             char message[180];
             std::snprintf(message,sizeof(message),"[QOL/Materials] Observed destination increase code=0x%08X destination=%s before=%lld after=%lld.",
-                code,refill?"belt":"inventory",static_cast<long long>(before),static_cast<long long>(after));
+                code,DestinationName(destination),static_cast<long long>(before),static_cast<long long>(after));
             ctx->LogInfo(message);
             if (!refill || !CanContinue(confirmed)) Finish(ctx,"Withdrawal complete");
             return;
@@ -176,6 +199,9 @@ void __cdecl Tick(const D2RL::PluginContext* ctx,void*) noexcept {
         return;
     }
     if (!Validate(ctx)) { ready=false; Finish(ctx,"Disabled: contract changed"); return; }
+    if(!refill && (!FocusMatches(ctx,slot,requested) || !QolStorageFocus::Matches(ctx,requested))) {
+        Finish(ctx,"Stopped: controller selection changed before withdrawal");return;
+    }
     if (!Quantity(ctx,destination,before)) { Finish(ctx,"Stopped: SDK baseline unavailable"); return; }
     const auto result=Submit(ctx,slot,destination);
     if (result==Submission::EmptyOrFull) {
@@ -185,7 +211,7 @@ void __cdecl Tick(const D2RL::PluginContext* ctx,void*) noexcept {
     if (result==Submission::Failed) { Finish(ctx,"Stopped: native withdrawal failed"); return; }
     waiting=true; deadline=GetTickCount64()+1500;
     char message[128];
-    std::snprintf(message,sizeof(message),"[QOL/Materials] Submitted code=0x%08X destination=%s; awaiting observation.",code,refill?"belt":"inventory");
+    std::snprintf(message,sizeof(message),"[QOL/Materials] Submitted code=0x%08X destination=%s; awaiting observation.",code,DestinationName(destination));
     ctx->LogInfo(message);
 }
 void __cdecl Session(const D2RL::PluginContext*,const D2RL::Lifecycle::GameplayEvent*,void*) noexcept {
@@ -210,13 +236,13 @@ bool Initialize(const D2RL::PluginContext* ctx) noexcept {
 }
 void Shutdown() noexcept { std::lock_guard lock(mutex); ready=false; Reset(); }
 bool Busy() noexcept { std::lock_guard lock(mutex); return active; }
-bool TryWithdrawFocused(const D2RL::PluginContext* ctx,const D2RL::Items::ItemInfo& info) noexcept {
+static bool TryWithdraw(const D2RL::PluginContext* ctx,const D2RL::Items::ItemInfo& info,Destination target) noexcept {
     std::lock_guard lock(mutex);
     if (!ready || !AdvancedProxyCandidate(info.container)) return false;
     if (!Validate(ctx)) { ready=false; return false; }
     const auto slot=Resolve(ctx,info.code);
     TraceResolve(ctx,slot,info.code,"focus");
-    if (!FocusMatches(ctx,slot,info)) {
+    if (!FocusMatches(ctx,slot,info) || !QolStorageFocus::Matches(ctx,info)) {
         if (slot.tab==0 || slot.tab==1) return false;
         char message[160];
         std::snprintf(message,sizeof(message),"[QOL/Materials] Focus rejected runtimeId=%u container=%u; unresolved/advanced stash must not use ordinary fallback.",
@@ -225,9 +251,23 @@ bool TryWithdrawFocused(const D2RL::PluginContext* ctx,const D2RL::Items::ItemIn
         ctx->LogWarn("[QOL/Materials] Focus does not match a current advanced-stash binding; ordinary same-code fallback suppressed.");
         return true;
     }
+    if(target==Destination::Belt && (slot.tab!=3 ||
+       (info.code!=RejuvenationCode(0) && info.code!=RejuvenationCode(1))))return true;
     if (active) return true;
-    Reset(); active=true; code=info.code; expectedTab=slot.tab;
+    Reset(); active=true; code=info.code; expectedTab=slot.tab;destination=target;requested=info;
+    expectedPrevious=At<bool(__fastcall*)()>(ctx,0x23B980)();seasonSet=true;
     // Tick is queued later; no pointer leaves this UI callback.
+    return true;
+}
+bool TryWithdrawFocused(const D2RL::PluginContext* ctx,const D2RL::Items::ItemInfo& info) noexcept {return TryWithdraw(ctx,info,Destination::Inventory);}
+bool TryWithdrawToBelt(const D2RL::PluginContext* ctx,const D2RL::Items::ItemInfo& info) noexcept {return TryWithdraw(ctx,info,Destination::Belt);}
+bool TryWithdrawToCube(const D2RL::PluginContext* ctx,const D2RL::Items::ItemInfo& info) noexcept {return TryWithdraw(ctx,info,Destination::Cube);}
+bool RequestSingleBelt(const D2RL::Items::ItemInfo& info) noexcept {
+    std::lock_guard lock(mutex);
+    if(!ready || !AdvancedProxyCandidate(info.container) ||
+       (info.code!=RejuvenationCode(0) && info.code!=RejuvenationCode(1)))return false;
+    if(active)return true;
+    Reset();active=true;code=info.code;expectedTab=3;destination=Destination::Belt;requested=info;
     return true;
 }
 uint32_t SelectedStashTab(const D2RL::PluginContext* ctx) noexcept {
@@ -241,14 +281,14 @@ bool RequestFocusedRefill(const D2RL::PluginContext* ctx,const D2RL::Items::Item
     const auto slot=Resolve(ctx,info.code);
     if (slot.tab!=3 || !FocusMatches(ctx,slot,info)) return false;
     if (active) return true;
-    Reset(); active=refill=true; expectedTab=3; selectedRefillCode=info.code;
+    Reset(); active=refill=true; expectedTab=3; selectedRefillCode=info.code;destination=Destination::Belt;
     TraceResolve(ctx,slot,info.code,"focused-refill");
     return true;
 }
 void RequestRefill() noexcept {
     std::lock_guard lock(mutex);
     if (!ready || active) return;
-    Reset(); active=refill=true; expectedTab=3;
+    Reset(); active=refill=true; expectedTab=3;destination=Destination::Belt;
 }
 void Pump(const D2RL::PluginContext* ctx) noexcept {
     std::lock_guard lock(mutex);
@@ -258,6 +298,6 @@ void Pump(const D2RL::PluginContext* ctx) noexcept {
         return;
     }
     queued=true; queuedAt=GetTickCount64();
-    if (threads->runOnUiThread(ctx,Tick,nullptr)!=D2RL::Threads::Result::Success) Finish(ctx,"Cancelled: UI scheduling refused");
+    if (threads->runOnUiThread(ctx,Tick,reinterpret_cast<void*>(generation))!=D2RL::Threads::Result::Success) Finish(ctx,"Cancelled: UI scheduling refused");
 }
 }
