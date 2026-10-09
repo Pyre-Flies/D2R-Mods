@@ -226,30 +226,32 @@ void ResolveSelection(View& view,bool allowPreview=false) noexcept {
 }
 
 void* __fastcall Selected(void* controller,int skill) noexcept {
-    const int previousPreview=previewSkill.load();
+    const int previousPreview=motionSettings.verbose?previewSkill.load():-1;
     void* const nativeTarget=originalSelected(controller,skill);
     View view{};
     // Active local controller skill only. Never use idle preview to suppress
     // native interactions, mouse targeting, or another skill's selected unit.
     if(!ReadView(nullptr,view,false)) return nativeTarget;
     if(Aim::UsesNativeUnitTarget(skill) && skill==view.activeSkill) {
-        unsigned type{}, id{};
-        const bool readable=ReadTargetIdentity(nativeTarget,type,id);
-        const auto now=GetTickCount64();
-        const std::uint64_t identity=(static_cast<std::uint64_t>(type)<<32)|id;
-        static thread_local std::uint64_t lastIdentity{}, lastReport{};
-        // Repeated queries in one frame must not consume the whole trace budget.
-        if((!lastReport || identity!=lastIdentity || now-lastReport>=1000) && nativeUnitSelectionReports.fetch_add(1)<64) {
-            lastIdentity=identity; lastReport=now;
-            char message[224];
-            std::snprintf(message,sizeof(message),"[QOL/AimUnit] selected skill=%d previousPreview=%d present=%u readable=%u type=%u id=%u; native unit route retained.",
-                skill,previousPreview,nativeTarget!=nullptr,readable,type,id);
-            ctx->LogInfo(message);
+        if(motionSettings.verbose) {
+            unsigned type{}, id{};
+            const bool readable=ReadTargetIdentity(nativeTarget,type,id);
+            const auto now=GetTickCount64();
+            const std::uint64_t identity=(static_cast<std::uint64_t>(type)<<32)|id;
+            static thread_local std::uint64_t lastIdentity{}, lastReport{};
+            // Repeated queries in one frame must not consume the whole trace budget.
+            if((!lastReport || identity!=lastIdentity || now-lastReport>=1000) && nativeUnitSelectionReports.fetch_add(1)<64) {
+                lastIdentity=identity; lastReport=now;
+                char message[224];
+                std::snprintf(message,sizeof(message),"[QOL/AimUnit] selected skill=%d previousPreview=%d present=%u readable=%u type=%u id=%u; native unit route retained.",
+                    skill,previousPreview,nativeTarget!=nullptr,readable,type,id);
+                ctx->LogInfo(message);
+            }
         }
         return nativeTarget;
     }
     if(!Aim::CoordinateRoute(manualAim.load(),skill,view.activeSkill,skillSettings)) return nativeTarget;
-    if(nativeTarget) {
+    if(motionSettings.verbose && nativeTarget) {
         const auto count=selectedSuppressionCount.fetch_add(1)+1;
         if(count<=32) {
             char message[160];
@@ -270,41 +272,43 @@ void __fastcall Lookup(void* controller,void* player,bool adjust,float* x,float*
     if(Aim::UsesNativeUnitTarget(view.skill)) return;
     View preview{};
     AcquireSRWLockExclusive(&stateLock);
-    preview=published;
+    if(motionSettings.verbose) preview=published;
     ResolveSelection(view);
     lastLookup=view;
     ReleaseSRWLockExclusive(&stateLock);
     __try { *x=view.destination.x; *y=view.destination.y; }
     __except(EXCEPTION_EXECUTE_HANDLER) { return; }
-    const auto count=lookupCount.fetch_add(1)+1;
-    if(count<=128) {
-        char trace[320];
-        std::snprintf(trace,sizeof(trace),"[QOL/AimTrace] lookup=%u skill=%d previewSkill=%d previewActive=%d previewId=%u previewAge=%llu chosenId=%u player=(%.2f,%.2f) facing=(%.3f,%.3f).",
-            count,view.skill,preview.skill,preview.activeSkill,preview.targetId,
-            static_cast<unsigned long long>(preview.valid && view.tick>=preview.tick?view.tick-preview.tick:999999),
-            view.targetId,view.player.x,view.player.y,view.facing.x,view.facing.y);
-        ctx->LogInfo(trace);
-        char message[256];
-        std::snprintf(message,sizeof(message),"[QOL/Aim] lookup #%u skill=%d range=%.2f center=(%.2f,%.2f) destination=(%.2f,%.2f) target=%s id=%u.",
-            count,view.skill,view.distance,view.center.x,view.center.y,view.destination.x,view.destination.y,view.target?"monster":"ground",view.targetId);
-        ctx->LogInfo(message);
-        if(view.target && view.skill!=Aim::Whirlwind && skillSettings.LeadMillisecondsPerTile(view.skill) &&
-            Aim::DistanceSquared(view.destination,view.targetPosition)>0.0001f) {
-            char lead[320];
-            std::snprintf(lead,sizeof(lead),"[QOL/AimLead] skill=%d id=%u travelMsPerTile=%u capMs=%u capTiles=%u target=(%.2f,%.2f) cast=(%.2f,%.2f) lead=%.2f.",
-                view.skill,view.targetId,skillSettings.LeadMillisecondsPerTile(view.skill),skillSettings.LeadMaxMilliseconds(view.skill),skillSettings.LeadMaxTiles(view.skill),view.targetPosition.x,view.targetPosition.y,
-                view.destination.x,view.destination.y,std::sqrt(Aim::DistanceSquared(view.destination,view.targetPosition)));
-            ctx->LogInfo(lead);
-        }
-        if(skillSettings.Snaps(view.skill)) {
-            const auto& d=view.snapDiagnostics;
-            char detail[280];
-            std::snprintf(detail,sizeof(detail),"[QOL/Aim] snap decision lookup=%u fresh=%u expired=%u outsideCircle=%u outsideRange=%u lastRejected=%u rejectedAge=%llu targetAge=%llu centerDistance=%.2f.",
-                count,d.fresh,d.expired,d.outsideCircle,d.outsideRange,d.rejectedId,
-                static_cast<unsigned long long>(d.rejectedTick && view.tick>=d.rejectedTick?view.tick-d.rejectedTick:999999),
-                static_cast<unsigned long long>(view.target && view.tick>=view.targetTick?view.tick-view.targetTick:999999),
-                view.target?std::sqrt(Aim::DistanceSquared(view.center,view.destination)):-1.0f);
-            ctx->LogInfo(detail);
+    if(motionSettings.verbose) {
+        const auto count=lookupCount.fetch_add(1)+1;
+        if(count<=128) {
+            char trace[320];
+            std::snprintf(trace,sizeof(trace),"[QOL/AimTrace] lookup=%u skill=%d previewSkill=%d previewActive=%d previewId=%u previewAge=%llu chosenId=%u player=(%.2f,%.2f) facing=(%.3f,%.3f).",
+                count,view.skill,preview.skill,preview.activeSkill,preview.targetId,
+                static_cast<unsigned long long>(preview.valid && view.tick>=preview.tick?view.tick-preview.tick:999999),
+                view.targetId,view.player.x,view.player.y,view.facing.x,view.facing.y);
+            ctx->LogInfo(trace);
+            char message[256];
+            std::snprintf(message,sizeof(message),"[QOL/Aim] lookup #%u skill=%d range=%.2f center=(%.2f,%.2f) destination=(%.2f,%.2f) target=%s id=%u.",
+                count,view.skill,view.distance,view.center.x,view.center.y,view.destination.x,view.destination.y,view.target?"monster":"ground",view.targetId);
+            ctx->LogInfo(message);
+            if(view.target && view.skill!=Aim::Whirlwind && skillSettings.LeadMillisecondsPerTile(view.skill) &&
+                Aim::DistanceSquared(view.destination,view.targetPosition)>0.0001f) {
+                char lead[320];
+                std::snprintf(lead,sizeof(lead),"[QOL/AimLead] skill=%d id=%u travelMsPerTile=%u capMs=%u capTiles=%u target=(%.2f,%.2f) cast=(%.2f,%.2f) lead=%.2f.",
+                    view.skill,view.targetId,skillSettings.LeadMillisecondsPerTile(view.skill),skillSettings.LeadMaxMilliseconds(view.skill),skillSettings.LeadMaxTiles(view.skill),view.targetPosition.x,view.targetPosition.y,
+                    view.destination.x,view.destination.y,std::sqrt(Aim::DistanceSquared(view.destination,view.targetPosition)));
+                ctx->LogInfo(lead);
+            }
+            if(skillSettings.Snaps(view.skill)) {
+                const auto& d=view.snapDiagnostics;
+                char detail[280];
+                std::snprintf(detail,sizeof(detail),"[QOL/Aim] snap decision lookup=%u fresh=%u expired=%u outsideCircle=%u outsideRange=%u lastRejected=%u rejectedAge=%llu targetAge=%llu centerDistance=%.2f.",
+                    count,d.fresh,d.expired,d.outsideCircle,d.outsideRange,d.rejectedId,
+                    static_cast<unsigned long long>(d.rejectedTick && view.tick>=d.rejectedTick?view.tick-d.rejectedTick:999999),
+                    static_cast<unsigned long long>(view.target && view.tick>=view.targetTick?view.tick-view.targetTick:999999),
+                    view.target?std::sqrt(Aim::DistanceSquared(view.center,view.destination)):-1.0f);
+                ctx->LogInfo(detail);
+            }
         }
     }
     AcquireSRWLockExclusive(&stateLock);
@@ -358,7 +362,7 @@ bool __fastcall UnitTest(void* controller,void* player,void* candidate) noexcept
     const auto trace=candidateTrace;
     candidateTrace=previousTrace;
     scoringWindow=previous;
-    if(nativeUnit && trace.calls && trace.returnedScore>=0 && nativeUnitCandidateReports.fetch_add(1)<64) {
+    if(motionSettings.verbose && nativeUnit && trace.calls && trace.returnedScore>=0 && nativeUnitCandidateReports.fetch_add(1)<64) {
         char message[224];
         std::snprintf(message,sizeof(message),"[QOL/AimUnit] candidate active=%d preview=%d type=%u id=%u nativeResult=%u scoreCalls=%u native=%.3f returned=%.3f.",
             view.activeSkill,view.skill,unitType,unitId,result,trace.calls,trace.nativeScore,trace.returnedScore);
@@ -371,24 +375,26 @@ bool __fastcall UnitTest(void* controller,void* player,void* candidate) noexcept
         AcquireSRWLockExclusive(&stateLock);
         snapBook.Observe(view.playerId,id,position,GetTickCount64(),eligible);
         ReleaseSRWLockExclusive(&stateLock);
-        const auto count=candidateCount.fetch_add(1)+1;
-        const bool previewNear=mode==Aim::ObservationMode::MeteorPreviewCircle && Aim::Score(view.center,position,motionSettings.snapRadius)>=0;
-        auto& traceReports=view.activeSkill>=0?activeSnapTraceReports:idleSnapTraceReports;
-        if(Aim::Score(view.center,position,motionSettings.snapRadius)>=0 && traceReports.fetch_add(1)<128) {
-            const float facingDot=(position.x-view.player.x)*view.facing.x+(position.y-view.player.y)*view.facing.y;
-            char detail[384];
-            std::snprintf(detail,sizeof(detail),"[QOL/AimTrace] candidate=%u active=%d previewSkill=%d override=%u eligible=%u scoreCalls=%u category=%d native=%.3f returned=%.3f facingDot=%.3f centerDistance=%.2f tick=%llu.",
-                id,view.activeSkill,view.skill,Aim::OverrideScoring(manualAim.load(),view.activeSkill,skillSettings,view.skill),eligible,
-                trace.calls,trace.category,trace.nativeScore,trace.returnedScore,facingDot,
-                std::sqrt(Aim::DistanceSquared(view.center,position)),static_cast<unsigned long long>(view.tick));
-            ctx->LogInfo(detail);
-        }
-        const bool reportPreview=previewNear && previewCandidateReports.fetch_add(1)<24;
-        if(reportPreview || (count<=64 && (eligible || count<=8))) {
-            char message[192];
-            std::snprintf(message,sizeof(message),"[QOL/Aim] candidate #%u id=%u eligible=%u source=%s center=(%.2f,%.2f) position=(%.2f,%.2f).",
-                count,id,eligible,mode==Aim::ObservationMode::MeteorPreviewCircle?"preview-circle":"active-snap",view.center.x,view.center.y,position.x,position.y);
-            ctx->LogInfo(message);
+        if(motionSettings.verbose) {
+            const auto count=candidateCount.fetch_add(1)+1;
+            const bool previewNear=mode==Aim::ObservationMode::MeteorPreviewCircle && Aim::Score(view.center,position,motionSettings.snapRadius)>=0;
+            auto& traceReports=view.activeSkill>=0?activeSnapTraceReports:idleSnapTraceReports;
+            if(Aim::Score(view.center,position,motionSettings.snapRadius)>=0 && traceReports.fetch_add(1)<128) {
+                const float facingDot=(position.x-view.player.x)*view.facing.x+(position.y-view.player.y)*view.facing.y;
+                char detail[384];
+                std::snprintf(detail,sizeof(detail),"[QOL/AimTrace] candidate=%u active=%d previewSkill=%d override=%u eligible=%u scoreCalls=%u category=%d native=%.3f returned=%.3f facingDot=%.3f centerDistance=%.2f tick=%llu.",
+                    id,view.activeSkill,view.skill,Aim::OverrideScoring(manualAim.load(),view.activeSkill,skillSettings,view.skill),eligible,
+                    trace.calls,trace.category,trace.nativeScore,trace.returnedScore,facingDot,
+                    std::sqrt(Aim::DistanceSquared(view.center,position)),static_cast<unsigned long long>(view.tick));
+                ctx->LogInfo(detail);
+            }
+            const bool reportPreview=previewNear && previewCandidateReports.fetch_add(1)<24;
+            if(reportPreview || (count<=64 && (eligible || count<=8))) {
+                char message[192];
+                std::snprintf(message,sizeof(message),"[QOL/Aim] candidate #%u id=%u eligible=%u source=%s center=(%.2f,%.2f) position=(%.2f,%.2f).",
+                    count,id,eligible,mode==Aim::ObservationMode::MeteorPreviewCircle?"preview-circle":"active-snap",view.center.x,view.center.y,position.x,position.y);
+                ctx->LogInfo(message);
+            }
         }
     }
     return result;
@@ -397,8 +403,13 @@ bool __fastcall UnitTest(void* controller,void* player,void* candidate) noexcept
 float __fastcall PointScore(void* controller,void* player,const float* position,int category,int profile) noexcept {
     const float nativeScore=originalPointScore(controller,player,position,category,profile);
     if(candidateTrace.active) {
-        ++candidateTrace.calls; candidateTrace.nativeScore=nativeScore; candidateTrace.returnedScore=nativeScore;
-        candidateTrace.category=category; candidateTrace.categories.Observe(category);
+        // Category observation is functional: preserve the NPC/snap-cache gate
+        // even when all diagnostic counters and score copies are disabled.
+        candidateTrace.categories.Observe(category);
+        if(motionSettings.verbose) {
+            ++candidateTrace.calls; candidateTrace.nativeScore=nativeScore; candidateTrace.returnedScore=nativeScore;
+            candidateTrace.category=category;
+        }
     }
     if(!installed.load() || !enabled.load() || !inSession.load() || !manualAim.load() || !scoringWindow.active || scoringWindow.player!=player) return nativeScore;
     // Keep NPC/friendly/dead/unknown categories on native geometry, including
@@ -411,12 +422,14 @@ float __fastcall PointScore(void* controller,void* player,const float* position,
     __try {
         if(scoringWindow.candidate && position) score=Aim::Score(scoringWindow.center,{position[0],position[1]},motionSettings.snapRadius);
     } __except(EXCEPTION_EXECUTE_HANDLER) { return nativeScore; }
-    if(candidateTrace.active) candidateTrace.returnedScore=score;
-    const auto count=scoringCount.fetch_add(1)+1;
-    if(count<=8) {
-        char message[160];
-        std::snprintf(message,sizeof(message),"[QOL/Aim] Aim circle score #%u category=%d profile=%d native=%.3f circle=%.3f.",count,category,profile,nativeScore,score);
-        ctx->LogInfo(message);
+    if(motionSettings.verbose && candidateTrace.active) candidateTrace.returnedScore=score;
+    if(motionSettings.verbose) {
+        const auto count=scoringCount.fetch_add(1)+1;
+        if(count<=8) {
+            char message[160];
+            std::snprintf(message,sizeof(message),"[QOL/Aim] Aim circle score #%u category=%d profile=%d native=%.3f circle=%.3f.",count,category,profile,nativeScore,score);
+            ctx->LogInfo(message);
+        }
     }
     return score;
 }
@@ -458,22 +471,26 @@ int __fastcall Cast(void* game,void* player,unsigned x,unsigned y,unsigned flag,
     // Pass-through observer: never rewrites packets, coordinates or server rules.
     const int result=originalCast(game,player,x,y,flag,selectedSkill);
     if(observed) {
-        sample.sequence=castCount.fetch_add(1)+1;
-        char message[224];
-        std::snprintf(message,sizeof(message),"[QOL/Aim] cast #%u skill=%d start=(%.0f,%.0f) request=(%u,%u) distance=%.2f result=%d (source unclassified).",
-            sample.sequence,skill,sample.start.x,sample.start.y,x,y,std::sqrt(Aim::DistanceSquared(sample.start,sample.requested)),result);
-        if(sample.sequence<=128) ctx->LogInfo(message);
+        sample.sequence=motionSettings.verbose?castCount.fetch_add(1)+1:0;
+        if(motionSettings.verbose && sample.sequence<=128) {
+            char message[224];
+            std::snprintf(message,sizeof(message),"[QOL/Aim] cast #%u skill=%d start=(%.0f,%.0f) request=(%u,%u) distance=%.2f result=%d (source unclassified).",
+                sample.sequence,skill,sample.start.x,sample.start.y,x,y,std::sqrt(Aim::DistanceSquared(sample.start,sample.requested)),result);
+            ctx->LogInfo(message);
+        }
         View lookup{};
         AcquireSRWLockShared(&stateLock); lookup=lastLookup; ReleaseSRWLockShared(&stateLock);
         if(lookup.valid && lookup.playerId==sample.playerId && lookup.skill==skill && Aim::Fresh(sample.tick,lookup.tick,200)) {
             AcquireSRWLockExclusive(&stateLock);
             lastCastMarker={true,sample.playerId,sample.requested,sample.tick};
             ReleaseSRWLockExclusive(&stateLock);
-            char alignment[224];
-            std::snprintf(alignment,sizeof(alignment),"[QOL/Aim] recent lookup comparison cast=%u target=%u snapped=%u age=%llu ms coordinateError=%.2f (temporal match, not transaction proof).",
-                sample.sequence,lookup.targetId,lookup.target,static_cast<unsigned long long>(sample.tick-lookup.tick),
-                std::sqrt(Aim::DistanceSquared(sample.requested,lookup.destination)));
-            if(sample.sequence<=128) ctx->LogInfo(alignment);
+            if(motionSettings.verbose && sample.sequence<=128) {
+                char alignment[224];
+                std::snprintf(alignment,sizeof(alignment),"[QOL/Aim] recent lookup comparison cast=%u target=%u snapped=%u age=%llu ms coordinateError=%.2f (temporal match, not transaction proof).",
+                    sample.sequence,lookup.targetId,lookup.target,static_cast<unsigned long long>(sample.tick-lookup.tick),
+                    std::sqrt(Aim::DistanceSquared(sample.requested,lookup.destination)));
+                ctx->LogInfo(alignment);
+            }
         }
         if(sample.active) {
             AcquireSRWLockExclusive(&stateLock); pending=sample; observedDisplacement=-1; ReleaseSRWLockExclusive(&stateLock);
@@ -633,7 +650,9 @@ void SkillTreeTick(std::uint64_t now) noexcept {
         snapBook={};whirlLockActive=false;lastLookup={};lastCastMarker={};
         ReleaseSRWLockExclusive(&stateLock);
         if(!value && previewSkill.load()==id)previewSkill.store(-1);
-        char message[192];std::snprintf(message,sizeof(message),"[QOL/Aim] Skill-tree R3: skill=%d aim=%s; saved numeric configuration.",id,value?"ON":"OFF");ctx->LogInfo(message);
+        if(motionSettings.verbose) {
+            char message[192];std::snprintf(message,sizeof(message),"[QOL/Aim] Skill-tree R3: skill=%d aim=%s; saved numeric configuration.",id,value?"ON":"OFF");ctx->LogInfo(message);
+        }
     } catch(...) {treeSaveFailureUntil.store(now+3000);ctx->LogWarn("[QOL/Aim] Skill-tree toggle failed; setting unchanged.");}
 }
 
@@ -658,7 +677,7 @@ void __cdecl UiTick(const D2RL::PluginContext*,void*) noexcept {
             D2RL::Overlay::Metrics metrics{}; metrics.structSize=sizeof(metrics);
             if(overlay->getMetrics(ctx,&metrics)==D2RL::Overlay::Result::Success)
                 view.projectionValid=ProbeProjection(view,metrics.screenWidth,metrics.screenHeight);
-            if(lastProjectionStatus.exchange(view.projectionStatus)!=view.projectionStatus && projectionReports.load()<8) {
+            if(motionSettings.verbose && lastProjectionStatus.exchange(view.projectionStatus)!=view.projectionStatus && projectionReports.load()<8) {
                 projectionReports.fetch_add(1);
                 char message[192];
                 std::snprintf(message,sizeof(message),"[QOL/Aim] projection status=%u (0=metrics unavailable,1=renderer unavailable,2=ray miss,3=world bounds,4=geometry check,5=singular,6=ready,7=exception,8=disabled).",view.projectionStatus);
@@ -691,11 +710,11 @@ void __cdecl UiTick(const D2RL::PluginContext*,void*) noexcept {
     }
     published=view;
     ReleaseSRWLockExclusive(&stateLock);
-    if(completed.active) {
+    if(motionSettings.verbose && completed.active && completed.sequence<=128) {
         char message[200];
         std::snprintf(message,sizeof(message),"[QOL/Aim] Teleport sample #%u displacement=%.2f requested=%.2f elapsed=%llu ms (single-cast test; movement can affect measurement).",
             completed.sequence,displacement,std::sqrt(Aim::DistanceSquared(completed.start,completed.requested)),static_cast<unsigned long long>(now-completed.tick));
-        if(completed.sequence<=128) ctx->LogInfo(message);
+        ctx->LogInfo(message);
     }
 }
 
@@ -820,7 +839,7 @@ void __cdecl Frame(const D2RL::PluginContext*,const D2RL::Overlay::Frame* frame,
     const auto lineResult=overlay->drawLine(ctx,&bar);
     // One diagnostic per session plus explicit failures (capped) makes missing
     // presentation distinguishable from missing callbacks or invalid aim.
-    if(overlayReports.load()==0 || ((textResult!=D2RL::Overlay::Result::Success || lineResult!=D2RL::Overlay::Result::Success) && overlayReports.load()<4)) {
+    if(motionSettings.verbose && (overlayReports.load()==0 || ((textResult!=D2RL::Overlay::Result::Success || lineResult!=D2RL::Overlay::Result::Success) && overlayReports.load()<4))) {
         overlayReports.fetch_add(1);
         char message[224];
         std::snprintf(message,sizeof(message),"[QOL/Aim] overlay frame=%llu size=%.0fx%.0f textResult=%u lineResult=%u fresh=%u projection=%u rendererGuard=%u clipCorrection=%u (0=success).",
@@ -915,11 +934,11 @@ D2RL::Input::ActionResult __cdecl Control(const D2RL::PluginContext*,const D2RL:
     if(!ready.load() || !event || event->kind!=D2RL::Input::ActionEventKind::Pressed) return D2RL::Input::ActionResult::Ignored;
     switch(reinterpret_cast<std::uintptr_t>(user)) {
         case 1: enabled.store(!enabled.load()); manualAim.store(false); requireStickRelease.store(false);
-            AcquireSRWLockExclusive(&stateLock); snapBook={}; whirlLockActive=false; lastLookup={}; lastCastMarker={}; ReleaseSRWLockExclusive(&stateLock); ctx->LogInfo(enabled.load()?"[QOL/Aim] Enabled.":"[QOL/Aim] Disabled; native aim restored."); break;
+            AcquireSRWLockExclusive(&stateLock); snapBook={}; whirlLockActive=false; lastLookup={}; lastCastMarker={}; ReleaseSRWLockExclusive(&stateLock); if(motionSettings.verbose) ctx->LogInfo(enabled.load()?"[QOL/Aim] Enabled.":"[QOL/Aim] Disabled; native aim restored."); break;
         case 2:
             AcquireSRWLockExclusive(&stateLock); retainedOffsetValid=false; cursorMotion={}; snapBook={}; whirlLockActive=false; lastLookup={}; lastCastMarker={}; ReleaseSRWLockExclusive(&stateLock);
-            requestedDistance.store(Aim::DefaultDistance); ctx->LogInfo("[QOL/Aim] Recenter pending: 20 tiles along current facing."); break;
-        case 3: reverseY.store(!reverseY.load()); ctx->LogInfo(reverseY.load()?"[QOL/Aim] Y inverted.":"[QOL/Aim] Y normal."); break;
+            requestedDistance.store(Aim::DefaultDistance); if(motionSettings.verbose) ctx->LogInfo("[QOL/Aim] Recenter pending: 20 tiles along current facing."); break;
+        case 3: reverseY.store(!reverseY.load()); if(motionSettings.verbose) ctx->LogInfo(reverseY.load()?"[QOL/Aim] Y inverted.":"[QOL/Aim] Y normal."); break;
     }
     return D2RL::Input::ActionResult::Handled;
 }
@@ -980,12 +999,12 @@ bool Install() noexcept {
     castObserverInstalled.store(observer==Aim::CastObserverState::Installed);
     if(observer==Aim::CastObserverState::Unavailable)
         ctx->LogWarn("[QOL/Aim] Optional cast observer unavailable at +0x4FDB40 (changed bytes or hook ownership); cursor/snapping/reticles retained. Cast diagnostics and Teleport measurements unavailable; target requests/UI retain skill isolation.");
-    else if(observer==Aim::CastObserverState::Disabled)
+    else if(motionSettings.verbose && observer==Aim::CastObserverState::Disabled)
         ctx->LogInfo("[QOL/Aim] Cast observer disabled by configuration; cursor/snapping/reticles retained.");
-    else
+    else if(motionSettings.verbose)
         ctx->LogInfo("[QOL/Aim] Cast observer installed at +0x4FDB40; full cast diagnostics/reset observation retained.");
     installed.store(true);
-    ctx->LogInfo("[QOL/Aim] Integrated aim installed: configured skill catalog; Teleport/Leap ground-only; Whirlwind snap/pass-through; projection sampled at configured rate.");
+    if(motionSettings.verbose) ctx->LogInfo("[QOL/Aim] Integrated aim installed: configured skill catalog; Teleport/Leap ground-only; Whirlwind snap/pass-through; projection sampled at configured rate.");
     return true;
 }
 void __cdecl Lifecycle(const D2RL::PluginContext*,const D2RL::Lifecycle::GameplayEvent* event,void*) noexcept {
@@ -1018,16 +1037,18 @@ bool QolAim::Initialize(const D2RL::PluginContext* context,bool qolEnabled) noex
         ctx->LogWarn("[QOL/Aim] Standalone aim module loaded; integrated aim disabled to avoid duplicate hooks.");
         return false;
     }
-    char configMessage[224];
-    std::snprintf(configMessage,sizeof(configMessage),"[QOL/Aim] Cursor settings: deadzone=%.2f initial_speed=%.2f maximum_speed=%.2f acceleration_seconds=%.2f (restart to reload).",
-        motionSettings.deadzone,motionSettings.initialSpeed,motionSettings.maximumSpeed,motionSettings.accelerationSeconds);
-    ctx->LogInfo(configMessage);
-    char featureMessage[256];
-    std::snprintf(featureMessage,sizeof(featureMessage),"[QOL/Aim] Features: snapping=%u radius=%.2f switch_advantage=%.2f overlay=%u debug=%u projection_hz=%.1f smoothing_ms=%.1f.",
-        motionSettings.snapping,motionSettings.snapRadius,motionSettings.switchAdvantage,motionSettings.overlay,motionSettings.debugOverlay,motionSettings.projectionHz,motionSettings.overlaySmoothingMs);
-    ctx->LogInfo(featureMessage);
-    std::snprintf(featureMessage,sizeof(featureMessage),"[QOL/Aim] Whirlwind: pass_through_enabled=%u pass_through_distance=%.2f (restart to reload).",motionSettings.whirlwindPassThrough,motionSettings.whirlwindPassThroughDistance);
-    ctx->LogInfo(featureMessage);
+    if(motionSettings.verbose) {
+        char configMessage[224];
+        std::snprintf(configMessage,sizeof(configMessage),"[QOL/Aim] Cursor settings: deadzone=%.2f initial_speed=%.2f maximum_speed=%.2f acceleration_seconds=%.2f (restart to reload).",
+            motionSettings.deadzone,motionSettings.initialSpeed,motionSettings.maximumSpeed,motionSettings.accelerationSeconds);
+        ctx->LogInfo(configMessage);
+        char featureMessage[256];
+        std::snprintf(featureMessage,sizeof(featureMessage),"[QOL/Aim] Features: snapping=%u radius=%.2f switch_advantage=%.2f overlay=%u debug=%u projection_hz=%.1f smoothing_ms=%.1f.",
+            motionSettings.snapping,motionSettings.snapRadius,motionSettings.switchAdvantage,motionSettings.overlay,motionSettings.debugOverlay,motionSettings.projectionHz,motionSettings.overlaySmoothingMs);
+        ctx->LogInfo(featureMessage);
+        std::snprintf(featureMessage,sizeof(featureMessage),"[QOL/Aim] Whirlwind: pass_through_enabled=%u pass_through_distance=%.2f (restart to reload).",motionSettings.whirlwindPassThrough,motionSettings.whirlwindPassThroughDistance);
+        ctx->LogInfo(featureMessage);
+    }
     constexpr unsigned char hash[]={0x2a,0x86,0x8d,0x01,0x3d,0x2e,0x08,0x30,0xbd,0x2d,0x9e,0x04,0xb9,0x18,0xb1,0x9e,0x46,0xa7,0x3c,0xf7,0x26,0xc8,0x33,0xe7,0x0d,0x08,0x9b,0x94,0x8f,0xde,0xb5,0xa2};
     const auto core=GetModuleHandleW(L"D2RCore.dll");
     if(!QolCore::VerifyFileHash(core,hash)) {ctx->LogWarn("[QOL/Aim] Unreviewed core; refusing aim module."); return false;}
@@ -1041,8 +1062,10 @@ bool QolAim::Initialize(const D2RL::PluginContext* context,bool qolEnabled) noex
     }
     treeLayoutAdmitted=treeAdmitted;
     for(const auto& guard:TreeLayoutNative::Guards)treeLayoutAdmitted=treeLayoutAdmitted && ctx->CheckExpectedBytes(guard.rva,guard.bytes,guard.size);
-    ctx->LogInfo(treeLayoutAdmitted?"[QOL/Aim] Skill-tree icon corner indicators/layout admitted; no additional hooks.":"[QOL/Aim] Skill-tree layout guard mismatch; icon indicators disabled, existing toggle retained.");
-    ctx->LogInfo(treeAdmitted?"[QOL/Aim] Skill-tree R3 toggle admitted; numeric class settings saved through SDK.":"[QOL/Aim] Skill-tree focus guard mismatch; tree toggle disabled, gameplay aim retained.");
+    if(!treeLayoutAdmitted) ctx->LogWarn("[QOL/Aim] Skill-tree layout guard mismatch; icon indicators disabled, existing toggle retained.");
+    else if(motionSettings.verbose) ctx->LogInfo("[QOL/Aim] Skill-tree icon corner indicators/layout admitted; no additional hooks.");
+    if(!treeAdmitted) ctx->LogWarn("[QOL/Aim] Skill-tree focus guard mismatch; tree toggle disabled, gameplay aim retained.");
+    else if(motionSettings.verbose) ctx->LogInfo("[QOL/Aim] Skill-tree R3 toggle admitted; numeric class settings saved through SDK.");
     inGame=reinterpret_cast<InGameFn>(GetProcAddress(core,"IsInGame"));
     const D2RL::LifecycleService* lifecycle{};
     const D2RL::InputService* input{};
@@ -1071,7 +1094,7 @@ bool QolAim::Initialize(const D2RL::PluginContext* context,bool qolEnabled) noex
     enabled.store(true); ready.store(true);
     inSession.store(inGame());
     if(inSession.load()) Install();
-    ctx->LogInfo("[QOL/Aim] Ready; move right stick beyond deadzone to aim. Unsupported/disabled skills restore native aim. F8 toggle, F9 recenter, F10 invert; settings load on restart.");
+    ctx->LogInfo(motionSettings.verbose?"[QOL/Aim] Ready; verbose diagnostics enabled.":"[QOL/Aim] Ready; verbose diagnostics disabled (aim.verbose=false).");
     return true;
 }
 void QolAim::Shutdown() noexcept {
@@ -1087,6 +1110,26 @@ bool QolAim::OwnsGuidedArrow() noexcept {
     return installed.load() && enabled.load() && inSession.load() && manualAim.load() && skillSettings.Enabled(Aim::GuidedArrow);
 }
 #ifdef QOL_AIM_TEST_INSTALL
+bool QolAim::TestScoreLogging(const D2RL::PluginContext* context,bool verbose) noexcept {
+    ctx=context; motionSettings={}; motionSettings.verbose=verbose;
+    installed.store(true); enabled.store(true); inSession.store(true); manualAim.store(true);
+    scoringCount.store(0);
+    float position[]{101,100};
+    void* player=position;
+    scoringWindow={true,true,player,{100,100},false};
+    candidateTrace={true};
+    originalPointScore=+[](void*,void*,const float*,int,int) noexcept -> float { return 0.75f; };
+    bool ok=true;
+    for(unsigned i=0;i<200;++i)
+        ok=ok && PointScore(nullptr,player,position,1,5)==Aim::Score({100,100},{101,100},motionSettings.snapRadius);
+    ok=ok && candidateTrace.categories.EnemyOnly() && scoringCount.load()==(verbose?200u:0u) &&
+        candidateTrace.calls==(verbose?200u:0u);
+    // NPC/native-category scores and cache exclusion must not depend on logging.
+    ok=ok && PointScore(nullptr,player,position,5,5)==0.75f && !candidateTrace.categories.EnemyOnly();
+    scoringWindow={}; candidateTrace={}; originalPointScore=nullptr;
+    Shutdown();
+    return ok;
+}
 bool QolAim::TestInstall(const D2RL::PluginContext* context,bool observer) noexcept {
     ctx=context; installed.store(false); castObserverInstalled.store(false);
     motionSettings={}; motionSettings.castObserver=observer;

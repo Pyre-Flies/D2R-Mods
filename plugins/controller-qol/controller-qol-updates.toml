@@ -30,6 +30,9 @@ portal_diagnostics = false
 [aim]
 # Controller cursor/snapping enabled by default; requires restart.
 enabled = true
+# Detailed aim diagnostics (file logging); keep false for normal play/handhelds.
+# Warnings remain visible. Independent of debug_overlay; requires restart.
+verbose = false
 # Radial dead zone, fraction of full stick travel (0.0..0.9).
 deadzone = 0.22
 # Speeds in world tiles/second at full stick tilt (0.1..100).

@@ -6,5 +6,6 @@ void Shutdown() noexcept;
 bool OwnsGuidedArrow() noexcept;
 #ifdef QOL_AIM_TEST_INSTALL
 bool TestInstall(const D2RL::PluginContext*,bool castObserver) noexcept;
+bool TestScoreLogging(const D2RL::PluginContext*,bool verbose) noexcept;
 #endif
 }

@@ -79,6 +79,7 @@ struct MotionSettings {
     float deadzone=0.22f, initialSpeed=8, maximumSpeed=48, accelerationSeconds=0.35f;
     bool snapping=true, overlay=true, debugOverlay=false, whirlwindPassThrough=true;
     bool castObserver=true;
+    bool verbose=false;
     bool skillTreeToggle=true;
     ReticleColor groundReticleColor{194.0f/255,181.0f/255,150.0f/255,1},lockReticleColor{204.0f/255,156.0f/255,82.0f/255,242.0f/255};
     float reticleThickness=2.0f;

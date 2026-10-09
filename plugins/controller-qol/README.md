@@ -1,7 +1,7 @@
 # Controller QOL Updates
 
 **Made by PyreFly for D2RLoader**  
-Version **1.3.1+rev.71-beta.1 (beta)** | Windows x64 | Diablo II: Resurrected
+Version **1.3.1+rev.72-beta.1 (beta)** | Windows x64 | Diablo II: Resurrected
 
 Controller QOL Updates adds direct controller looting, contextual item actions,
 stash and Cube transfers, belt management, clearer controller prompts, and
@@ -220,6 +220,7 @@ without disabling other QOL features. Overlay settings do not affect targeting.
 | Key | Default | Purpose / allowed values |
 | --- | --- | --- |
 | `enabled` | `true` | Enable aim hooks, controls and overlay |
+| `verbose` | `false` | Detailed aim file logging; restart required. Warnings remain visible. |
 | `deadzone` | `0.22` | Radial stick dead zone, 0-0.9 |
 | `initial_speed` | `8.0` | Initial full-tilt speed, 0.1-100 tiles/sec |
 | `maximum_speed` | `48` | Held speed, initial_speed-100 tiles/sec |
@@ -468,3 +469,17 @@ offline and non-Ladder installations keep their original paths and require
 neither plugin. Compatibility is tied to the reviewed plugin builds; unknown
 hooks are refused. See [the compatibility record](docs/REMOTE-ID-TRANSFER-TRACE.md#2026-10-07-ladder-forwarding-compatibility-candidate)
 for evidence and the remaining live checks.
+
+### Aim diagnostic logging
+
+`[aim] verbose = false` is the default, including existing configs that omit it.
+It skips detailed candidate, lookup, leading, scoring, cast, Teleport, projection,
+overlay and skill-toggle log messages and their logging-only counters/formatting.
+A concise startup status and compatibility/save-failure warnings remain visible.
+Set `verbose = true` and restart only when collecting aim diagnostics; existing
+trace limits still apply. `debug_overlay` controls the HUD separately and does
+not turn on file logging. `[qol] debug_logging` and `portal_diagnostics` remain
+independent. Aiming, NPC category validation and cast-observer state still run.
+
+This reduces diagnostic work; Steam Deck frame-time improvement has not yet
+been measured, and other causes of handheld performance remain possible.

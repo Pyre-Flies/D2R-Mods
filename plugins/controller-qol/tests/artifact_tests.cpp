@@ -61,6 +61,7 @@ int main(int argc,char** argv) {
     check(skills.LeadMaxMilliseconds(39)==1200 && skills.LeadMaxTiles(45)==6 && skills.LeadMaxTiles(47)==3,"ice limits do not leak to other skills");
     check(skills.CanToggle(136) && skills.CanToggle(141) && !skills.Enabled(136) && !skills.Enabled(141) && skills.Targeting(136)==Aim::TargetMode::Snap && skills.Targeting(141)==Aim::TargetMode::Snap,"Reimagined passive replacements can opt in without default activation");
     check(aim.skillTreeToggle && config.find("skill_tree_toggle_enabled = true")!=config.npos,"skill-tree toggle default included in shipped configuration");
+    check(!aim.verbose && config.find("verbose = false")!=config.npos,"packaged aim logging defaults quiet");
     check(aim.castObserver && config.find("cast_observer_enabled = true")!=config.npos,"optional cast observer defaults enabled for full functionality");
     check(!GetProcAddress(dll,"D2RControllerAimOwnsGuidedArrowV1"),"prototype ownership export replaced by internal interface");
     // Do not call the plugin load export: this process has no game or loader services.

@@ -1,5 +1,21 @@
 # Controller QOL changelog
 
+## 1.3.1+rev.72-beta.1 - 2026-10-08
+
+- Add `[aim] verbose = false`. Omitted settings also default false, so existing
+  configs become quiet without replacement. `true` restores bounded detailed
+  traces after restart, independently of the debug HUD and other QOL logging.
+- Skip logging-only counters, native identity reads, comparisons and formatting
+  in candidate/lookup/scoring/cast/UI diagnostics when quiet. Cast messages are
+  also formatted only within their output limit. Preserve functional category
+  validation, target selection, cast-state updates and HUD measurements.
+- Keep concise startup status and compatibility/save-failure warnings visible.
+  No native hook, address, aim tuning or input behavior changes.
+- All 28 automated suites pass. Quiet-mode scoring emits zero traces and leaves
+  logging counters untouched; verbose mode retains its eight-message score cap.
+  Enemy/NPC scoring, strict flag parsing and packaged defaults pass. Handheld
+  frame-time benefit still needs live testing.
+
 ## 1.3.1+rev.71-beta.1 - 2026-10-08
 
 - Package Reimagined-oriented leading baselines for all 240 catalog IDs: 42

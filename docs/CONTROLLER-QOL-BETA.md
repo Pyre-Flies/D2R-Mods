@@ -1,8 +1,20 @@
-# Controller QOL 1.3.1+rev.71-beta.1
+# Controller QOL 1.3.1+rev.72-beta.1
 
 This is a **GitHub prerelease** of Controller QOL only.
 
-## Changes since rev.64 beta
+## Rev.72 logging update
+
+Detailed aim logging now requires `[aim] verbose = true` and a restart. The
+packaged default is `false`; existing configs that omit it also stay quiet.
+Quiet mode skips diagnostic formatting and logging-only counters/reads as well
+as file writes. It preserves aiming, NPC selection checks and cast state.
+Startup status and compatibility/save-failure warnings remain visible.
+The debug HUD, general QOL debug logs and portal diagnostics are separate flags.
+
+This targets unnecessary work on handhelds. Steam Deck frame-time improvement
+has not yet been measured; the update is not a claim to resolve every slowdown.
+
+## Included changes since rev.64 beta
 
 - Improve first-cast Telekinesis object/item targeting and snapping for lobbed
   skills such as Fire Blast and Ice Barrage.
@@ -40,6 +52,8 @@ outside scope. Leading falls back to current-position aim on unreliable motion.
 
 Local automated validation covers all 28 suites, DLL ABI/exports/defaults,
 category isolation, prediction bounds, R3 persistence and package integrity.
+Rev.72 also checks strict verbose parsing, quiet defaults, zero hot-path log
+writes/counters, bounded verbose output and unchanged enemy/NPC scoring.
 User testing confirmed improved Telekinesis/Fire Blast targeting, several
 projectile families, chest priority, first-A NPC interaction and Shock Web lead.
 The nine newly added estimates still need ordinary gameplay testing; these

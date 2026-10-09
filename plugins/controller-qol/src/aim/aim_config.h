@@ -45,6 +45,7 @@ inline bool ParseSettings(std::string_view text,MotionSettings& output,bool* ena
         else if(key=="debug_overlay") { boolean=&parsed.debugOverlay; booleanBit=64; }
         else if(key=="skill_tree_toggle_enabled") { boolean=&parsed.skillTreeToggle; booleanBit=32768; }
         else if(key=="cast_observer_enabled") { boolean=&parsed.castObserver; booleanBit=16384; }
+        else if(key=="verbose") { boolean=&parsed.verbose; booleanBit=524288; }
         if(boolean) {
             if(seen&booleanBit || (value!="true" && value!="false")) return false;
             seen|=booleanBit; *boolean=value=="true"; continue;

@@ -34,7 +34,7 @@ jobs:
       - name: Publish beta
         uses: softprops/action-gh-release@v2
         with:
-          name: Controller QOL rev.71-beta.1
+          name: Controller QOL rev.72-beta.1
           prerelease: true
           make_latest: "false"
           body_path: docs/CONTROLLER-QOL-BETA.md

@@ -14,6 +14,11 @@ void Check(bool b,const char* message) {
 }
 int main() {
     using namespace Aim;
+    MotionSettings logSettings{}; bool logEnabled{};
+    Check(ParseQolSettings("[aim]\nenabled=true",logSettings,logEnabled) && !logSettings.verbose,"existing configs default to quiet aim logging");
+    Check(ParseQolSettings("[aim]\nverbose=true\ndebug_overlay=false",logSettings,logEnabled) && logSettings.verbose && !logSettings.debugOverlay,"verbose file logging is independent of HUD");
+    Check(ParseQolSettings("[aim]\nverbose=false\ndebug_overlay=true",logSettings,logEnabled) && !logSettings.verbose && logSettings.debugOverlay,"debug HUD does not enable file logging");
+    Check(!ParseQolSettings("[aim]\nverbose=1",logSettings,logEnabled) && !ParseQolSettings("[aim]\nverbose=true\nverbose=false",logSettings,logEnabled),"verbose requires a single true/false value");
     for(bool nativeUnits:{false,true}) {
         Check(ReticleScoringCategory(1,nativeUnits),"ordinary monster keeps full-circle aim scoring");
         for(int category:{-1,0,4,5,6,7,8,9,10,999})

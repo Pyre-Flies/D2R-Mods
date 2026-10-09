@@ -12,6 +12,9 @@ namespace ControllerQoL { bool NativeRightStickPresses(uint64_t&) noexcept {retu
 namespace QolPortal { bool OwnsContactDestination(std::uintptr_t) noexcept { return false; } }
 static const char* config="[qol]\nenabled=true\n[aim]\nenabled=false";
 static unsigned reads{},queries{},hooks{};
+static unsigned infoLogs{},warningLogs{};
+static void __cdecl Info(const D2RL::PluginContext*,const char*) noexcept { ++infoLogs; }
+static void __cdecl Warn(const D2RL::PluginContext*,const char*) noexcept { ++warningLogs; }
 static bool __cdecl Read(const D2RL::PluginContext*,char* out,uint32_t size,uint32_t*) noexcept {
     ++reads; if(std::strlen(config)+1>size) return false; std::memcpy(out,config,std::strlen(config)+1); return true;
 }
@@ -43,6 +46,7 @@ static void TestInstallation() {
         std::memcpy(image+rva+1,&displacement,sizeof(displacement));
     }
     D2RL::PluginApi api{}; api.apiSize=sizeof(api); api.checkExpectedBytes=Match; api.installInlineHook=RecordHook;
+    api.logInfo=Info; api.logWarn=Warn;
     D2RL::PluginContext context{}; context.contextSize=sizeof(context); context.api=&api;
     context.exeBase=reinterpret_cast<std::uintptr_t>(image);
     installCount=0;
@@ -57,6 +61,7 @@ static void TestInstallation() {
     Check(QolAim::TestInstall(&context,true) && installCount==5,"SDK cast ownership rejection retains essential aim");
     rejectCast=false; image[Native::LookupRva]^=1; installCount=0;
     Check(!QolAim::TestInstall(&context,true) && installCount==0,"essential lookup guard mismatch still disables aim before hooks");
+    Check(warningLogs>0,"quiet mode retains compatibility warnings");
     QolAim::Shutdown();
     VirtualFree(image,0,MEM_RELEASE);
 }
@@ -77,5 +82,9 @@ int main() {
     Check(!QolAim::OwnsGuidedArrow() && queries==0 && hooks==0,"disabled and malformed aim never register or claim Guided Arrow");
     QolAim::Shutdown();Check(!QolAim::OwnsGuidedArrow(),"shutdown leaves native Guided Arrow ownership");
     TestInstallation();
+    api.logInfo=Info; api.logWarn=Warn;
+    infoLogs=0;
+    Check(QolAim::TestScoreLogging(&ctx,false) && infoLogs==0,"quiet native scoring preserves enemy/NPC behavior without trace counters or log writes");
+    Check(QolAim::TestScoreLogging(&ctx,true) && infoLogs==8,"verbose scoring restores bounded diagnostics without changing targeting");
     std::puts("Aim configuration gates leave loader services untouched.");
 }

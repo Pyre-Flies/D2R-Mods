@@ -278,5 +278,6 @@ All 28 automated suites pass, including configuration bounds, R3 preservation,
 confidence warmup, stops, turns, jumps, stale observations, identity changes,
 distance scaling and displacement/range caps. DLL version/export checks pass.
 Live accuracy, practical tuning and offline/Ladder comparison remain unverified.
-The existing bounded lookup log emits `[QOL/AimLead]` when a nonzero lead is used.
+The existing bounded lookup log emits `[QOL/AimLead]` when a nonzero lead is used
+and `[aim] verbose = true` (rev.72 onward; quiet by default).
 This change is not a crash fix.
