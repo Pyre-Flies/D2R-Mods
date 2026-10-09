@@ -1,7 +1,7 @@
 # Controller QOL Updates
 
 **Made by PyreFly for D2RLoader**  
-Version **1.3.1+rev.64-beta.1 (beta)** | Windows x64 | Diablo II: Resurrected
+Version **1.3.1+rev.71-beta.1 (beta)** | Windows x64 | Diablo II: Resurrected
 
 Controller QOL Updates adds direct controller looting, contextual item actions,
 stash and Cube transfers, belt management, clearer controller prompts, and
@@ -32,7 +32,7 @@ actions or `ground_pickup_button` for direct ground looting.
 | LB + RB | Ground-loot assignments visible | Pick up the item labeled RB |
 | LB + RT | Ground-loot assignments visible | Pick up the item labeled RT |
 | LB + LT | Ground-loot assignments visible | Pick up the item labeled LT |
-| A | Normal world interaction | Prefer an eligible nearby portal, stash, waypoint, shrine/well, or enabled chest over ground loot |
+| A | Normal world interaction | Prefer an eligible nearby portal, stash, waypoint, shrine/well, or enabled chest over ground loot; rev.68 also preserves these objects when combat arbitration would discard them |
 
 Direct-loot assignments are stable while the modifier is held. Empty slots are
 refilled as items are collected or the player moves. Only nearby, reachable
@@ -221,9 +221,9 @@ without disabling other QOL features. Overlay settings do not affect targeting.
 | --- | --- | --- |
 | `enabled` | `true` | Enable aim hooks, controls and overlay |
 | `deadzone` | `0.22` | Radial stick dead zone, 0-0.9 |
-| `initial_speed` | `4.0` | Initial full-tilt speed, 0.1-100 tiles/sec |
-| `maximum_speed` | `28.0` | Held speed, initial_speed-100 tiles/sec |
-| `acceleration_seconds` | `0.65` | Time to maximum speed, 0-5; zero is immediate |
+| `initial_speed` | `8.0` | Initial full-tilt speed, 0.1-100 tiles/sec |
+| `maximum_speed` | `48` | Held speed, initial_speed-100 tiles/sec |
+| `acceleration_seconds` | `0.35` | Time to maximum speed, 0-5; zero is immediate |
 | `snapping_enabled` | `true` | Snap attack skills; false uses ground cursor |
 | `snap_radius` | `6.0` | Acquisition radius around cursor, 0.5-15 tiles |
 | `switch_advantage` | `1.5` | Competitor must be this much closer, 0-15 tiles |
@@ -374,6 +374,67 @@ does not establish that its provisional ground/snap behavior is appropriate.
 The shortcut reads the existing controller input snapshot on the UI thread and
 leaves native button delivery intact; R3 is currently blocked by the native tree.
 See [skill-tree compatibility evidence](docs/SKILL-TREE-AIM-TOGGLE.md).
+
+Rev.65 defaults offensive ground placement (including Fire Blast, Shock Web,
+Fissure, Volcano and sentries) to enemy snapping when enabled. A ground-cast
+spell can use an enemy's position as its destination. To retain exact cursor
+placement, set that numeric ID to `"ground"` in `[aim.targeting]`; R3 preserves
+this preference. Movement, wall and minion placement keep their existing defaults.
+Telekinesis uses a separate native unit-selection path for enemies, items and
+objects; it does not display a custom object lock marker. These new behaviors
+are local beta candidates awaiting live validation.
+
+Mod-renamed skills use their numeric ID even when the comment has a vanilla name.
+For example, the inspected Reimagined Ladder version maps Ice Barrage to 253
+(Psychic Hammer in this catalog), while Shock Web remains 256. See
+[the special-skill investigation](docs/SKILL-CATALOG.md).
+
+Rev.67 adds optional experimental projectile leading. Set estimated travel time
+in milliseconds per world tile for individual numeric skill IDs:
+
+```toml
+[aim.leading]
+"47" = 50   # Fireball
+"84" = 50   # Bone Spear
+"251" = 100 # Fire Blast
+"253" = 100 # Ice Barrage in the inspected Reimagined version
+```
+
+Values are integers from 0 to 200; missing or zero means no leading. These are
+initial tuning estimates, not measured flight times. The skill must also be
+enabled and use snap targeting. R3 preserves its leading preference. Prediction
+requires consistent recent movement, defaults to caps of 600 ms and three tiles, and falls
+back to current-position snapping when samples are unreliable. The lock marker
+stays on the enemy. Telekinesis, ground-only targeting and Whirlwind do not use
+leading. Rev.71 ships Reimagined-oriented baselines for all 240 IDs: 42
+projectile estimates and 198 zero-lead settings. Values apply only when a skill
+is enabled for snap aim; existing saved configs are not migrated automatically.
+Replacement IDs are labelled, but mod behavior is not detected automatically.
+See [baseline scope and variant limits](docs/LEADING-BASELINES-REV71.md) and
+[the evidence and limitations](docs/PROJECTILE-LEADING.md).
+
+Rev.69 allows per-skill prediction limits when a slow projectile reaches those
+caps. Both maps use integer values and preserve the defaults for omitted IDs:
+
+Keep enable state and tuning in separate sections: `"6" = true` under
+`[aim.amazon]` enables Magic Arrow, while `"6" = 50` under `[aim.leading]` sets
+its travel estimate. The numeric ID links them. Class/name comments can group
+the leading entries without changing their TOML section. R3 only rewrites the
+enable state, preserving targeting and leading preferences.
+
+```toml
+[aim.leading_max_ms] # 100..1500 milliseconds
+"39" = 1200 # Ice Bolt
+"45" = 1200 # Ice Blast
+[aim.leading_max_tiles] # 1..8 world tiles
+"39" = 6
+"45" = 6
+```
+
+These limits do not enable leading or the skill itself. Larger predictions are
+more sensitive to enemy turns. Movement estimates follow observed enemy speed,
+including slowing/stopping; projectile-speed debuffs such as Slow Missiles are
+outside this revision's scope.
 
 Rev.57 displays a small brass crosshair inside the upper-right corner of each
 enabled visible catalog skill icon. Disabled icons have no crosshair. The control

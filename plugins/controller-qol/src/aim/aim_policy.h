@@ -76,12 +76,12 @@ struct Projection {
 };
 struct ReticleColor { float red{},green{},blue{},alpha{1}; };
 struct MotionSettings {
-    float deadzone=0.22f, initialSpeed=4, maximumSpeed=28, accelerationSeconds=0.65f;
+    float deadzone=0.22f, initialSpeed=8, maximumSpeed=48, accelerationSeconds=0.35f;
     bool snapping=true, overlay=true, debugOverlay=false, whirlwindPassThrough=true;
     bool castObserver=true;
     bool skillTreeToggle=true;
-    ReticleColor groundReticleColor{0.76f,0.71f,0.59f,1},lockReticleColor{0.80f,0.61f,0.32f,0.95f};
-    float reticleThickness=1.0f;
+    ReticleColor groundReticleColor{194.0f/255,181.0f/255,150.0f/255,1},lockReticleColor{204.0f/255,156.0f/255,82.0f/255,242.0f/255};
+    float reticleThickness=2.0f;
     float whirlwindPassThroughDistance=1.5f;
     float snapRadius=6, switchAdvantage=1.5f, projectionHz=60, overlaySmoothingMs=35;
     bool Valid() const noexcept {

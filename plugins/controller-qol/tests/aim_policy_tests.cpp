@@ -14,6 +14,23 @@ void Check(bool b,const char* message) {
 }
 int main() {
     using namespace Aim;
+    for(bool nativeUnits:{false,true}) {
+        Check(ReticleScoringCategory(1,nativeUnits),"ordinary monster keeps full-circle aim scoring");
+        for(int category:{-1,0,4,5,6,7,8,9,10,999})
+            Check(!ReticleScoringCategory(category,nativeUnits),"NPC and other native categories retain interaction scoring after snap casts");
+        for(int category:{2,3}) Check(ReticleScoringCategory(category,nativeUnits)==nativeUnits,"only Telekinesis preparation scores objects and items");
+    }
+    TargetCategoryObservation observed{};
+    Check(!observed.EnemyOnly(),"unclassified candidate cannot enter snap cache");
+    observed.Observe(1); observed.Observe(1);
+    Check(observed.EnemyOnly(),"repeated ordinary enemy scoring remains eligible");
+    observed.Observe(5);
+    Check(!observed.EnemyOnly(),"mixed native classifications cannot enter enemy cache");
+    observed={}; observed.Observe(5); observed.Observe(1);
+    Check(!observed.EnemyOnly(),"later enemy score cannot erase protected classification");
+    SnapBook npcBook{}; npcBook.Observe(1,7,{110,100},100,true);
+    npcBook.Observe(1,7,{110,100},101,observed.EnemyOnly());
+    Check(!npcBook.Choose(1,{110,100},{100,100},101).valid,"noncombat classification removes previously retained snap identity");
     MotionSettings integrated{}; bool enabled=true;
     unsigned observerGuards=0,observerHooks=0;
     auto guardOk=[&]() noexcept { ++observerGuards; return true; };
@@ -96,6 +113,32 @@ int main() {
     Check(!ParseSkills("[aim.targeting]\n\"900\"=\"snap\"",skills),"undeclared custom target rejected");
     Check(!ParseSkills("[aim.targeting]\n\"54\"=\"ground\"\n\"054\"=\"snap\"",skills),"duplicate override numeric identity rejected");
     Check(!ParseSkills("[aim.targeting]\n\"54\"=true",skills) && !ParseSkills("[aim.targeting]\n\"65535\"=\"snap\"",skills),"invalid targeting mode and ID rejected");
+    SkillSettings special{};
+    const std::string leadConfig="[aim.sorceress]\n\"47\"=false\n[aim.leading]\n\"47\"=50 # preserve\n\"251\"=100\n[aim.custom]\n\"900\"=true\n";
+    Check(ParseSkills(leadConfig,special) && special.LeadMillisecondsPerTile(47)==50 && special.LeadMillisecondsPerTile(251)==100 && !special.Enabled(47),"lead estimates never enable skills");
+    Check(RewriteSkillToggle(leadConfig,47,true,toggled) && toggled.find("\"47\"=50 # preserve")!=toggled.npos && ParseSkills(toggled,special) && special.Enabled(47) && special.LeadMillisecondsPerTile(47)==50,"R3 preserves leading entry when it follows the enable section");
+    for(const char* bad:{"[aim.leading]\n\"47\"=-1", "[aim.leading]\n\"47\"=201", "[aim.leading]\n\"47\"=50.5", "[aim.leading]\n\"900\"=50", "[aim.leading]\n\"47\"=50\n\"047\"=60"})
+        Check(!ParseSkills(bad,special),"invalid or undeclared lead configuration rejected");
+    Check(ParseSkills("[aim.custom]\n\"900\"=true\n[aim.leading]\n\"900\"=75\n\"47\"=0",special) && special.LeadMillisecondsPerTile(900)==75 && special.LeadMillisecondsPerTile(47)==0,"custom declared skills and explicit zero lead supported");
+    Check(ParseSkills("[aim.sorceress]\n\"43\"=true\n[aim.assassin]\n\"251\"=true",special),"special skill fixture parses");
+    Check(!CoordinateRoute(true,43,43,special) && CoordinateRoute(true,251,251,special),"Telekinesis retains unit identity while Fire Blast uses snapped coordinates");
+    for(unsigned type:{1u,2u,4u}) {
+        Check(NativeUnitScoring(true,43,251,type,special) && NativeUnitScoring(true,-1,43,type,special),"Telekinesis scores enemies objects and items during cast and its own preview");
+        Check(!NativeUnitScoring(false,43,43,type,special) && !NativeUnitScoring(true,251,43,type,special),"unarmed and other active skills cannot inherit Telekinesis scoring");
+    }
+    for(unsigned type:{0u,3u,5u,999u}) Check(!NativeUnitScoring(true,43,43,type,special),"other unit categories retain native geometry");
+    for(unsigned type:{2u,4u}) {
+        Check(NativeUnitScoring(true,-1,54,type,special) && NativeUnitScoring(true,-1,251,type,special),"idle after another enabled skill prepares the first Telekinesis object/item selection");
+        Check(!NativeUnitScoring(true,54,43,type,special) && !NativeUnitScoring(true,357,43,type,special) && !NativeUnitScoring(true,-1,143,type,special),"active movement/interaction and disabled previews cannot inherit Telekinesis preparation");
+    }
+    Check(!NativeUnitScoring(true,-1,54,1,special),"ordinary monster preview remains owned by the existing snap pipeline");
+    for(int id:{234,244,251,256,257,261,262,271,272,276,393,396,400}) {
+        Check(special.Targeting(id)==TargetMode::Snap,"offensive ground placement defaults to enemy snapping");
+        if(id!=251) Check(!special.Enabled(id),"new targeting defaults do not enable previously disabled skills");
+    }
+    Check(special.Targeting(54)==TargetMode::Ground && special.Targeting(132)==TargetMode::Ground && special.Targeting(78)==TargetMode::Ground && special.Targeting(75)==TargetMode::Ground,"movement wall and minion placement retain ground policy");
+    Check(ParseSkills("[aim.sorceress]\n\"43\"=true\n[aim.assassin]\n\"251\"=true\n[aim.targeting]\n\"43\"=\"ground\"\n\"251\"=\"ground\"",special) && !NativeUnitScoring(true,43,43,2,special) && !CoordinateRoute(true,43,43,special) && special.Mode(251)==TargetMode::Ground,"explicit ground preferences are retained; Telekinesis never discards its native unit");
+    Check(ParseSkills("[aim.sorceress]\n\"43\"=false",special) && !NativeUnitScoring(true,43,43,2,special),"disabled Telekinesis stays fully native");
 
     Check(ReleaseForSkill(48,skills),"unsupported active skill releases manual aim without cast observer");
     Check(!ReleaseForSkill(-1,skills) && !ReleaseForSkill(Meteor,skills),"idle queries and supported active skills preserve manual intent");
@@ -231,6 +274,9 @@ int main() {
         Check(std::abs(delta.x*stick.y+delta.y*stick.x)<0.001f,"screen direction no isometric rotation");
     }
     MotionSettings settings{};
+    Check(settings.initialSpeed==8 && settings.maximumSpeed==48 && settings.accelerationSeconds==0.35f,"requested faster cursor defaults");
+    // Keep the measured acceleration regression fixture independent of defaults.
+    settings.initialSpeed=4; settings.maximumSpeed=28; settings.accelerationSeconds=0.65f;
     CursorMotion motion{};
     offset={0,0};
     Check(!motion.Advance({0.15f,0.15f},projection,false,0.05f,settings,offset),"radial dead zone rejects drift");
@@ -296,6 +342,55 @@ int main() {
     Check(beforeCast.Choose(1,{110,100},{100,100},1010).id==42,"idle observation supplies next lookup destination");
     Check(!beforeCast.Choose(1,{110,100},{100,100},1200).valid,"idle sampling does not allow stale destination reuse");
     SnapBook book{};
+    MotionTrack moving{};
+    const std::string iceLimits="[aim.sorceress]\n\"39\"=false\n[aim.leading]\n\"39\"=100\n[aim.leading_max_ms]\n\"39\"=1200\n[aim.leading_max_tiles]\n\"39\"=6\n";
+    Check(ParseSkills(iceLimits,special) && !special.Enabled(39) && special.LeadMaxMilliseconds(39)==1200 && special.LeadMaxTiles(39)==6 && special.LeadMaxMilliseconds(36)==600 && special.LeadMaxTiles(36)==3,"ice limits do not enable skill or change other skills");
+    Check(RewriteSkillToggle(iceLimits,39,true,toggled) && ParseSkills(toggled,special) && special.Enabled(39) && special.LeadMaxMilliseconds(39)==1200 && special.LeadMaxTiles(39)==6,"R3 preserves both leading limit sections");
+    for(const char* bad : {"[aim.leading_max_ms]\n\"39\"=99", "[aim.leading_max_ms]\n\"39\"=1501", "[aim.leading_max_tiles]\n\"39\"=0", "[aim.leading_max_tiles]\n\"39\"=9", "[aim.leading_max_tiles]\n\"39\"=1.5", "[aim.leading_max_ms]\n\"900\"=1000", "[aim.leading_max_tiles]\n\"39\"=6\n\"039\"=4"})
+        Check(!ParseSkills(bad,special),"leading limits reject invalid bounds, undeclared IDs and duplicates");
+    moving.Observe({110,100},1000);
+    moving.Observe({110.2f,100},1050);
+    Check(moving.Destination({108,100},{110.2f,100},1050,50).x==110.2f,"one velocity window cannot lead");
+    moving.Observe({110.4f,100},1100);
+    const auto fastLead=moving.Destination({108,100},{110.4f,100},1100,50);
+    const auto slowLead=moving.Destination({108,100},{110.4f,100},1100,100);
+    Check(std::abs((fastLead.x-110.4f)-0.48f)<0.002f && std::abs((slowLead.x-110.4f)-0.96f)<0.003f,"lead scales with distance and per-skill travel estimate");
+    moving.Observe({110.4f,100},1100);
+    Check(moving.consistent==2 && Finite(moving.velocity),"same timestamp does not divide by zero or clear stable motion");
+    Check(moving.Destination({108,100},{110.4f,100},1200,50).x==110.4f && moving.Destination({108,100},{110.4f,100},1100,0).x==110.4f,"stale and disabled lead fall back to current position");
+    moving.Observe({110.2f,100},1150);
+    Check(moving.Destination({108,100},{110.2f,100},1150,100).x==110.2f,"direction reversal immediately drops prediction until movement agrees");
+    moving.Observe({120,100},1200);
+    Check(moving.consistent==0,"teleport-like position jump invalidates motion estimate");
+    moving.Observe({120,100},1250);
+    Check(moving.velocity.x==0 && moving.consistent==0,"stationary target needs no lead");
+    moving.Reset({110,100},2000);moving.Observe({111,100},2050);moving.Observe({112,100},2100);
+    Check(std::abs(moving.Destination({100,100},{112,100},2100,200).x-115)<0.001f,"lead displacement capped at three tiles");
+    Check(std::abs(moving.Destination({100,100},{112,100},2100,100,1200,6).x-118)<0.001f,"ice override permits six tiles without changing default cap");
+    Check(moving.Destination({100,100},{112,100},2100,100,1600,6).x==112 && moving.Destination({100,100},{112,100},2100,100,1200,9).x==112,"invalid runtime limits fail open to current position");
+    Check(moving.Destination({83,100},{112,100},2100,100).x==112,"prediction cannot exceed outer aim range");
+    Check(moving.Destination({83,100},{112,100},2100,100,1200,6).x==112,"expanded ice lead still respects outer aim range");
+    MotionTrack slow{};
+    slow.Observe({111,100},3000); slow.Observe({111.125f,100},3125); slow.Observe({111.25f,100},3250);
+    Check(std::abs(slow.Destination({100,100},{111.25f,100},3250,100).x-111.85f)<0.001f && std::abs(slow.Destination({100,100},{111.25f,100},3250,100,1200,6).x-112.375f)<0.001f,"ice time horizon grows only when overridden");
+    MotionTrack chilled{};
+    chilled.Observe({110,100},4000); chilled.Observe({110.5f,100},4100); chilled.Observe({111,100},4200);
+    chilled.Observe({111.25f,100},4300);
+    Check(chilled.consistent==2 && chilled.velocity.x<5 && chilled.velocity.x>2.5f,"halved movement reduces lead estimate without a cold-state guess");
+    chilled.Observe({111.3125f,100},4400);
+    Check(chilled.consistent==1,"large slowdown drops confidence instead of keeping old fast lead");
+    chilled.Observe({111.375f,100},4500);
+    Check(chilled.consistent==2 && std::abs(chilled.velocity.x-0.625f)<0.001f,"slowed movement establishes its own measured velocity");
+    chilled.Observe({111.375f,100},4600);
+    Check(chilled.consistent==0 && chilled.Destination({100,100},{111.375f,100},4600,100,1200,6).x==111.375f,"frozen target receives no leading");
+    SnapBook leadBook{};
+    for(unsigned t:{1000u,1050u,1100u}) leadBook.Observe(1,99,{110+(t-1000)*0.004f,100},t,true);
+    Check(leadBook.Choose(1,{110,100},{100,100},1100).motion.consistent==2,"native copied observations carry stable movement to selection");
+    leadBook.Observe(1,99,{110.4f,100},1110,false);
+    leadBook.Observe(1,99,{110.4f,100},1120,true);
+    Check(leadBook.Choose(1,{110,100},{100,100},1120).motion.consistent==0,"rejected target cannot reuse previous velocity on reacquisition");
+    leadBook.Observe(2,99,{110.4f,100},1130,true);
+    Check(leadBook.Choose(2,{110,100},{100,100},1130).motion.consistent==0,"unit IDs cannot transfer velocity across player identity");
     const Point player{100,100}, cursor{110,100};
     book.Observe(1,10,{112,100},100,true);
     book.Observe(1,20,{114,100},100,true);

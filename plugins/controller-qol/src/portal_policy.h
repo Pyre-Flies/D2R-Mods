@@ -81,6 +81,16 @@ inline bool PrepareScoringView(unsigned char* view, const unsigned char* native,
 inline bool WithinPriorityDistance(int distance, uint32_t radius) noexcept {
     return distance >= 0 && static_cast<uint32_t>(distance) <= radius;
 }
+// GetInteractionTarget can discard its accepted Interact object in favor of a
+// bound combat skill. Re-query through the current native Selected entry only
+// after that null result. Existing results, modified input and mouse UI pass on.
+template<class Query, class Eligible>
+void* RecoverInteraction(bool enabled, bool controllerUi, bool modified,
+    void* nativeResult, Query query, Eligible eligible) {
+    if (nativeResult || !enabled || !controllerUi || modified) return nativeResult;
+    void* candidate = query();
+    return candidate && eligible(candidate) ? candidate : nativeResult;
+}
 inline bool IsCandidateContactCaller(uintptr_t rva) noexcept {
     return rva == 0x19158E || rva == 0x1922D2 || rva == 0x19237D;
 }

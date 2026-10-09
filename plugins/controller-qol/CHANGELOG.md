@@ -1,5 +1,153 @@
 # Controller QOL changelog
 
+## 1.3.1+rev.71-beta.1 - 2026-10-08
+
+- Package Reimagined-oriented leading baselines for all 240 catalog IDs: 42
+  projectile estimates and 198 explicit zero-lead choices. Preserve 33 prior
+  estimates, add nine reviewed projectile families, and retain tested ice caps.
+  New additions remain gameplay estimates; variant detection is deferred.
+- Make Reimagined active replacements 18/134/136/141 R3-toggleable but off by
+  default; 136/141 use explicit snap overrides. Keep ten enabled defaults.
+- Package deadzone 0.22, speeds 8.0/48, acceleration 0.35, ground color #C2B596,
+  lock color #CC9C52F2, and thickness 2.0; compiled style fallbacks match.
+- User confirms rev.70 NPC first-press interaction and Shock Web improvement.
+- All 28 automated suites pass, including embedded baseline/default parsing,
+  R3 eligibility, prediction limits, native guards and DLL ABI/exports. Local
+  runtime ZIP checks pass; new estimates await gameplay feedback.
+
+## 1.3.1+rev.70-beta.1 - 2026-10-08 (local candidate)
+
+- Preserve native scoring for NPC/noncombat target categories after snap aiming;
+  only ordinary monster categories enter the enemy snap/leading cache. Keep
+  Telekinesis object/item preparation. Guard the native category classifier and
+  score argument path; no additional hooks or native calls. This addresses a
+  likely cause of NPC interaction requiring a second A press; live confirmation
+  remains pending.
+- Remove Shock Wave from local leading trials without changing its R3 setting;
+  increase Shock Web from 100 to 110 ms/tile (+10%), retaining default caps.
+  User reports Tornado, Flame Wave, Charged Bolt and Double Throw feel good;
+  Twister coverage makes leading hard to assess. Other tuning is unchanged.
+- All 28 automated suites pass, including category isolation, snap-cache
+  invalidation, aim gating and DLL ABI/version checks. Live NPC interaction
+  and revised Shock Web tuning remain pending.
+
+## 1.3.1+rev.69-beta.1 - 2026-10-08 (local candidate)
+
+- Add local leading trials for Double Throw, Shock Wave, Flame Wave, Shock Web,
+  Charged Bolt, Twister and Tornado (34 configured IDs total). Use installed
+  primary/child missile and weapon mappings for estimates; retain default limits
+  and all skill-enable states. Wandering/spread skills remain exploratory; defer
+  Frozen Orb burst and Molten Boulder startup timing. Configuration validation
+  passes; new trials need gameplay checks and require no DLL replacement.
+- Tune local Holy Bolt/Miasma Bolt leading from 60 to 68 ms/tile (+13.33%) and
+  Blade Fury from 55 to 69 (+25.45%) following user tests. Update commented stock
+  examples; preserve existing caps and other settings. Config validation passed;
+  the revised estimates await live confirmation. No DLL change required.
+- Extend local leading configuration to Lightning, Chain Lightning, Teeth, Holy
+  Bolt, Blade Fury and Miasma Bolt using inspected missile-speed estimates. Group
+  leading entries by class comments with readable names; keep enable/targeting
+  and ice limits unchanged. Add commented stock examples. Configuration checks
+  pass; these six additions await live testing and require no DLL replacement.
+- User confirms improved ice leading and excludes Slow Missiles compensation
+  from scope.
+- Add optional per-skill `[aim.leading_max_ms]` (100..1500 milliseconds) and
+  `[aim.leading_max_tiles]` (1..8 world tiles). Missing entries preserve the
+  original 600 ms / three-tile limits. Limits do not enable a skill or leading;
+  R3 preserves them alongside the existing travel estimates.
+- Local trial raises only Ice Bolt/Ice Blast to 1200 ms / six tiles after the
+  user reported under-leading and the Ice Bolt trace reached the three-tile cap.
+  Keep their 100 ms/tile estimates and other skills' tuning unchanged.
+- All 28 suites pass, including per-skill isolation, cap/range enforcement,
+  invalid configuration, R3 preservation and observed slow/frozen enemy motion.
+  Ice tuning remains pending live confirmation. Slow Missiles projectile-speed
+  compensation is not implemented; record verified data and remaining runtime
+  questions in `docs/PROJECTILE-LEADING.md`.
+
+## 1.3.1+rev.68-beta.1 - 2026-10-08 (local candidate)
+
+- Preserve enabled nearby priority objects when native controller interaction
+  arbitration would discard them in favor of a bound combat skill. The previous
+  comparison hooks only handled object-versus-loot ranking, which did not cover
+  opening a chest surrounded by enemies.
+- A separately guarded GetInteractionTarget wrapper runs the original once and
+  only recovers a null result through the current native Selected(Interact)
+  entry. Only an enabled supported object within the configured priority radius
+  qualifies. Existing native results, mouse UI, modified pickup, ordinary loot
+  and unsupported/out-of-range objects retain native behavior. No object-use
+  packet, scheduler, shared table mutation or persistent unit pointer is added.
+- Add policy coverage for combat-null recovery, each supported object family,
+  boundary/invalid distances, modifier and mouse isolation, shutdown, retained
+  native results and native selection rejection. Live enemy-surrounded chest
+  behavior remains pending. Record the reviewed path and byte guards in
+  `docs/NEUTRAL-A-2026-10-08.md` and `interaction-priority-evidence.json`.
+- User reports rev.67 projectile leading feels better; tuning remains empirical.
+- Extend the local leading trial to Fire Bolt, Ice Bolt, Ice Blast, Glacial Spike,
+  Poison/Plague Javelin, Lightning Bolt and Lightning Fury. Scale initial estimates
+  by the inspected missile speeds and preserve existing skill enable states.
+  Add commented configuration examples; no new DLL required for this expansion.
+  New skills' leading accuracy remains unverified in gameplay.
+
+## 1.3.1+rev.67-beta.1 - 2026-10-08 (local candidate)
+
+- Add optional per-skill projectile leading through `[aim.leading]`: integer
+  travel-time estimates in milliseconds per world tile, 0..200; missing/zero
+  leaves current-position snapping unchanged. Leading does not enable a skill.
+- Estimate movement from existing copied monster observations, require two
+  agreeing sample windows, and fall back on stale samples, abrupt turns, stops,
+  large jumps or invalid/out-of-range predictions. Cap prediction at 600 ms and
+  three tiles. Select the target using its actual position, then adjust only an
+  active snapped cast's destination. Keep the enemy lock marker on the enemy.
+- Telekinesis's native unit route, ground-only casts and Whirlwind are excluded.
+  No native hook, direct function call, persistent unit pointer or scheduler was
+  added. R3 preserves leading preferences independently of enable state.
+- All 28 automated suites pass, including motion discontinuities, stale samples,
+  distance scaling, lead/range caps, target identity resets, configuration bounds
+  and R3 rewrites. Live accuracy and tuning remain pending; no crash fix claimed.
+
+## 1.3.1+rev.66-beta.1 - 2026-10-08 (local candidate)
+
+- Prepare Telekinesis object/item scores while the armed cursor is idle after
+  any enabled aim skill, so the first Telekinesis press after Teleport or another
+  spell need not warm up object selection. Different active skills still retain
+  their scoring behavior; disabled Telekinesis and snapping-off stay native.
+- Reduce repeated selected-target diagnostics and include the previous preview
+  skill. Label the native candidate return `nativeResult`: false is not proof of
+  object ineligibility, as rev.65 logs show those objects subsequently selected.
+- User confirms rev.65 Telekinesis interaction, with a two-tap issue. Record the
+  separate leave-game access violation in `docs/CRASH-TRIAGE-2026-10-08.md`;
+  neither attribution nor a crash fix is established.
+- All 28 automated suites pass, including first-press preparation policy and DLL
+  ABI/version checks. Deployed to Ladder with matching SHA256 and a rev.65 backup;
+  the user subsequently reported that both Telekinesis and Fire Blast feel much
+  better. This validates the tested targeting experience, not every item/object,
+  other placement skill, offline path or leave-game stability.
+
+## 1.3.1+rev.65-beta.1 - 2026-10-08 (local candidate)
+
+- Default enabled ground attacks/traps to enemy snapping: Fire Blast, Shock Web,
+  Blade Sentinel, Charged Bolt Sentry, Wake of Fire, Lightning Sentry, Wake of
+  Inferno, Death Sentry, Fissure, Volcano and the three Warlock sigils. These skills
+  still start disabled; R3 enables the chosen targeting mode. Explicit per-skill
+  ground overrides remain effective. Movement, wall and minion placement defaults
+  are unchanged.
+- Preserve Telekinesis's native selected-unit and Lookup results instead of
+  converting its item/object operations into coordinate casts. Apply reticle
+  geometry only to naturally enumerated enemy/item/object candidates while this
+  enabled snap skill is active or previewed; native eligibility and dispatch
+  remain in control. Bounded `QOL/AimUnit` diagnostics support live validation.
+  Custom monster lock markers are not presented as Telekinesis object locks.
+- Set cursor defaults to initial speed 8, maximum speed 48 and acceleration time
+  0.35 seconds. Existing explicit settings remain authoritative.
+- Installed Ladder data and logs confirm Ice Barrage uses catalog ID 253
+  (vanilla Psychic Hammer), independently of Shock Web 256. Record the numeric
+  mappings and special-skill investigation in `docs/SKILL-CATALOG.md`.
+- User reports Fire Blast remained at the cursor with R3 enabled in an earlier
+  test, and Telekinesis failed for items/objects; enemy Telekinesis was not tested.
+  Candidate behavior still requires live Fire Blast and chest/shrine/item checks.
+- All 28 automated suites pass, including special-skill routing policy, explicit
+  targeting overrides, disabled-skill isolation, existing hook admission, and DLL
+  ABI/version/exports. These checks do not establish native object interaction.
+
 ## 1.3.1+rev.64-beta.1 - 2026-10-07
 
 - Publish as a beta prerelease while full-Ladder crashes remain under investigation

@@ -1,44 +1,63 @@
-# Controller QOL 1.3.1+rev.64-beta.1
+# Controller QOL 1.3.1+rev.71-beta.1
 
-This is a **beta / GitHub prerelease**, not a stable release. It contains only
-Controller QOL; Item Roll Ranges and Map Assistance are not updated here.
+This is a **GitHub prerelease** of Controller QOL only.
 
-## Changes
+## Changes since rev.64 beta
 
-- Add guarded remote-client ground pickup, item identification, stash/Cube
-  transfers, advanced storage actions and deposit-all. Preserve existing
-  authoritative/offline routes.
-- Support the reviewed Ladder Global Chat and Maps hooks without replacing or
-  bypassing them. Offline and non-Ladder installations require neither plugin.
-- Fix competing ordinary A pickup, empty-cell targeting, Shared potion input,
-  embedded Cube actions and queued-request cleanup.
-- Add vendor LB+R3 on Identify and Town Portal scrolls to fill matching carried
-  tomes through native purchasing. Gold and native capacity rules still apply.
-- Fix slow right-stick movement when repeated clock timestamps reset acceleration.
+- Improve first-cast Telekinesis object/item targeting and snapping for lobbed
+  skills such as Fire Blast and Ice Barrage.
+- Add bounded projectile leading from observed enemy motion, with independent
+  per-skill travel estimates and limits. Ship 42 projectile estimates and explicit
+  zero-lead baselines for the remaining 198 catalog skills.
+- Preserve the tuned Ice Bolt/Ice Blast limits and Holy Bolt, Miasma Bolt,
+  Blade Fury and Shock Web values. Add initial estimates for Inferno, Frozen Orb,
+  Shield Throw, Winter's Gambit, Chasm Break, Firestorm, Molten Boulder,
+  Echoing Strike and Miasma Chains.
+- Restore nearby chest/object priority on native A and preserve native NPC
+  scoring after snap aiming so interaction does not require a second press.
+- Set aim defaults to deadzone 0.22, initial speed 8.0, maximum speed 48,
+  acceleration 0.35 seconds, ground color `#C2B596`, lock color `#CC9C52F2`,
+  and reticle thickness 2.0.
 
-## Validation and known limitations
+Remote item actions, vendor tome filling, offline routes and Ladder hook
+coexistence from rev.64 remain included.
 
-All 28 automated suites pass locally, including DLL ABI/exports, forwarding
-guards, original paths without Ladder plugins, and acceleration regression tests.
-Private-server testing confirmed many ID/storage actions, improved cursor
-movement and vendor tome filling; a successful fill was observed from 91 to 100
-charges. This does not establish every edge case or long-term stability.
+## Configuration and scope
 
-**Unexpected client crashes with the full Ladder setup remain under investigation.**
-Recent crash records name game/loader code, Trade Notifications and Supporter
-Portals. A causal connection to QOL has neither been established nor excluded.
-The final beta still needs an offline smoke test and broader session/persistence
-qualification. Hook compatibility is limited to the exact reviewed plugin builds.
-Remote Identify All targets remain limited to Inventory; Cube/Shared ID supplies
-are unsupported.
+Defaults are **Reimagined-oriented**. Numeric skill IDs do not detect whether a
+mod replaced the skill. Automatic vanilla/Reimagined differentiation is deferred.
+Replacement names are annotated; review those settings for other variants.
+Four replaced passive IDs become off-but-toggleable, and Winter's Gambit/Chasm
+Break receive snap overrides. The same ten skills remain enabled by default.
+Leading values do not enable skills: use R3 or the class sections to opt in.
+
+Frozen Orb's baseline adjusts parent direction, not burst placement; Molten
+Boulder has no separate startup-delay model. Homing, movement, melee, stationary
+area, summon and trap placement retain zero lead. Slow Missiles compensation is
+outside scope. Leading falls back to current-position aim on unreliable motion.
+
+## Validation and limitations
+
+Local automated validation covers all 28 suites, DLL ABI/exports/defaults,
+category isolation, prediction bounds, R3 persistence and package integrity.
+User testing confirmed improved Telekinesis/Fire Blast targeting, several
+projectile families, chest priority, first-A NPC interaction and Shock Web lead.
+The nine newly added estimates still need ordinary gameplay testing; these
+checks do not establish all offline scenarios or long-term session stability.
+
+Unexpected client exits in the full Ladder setup remain under investigation.
+This revision makes no crash-fix claim. Native compatibility is limited to the
+reviewed builds and guarded paths. Remote Identify All targets remain limited
+to Inventory; Cube/Shared identification supplies remain unsupported.
 
 ## Installation
 
-Close the client and back up the existing DLL. Extract the ZIP into the game
-directory; it installs under `d2rloader/plugins` and `d2rloader/config`. Preserve
-customized TOML settings instead of overwriting them with the packaged defaults.
-For a pack-managed Ladder installation, use the pack author's approved update
-process; local package modifications may fail integrity checks.
+Close the client and back up the DLL/config. Extract the ZIP into the game
+folder: DLL under `d2rloader/plugins`, config under `d2rloader/config`.
+Merge new leading maps and desired defaults into existing customized TOML files;
+do not overwrite personal skill toggles unintentionally. Restart after updating.
+Pack-managed Ladder installations must use their approved revision process.
 
-`SHA256SUMS` verifies the ZIP, and the ZIP contains a second checksum manifest for
-its files. No game binaries, crash dumps, local logs or credentials are included.
+The release `SHA256SUMS` verifies the runtime ZIP; its internal manifest verifies
+individual files. GitHub also supplies source archives for this tag. Game binaries,
+local logs, crash dumps, backups and credentials are not included.

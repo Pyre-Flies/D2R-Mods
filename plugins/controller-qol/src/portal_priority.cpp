@@ -9,6 +9,7 @@
 #include "portal_policy.h"
 #include "portal_signatures.h"
 #include "portal_calls.h"
+#include "interaction_priority_signatures.h"
 
 namespace QolPortal {
 namespace {
@@ -41,6 +42,9 @@ using UnitScoreFn = float(__fastcall*)(void*, void*, void*, int);
 UnitScoreFn originalUnitScore = nullptr;
 using ContactFn = int(__fastcall*)(void*, void*);
 ContactFn originalContact = nullptr;
+using InteractionFn = void*(__fastcall*)(void*, unsigned);
+InteractionFn originalInteraction = nullptr;
+thread_local bool recoveringInteraction = false;
 
 bool InstallContactCalls(const D2RL::PluginContext* ctx) noexcept;
 
@@ -92,6 +96,44 @@ PriorityKind ReadPriorityObjectDistance(void* player, void* candidate, int& meas
 
 bool ModifiedLoot() noexcept {
     return directLoot && ControllerQoL::IsGroundPickupActive(modifier);
+}
+
+void* __fastcall Interaction(void* controller, unsigned index) {
+    // Preserve the complete native arbitration, including other owners of its
+    // callees. Recovery never promotes loot or fabricates an operation/packet.
+    void* const nativeResult = originalInteraction(controller, index);
+    void* player = nullptr;
+    int distance = -1;
+    PriorityKind kind = PriorityKind::None;
+    const bool permitted = active.load() && context && controller && index < 8 && !recoveringInteraction;
+    void* const result = RecoverInteraction(permitted, ControllerQoL::IsControllerUiActive(), ModifiedLoot(), nativeResult,
+        [&]() -> void* {
+            struct Scope {
+                bool previous = recoveringInteraction;
+                Scope() { recoveringInteraction = true; }
+                ~Scope() { recoveringInteraction = previous; }
+            } scope;
+            // Same player-index helper and Selected(Interact) call used by the
+            // original. Call current entries so their hook chains remain intact.
+            player = reinterpret_cast<void*(__fastcall*)(unsigned)>(context->exeBase + InteractionNative::LocalPlayerRva)(index);
+            if (!player) return nullptr;
+            return reinterpret_cast<void*(__fastcall*)(void*, int)>(context->exeBase + InteractionNative::SelectedRva)(controller, InteractSkill);
+        }, [&](void* candidate) {
+            kind = ReadPriorityObjectDistance(player, candidate, distance);
+            return kind != PriorityKind::None && WithinPriorityDistance(distance, range);
+        });
+    if (trace && context && result != nativeResult) {
+        static thread_local ULONGLONG lastLog = 0;
+        const auto now = GetTickCount64();
+        if (now - lastLog >= 1000) {
+            lastLog = now;
+            char message[192];
+            std::snprintf(message, sizeof(message), "[QOL/Priority] Neutral interaction recovered after combat arbitration: kind=%u distance=%d configured=%u.",
+                static_cast<unsigned>(kind), distance, range);
+            context->LogInfo(message);
+        }
+    }
+    return result;
 }
 
 __declspec(noinline) int __fastcall CandidateContact(void* player, void* candidate) {
@@ -350,6 +392,17 @@ void Initialize(const D2RL::PluginContext* ctx, bool enabled, bool directLootEna
         return;
     }
     active.store(true);
+    // This extension has separate admission: a conflict leaves the established
+    // object-versus-loot priority running and preserves native combat arbitration.
+    bool interactionCompatible = true;
+    for (const auto& site : InteractionNative::Sites)
+        if (!ctx->CheckExpectedBytes(site.rva, site.bytes, site.size)) interactionCompatible = false;
+    if (interactionCompatible && ctx->InstallInlineHook(InteractionNative::InteractionRva,
+            InteractionNative::Interaction, 16, reinterpret_cast<void*>(&Interaction),
+            reinterpret_cast<void**>(&originalInteraction)) && originalInteraction)
+        ctx->LogInfo("[QOL/Priority] Neutral interaction combat arbitration recovery installed.");
+    else
+        ctx->LogWarn("[QOL/Priority] Combat arbitration recovery unavailable; existing object/loot priority retained.");
     char message[160];
     std::snprintf(message, sizeof(message), "[QOL/Priority] portal=%d stash=%d waypoint=%d shrine=%d chest=%d; contact/scoring/range enabled within %u native units; diagnostics=%d.", portals, stash, waypoints, shrines, chests, range, trace);
     ctx->LogInfo(message);

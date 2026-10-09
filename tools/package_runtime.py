@@ -109,6 +109,10 @@ mismatch. Close D2R before installing or replacing the DLL.
     # Include the release's focused compatibility and native-contract records.
     for name in (
         "PRODUCTION-1.3.1-rev.60.md", "SKILL-TREE-AIM-TOGGLE.md",
+        "PROJECTILE-LEADING.md", "LEADING-BASELINES-REV71.md", "leading-baselines.json",
+        "NEUTRAL-A-2026-10-08.md", "NPC-INTERACTION-2026-10-08.md",
+        "CRASH-TRIAGE-2026-10-08.md", "interaction-priority-evidence.json",
+        "target-category-evidence.json",
         "SKILL-CATALOG.md", "AIM-CAST-OBSERVER-COMPATIBILITY.md",
         "IMPLEMENTATION-1.3.1-rev.52.md", "PRODUCTION-1.3.1-rev.50.md", "AIM-NATIVE-HISTORY.md", "PRODUCTION-1.3.1-rev.47.md",
         "LADDER-CONFLICTS-REV12.md", "LABEL-REFRESH-REV13.md", "LABEL-MODE-REV14.md",

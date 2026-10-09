@@ -1,0 +1,2175 @@
+{
+  "profile": "Reimagined-oriented beta; no runtime variant detection",
+  "skills_sha256": "708DA23BF078CC3FC4D2EF901C7480869E18206ABA8CBC91E4030D5CBA93FEF3",
+  "missiles_sha256": "432CC9EA7CE03D2C6D65370E7412B4C077ED1BD17000902F5AB173AE03A9FAED",
+  "records": [
+    {
+      "id": 6,
+      "name": "Magic Arrow",
+      "catalog_name": "Magic Arrow",
+      "class_name": "amazon",
+      "ms_per_tile": 50,
+      "status": "existing trial",
+      "rationale": "Prior local trial; preserve tested tuning and family estimate"
+    },
+    {
+      "id": 7,
+      "name": "Fire Arrow",
+      "catalog_name": "Fire Arrow",
+      "class_name": "amazon",
+      "ms_per_tile": 50,
+      "status": "existing trial",
+      "rationale": "Prior local trial; preserve tested tuning and family estimate"
+    },
+    {
+      "id": 8,
+      "name": "Inner Sight",
+      "catalog_name": "Inner Sight",
+      "class_name": "amazon",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Stationary, self, area, buff or native effect; no projectile travel estimate"
+    },
+    {
+      "id": 9,
+      "name": "Critical Strike",
+      "catalog_name": "Critical Strike",
+      "class_name": "amazon",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Passive"
+    },
+    {
+      "id": 10,
+      "name": "Jab",
+      "catalog_name": "Jab",
+      "class_name": "amazon",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Melee or mixed weapon attack; no travel estimate"
+    },
+    {
+      "id": 11,
+      "name": "Cold Arrow",
+      "catalog_name": "Cold Arrow",
+      "class_name": "amazon",
+      "ms_per_tile": 50,
+      "status": "existing trial",
+      "rationale": "Prior local trial; preserve tested tuning and family estimate"
+    },
+    {
+      "id": 12,
+      "name": "Multiple Shot",
+      "catalog_name": "Multi Shot",
+      "class_name": "amazon",
+      "ms_per_tile": 50,
+      "status": "existing trial",
+      "rationale": "Prior local trial; preserve tested tuning and family estimate"
+    },
+    {
+      "id": 13,
+      "name": "Dodge",
+      "catalog_name": "Dodge",
+      "class_name": "amazon",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Passive"
+    },
+    {
+      "id": 14,
+      "name": "Toxic Whirl",
+      "catalog_name": "Power Strike",
+      "class_name": "amazon",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Melee or mixed weapon attack; no travel estimate"
+    },
+    {
+      "id": 15,
+      "name": "Poison Javelin",
+      "catalog_name": "Poison Javelin",
+      "class_name": "amazon",
+      "ms_per_tile": 50,
+      "status": "existing trial",
+      "rationale": "Prior local trial; preserve tested tuning and family estimate"
+    },
+    {
+      "id": 16,
+      "name": "Exploding Arrow",
+      "catalog_name": "Exploding Arrow",
+      "class_name": "amazon",
+      "ms_per_tile": 50,
+      "status": "existing trial",
+      "rationale": "Prior local trial; preserve tested tuning and family estimate"
+    },
+    {
+      "id": 17,
+      "name": "Slow Missiles",
+      "catalog_name": "Slow Missiles",
+      "class_name": "amazon",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Stationary, self, area, buff or native effect; no projectile travel estimate"
+    },
+    {
+      "id": 18,
+      "name": "Elemental Covenant",
+      "catalog_name": "Avoid",
+      "class_name": "amazon",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Stationary, self, area, buff or native effect; no projectile travel estimate"
+    },
+    {
+      "id": 19,
+      "name": "Impale",
+      "catalog_name": "Impale",
+      "class_name": "amazon",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Melee or mixed weapon attack; no travel estimate"
+    },
+    {
+      "id": 20,
+      "name": "Lightning Bolt",
+      "catalog_name": "Lightning Bolt",
+      "class_name": "amazon",
+      "ms_per_tile": 40,
+      "status": "existing trial",
+      "rationale": "Prior local trial; preserve tested tuning and family estimate"
+    },
+    {
+      "id": 21,
+      "name": "Freezing Arrow",
+      "catalog_name": "Ice Arrow",
+      "class_name": "amazon",
+      "ms_per_tile": 50,
+      "status": "existing trial",
+      "rationale": "Prior local trial; preserve tested tuning and family estimate"
+    },
+    {
+      "id": 22,
+      "name": "Guided Arrow",
+      "catalog_name": "Guided Arrow",
+      "class_name": "amazon",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Homing; preserve native pursuit"
+    },
+    {
+      "id": 23,
+      "name": "Penetrate",
+      "catalog_name": "Penetrate",
+      "class_name": "amazon",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Passive"
+    },
+    {
+      "id": 24,
+      "name": "Charged Strike",
+      "catalog_name": "Charged Strike",
+      "class_name": "amazon",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Melee or mixed weapon attack; no travel estimate"
+    },
+    {
+      "id": 25,
+      "name": "Plague Javelin",
+      "catalog_name": "Plague Javelin",
+      "class_name": "amazon",
+      "ms_per_tile": 50,
+      "status": "existing trial",
+      "rationale": "Prior local trial; preserve tested tuning and family estimate"
+    },
+    {
+      "id": 26,
+      "name": "Strafe",
+      "catalog_name": "Strafe",
+      "class_name": "amazon",
+      "ms_per_tile": 50,
+      "status": "existing trial",
+      "rationale": "Prior local trial; preserve tested tuning and family estimate"
+    },
+    {
+      "id": 27,
+      "name": "Meteoric Arrow",
+      "catalog_name": "Immolation Arrow",
+      "class_name": "amazon",
+      "ms_per_tile": 50,
+      "status": "existing trial",
+      "rationale": "Prior local trial; preserve tested tuning and family estimate"
+    },
+    {
+      "id": 28,
+      "name": "Titans Covenant",
+      "catalog_name": "Dopplezon",
+      "class_name": "amazon",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Stationary, self, area, buff or native effect; no projectile travel estimate"
+    },
+    {
+      "id": 29,
+      "name": "Evade",
+      "catalog_name": "Evade",
+      "class_name": "amazon",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Passive"
+    },
+    {
+      "id": 30,
+      "name": "Fend",
+      "catalog_name": "Fend",
+      "class_name": "amazon",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Melee or mixed weapon attack; no travel estimate"
+    },
+    {
+      "id": 31,
+      "name": "Glacial Orb Arrow",
+      "catalog_name": "Freezing Arrow",
+      "class_name": "amazon",
+      "ms_per_tile": 50,
+      "status": "existing trial",
+      "rationale": "Prior local trial; preserve tested tuning and family estimate"
+    },
+    {
+      "id": 32,
+      "name": "Valkyrie",
+      "catalog_name": "Valkyrie",
+      "class_name": "amazon",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Summon/trap placement; no prediction of later attacks"
+    },
+    {
+      "id": 33,
+      "name": "Pierce",
+      "catalog_name": "Pierce",
+      "class_name": "amazon",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Passive"
+    },
+    {
+      "id": 34,
+      "name": "Lightning Strike",
+      "catalog_name": "Lightning Strike",
+      "class_name": "amazon",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Melee or mixed weapon attack; no travel estimate"
+    },
+    {
+      "id": 35,
+      "name": "Lightning Fury",
+      "catalog_name": "Lightning Fury",
+      "class_name": "amazon",
+      "ms_per_tile": 40,
+      "status": "existing trial",
+      "rationale": "Prior local trial; preserve tested tuning and family estimate"
+    },
+    {
+      "id": 36,
+      "name": "Fire Bolt",
+      "catalog_name": "Fire Bolt",
+      "class_name": "sorceress",
+      "ms_per_tile": 60,
+      "status": "existing trial",
+      "rationale": "Prior local trial; preserve tested tuning and family estimate"
+    },
+    {
+      "id": 37,
+      "name": "Warmth",
+      "catalog_name": "Warmth",
+      "class_name": "sorceress",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Passive"
+    },
+    {
+      "id": 38,
+      "name": "Charged Bolt",
+      "catalog_name": "Charged Bolt",
+      "class_name": "sorceress",
+      "ms_per_tile": 100,
+      "status": "existing trial",
+      "rationale": "Prior local trial; preserve tested tuning and family estimate"
+    },
+    {
+      "id": 39,
+      "name": "Ice Bolt",
+      "catalog_name": "Ice Bolt",
+      "class_name": "sorceress",
+      "ms_per_tile": 100,
+      "status": "existing trial",
+      "rationale": "Prior local trial; preserve tested tuning and family estimate"
+    },
+    {
+      "id": 40,
+      "name": "Frozen Armor",
+      "catalog_name": "Frozen Armor",
+      "class_name": "sorceress",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Stationary, self, area, buff or native effect; no projectile travel estimate"
+    },
+    {
+      "id": 41,
+      "name": "Inferno",
+      "catalog_name": "Inferno",
+      "class_name": "sorceress",
+      "ms_per_tile": 92,
+      "status": "estimate",
+      "rationale": "infernoflame1/2 Vel 13; channel direction estimate"
+    },
+    {
+      "id": 42,
+      "name": "Static Field",
+      "catalog_name": "Static Field",
+      "class_name": "sorceress",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Stationary, self, area, buff or native effect; no projectile travel estimate"
+    },
+    {
+      "id": 43,
+      "name": "Telekinesis",
+      "catalog_name": "Telekinesis",
+      "class_name": "sorceress",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Native unit/item/object interaction"
+    },
+    {
+      "id": 44,
+      "name": "Frost Nova",
+      "catalog_name": "Frost Nova",
+      "class_name": "sorceress",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Stationary, self, area, buff or native effect; no projectile travel estimate"
+    },
+    {
+      "id": 45,
+      "name": "Ice Blast",
+      "catalog_name": "Ice Blast",
+      "class_name": "sorceress",
+      "ms_per_tile": 100,
+      "status": "existing trial",
+      "rationale": "Prior local trial; preserve tested tuning and family estimate"
+    },
+    {
+      "id": 46,
+      "name": "Blaze",
+      "catalog_name": "Blaze",
+      "class_name": "sorceress",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Stationary, self, area, buff or native effect; no projectile travel estimate"
+    },
+    {
+      "id": 47,
+      "name": "Fire Ball",
+      "catalog_name": "Fire Ball",
+      "class_name": "sorceress",
+      "ms_per_tile": 50,
+      "status": "existing trial",
+      "rationale": "Prior local trial; preserve tested tuning and family estimate"
+    },
+    {
+      "id": 48,
+      "name": "Nova",
+      "catalog_name": "Nova",
+      "class_name": "sorceress",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Stationary, self, area, buff or native effect; no projectile travel estimate"
+    },
+    {
+      "id": 49,
+      "name": "Lightning",
+      "catalog_name": "Lightning",
+      "class_name": "sorceress",
+      "ms_per_tile": 34,
+      "status": "existing trial",
+      "rationale": "Prior local trial; preserve tested tuning and family estimate"
+    },
+    {
+      "id": 50,
+      "name": "Shiver Armor",
+      "catalog_name": "Shiver Armor",
+      "class_name": "sorceress",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Stationary, self, area, buff or native effect; no projectile travel estimate"
+    },
+    {
+      "id": 51,
+      "name": "Fire Wall",
+      "catalog_name": "Fire Wall",
+      "class_name": "sorceress",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Stationary, self, area, buff or native effect; no projectile travel estimate"
+    },
+    {
+      "id": 52,
+      "name": "Enchant",
+      "catalog_name": "Enchant",
+      "class_name": "sorceress",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Stationary, self, area, buff or native effect; no projectile travel estimate"
+    },
+    {
+      "id": 53,
+      "name": "Chain Lightning",
+      "catalog_name": "Chain Lightning",
+      "class_name": "sorceress",
+      "ms_per_tile": 34,
+      "status": "existing trial",
+      "rationale": "Prior local trial; preserve tested tuning and family estimate"
+    },
+    {
+      "id": 54,
+      "name": "Teleport",
+      "catalog_name": "Teleport",
+      "class_name": "sorceress",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Movement or relocation; preserve destination"
+    },
+    {
+      "id": 55,
+      "name": "Glacial Spike",
+      "catalog_name": "Glacial Spike",
+      "class_name": "sorceress",
+      "ms_per_tile": 67,
+      "status": "existing trial",
+      "rationale": "Prior local trial; preserve tested tuning and family estimate"
+    },
+    {
+      "id": 56,
+      "name": "Meteor",
+      "catalog_name": "Meteor",
+      "class_name": "sorceress",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Stationary, self, area, buff or native effect; no projectile travel estimate"
+    },
+    {
+      "id": 57,
+      "name": "Thunder Storm",
+      "catalog_name": "Thunder Storm",
+      "class_name": "sorceress",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Stationary, self, area, buff or native effect; no projectile travel estimate"
+    },
+    {
+      "id": 58,
+      "name": "Energy Shield",
+      "catalog_name": "Energy Shield",
+      "class_name": "sorceress",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Stationary, self, area, buff or native effect; no projectile travel estimate"
+    },
+    {
+      "id": 59,
+      "name": "Blizzard",
+      "catalog_name": "Blizzard",
+      "class_name": "sorceress",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Stationary, self, area, buff or native effect; no projectile travel estimate"
+    },
+    {
+      "id": 60,
+      "name": "Chilling Armor",
+      "catalog_name": "Chilling Armor",
+      "class_name": "sorceress",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Stationary, self, area, buff or native effect; no projectile travel estimate"
+    },
+    {
+      "id": 61,
+      "name": "Fire Mastery",
+      "catalog_name": "Fire Mastery",
+      "class_name": "sorceress",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Passive"
+    },
+    {
+      "id": 62,
+      "name": "Hydra",
+      "catalog_name": "Hydra",
+      "class_name": "sorceress",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Summon/trap placement; no prediction of later attacks"
+    },
+    {
+      "id": 63,
+      "name": "Lightning Mastery",
+      "catalog_name": "Lightning Mastery",
+      "class_name": "sorceress",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Passive"
+    },
+    {
+      "id": 64,
+      "name": "Frozen Orb",
+      "catalog_name": "Frozen Orb",
+      "class_name": "sorceress",
+      "ms_per_tile": 100,
+      "status": "estimate",
+      "rationale": "frozenorb Vel 12; parent direction only, no burst timing"
+    },
+    {
+      "id": 65,
+      "name": "Cold Mastery",
+      "catalog_name": "Cold Mastery",
+      "class_name": "sorceress",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Passive"
+    },
+    {
+      "id": 66,
+      "name": "Amplify Damage",
+      "catalog_name": "Amplify Damage",
+      "class_name": "necromancer",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Stationary, self, area, buff or native effect; no projectile travel estimate"
+    },
+    {
+      "id": 67,
+      "name": "Teeth",
+      "catalog_name": "Teeth",
+      "class_name": "necromancer",
+      "ms_per_tile": 60,
+      "status": "existing trial",
+      "rationale": "Prior local trial; preserve tested tuning and family estimate"
+    },
+    {
+      "id": 68,
+      "name": "Bone Armor",
+      "catalog_name": "Bone Armor",
+      "class_name": "necromancer",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Stationary, self, area, buff or native effect; no projectile travel estimate"
+    },
+    {
+      "id": 69,
+      "name": "Skeleton Mastery",
+      "catalog_name": "Skeleton Mastery",
+      "class_name": "necromancer",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Passive"
+    },
+    {
+      "id": 70,
+      "name": "Raise Skeleton",
+      "catalog_name": "Raise Skeleton",
+      "class_name": "necromancer",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Corpse target"
+    },
+    {
+      "id": 71,
+      "name": "Dim Vision",
+      "catalog_name": "Dim Vision",
+      "class_name": "necromancer",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Stationary, self, area, buff or native effect; no projectile travel estimate"
+    },
+    {
+      "id": 72,
+      "name": "Weaken",
+      "catalog_name": "Weaken",
+      "class_name": "necromancer",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Stationary, self, area, buff or native effect; no projectile travel estimate"
+    },
+    {
+      "id": 73,
+      "name": "Poison Dagger",
+      "catalog_name": "Poison Dagger",
+      "class_name": "necromancer",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Melee or mixed weapon attack; no travel estimate"
+    },
+    {
+      "id": 74,
+      "name": "Corpse Explosion",
+      "catalog_name": "Corpse Explosion",
+      "class_name": "necromancer",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Corpse target"
+    },
+    {
+      "id": 75,
+      "name": "Clay Golem",
+      "catalog_name": "Clay Golem",
+      "class_name": "necromancer",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Summon/trap placement; no prediction of later attacks"
+    },
+    {
+      "id": 76,
+      "name": "Iron Maiden",
+      "catalog_name": "Iron Maiden",
+      "class_name": "necromancer",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Stationary, self, area, buff or native effect; no projectile travel estimate"
+    },
+    {
+      "id": 77,
+      "name": "Terror",
+      "catalog_name": "Terror",
+      "class_name": "necromancer",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Stationary, self, area, buff or native effect; no projectile travel estimate"
+    },
+    {
+      "id": 78,
+      "name": "Bone Wall",
+      "catalog_name": "Bone Wall",
+      "class_name": "necromancer",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Summon/trap placement; no prediction of later attacks"
+    },
+    {
+      "id": 79,
+      "name": "Golem Mastery",
+      "catalog_name": "Golem Mastery",
+      "class_name": "necromancer",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Passive"
+    },
+    {
+      "id": 80,
+      "name": "Raise Skeletal Mage",
+      "catalog_name": "Raise Skeletal Mage",
+      "class_name": "necromancer",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Corpse target"
+    },
+    {
+      "id": 81,
+      "name": "Corpse Field",
+      "catalog_name": "Confuse",
+      "class_name": "necromancer",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Stationary, self, area, buff or native effect; no projectile travel estimate"
+    },
+    {
+      "id": 82,
+      "name": "Life Tap",
+      "catalog_name": "Life Tap",
+      "class_name": "necromancer",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Stationary, self, area, buff or native effect; no projectile travel estimate"
+    },
+    {
+      "id": 83,
+      "name": "Poison Explosion",
+      "catalog_name": "Poison Explosion",
+      "class_name": "necromancer",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Stationary, self, area, buff or native effect; no projectile travel estimate"
+    },
+    {
+      "id": 84,
+      "name": "Bone Spear",
+      "catalog_name": "Bone Spear",
+      "class_name": "necromancer",
+      "ms_per_tile": 50,
+      "status": "existing trial",
+      "rationale": "Prior local trial; preserve tested tuning and family estimate"
+    },
+    {
+      "id": 85,
+      "name": "BloodGolem",
+      "catalog_name": "Blood Golem",
+      "class_name": "necromancer",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Summon/trap placement; no prediction of later attacks"
+    },
+    {
+      "id": 86,
+      "name": "Attract",
+      "catalog_name": "Attract",
+      "class_name": "necromancer",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Stationary, self, area, buff or native effect; no projectile travel estimate"
+    },
+    {
+      "id": 87,
+      "name": "Decrepify",
+      "catalog_name": "Decrepify",
+      "class_name": "necromancer",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Stationary, self, area, buff or native effect; no projectile travel estimate"
+    },
+    {
+      "id": 88,
+      "name": "Bone Prison",
+      "catalog_name": "Bone Prison",
+      "class_name": "necromancer",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Summon/trap placement; no prediction of later attacks"
+    },
+    {
+      "id": 89,
+      "name": "Summon Resist",
+      "catalog_name": "Summon Resist",
+      "class_name": "necromancer",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Passive"
+    },
+    {
+      "id": 90,
+      "name": "IronGolem",
+      "catalog_name": "Iron Golem",
+      "class_name": "necromancer",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Summon/trap placement; no prediction of later attacks"
+    },
+    {
+      "id": 91,
+      "name": "Lower Resist",
+      "catalog_name": "Lower Resist",
+      "class_name": "necromancer",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Stationary, self, area, buff or native effect; no projectile travel estimate"
+    },
+    {
+      "id": 92,
+      "name": "Poison Nova",
+      "catalog_name": "Poison Nova",
+      "class_name": "necromancer",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Stationary, self, area, buff or native effect; no projectile travel estimate"
+    },
+    {
+      "id": 93,
+      "name": "Bone Spirit",
+      "catalog_name": "Bone Spirit",
+      "class_name": "necromancer",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Homing; preserve native pursuit"
+    },
+    {
+      "id": 94,
+      "name": "FireGolem",
+      "catalog_name": "Fire Golem",
+      "class_name": "necromancer",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Summon/trap placement; no prediction of later attacks"
+    },
+    {
+      "id": 95,
+      "name": "Revive",
+      "catalog_name": "Revive",
+      "class_name": "necromancer",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Corpse target"
+    },
+    {
+      "id": 96,
+      "name": "Sacrifice",
+      "catalog_name": "Sacrifice",
+      "class_name": "paladin",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Melee or mixed weapon attack; no travel estimate"
+    },
+    {
+      "id": 97,
+      "name": "Smite",
+      "catalog_name": "Smite",
+      "class_name": "paladin",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Melee or mixed weapon attack; no travel estimate"
+    },
+    {
+      "id": 98,
+      "name": "Might",
+      "catalog_name": "Might",
+      "class_name": "paladin",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Stationary, self, area, buff or native effect; no projectile travel estimate"
+    },
+    {
+      "id": 99,
+      "name": "Prayer",
+      "catalog_name": "Prayer",
+      "class_name": "paladin",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Stationary, self, area, buff or native effect; no projectile travel estimate"
+    },
+    {
+      "id": 100,
+      "name": "Resist Fire",
+      "catalog_name": "Resist Fire",
+      "class_name": "paladin",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Stationary, self, area, buff or native effect; no projectile travel estimate"
+    },
+    {
+      "id": 101,
+      "name": "Holy Bolt",
+      "catalog_name": "Holy Bolt",
+      "class_name": "paladin",
+      "ms_per_tile": 68,
+      "status": "existing trial",
+      "rationale": "Prior local trial; preserve tested tuning and family estimate"
+    },
+    {
+      "id": 102,
+      "name": "Holy Fire",
+      "catalog_name": "Holy Fire",
+      "class_name": "paladin",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Stationary, self, area, buff or native effect; no projectile travel estimate"
+    },
+    {
+      "id": 103,
+      "name": "Thorns",
+      "catalog_name": "Thorns",
+      "class_name": "paladin",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Stationary, self, area, buff or native effect; no projectile travel estimate"
+    },
+    {
+      "id": 104,
+      "name": "Defiance",
+      "catalog_name": "Defiance",
+      "class_name": "paladin",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Stationary, self, area, buff or native effect; no projectile travel estimate"
+    },
+    {
+      "id": 105,
+      "name": "Resist Cold",
+      "catalog_name": "Resist Cold",
+      "class_name": "paladin",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Stationary, self, area, buff or native effect; no projectile travel estimate"
+    },
+    {
+      "id": 106,
+      "name": "Zeal",
+      "catalog_name": "Zeal",
+      "class_name": "paladin",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Melee or mixed weapon attack; no travel estimate"
+    },
+    {
+      "id": 107,
+      "name": "Charge",
+      "catalog_name": "Charge",
+      "class_name": "paladin",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Movement or relocation; preserve destination"
+    },
+    {
+      "id": 108,
+      "name": "Blessed Aim",
+      "catalog_name": "Blessed Aim",
+      "class_name": "paladin",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Stationary, self, area, buff or native effect; no projectile travel estimate"
+    },
+    {
+      "id": 109,
+      "name": "Cleansing",
+      "catalog_name": "Cleansing",
+      "class_name": "paladin",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Stationary, self, area, buff or native effect; no projectile travel estimate"
+    },
+    {
+      "id": 110,
+      "name": "Resist Lightning",
+      "catalog_name": "Resist Lightning",
+      "class_name": "paladin",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Stationary, self, area, buff or native effect; no projectile travel estimate"
+    },
+    {
+      "id": 111,
+      "name": "Vengeance",
+      "catalog_name": "Vengeance",
+      "class_name": "paladin",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Melee or mixed weapon attack; no travel estimate"
+    },
+    {
+      "id": 112,
+      "name": "Blessed Hammer",
+      "catalog_name": "Blessed Hammer",
+      "class_name": "paladin",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Stationary, self, area, buff or native effect; no projectile travel estimate"
+    },
+    {
+      "id": 113,
+      "name": "Concentration",
+      "catalog_name": "Concentration",
+      "class_name": "paladin",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Stationary, self, area, buff or native effect; no projectile travel estimate"
+    },
+    {
+      "id": 114,
+      "name": "Holy Freeze",
+      "catalog_name": "Holy Freeze",
+      "class_name": "paladin",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Stationary, self, area, buff or native effect; no projectile travel estimate"
+    },
+    {
+      "id": 115,
+      "name": "Vigor",
+      "catalog_name": "Vigor",
+      "class_name": "paladin",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Stationary, self, area, buff or native effect; no projectile travel estimate"
+    },
+    {
+      "id": 116,
+      "name": "Shield Throw",
+      "catalog_name": "Conversion",
+      "class_name": "paladin",
+      "ms_per_tile": 48,
+      "status": "estimate",
+      "rationale": "pala_shieldthrow Vel 25; first projectile, no bounce prediction"
+    },
+    {
+      "id": 117,
+      "name": "Holy Shield",
+      "catalog_name": "Holy Shield",
+      "class_name": "paladin",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Stationary, self, area, buff or native effect; no projectile travel estimate"
+    },
+    {
+      "id": 118,
+      "name": "Holy Shock",
+      "catalog_name": "Holy Shock",
+      "class_name": "paladin",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Stationary, self, area, buff or native effect; no projectile travel estimate"
+    },
+    {
+      "id": 119,
+      "name": "Sanctuary",
+      "catalog_name": "Sanctuary",
+      "class_name": "paladin",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Stationary, self, area, buff or native effect; no projectile travel estimate"
+    },
+    {
+      "id": 120,
+      "name": "Meditation",
+      "catalog_name": "Meditation",
+      "class_name": "paladin",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Stationary, self, area, buff or native effect; no projectile travel estimate"
+    },
+    {
+      "id": 121,
+      "name": "Fist of the Heavens",
+      "catalog_name": "Fist of the Heavens",
+      "class_name": "paladin",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Stationary, self, area, buff or native effect; no projectile travel estimate"
+    },
+    {
+      "id": 122,
+      "name": "Fanaticism",
+      "catalog_name": "Fanaticism",
+      "class_name": "paladin",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Stationary, self, area, buff or native effect; no projectile travel estimate"
+    },
+    {
+      "id": 123,
+      "name": "Conviction",
+      "catalog_name": "Conviction",
+      "class_name": "paladin",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Stationary, self, area, buff or native effect; no projectile travel estimate"
+    },
+    {
+      "id": 124,
+      "name": "Redemption",
+      "catalog_name": "Redemption",
+      "class_name": "paladin",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Stationary, self, area, buff or native effect; no projectile travel estimate"
+    },
+    {
+      "id": 125,
+      "name": "Salvation",
+      "catalog_name": "Salvation",
+      "class_name": "paladin",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Stationary, self, area, buff or native effect; no projectile travel estimate"
+    },
+    {
+      "id": 126,
+      "name": "Bash",
+      "catalog_name": "Bash",
+      "class_name": "barbarian",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Melee or mixed weapon attack; no travel estimate"
+    },
+    {
+      "id": 127,
+      "name": "Melee Mastery",
+      "catalog_name": "Blade Mastery",
+      "class_name": "barbarian",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Passive"
+    },
+    {
+      "id": 128,
+      "name": "Shield Mastery",
+      "catalog_name": "Axe Mastery",
+      "class_name": "barbarian",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Passive"
+    },
+    {
+      "id": 129,
+      "name": "Deadly Treasures",
+      "catalog_name": "Mace Mastery",
+      "class_name": "barbarian",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Passive"
+    },
+    {
+      "id": 130,
+      "name": "Howl",
+      "catalog_name": "Howl",
+      "class_name": "barbarian",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Stationary, self, area, buff or native effect; no projectile travel estimate"
+    },
+    {
+      "id": 131,
+      "name": "Find Potion",
+      "catalog_name": "Find Potion",
+      "class_name": "barbarian",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Corpse target"
+    },
+    {
+      "id": 132,
+      "name": "Leap",
+      "catalog_name": "Leap",
+      "class_name": "barbarian",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Movement or relocation; preserve destination"
+    },
+    {
+      "id": 133,
+      "name": "Double Swing",
+      "catalog_name": "Double Swing",
+      "class_name": "barbarian",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Melee or mixed weapon attack; no travel estimate"
+    },
+    {
+      "id": 134,
+      "name": "Unstoppable Force",
+      "catalog_name": "Pole Arm Mastery",
+      "class_name": "barbarian",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Homing; preserve native pursuit"
+    },
+    {
+      "id": 135,
+      "name": "Throwing Mastery",
+      "catalog_name": "Throwing Mastery",
+      "class_name": "barbarian",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Passive"
+    },
+    {
+      "id": 136,
+      "name": "Winters Gambit",
+      "catalog_name": "Spear Mastery",
+      "class_name": "barbarian",
+      "ms_per_tile": 50,
+      "status": "estimate",
+      "rationale": "wgambit_spawn Vel 24; first projectile only"
+    },
+    {
+      "id": 137,
+      "name": "Taunt",
+      "catalog_name": "Taunt",
+      "class_name": "barbarian",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Stationary, self, area, buff or native effect; no projectile travel estimate"
+    },
+    {
+      "id": 138,
+      "name": "Shout",
+      "catalog_name": "Shout",
+      "class_name": "barbarian",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Stationary, self, area, buff or native effect; no projectile travel estimate"
+    },
+    {
+      "id": 139,
+      "name": "Stun",
+      "catalog_name": "Stun",
+      "class_name": "barbarian",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Melee or mixed weapon attack; no travel estimate"
+    },
+    {
+      "id": 140,
+      "name": "Double Throw",
+      "catalog_name": "Double Throw",
+      "class_name": "barbarian",
+      "ms_per_tile": 50,
+      "status": "existing trial",
+      "rationale": "Prior local trial; preserve tested tuning and family estimate"
+    },
+    {
+      "id": 141,
+      "name": "Chasm Break",
+      "catalog_name": "Increased Stamina",
+      "class_name": "barbarian",
+      "ms_per_tile": 12,
+      "status": "estimate",
+      "rationale": "chasm_break Vel 100; first projectile only"
+    },
+    {
+      "id": 142,
+      "name": "Find Item",
+      "catalog_name": "Find Item",
+      "class_name": "barbarian",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Corpse target"
+    },
+    {
+      "id": 143,
+      "name": "Leap Attack",
+      "catalog_name": "Leap Attack",
+      "class_name": "barbarian",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Movement or relocation; preserve destination"
+    },
+    {
+      "id": 144,
+      "name": "Concentrate",
+      "catalog_name": "Concentrate",
+      "class_name": "barbarian",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Melee or mixed weapon attack; no travel estimate"
+    },
+    {
+      "id": 145,
+      "name": "Iron Skin",
+      "catalog_name": "Iron Skin",
+      "class_name": "barbarian",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Passive"
+    },
+    {
+      "id": 146,
+      "name": "Battle Cry",
+      "catalog_name": "Battle Cry",
+      "class_name": "barbarian",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Stationary, self, area, buff or native effect; no projectile travel estimate"
+    },
+    {
+      "id": 147,
+      "name": "Frenzy",
+      "catalog_name": "Frenzy",
+      "class_name": "barbarian",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Melee or mixed weapon attack; no travel estimate"
+    },
+    {
+      "id": 148,
+      "name": "Increased Speed",
+      "catalog_name": "Increased Speed",
+      "class_name": "barbarian",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Passive"
+    },
+    {
+      "id": 149,
+      "name": "Battle Orders",
+      "catalog_name": "Battle Orders",
+      "class_name": "barbarian",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Stationary, self, area, buff or native effect; no projectile travel estimate"
+    },
+    {
+      "id": 150,
+      "name": "Korlics Fury",
+      "catalog_name": "Grim Ward",
+      "class_name": "barbarian",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Stationary, self, area, buff or native effect; no projectile travel estimate"
+    },
+    {
+      "id": 151,
+      "name": "Whirlwind",
+      "catalog_name": "Whirlwind",
+      "class_name": "barbarian",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Movement or relocation; preserve destination"
+    },
+    {
+      "id": 152,
+      "name": "Berserk",
+      "catalog_name": "Berserk",
+      "class_name": "barbarian",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Melee or mixed weapon attack; no travel estimate"
+    },
+    {
+      "id": 153,
+      "name": "Natural Resistance",
+      "catalog_name": "Natural Resistance",
+      "class_name": "barbarian",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Passive"
+    },
+    {
+      "id": 154,
+      "name": "War Cry",
+      "catalog_name": "War Cry",
+      "class_name": "barbarian",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Stationary, self, area, buff or native effect; no projectile travel estimate"
+    },
+    {
+      "id": 155,
+      "name": "Battle Command",
+      "catalog_name": "Battle Command",
+      "class_name": "barbarian",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Stationary, self, area, buff or native effect; no projectile travel estimate"
+    },
+    {
+      "id": 221,
+      "name": "Raven",
+      "catalog_name": "Raven",
+      "class_name": "druid",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Summon/trap placement; no prediction of later attacks"
+    },
+    {
+      "id": 222,
+      "name": "Poison Creeper",
+      "catalog_name": "Poison Creeper",
+      "class_name": "druid",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Summon/trap placement; no prediction of later attacks"
+    },
+    {
+      "id": 223,
+      "name": "Werewolf",
+      "catalog_name": "Werewolf",
+      "class_name": "druid",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Stationary, self, area, buff or native effect; no projectile travel estimate"
+    },
+    {
+      "id": 224,
+      "name": "Lycanthropy",
+      "catalog_name": "Lycanthropy",
+      "class_name": "druid",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Passive"
+    },
+    {
+      "id": 225,
+      "name": "Firestorm",
+      "catalog_name": "Firestorm",
+      "class_name": "druid",
+      "ms_per_tile": 100,
+      "status": "estimate",
+      "rationale": "firestormmaker Vel 12; stream direction only"
+    },
+    {
+      "id": 226,
+      "name": "Oak Sage",
+      "catalog_name": "Oak Sage",
+      "class_name": "druid",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Summon/trap placement; no prediction of later attacks"
+    },
+    {
+      "id": 227,
+      "name": "Summon Spirit Wolf",
+      "catalog_name": "Summon Spirit Wolf",
+      "class_name": "druid",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Summon/trap placement; no prediction of later attacks"
+    },
+    {
+      "id": 228,
+      "name": "Werebear",
+      "catalog_name": "Werebear",
+      "class_name": "druid",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Stationary, self, area, buff or native effect; no projectile travel estimate"
+    },
+    {
+      "id": 229,
+      "name": "Molten Boulder",
+      "catalog_name": "Molten Boulder",
+      "class_name": "druid",
+      "ms_per_tile": 100,
+      "status": "estimate",
+      "rationale": "moltenboulder Vel 12; excludes emergence delay"
+    },
+    {
+      "id": 230,
+      "name": "Arctic Blast",
+      "catalog_name": "Arctic Blast",
+      "class_name": "druid",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Stationary, self, area, buff or native effect; no projectile travel estimate"
+    },
+    {
+      "id": 231,
+      "name": "Carrion Vine",
+      "catalog_name": "Carrion Vine",
+      "class_name": "druid",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Summon/trap placement; no prediction of later attacks"
+    },
+    {
+      "id": 232,
+      "name": "Feral Rage",
+      "catalog_name": "Feral Rage",
+      "class_name": "druid",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Melee or mixed weapon attack; no travel estimate"
+    },
+    {
+      "id": 233,
+      "name": "Maul",
+      "catalog_name": "Maul",
+      "class_name": "druid",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Melee or mixed weapon attack; no travel estimate"
+    },
+    {
+      "id": 234,
+      "name": "Eruption",
+      "catalog_name": "Fissure",
+      "class_name": "druid",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Stationary, self, area, buff or native effect; no projectile travel estimate"
+    },
+    {
+      "id": 235,
+      "name": "Cyclone Armor",
+      "catalog_name": "Cyclone Armor",
+      "class_name": "druid",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Stationary, self, area, buff or native effect; no projectile travel estimate"
+    },
+    {
+      "id": 236,
+      "name": "Heart of Wolverine",
+      "catalog_name": "Heart of Wolverine",
+      "class_name": "druid",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Summon/trap placement; no prediction of later attacks"
+    },
+    {
+      "id": 237,
+      "name": "Summon Spirit Wolf",
+      "catalog_name": "Summon Dire Wolf",
+      "class_name": "druid",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Summon/trap placement; no prediction of later attacks"
+    },
+    {
+      "id": 238,
+      "name": "Rabies",
+      "catalog_name": "Rabies",
+      "class_name": "druid",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Melee or mixed weapon attack; no travel estimate"
+    },
+    {
+      "id": 239,
+      "name": "Fire Claws",
+      "catalog_name": "Fire Claws",
+      "class_name": "druid",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Melee or mixed weapon attack; no travel estimate"
+    },
+    {
+      "id": 240,
+      "name": "Twister",
+      "catalog_name": "Twister",
+      "class_name": "druid",
+      "ms_per_tile": 86,
+      "status": "existing trial",
+      "rationale": "Prior local trial; preserve tested tuning and family estimate"
+    },
+    {
+      "id": 241,
+      "name": "Solar Creeper",
+      "catalog_name": "Solar Creeper",
+      "class_name": "druid",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Summon/trap placement; no prediction of later attacks"
+    },
+    {
+      "id": 242,
+      "name": "Hunger",
+      "catalog_name": "Hunger",
+      "class_name": "druid",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Melee or mixed weapon attack; no travel estimate"
+    },
+    {
+      "id": 243,
+      "name": "Shock Wave",
+      "catalog_name": "Shock Wave",
+      "class_name": "druid",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Excluded from leading at user request"
+    },
+    {
+      "id": 244,
+      "name": "Volcano",
+      "catalog_name": "Volcano",
+      "class_name": "druid",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Stationary, self, area, buff or native effect; no projectile travel estimate"
+    },
+    {
+      "id": 245,
+      "name": "Tornado",
+      "catalog_name": "Tornado",
+      "class_name": "druid",
+      "ms_per_tile": 100,
+      "status": "existing trial",
+      "rationale": "Prior local trial; preserve tested tuning and family estimate"
+    },
+    {
+      "id": 246,
+      "name": "Spirit of Barbs",
+      "catalog_name": "Spirit of Barbs",
+      "class_name": "druid",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Summon/trap placement; no prediction of later attacks"
+    },
+    {
+      "id": 247,
+      "name": "Summon Grizzly",
+      "catalog_name": "Summon Grizzly",
+      "class_name": "druid",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Summon/trap placement; no prediction of later attacks"
+    },
+    {
+      "id": 248,
+      "name": "Fury",
+      "catalog_name": "Fury",
+      "class_name": "druid",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Melee or mixed weapon attack; no travel estimate"
+    },
+    {
+      "id": 249,
+      "name": "Armageddon",
+      "catalog_name": "Armageddon",
+      "class_name": "druid",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Stationary, self, area, buff or native effect; no projectile travel estimate"
+    },
+    {
+      "id": 250,
+      "name": "Hurricane",
+      "catalog_name": "Hurricane",
+      "class_name": "druid",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Stationary, self, area, buff or native effect; no projectile travel estimate"
+    },
+    {
+      "id": 251,
+      "name": "Fire Blast",
+      "catalog_name": "Fire Blast",
+      "class_name": "assassin",
+      "ms_per_tile": 100,
+      "status": "existing trial",
+      "rationale": "Prior local trial; preserve tested tuning and family estimate"
+    },
+    {
+      "id": 252,
+      "name": "Claw Mastery",
+      "catalog_name": "Claw Mastery",
+      "class_name": "assassin",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Passive"
+    },
+    {
+      "id": 253,
+      "name": "Ice Barrage",
+      "catalog_name": "Psychic Hammer",
+      "class_name": "assassin",
+      "ms_per_tile": 100,
+      "status": "existing trial",
+      "rationale": "Prior local trial; preserve tested tuning and family estimate"
+    },
+    {
+      "id": 254,
+      "name": "Tiger Strike",
+      "catalog_name": "Tiger Strike",
+      "class_name": "assassin",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Melee or mixed weapon attack; no travel estimate"
+    },
+    {
+      "id": 255,
+      "name": "Dragon Talon",
+      "catalog_name": "Dragon Talon",
+      "class_name": "assassin",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Melee or mixed weapon attack; no travel estimate"
+    },
+    {
+      "id": 256,
+      "name": "Shock Web",
+      "catalog_name": "Shock Web",
+      "class_name": "assassin",
+      "ms_per_tile": 110,
+      "status": "existing trial",
+      "rationale": "Prior local trial; preserve tested tuning and family estimate"
+    },
+    {
+      "id": 257,
+      "name": "Blade Sentinel",
+      "catalog_name": "Blade Sentinel",
+      "class_name": "assassin",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Summon/trap placement; no prediction of later attacks"
+    },
+    {
+      "id": 258,
+      "name": "Burst of Speed",
+      "catalog_name": "Burst of Speed",
+      "class_name": "assassin",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Stationary, self, area, buff or native effect; no projectile travel estimate"
+    },
+    {
+      "id": 259,
+      "name": "Fists of Fire",
+      "catalog_name": "Fists of Fire",
+      "class_name": "assassin",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Melee or mixed weapon attack; no travel estimate"
+    },
+    {
+      "id": 260,
+      "name": "Dragon Claw",
+      "catalog_name": "Dragon Claw",
+      "class_name": "assassin",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Melee or mixed weapon attack; no travel estimate"
+    },
+    {
+      "id": 261,
+      "name": "Charged Bolt Sentry",
+      "catalog_name": "Charged Bolt Sentry",
+      "class_name": "assassin",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Summon/trap placement; no prediction of later attacks"
+    },
+    {
+      "id": 262,
+      "name": "Wake of Fire Sentry",
+      "catalog_name": "Wake of Fire",
+      "class_name": "assassin",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Summon/trap placement; no prediction of later attacks"
+    },
+    {
+      "id": 263,
+      "name": "Weapon Block",
+      "catalog_name": "Weapon Block",
+      "class_name": "assassin",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Passive"
+    },
+    {
+      "id": 264,
+      "name": "Snowlash Sentry",
+      "catalog_name": "Cloak of Shadows",
+      "class_name": "assassin",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Summon/trap placement; no prediction of later attacks"
+    },
+    {
+      "id": 265,
+      "name": "Cobra Strike",
+      "catalog_name": "Cobra Strike",
+      "class_name": "assassin",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Melee or mixed weapon attack; no travel estimate"
+    },
+    {
+      "id": 266,
+      "name": "Blade Fury",
+      "catalog_name": "Blade Fury",
+      "class_name": "assassin",
+      "ms_per_tile": 69,
+      "status": "existing trial",
+      "rationale": "Prior local trial; preserve tested tuning and family estimate"
+    },
+    {
+      "id": 267,
+      "name": "Fade",
+      "catalog_name": "Fade",
+      "class_name": "assassin",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Stationary, self, area, buff or native effect; no projectile travel estimate"
+    },
+    {
+      "id": 268,
+      "name": "Shadow Warrior",
+      "catalog_name": "Shadow Warrior",
+      "class_name": "assassin",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Summon/trap placement; no prediction of later attacks"
+    },
+    {
+      "id": 269,
+      "name": "Claws of Thunder",
+      "catalog_name": "Claws of Thunder",
+      "class_name": "assassin",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Melee or mixed weapon attack; no travel estimate"
+    },
+    {
+      "id": 270,
+      "name": "Dragon Tail",
+      "catalog_name": "Dragon Tail",
+      "class_name": "assassin",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Melee or mixed weapon attack; no travel estimate"
+    },
+    {
+      "id": 271,
+      "name": "Lightning Sentry",
+      "catalog_name": "Lightning Sentry",
+      "class_name": "assassin",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Summon/trap placement; no prediction of later attacks"
+    },
+    {
+      "id": 272,
+      "name": "Flameburst Sentry",
+      "catalog_name": "Wake of Inferno",
+      "class_name": "assassin",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Summon/trap placement; no prediction of later attacks"
+    },
+    {
+      "id": 273,
+      "name": "Glacial Burst Sentry",
+      "catalog_name": "Mind Blast",
+      "class_name": "assassin",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Summon/trap placement; no prediction of later attacks"
+    },
+    {
+      "id": 274,
+      "name": "Blades of Ice",
+      "catalog_name": "Blades of Ice",
+      "class_name": "assassin",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Melee or mixed weapon attack; no travel estimate"
+    },
+    {
+      "id": 275,
+      "name": "Dragon Flight",
+      "catalog_name": "Dragon Flight",
+      "class_name": "assassin",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Movement or relocation; preserve destination"
+    },
+    {
+      "id": 276,
+      "name": "Death Sentry",
+      "catalog_name": "Death Sentry",
+      "class_name": "assassin",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Summon/trap placement; no prediction of later attacks"
+    },
+    {
+      "id": 277,
+      "name": "Blade Shield",
+      "catalog_name": "Blade Shield",
+      "class_name": "assassin",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Stationary, self, area, buff or native effect; no projectile travel estimate"
+    },
+    {
+      "id": 278,
+      "name": "Venom",
+      "catalog_name": "Venom",
+      "class_name": "assassin",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Stationary, self, area, buff or native effect; no projectile travel estimate"
+    },
+    {
+      "id": 279,
+      "name": "Shadow Master",
+      "catalog_name": "Shadow Master",
+      "class_name": "assassin",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Summon/trap placement; no prediction of later attacks"
+    },
+    {
+      "id": 280,
+      "name": "Royal Strike",
+      "catalog_name": "Phoenix Strike",
+      "class_name": "assassin",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Melee or mixed weapon attack; no travel estimate"
+    },
+    {
+      "id": 373,
+      "name": "Summon Goatman",
+      "catalog_name": "Summon Goatman",
+      "class_name": "warlock",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Summon/trap placement; no prediction of later attacks"
+    },
+    {
+      "id": 374,
+      "name": "Demonic Mastery",
+      "catalog_name": "Demonic Mastery",
+      "class_name": "warlock",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Passive"
+    },
+    {
+      "id": 375,
+      "name": "Death Mark",
+      "catalog_name": "Death Mark",
+      "class_name": "warlock",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Stationary, self, area, buff or native effect; no projectile travel estimate"
+    },
+    {
+      "id": 376,
+      "name": "Summon Tainted",
+      "catalog_name": "Summon Tainted",
+      "class_name": "warlock",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Summon/trap placement; no prediction of later attacks"
+    },
+    {
+      "id": 377,
+      "name": "Summon Defiler",
+      "catalog_name": "Summon Defiler",
+      "class_name": "warlock",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Summon/trap placement; no prediction of later attacks"
+    },
+    {
+      "id": 378,
+      "name": "Blood Oath",
+      "catalog_name": "Blood Oath",
+      "class_name": "warlock",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Passive"
+    },
+    {
+      "id": 379,
+      "name": "Engorge",
+      "catalog_name": "Engorge",
+      "class_name": "warlock",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Corpse target"
+    },
+    {
+      "id": 380,
+      "name": "Blood Boil",
+      "catalog_name": "Blood Boil",
+      "class_name": "warlock",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Stationary, self, area, buff or native effect; no projectile travel estimate"
+    },
+    {
+      "id": 381,
+      "name": "Consume",
+      "catalog_name": "Consume",
+      "class_name": "warlock",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Stationary, self, area, buff or native effect; no projectile travel estimate"
+    },
+    {
+      "id": 382,
+      "name": "Bind Demon",
+      "catalog_name": "Bind Demon",
+      "class_name": "warlock",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Stationary, self, area, buff or native effect; no projectile travel estimate"
+    },
+    {
+      "id": 383,
+      "name": "Levitate",
+      "catalog_name": "Levitate",
+      "class_name": "warlock",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Passive"
+    },
+    {
+      "id": 384,
+      "name": "Eldritch Blast",
+      "catalog_name": "Eldritch Blast",
+      "class_name": "warlock",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Stationary, self, area, buff or native effect; no projectile travel estimate"
+    },
+    {
+      "id": 385,
+      "name": "Hex Bane",
+      "catalog_name": "Hex Bane",
+      "class_name": "warlock",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Stationary, self, area, buff or native effect; no projectile travel estimate"
+    },
+    {
+      "id": 386,
+      "name": "Hex Siphon",
+      "catalog_name": "Hex Siphon",
+      "class_name": "warlock",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Stationary, self, area, buff or native effect; no projectile travel estimate"
+    },
+    {
+      "id": 387,
+      "name": "Psychic Ward",
+      "catalog_name": "Psychic Ward",
+      "class_name": "warlock",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Stationary, self, area, buff or native effect; no projectile travel estimate"
+    },
+    {
+      "id": 388,
+      "name": "Echoing Strike",
+      "catalog_name": "Echoing Strike",
+      "class_name": "warlock",
+      "ms_per_tile": 50,
+      "status": "estimate",
+      "rationale": "echoingstrike Vel 24; initial projectile only"
+    },
+    {
+      "id": 389,
+      "name": "Hex Purge",
+      "catalog_name": "Hex Purge",
+      "class_name": "warlock",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Stationary, self, area, buff or native effect; no projectile travel estimate"
+    },
+    {
+      "id": 390,
+      "name": "Blade Warp",
+      "catalog_name": "Blade Warp",
+      "class_name": "warlock",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Movement or relocation; preserve destination"
+    },
+    {
+      "id": 391,
+      "name": "Cleave",
+      "catalog_name": "Cleave",
+      "class_name": "warlock",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Melee or mixed weapon attack; no travel estimate"
+    },
+    {
+      "id": 392,
+      "name": "Mirrored Blades",
+      "catalog_name": "Mirrored Blades",
+      "class_name": "warlock",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Melee or mixed weapon attack; no travel estimate"
+    },
+    {
+      "id": 393,
+      "name": "Sigil of Lethargy",
+      "catalog_name": "Sigil of Lethargy",
+      "class_name": "warlock",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Stationary, self, area, buff or native effect; no projectile travel estimate"
+    },
+    {
+      "id": 394,
+      "name": "Ring of Fire",
+      "catalog_name": "Ring of Fire",
+      "class_name": "warlock",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Stationary, self, area, buff or native effect; no projectile travel estimate"
+    },
+    {
+      "id": 395,
+      "name": "Miasma Bolt",
+      "catalog_name": "Miasma Bolt",
+      "class_name": "warlock",
+      "ms_per_tile": 68,
+      "status": "existing trial",
+      "rationale": "Prior local trial; preserve tested tuning and family estimate"
+    },
+    {
+      "id": 396,
+      "name": "Sigil of Rancor",
+      "catalog_name": "Sigil of Rancor",
+      "class_name": "warlock",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Stationary, self, area, buff or native effect; no projectile travel estimate"
+    },
+    {
+      "id": 397,
+      "name": "Enhanced Entropy",
+      "catalog_name": "Enhanced Entropy",
+      "class_name": "warlock",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Passive"
+    },
+    {
+      "id": 398,
+      "name": "Flame Wave",
+      "catalog_name": "Flame Wave",
+      "class_name": "warlock",
+      "ms_per_tile": 50,
+      "status": "existing trial",
+      "rationale": "Prior local trial; preserve tested tuning and family estimate"
+    },
+    {
+      "id": 399,
+      "name": "Miasma Chains",
+      "catalog_name": "Miasma Chains",
+      "class_name": "warlock",
+      "ms_per_tile": 34,
+      "status": "estimate",
+      "rationale": "miasmachains child Vel 35; excludes maker delay and later behavior"
+    },
+    {
+      "id": 400,
+      "name": "Sigil of Death",
+      "catalog_name": "Sigil of Death",
+      "class_name": "warlock",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Stationary, self, area, buff or native effect; no projectile travel estimate"
+    },
+    {
+      "id": 401,
+      "name": "Apocalypse",
+      "catalog_name": "Apocalypse",
+      "class_name": "warlock",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Stationary, self, area, buff or native effect; no projectile travel estimate"
+    },
+    {
+      "id": 402,
+      "name": "Abyss",
+      "catalog_name": "Abyss",
+      "class_name": "warlock",
+      "ms_per_tile": 0,
+      "status": "no lead",
+      "rationale": "Stationary, self, area, buff or native effect; no projectile travel estimate"
+    }
+  ],
+  "max_ms": {
+    "39": 1200,
+    "45": 1200
+  },
+  "max_tiles": {
+    "39": 6,
+    "45": 6
+  }
+}

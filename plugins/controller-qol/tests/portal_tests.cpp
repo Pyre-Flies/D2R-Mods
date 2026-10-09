@@ -123,6 +123,36 @@ int main() {
     Check(!PreferObject(true,false,357,4,PriorityKind::None,2,6),"ordinary object is not promoted");
     Check(!PreferObject(true,false,357,2,PriorityKind::Waypoint,2,6),"object versus object retains native ranking");
     int item=1, portal=2; void* selected=&item; float best=0.9f;
+    // Regression: Interact accepted the chest, but later bound-skill arbitration
+    // discarded it when a combat target was present. Never recover loot here.
+    {
+        int queries=0, checks=0;
+        void* queried=&portal;
+        PriorityKind kind=PriorityKind::Chest;
+        int distance=0;
+        auto query=[&]() -> void* { ++queries; return queried; };
+        auto eligible=[&](void*) { ++checks; return kind!=PriorityKind::None && WithinPriorityDistance(distance,10); };
+        Check(RecoverInteraction(true,true,false,nullptr,query,eligible)==&portal && queries==1 && checks==1,
+            "accepted nearby chest restored after null combat arbitration");
+        for (auto family : {PriorityKind::Portal,PriorityKind::Stash,PriorityKind::Waypoint,PriorityKind::Shrine,PriorityKind::Well,PriorityKind::Chest}) {
+            kind=family; distance=10;
+            Check(RecoverInteraction(true,true,false,nullptr,query,eligible)==&portal,"enabled priority families recover at inclusive boundary");
+        }
+        for (int outside : {-1,11}) {
+            distance=outside;
+            Check(!RecoverInteraction(true,true,false,nullptr,query,eligible),"invalid or distant object keeps combat fallback");
+        }
+        distance=0; kind=PriorityKind::None;
+        Check(!RecoverInteraction(true,true,false,nullptr,query,eligible),"loot, unsupported and disabled object kinds never recovered");
+        kind=PriorityKind::Chest;
+        queries=checks=0;
+        Check(RecoverInteraction(true,true,false,&item,query,eligible)==&item && !queries && !checks,"existing native result not replaced or requeried");
+        Check(!RecoverInteraction(false,true,false,nullptr,query,eligible) && !queries,"shutdown or failed admission remains native");
+        Check(!RecoverInteraction(true,false,false,nullptr,query,eligible) && !queries,"mouse UI does not query or recover interactions");
+        Check(!RecoverInteraction(true,true,true,nullptr,query,eligible) && !queries,"held pickup modifier preserves native arbitration");
+        queried=nullptr;
+        Check(!RecoverInteraction(true,true,false,nullptr,query,eligible) && queries==1 && !checks,"native selection rejection never fabricates a target");
+    }
     int calls=0;
     auto accept=[&](float score) { ++calls; if (score>best) {best=score;selected=&portal;} };
     Check(EvaluatePortal(true,&portal,0.2f,best,selected,accept),"lower-score portal beats item");

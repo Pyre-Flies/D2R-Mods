@@ -34,11 +34,11 @@ enabled = true
 deadzone = 0.22
 # Speeds in world tiles/second at full stick tilt (0.1..100).
 # Light tilt slows movement further with a squared response curve.
-initial_speed = 4.0
-maximum_speed = 28.0
+initial_speed = 8.0
+maximum_speed = 48
 # Time to reach maximum speed while held (0.0..5.0).
 # Higher = gentler acceleration. Zero = immediate maximum speed.
-acceleration_seconds = 0.65
+acceleration_seconds = 0.35
 
 # All settings load on restart. Disabling the overlay does not disable aiming.
 snapping_enabled = true
@@ -48,7 +48,7 @@ overlay_enabled = true
 # Reticle colors: quoted #RRGGBB or #RRGGBBAA (optional opacity).
 ground_reticle_color = "#C2B596"
 lock_reticle_color = "#CC9C52F2"
-reticle_thickness = 1.0 # line-width multiplier, 0.5..4; 2.0 doubles strokes
+reticle_thickness = 2.0 # line-width multiplier, 0.5..4; 2.0 doubles strokes
 debug_overlay = false # verbose HUD, outer range circle, ticks and LAST CAST
 # Optional observer at 0x4FDB40: diagnostics, Teleport samples, cast-time reset.
 # true keeps full functionality when available; conflicts auto-skip only this hook.
@@ -93,7 +93,7 @@ whirlwind_pass_through_distance = 1.5 # world tiles beyond enemy, 0..15
 # Slow Missiles — self/buff/automatic; keep native
 "17" = false
 # Avoid — passive; keep native
-"18" = "disabled"
+"18" = false # Reimagined active replacement; R3-toggleable
 # Impale — melee/unit target; untested
 "19" = false
 # Lightning Bolt — directional target; untested
@@ -144,7 +144,7 @@ whirlwind_pass_through_distance = 1.5 # world tiles beyond enemy, 0..15
 "41" = false
 # Static Field — self/buff/automatic; keep native
 "42" = false
-# Telekinesis — directional target; untested
+# Telekinesis — native unit/item/object target; untested
 "43" = false
 # Frost Nova — self-centered area; keep native
 "44" = false
@@ -333,11 +333,11 @@ whirlwind_pass_through_distance = 1.5 # world tiles beyond enemy, 0..15
 # Double Swing — melee/unit target; untested
 "133" = false
 # Pole Arm Mastery — passive; keep native
-"134" = "disabled"
+"134" = false # Reimagined active replacement; R3-toggleable
 # Throwing Mastery — passive; keep native
 "135" = "disabled"
 # Spear Mastery — passive; keep native
-"136" = "disabled"
+"136" = false # Reimagined active replacement; R3-toggleable
 # Taunt — native behavior; review before enabling
 "137" = false
 # Shout — self/buff/automatic; keep native
@@ -347,7 +347,7 @@ whirlwind_pass_through_distance = 1.5 # world tiles beyond enemy, 0..15
 # Double Throw — directional target; untested
 "140" = false
 # Increased Stamina — passive; keep native
-"141" = "disabled"
+"141" = false # Reimagined active replacement; R3-toggleable
 # Find Item — corpse target; keep native
 "142" = false
 # Leap Attack — native behavior; review before enabling
@@ -440,7 +440,7 @@ whirlwind_pass_through_distance = 1.5 # world tiles beyond enemy, 0..15
 "250" = false
 
 [aim.assassin]
-# Fire Blast — point/directional target; untested
+# Fire Blast — snap placement; untested
 "251" = false
 # Claw Mastery — passive; keep native
 "252" = "disabled"
@@ -573,5 +573,279 @@ whirlwind_pass_through_distance = 1.5 # world tiles beyond enemy, 0..15
 # Optional targeting overrides for built-in or declared custom IDs.
 # Changes targeting only; does not enable a skill.
 [aim.targeting]
+# Reimagined active replacements for vanilla passive IDs; enable separately with R3.
+"136" = "snap" # Winter's Gambit
+"141" = "snap" # Chasm Break
 # "357" = "ground"
 # "54" = "snap"
+
+# Reimagined-oriented projectile baselines; numeric IDs are not mod-detected.
+# Milliseconds per world tile (0..200). Zero retains current-position aim.
+# Does not enable a skill. R3 and [aim.targeting] still control snap aiming.
+# New estimates need gameplay testing; see docs/PROJECTILE-LEADING.md.
+[aim.leading]
+
+# Amazon
+"6" = 50 # Magic Arrow
+"7" = 50 # Fire Arrow
+"8" = 0 # Inner Sight
+"9" = 0 # Critical Strike
+"10" = 0 # Jab
+"11" = 50 # Cold Arrow
+"12" = 50 # Multiple Shot (catalog: Multi Shot)
+"13" = 0 # Dodge
+"14" = 0 # Toxic Whirl (catalog: Power Strike)
+"15" = 50 # Poison Javelin
+"16" = 50 # Exploding Arrow
+"17" = 0 # Slow Missiles
+"18" = 0 # Elemental Covenant (catalog: Avoid)
+"19" = 0 # Impale
+"20" = 40 # Lightning Bolt
+"21" = 50 # Freezing Arrow (catalog: Ice Arrow)
+"22" = 0 # Guided Arrow
+"23" = 0 # Penetrate
+"24" = 0 # Charged Strike
+"25" = 50 # Plague Javelin
+"26" = 50 # Strafe
+"27" = 50 # Meteoric Arrow (catalog: Immolation Arrow)
+"28" = 0 # Titans Covenant (catalog: Dopplezon)
+"29" = 0 # Evade
+"30" = 0 # Fend
+"31" = 50 # Glacial Orb Arrow (catalog: Freezing Arrow)
+"32" = 0 # Valkyrie
+"33" = 0 # Pierce
+"34" = 0 # Lightning Strike
+"35" = 40 # Lightning Fury
+
+# Sorceress
+"36" = 60 # Fire Bolt
+"37" = 0 # Warmth
+"38" = 100 # Charged Bolt
+"39" = 100 # Ice Bolt
+"40" = 0 # Frozen Armor
+"41" = 92 # Inferno
+"42" = 0 # Static Field
+"43" = 0 # Telekinesis
+"44" = 0 # Frost Nova
+"45" = 100 # Ice Blast
+"46" = 0 # Blaze
+"47" = 50 # Fire Ball
+"48" = 0 # Nova
+"49" = 34 # Lightning
+"50" = 0 # Shiver Armor
+"51" = 0 # Fire Wall
+"52" = 0 # Enchant
+"53" = 34 # Chain Lightning
+"54" = 0 # Teleport
+"55" = 67 # Glacial Spike
+"56" = 0 # Meteor
+"57" = 0 # Thunder Storm
+"58" = 0 # Energy Shield
+"59" = 0 # Blizzard
+"60" = 0 # Chilling Armor
+"61" = 0 # Fire Mastery
+"62" = 0 # Hydra
+"63" = 0 # Lightning Mastery
+"64" = 100 # Frozen Orb
+"65" = 0 # Cold Mastery
+
+# Necromancer
+"66" = 0 # Amplify Damage
+"67" = 60 # Teeth
+"68" = 0 # Bone Armor
+"69" = 0 # Skeleton Mastery
+"70" = 0 # Raise Skeleton
+"71" = 0 # Dim Vision
+"72" = 0 # Weaken
+"73" = 0 # Poison Dagger
+"74" = 0 # Corpse Explosion
+"75" = 0 # Clay Golem
+"76" = 0 # Iron Maiden
+"77" = 0 # Terror
+"78" = 0 # Bone Wall
+"79" = 0 # Golem Mastery
+"80" = 0 # Raise Skeletal Mage
+"81" = 0 # Corpse Field (catalog: Confuse)
+"82" = 0 # Life Tap
+"83" = 0 # Poison Explosion
+"84" = 50 # Bone Spear
+"85" = 0 # BloodGolem (catalog: Blood Golem)
+"86" = 0 # Attract
+"87" = 0 # Decrepify
+"88" = 0 # Bone Prison
+"89" = 0 # Summon Resist
+"90" = 0 # IronGolem (catalog: Iron Golem)
+"91" = 0 # Lower Resist
+"92" = 0 # Poison Nova
+"93" = 0 # Bone Spirit
+"94" = 0 # FireGolem (catalog: Fire Golem)
+"95" = 0 # Revive
+
+# Paladin
+"96" = 0 # Sacrifice
+"97" = 0 # Smite
+"98" = 0 # Might
+"99" = 0 # Prayer
+"100" = 0 # Resist Fire
+"101" = 68 # Holy Bolt
+"102" = 0 # Holy Fire
+"103" = 0 # Thorns
+"104" = 0 # Defiance
+"105" = 0 # Resist Cold
+"106" = 0 # Zeal
+"107" = 0 # Charge
+"108" = 0 # Blessed Aim
+"109" = 0 # Cleansing
+"110" = 0 # Resist Lightning
+"111" = 0 # Vengeance
+"112" = 0 # Blessed Hammer
+"113" = 0 # Concentration
+"114" = 0 # Holy Freeze
+"115" = 0 # Vigor
+"116" = 48 # Shield Throw (catalog: Conversion)
+"117" = 0 # Holy Shield
+"118" = 0 # Holy Shock
+"119" = 0 # Sanctuary
+"120" = 0 # Meditation
+"121" = 0 # Fist of the Heavens
+"122" = 0 # Fanaticism
+"123" = 0 # Conviction
+"124" = 0 # Redemption
+"125" = 0 # Salvation
+
+# Barbarian
+"126" = 0 # Bash
+"127" = 0 # Melee Mastery (catalog: Blade Mastery)
+"128" = 0 # Shield Mastery (catalog: Axe Mastery)
+"129" = 0 # Deadly Treasures (catalog: Mace Mastery)
+"130" = 0 # Howl
+"131" = 0 # Find Potion
+"132" = 0 # Leap
+"133" = 0 # Double Swing
+"134" = 0 # Unstoppable Force (catalog: Pole Arm Mastery)
+"135" = 0 # Throwing Mastery
+"136" = 50 # Winters Gambit (catalog: Spear Mastery)
+"137" = 0 # Taunt
+"138" = 0 # Shout
+"139" = 0 # Stun
+"140" = 50 # Double Throw
+"141" = 12 # Chasm Break (catalog: Increased Stamina)
+"142" = 0 # Find Item
+"143" = 0 # Leap Attack
+"144" = 0 # Concentrate
+"145" = 0 # Iron Skin
+"146" = 0 # Battle Cry
+"147" = 0 # Frenzy
+"148" = 0 # Increased Speed
+"149" = 0 # Battle Orders
+"150" = 0 # Korlics Fury (catalog: Grim Ward)
+"151" = 0 # Whirlwind
+"152" = 0 # Berserk
+"153" = 0 # Natural Resistance
+"154" = 0 # War Cry
+"155" = 0 # Battle Command
+
+# Druid
+"221" = 0 # Raven
+"222" = 0 # Poison Creeper
+"223" = 0 # Werewolf
+"224" = 0 # Lycanthropy
+"225" = 100 # Firestorm
+"226" = 0 # Oak Sage
+"227" = 0 # Summon Spirit Wolf
+"228" = 0 # Werebear
+"229" = 100 # Molten Boulder
+"230" = 0 # Arctic Blast
+"231" = 0 # Carrion Vine
+"232" = 0 # Feral Rage
+"233" = 0 # Maul
+"234" = 0 # Eruption (catalog: Fissure)
+"235" = 0 # Cyclone Armor
+"236" = 0 # Heart of Wolverine
+"237" = 0 # Summon Spirit Wolf (catalog: Summon Dire Wolf)
+"238" = 0 # Rabies
+"239" = 0 # Fire Claws
+"240" = 86 # Twister
+"241" = 0 # Solar Creeper
+"242" = 0 # Hunger
+"243" = 0 # Shock Wave
+"244" = 0 # Volcano
+"245" = 100 # Tornado
+"246" = 0 # Spirit of Barbs
+"247" = 0 # Summon Grizzly
+"248" = 0 # Fury
+"249" = 0 # Armageddon
+"250" = 0 # Hurricane
+
+# Assassin
+"251" = 100 # Fire Blast
+"252" = 0 # Claw Mastery
+"253" = 100 # Ice Barrage (catalog: Psychic Hammer)
+"254" = 0 # Tiger Strike
+"255" = 0 # Dragon Talon
+"256" = 110 # Shock Web
+"257" = 0 # Blade Sentinel
+"258" = 0 # Burst of Speed
+"259" = 0 # Fists of Fire
+"260" = 0 # Dragon Claw
+"261" = 0 # Charged Bolt Sentry
+"262" = 0 # Wake of Fire Sentry (catalog: Wake of Fire)
+"263" = 0 # Weapon Block
+"264" = 0 # Snowlash Sentry (catalog: Cloak of Shadows)
+"265" = 0 # Cobra Strike
+"266" = 69 # Blade Fury
+"267" = 0 # Fade
+"268" = 0 # Shadow Warrior
+"269" = 0 # Claws of Thunder
+"270" = 0 # Dragon Tail
+"271" = 0 # Lightning Sentry
+"272" = 0 # Flameburst Sentry (catalog: Wake of Inferno)
+"273" = 0 # Glacial Burst Sentry (catalog: Mind Blast)
+"274" = 0 # Blades of Ice
+"275" = 0 # Dragon Flight
+"276" = 0 # Death Sentry
+"277" = 0 # Blade Shield
+"278" = 0 # Venom
+"279" = 0 # Shadow Master
+"280" = 0 # Royal Strike (catalog: Phoenix Strike)
+
+# Warlock
+"373" = 0 # Summon Goatman
+"374" = 0 # Demonic Mastery
+"375" = 0 # Death Mark
+"376" = 0 # Summon Tainted
+"377" = 0 # Summon Defiler
+"378" = 0 # Blood Oath
+"379" = 0 # Engorge
+"380" = 0 # Blood Boil
+"381" = 0 # Consume
+"382" = 0 # Bind Demon
+"383" = 0 # Levitate
+"384" = 0 # Eldritch Blast
+"385" = 0 # Hex Bane
+"386" = 0 # Hex Siphon
+"387" = 0 # Psychic Ward
+"388" = 50 # Echoing Strike
+"389" = 0 # Hex Purge
+"390" = 0 # Blade Warp
+"391" = 0 # Cleave
+"392" = 0 # Mirrored Blades
+"393" = 0 # Sigil of Lethargy
+"394" = 0 # Ring of Fire
+"395" = 68 # Miasma Bolt
+"396" = 0 # Sigil of Rancor
+"397" = 0 # Enhanced Entropy
+"398" = 50 # Flame Wave
+"399" = 34 # Miasma Chains
+"400" = 0 # Sigil of Death
+"401" = 0 # Apocalypse
+"402" = 0 # Abyss
+
+# Tested ice limits; other skills retain 600 ms / three tiles.
+[aim.leading_max_ms]
+"39" = 1200
+"45" = 1200
+
+[aim.leading_max_tiles]
+"39" = 6
+"45" = 6

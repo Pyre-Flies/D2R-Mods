@@ -53,7 +53,13 @@ int main(int argc,char** argv) {
     check(enabledCount==10 && !skills.Enabled(48) && !skills.Enabled(74) && !skills.Enabled(92),"only ten tested class skills default on; Nova/corpse skills stay native");
     for(const auto& skill:Aim::SkillCatalog) check(config.find("\""+std::to_string(skill.id)+"\" = ")!=config.npos,"all 240 class IDs included in embedded configuration");
     check(aim.whirlwindPassThrough && aim.whirlwindPassThroughDistance==1.5f && !aim.debugOverlay,"merged aim defaults preserve reviewed behavior");
-    check(aim.reticleThickness==1 && config.find("ground_reticle_color = \"#C2B596\"")!=config.npos && config.find("lock_reticle_color = \"#CC9C52F2\"")!=config.npos,"reticle color and thickness defaults included in shipped config");
+    check(aim.reticleThickness==2 && config.find("ground_reticle_color = \"#C2B596\"")!=config.npos && config.find("lock_reticle_color = \"#CC9C52F2\"")!=config.npos,"reticle color and thickness defaults included in shipped config");
+    check(aim.deadzone==0.22f && aim.initialSpeed==8 && aim.maximumSpeed==48 && aim.accelerationSeconds==0.35f,"packaged motion defaults match reviewed tuning");
+    unsigned leadCount=0;
+    for(const auto& skill:Aim::SkillCatalog) leadCount+=skills.LeadMillisecondsPerTile(skill.id)>0?1u:0u;
+    check(leadCount==42 && skills.LeadMillisecondsPerTile(256)==110 && skills.LeadMillisecondsPerTile(243)==0,"42 projectile baselines preserve Shock Web tuning and Shock Wave exclusion");
+    check(skills.LeadMaxMilliseconds(39)==1200 && skills.LeadMaxTiles(45)==6 && skills.LeadMaxTiles(47)==3,"ice limits do not leak to other skills");
+    check(skills.CanToggle(136) && skills.CanToggle(141) && !skills.Enabled(136) && !skills.Enabled(141) && skills.Targeting(136)==Aim::TargetMode::Snap && skills.Targeting(141)==Aim::TargetMode::Snap,"Reimagined passive replacements can opt in without default activation");
     check(aim.skillTreeToggle && config.find("skill_tree_toggle_enabled = true")!=config.npos,"skill-tree toggle default included in shipped configuration");
     check(aim.castObserver && config.find("cast_observer_enabled = true")!=config.npos,"optional cast observer defaults enabled for full functionality");
     check(!GetProcAddress(dll,"D2RControllerAimOwnsGuidedArrowV1"),"prototype ownership export replaced by internal interface");

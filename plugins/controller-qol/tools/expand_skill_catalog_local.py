@@ -18,7 +18,8 @@ labels = {12:'Multi Shot',85:'Blood Golem',90:'Iron Golem',94:'Fire Golem',
           393:'Sigil of Lethargy',396:'Sigil of Rancor',400:'Sigil of Death'}
 tested = {12,22,51,54,56,59,62,67,132,151}
 ground = {54,132,78,75,85,94,32,28,221,222,226,227,231,236,237,241,246,247,
-          251,256,257,261,262,268,271,272,276,279,373,376,377,390,393,396,400}
+          256,257,261,262,268,271,272,276,279,373,376,377,390,393,396,400}
+snap_placement = {234,244,251,256,257,261,262,271,272,276,393,396,400}
 curses = {66,71,72,76,77,81,82,86,87,91}
 directional = {6,7,11,12,15,16,20,21,22,25,26,27,31,35,
                36,38,39,41,43,45,47,49,53,55,64,67,84,93,101,121,140,
@@ -32,9 +33,13 @@ for row in rows:
         continue
     sid = int(row['*Id'])
     label = labels.get(sid, row['skill'])
-    snap = sid not in ground and (row['range'] in ('rng','h2h','both') or sid in curses or sid in tested or sid in directional)
+    snap = sid in snap_placement or sid not in ground and (row['range'] in ('rng','h2h','both') or sid in curses or sid in tested or sid in directional)
     if sid in tested:
         behavior = 'tested snap aim' if snap else 'tested ground aim'
+    elif sid == 43:
+        behavior = 'native unit/item/object target; untested'
+    elif sid == 251:
+        behavior = 'snap placement; untested'
     elif row['TargetCorpse'] == '1':
         behavior = 'corpse target; keep native'
     elif row['passive'] == '1':
@@ -97,7 +102,8 @@ for cls in classes.values():
     config += f'\n[aim.{cls}]\n'
     for sid,label,entry_cls,behavior,snap,enabled in entries:
         if entry_cls == cls:
-            config += f'# {label} — {behavior}\n"{sid}" = {str(enabled).lower()}\n'
+            value = '"disabled"' if behavior.startswith('passive;') else str(enabled).lower()
+            config += f'# {label} — {behavior}\n"{sid}" = {value}\n'
 config += '''
 # Additional IDs outside the class catalog; use the active mod's skills table.
 # true enables snap aim; false is off; "disabled" locks off. Maximum 32 IDs (1..65534).
@@ -109,8 +115,13 @@ config += '''
 # Optional targeting overrides for built-in or declared custom IDs.
 # Changes targeting only; does not enable a skill.
 [aim.targeting]
+"136" = "snap" # Reimagined Winter's Gambit
+"141" = "snap" # Reimagined Chasm Break
 # "357" = "ground"
 # "54" = "snap"
+
 '''
+from leading_defaults import render_leading_defaults
+config += render_leading_defaults()
 (root/'controller-qol-updates.toml').write_text(config,encoding='utf-8')
-print('Generated 240 class entries; 10 tested defaults enabled, 230 disabled.')
+print('Generated 240 class entries and reviewed leading baselines.')

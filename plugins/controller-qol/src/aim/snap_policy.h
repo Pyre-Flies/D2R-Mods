@@ -1,8 +1,19 @@
 #pragma once
 #include "aim_policy.h"
+#include "lead_policy.h"
 #include <array>
 
 namespace Aim {
+// Native target categories are richer than UnitType: NPCs and allies also use
+// UnitType 1. Only the ordinary monster category may enter the enemy cache.
+inline bool ReticleScoringCategory(int category,bool nativeUnits) noexcept {
+    return category==1 || (nativeUnits && (category==2 || category==3));
+}
+struct TargetCategoryObservation {
+    bool enemy{}, other{};
+    void Observe(int category) noexcept { if(category==1) enemy=true; else other=true; }
+    bool EnemyOnly() const noexcept { return enemy && !other; }
+};
 enum class ObservationMode { None, MeteorPreviewCircle, MeteorCircle };
 inline bool UseCoordinateTarget(int requestedSkill,int activeSkill) noexcept {
     return Supported(requestedSkill) && requestedSkill==activeSkill;
@@ -21,6 +32,7 @@ struct SnapCandidate {
     unsigned playerId{}, id{};
     Point position{};
     std::uint64_t tick{};
+    MotionTrack motion{};
 };
 struct SnapDiagnostics {
     unsigned fresh{}, expired{}, outsideCircle{}, outsideRange{};
@@ -47,7 +59,10 @@ struct SnapBook {
             if(retained.valid && retained.playerId==player && retained.id==id) retained={};
             return;
         }
-        *slot={true,player,id,position,tick};
+        MotionTrack motion{};
+        if(slot->valid && slot->playerId==player && slot->id==id) motion=slot->motion;
+        motion.Observe(position,tick);
+        *slot={true,player,id,position,tick,motion};
     }
     SnapCandidate Choose(unsigned player,Point center,Point playerPosition,std::uint64_t now,SnapDiagnostics* diagnostics=nullptr,float radius=SnapRadius,float switchAdvantage=SwitchAdvantage,bool retainOutsideCircle=false) noexcept {
         SnapDiagnostics reasons{};

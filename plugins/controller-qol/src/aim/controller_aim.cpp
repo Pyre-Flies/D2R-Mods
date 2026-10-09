@@ -45,6 +45,7 @@ PointScoreFn originalPointScore{};
 CastFn originalCast{};
 SelectedFn originalSelected{};
 std::atomic<unsigned> selectedSuppressionCount{};
+std::atomic<unsigned> nativeUnitSelectionReports{}, nativeUnitCandidateReports{};
 std::atomic<bool> ready{}, installed{}, enabled{false}, inSession{}, queued{}, reverseY{};
 std::atomic<float> requestedDistance{Aim::DefaultDistance};
 std::atomic<unsigned> lookupCount{}, scoringCount{}, castCount{};
@@ -82,7 +83,7 @@ struct CastMarker { bool valid{}; unsigned playerId{}; Aim::Point position{}; st
 CastMarker lastCastMarker{};
 std::atomic<unsigned> candidateCount{}, previewCandidateReports{};
 std::atomic<unsigned> activeSnapTraceReports{}, idleSnapTraceReports{};
-struct CandidateTrace { bool active{}; unsigned calls{}; float nativeScore{-1}, returnedScore{-1}; };
+struct CandidateTrace { bool active{}; unsigned calls{}; float nativeScore{-1}, returnedScore{-1}; Aim::TargetCategoryObservation categories{}; int category{-1}; };
 thread_local CandidateTrace candidateTrace{};
 struct PendingTeleport {
     bool active{};
@@ -93,7 +94,7 @@ struct PendingTeleport {
 PendingTeleport pending{};
 float observedDisplacement{-1};
 std::atomic<std::uint64_t> lastUiTick{};
-struct ScoringWindow { bool active{}, monster{}; void* player{}; Aim::Point center{}; };
+struct ScoringWindow { bool active{}, candidate{}; void* player{}; Aim::Point center{}; bool nativeUnits{}; };
 thread_local ScoringWindow scoringWindow{};
 
 template<class T> T NativeFunction(std::uintptr_t rva) noexcept {
@@ -193,9 +194,20 @@ bool ReadMonster(void* unit, Aim::Point& position, unsigned& id) noexcept {
     } __except(EXCEPTION_EXECUTE_HANDLER) { return false; }
 }
 
+bool ReadTargetIdentity(void* unit,unsigned& type,unsigned& id) noexcept {
+    __try {
+        if(!unit) return false;
+        type=Field<unsigned>(unit,0); id=Field<unsigned>(unit,8);
+        return true;
+    } __except(EXCEPTION_EXECUTE_HANDLER) { return false; }
+}
+
 // Called with stateLock held. Facing and native selected-target caches are not
 // inputs: normal turn-to-cast cannot move the cursor or re-rank the same point.
 void ResolveSelection(View& view,bool allowPreview=false) noexcept {
+    // Telekinesis retains the game's selected unit. The monster-only coordinate
+    // book must neither replace it nor display a different target as its lock.
+    if(Aim::UsesNativeUnitTarget(view.skill)) { whirlLockActive=false; return; }
     const bool groundPreview=allowPreview && view.activeSkill==-1 && skillSettings.Enabled(view.skill) && !skillSettings.Snaps(view.skill);
     if(!manualAim.load() || !motionSettings.snapping || (!skillSettings.Snaps(view.skill) && !groundPreview)) { whirlLockActive=false; return; }
     const bool whirl=view.skill==Aim::Whirlwind;
@@ -204,6 +216,9 @@ void ResolveSelection(View& view,bool allowPreview=false) noexcept {
     const auto chosen=snapBook.Choose(view.playerId,view.center,view.player,view.tick,&view.snapDiagnostics,motionSettings.snapRadius,motionSettings.switchAdvantage,whirl);
     if(chosen.valid) {
         Aim::Point endpoint=chosen.position;
+        if(!whirl && view.activeSkill==view.skill && skillSettings.Snaps(view.skill))
+            endpoint=chosen.motion.Destination(view.player,chosen.position,view.tick,skillSettings.LeadMillisecondsPerTile(view.skill),
+                skillSettings.LeadMaxMilliseconds(view.skill),skillSettings.LeadMaxTiles(view.skill));
         if(whirl && !Aim::WhirlwindEndpoint(view.player,chosen.position,endpoint,motionSettings.whirlwindPassThrough?motionSettings.whirlwindPassThroughDistance:0)) return;
         view.target=true; view.targetTick=chosen.tick;
         view.targetId=chosen.id; view.destination=endpoint; view.targetPosition=chosen.position;
@@ -211,11 +226,29 @@ void ResolveSelection(View& view,bool allowPreview=false) noexcept {
 }
 
 void* __fastcall Selected(void* controller,int skill) noexcept {
+    const int previousPreview=previewSkill.load();
     void* const nativeTarget=originalSelected(controller,skill);
     View view{};
     // Active local controller skill only. Never use idle preview to suppress
     // native interactions, mouse targeting, or another skill's selected unit.
-    if(!ReadView(nullptr,view,false) || !Aim::CoordinateRoute(manualAim.load(),skill,view.activeSkill,skillSettings)) return nativeTarget;
+    if(!ReadView(nullptr,view,false)) return nativeTarget;
+    if(Aim::UsesNativeUnitTarget(skill) && skill==view.activeSkill) {
+        unsigned type{}, id{};
+        const bool readable=ReadTargetIdentity(nativeTarget,type,id);
+        const auto now=GetTickCount64();
+        const std::uint64_t identity=(static_cast<std::uint64_t>(type)<<32)|id;
+        static thread_local std::uint64_t lastIdentity{}, lastReport{};
+        // Repeated queries in one frame must not consume the whole trace budget.
+        if((!lastReport || identity!=lastIdentity || now-lastReport>=1000) && nativeUnitSelectionReports.fetch_add(1)<64) {
+            lastIdentity=identity; lastReport=now;
+            char message[224];
+            std::snprintf(message,sizeof(message),"[QOL/AimUnit] selected skill=%d previousPreview=%d present=%u readable=%u type=%u id=%u; native unit route retained.",
+                skill,previousPreview,nativeTarget!=nullptr,readable,type,id);
+            ctx->LogInfo(message);
+        }
+        return nativeTarget;
+    }
+    if(!Aim::CoordinateRoute(manualAim.load(),skill,view.activeSkill,skillSettings)) return nativeTarget;
     if(nativeTarget) {
         const auto count=selectedSuppressionCount.fetch_add(1)+1;
         if(count<=32) {
@@ -232,6 +265,9 @@ void __fastcall Lookup(void* controller,void* player,bool adjust,float* x,float*
     View view{};
     if(!x || !y || !ReadView(player,view)) return;
     previewSkill.store(view.skill);
+    // Native Lookup already consumed the selected unit; preserve its output as
+    // well as Selected's identity for item/object operations.
+    if(Aim::UsesNativeUnitTarget(view.skill)) return;
     View preview{};
     AcquireSRWLockExclusive(&stateLock);
     preview=published;
@@ -252,6 +288,14 @@ void __fastcall Lookup(void* controller,void* player,bool adjust,float* x,float*
         std::snprintf(message,sizeof(message),"[QOL/Aim] lookup #%u skill=%d range=%.2f center=(%.2f,%.2f) destination=(%.2f,%.2f) target=%s id=%u.",
             count,view.skill,view.distance,view.center.x,view.center.y,view.destination.x,view.destination.y,view.target?"monster":"ground",view.targetId);
         ctx->LogInfo(message);
+        if(view.target && view.skill!=Aim::Whirlwind && skillSettings.LeadMillisecondsPerTile(view.skill) &&
+            Aim::DistanceSquared(view.destination,view.targetPosition)>0.0001f) {
+            char lead[320];
+            std::snprintf(lead,sizeof(lead),"[QOL/AimLead] skill=%d id=%u travelMsPerTile=%u capMs=%u capTiles=%u target=(%.2f,%.2f) cast=(%.2f,%.2f) lead=%.2f.",
+                view.skill,view.targetId,skillSettings.LeadMillisecondsPerTile(view.skill),skillSettings.LeadMaxMilliseconds(view.skill),skillSettings.LeadMaxTiles(view.skill),view.targetPosition.x,view.targetPosition.y,
+                view.destination.x,view.destination.y,std::sqrt(Aim::DistanceSquared(view.destination,view.targetPosition)));
+            ctx->LogInfo(lead);
+        }
         if(skillSettings.Snaps(view.skill)) {
             const auto& d=view.snapDiagnostics;
             char detail[280];
@@ -282,7 +326,11 @@ bool __fastcall UnitTest(void* controller,void* player,void* candidate) noexcept
     const auto mode=haveView && manualAim.load() && motionSettings.snapping?
         (skillSettings.Snaps(view.activeSkill)?Aim::ObservationMode::MeteorCircle:
         (view.activeSkill==-1?Aim::ObservationMode::MeteorPreviewCircle:Aim::ObservationMode::None)):Aim::ObservationMode::None;
-    const bool observe=mode!=Aim::ObservationMode::None && ReadMonster(candidate,position,id);
+    unsigned unitType{}, unitId{};
+    const bool nativeUnit=haveView && motionSettings.snapping &&
+        ReadTargetIdentity(candidate,unitType,unitId) &&
+        Aim::NativeUnitScoring(manualAim.load(),view.activeSkill,view.skill,unitType,skillSettings);
+    const bool observe=mode!=Aim::ObservationMode::None && !Aim::UsesNativeUnitTarget(view.skill) && ReadMonster(candidate,position,id);
     // Acquire around the armed reticle before Lookup needs the first target.
     // Natural enumeration still validates candidates; idle monster ranking is
     // changed deliberately. Active ground/disabled skills do not inherit it.
@@ -300,16 +348,26 @@ bool __fastcall UnitTest(void* controller,void* player,void* candidate) noexcept
             scoringCenter=position;
         scoringWindow={true,true,player,scoringCenter};
     }
+    // Reuse the naturally enumerated candidate's native position and category.
+    // The original UnitTest and Selected retain skill/category eligibility and
+    // final unit identity; no object pointer enters the monster snap cache.
+    if(nativeUnit) scoringWindow={true,true,player,view.center,true};
     const auto previousTrace=candidateTrace;
-    candidateTrace={observe,0,-1,-1};
+    candidateTrace={observe || nativeUnit,0,-1,-1};
     const bool result=originalUnitTest(controller,player,candidate);
     const auto trace=candidateTrace;
     candidateTrace=previousTrace;
     scoringWindow=previous;
+    if(nativeUnit && trace.calls && trace.returnedScore>=0 && nativeUnitCandidateReports.fetch_add(1)<64) {
+        char message[224];
+        std::snprintf(message,sizeof(message),"[QOL/AimUnit] candidate active=%d preview=%d type=%u id=%u nativeResult=%u scoreCalls=%u native=%.3f returned=%.3f.",
+            view.activeSkill,view.skill,unitType,unitId,result,trace.calls,trace.nativeScore,trace.returnedScore);
+        ctx->LogInfo(message);
+    }
     if(observe) {
         unsigned currentId{};
         const bool stillReadable=ReadMonster(candidate,position,currentId) && currentId==id;
-        const bool eligible=result && stillReadable;
+        const bool eligible=result && stillReadable && trace.categories.EnemyOnly();
         AcquireSRWLockExclusive(&stateLock);
         snapBook.Observe(view.playerId,id,position,GetTickCount64(),eligible);
         ReleaseSRWLockExclusive(&stateLock);
@@ -319,9 +377,9 @@ bool __fastcall UnitTest(void* controller,void* player,void* candidate) noexcept
         if(Aim::Score(view.center,position,motionSettings.snapRadius)>=0 && traceReports.fetch_add(1)<128) {
             const float facingDot=(position.x-view.player.x)*view.facing.x+(position.y-view.player.y)*view.facing.y;
             char detail[384];
-            std::snprintf(detail,sizeof(detail),"[QOL/AimTrace] candidate=%u active=%d previewSkill=%d override=%u eligible=%u scoreCalls=%u native=%.3f returned=%.3f facingDot=%.3f centerDistance=%.2f tick=%llu.",
+            std::snprintf(detail,sizeof(detail),"[QOL/AimTrace] candidate=%u active=%d previewSkill=%d override=%u eligible=%u scoreCalls=%u category=%d native=%.3f returned=%.3f facingDot=%.3f centerDistance=%.2f tick=%llu.",
                 id,view.activeSkill,view.skill,Aim::OverrideScoring(manualAim.load(),view.activeSkill,skillSettings,view.skill),eligible,
-                trace.calls,trace.nativeScore,trace.returnedScore,facingDot,
+                trace.calls,trace.category,trace.nativeScore,trace.returnedScore,facingDot,
                 std::sqrt(Aim::DistanceSquared(view.center,position)),static_cast<unsigned long long>(view.tick));
             ctx->LogInfo(detail);
         }
@@ -338,13 +396,20 @@ bool __fastcall UnitTest(void* controller,void* player,void* candidate) noexcept
 
 float __fastcall PointScore(void* controller,void* player,const float* position,int category,int profile) noexcept {
     const float nativeScore=originalPointScore(controller,player,position,category,profile);
-    if(candidateTrace.active) { ++candidateTrace.calls; candidateTrace.nativeScore=nativeScore; candidateTrace.returnedScore=nativeScore; }
+    if(candidateTrace.active) {
+        ++candidateTrace.calls; candidateTrace.nativeScore=nativeScore; candidateTrace.returnedScore=nativeScore;
+        candidateTrace.category=category; candidateTrace.categories.Observe(category);
+    }
     if(!installed.load() || !enabled.load() || !inSession.load() || !manualAim.load() || !scoringWindow.active || scoringWindow.player!=player) return nativeScore;
-    // Replace geometry only in native Meteor candidate enumeration. Native
+    // Keep NPC/friendly/dead/unknown categories on native geometry, including
+    // idle preview after casting. Objects/items are allowed only for native-unit
+    // Telekinesis preparation, and never enter the enemy snap cache.
+    if(!Aim::ReticleScoringCategory(category,scoringWindow.nativeUnits)) return nativeScore;
+    // Replace geometry only inside admitted native candidate enumeration. Native
     // visibility, hostility/category and skill validation still execute.
     float score=-1;
     __try {
-        if(scoringWindow.monster && position) score=Aim::Score(scoringWindow.center,{position[0],position[1]},motionSettings.snapRadius);
+        if(scoringWindow.candidate && position) score=Aim::Score(scoringWindow.center,{position[0],position[1]},motionSettings.snapRadius);
     } __except(EXCEPTION_EXECUTE_HANDLER) { return nativeScore; }
     if(candidateTrace.active) candidateTrace.returnedScore=score;
     const auto count=scoringCount.fetch_add(1)+1;
@@ -794,7 +859,7 @@ void __cdecl Frame(const D2RL::PluginContext*,const D2RL::Overlay::Frame* frame,
             Aim::Point enemy{};
             if(view.projection.Project(view.targetPosition,enemy)) EnemyReticle(frame->canvas,enemy,scale);
             // Whirlwind's landing point is separate from the enemy lock.
-            if(Aim::DistanceSquared(view.destination,view.targetPosition)>0.01f)
+            if(view.skill==Aim::Whirlwind && Aim::DistanceSquared(view.destination,view.targetPosition)>0.01f)
                 GroundReticle(frame->canvas,view.projection,view.destination,scale,0.9f);
         }
         return;
@@ -932,6 +997,7 @@ void __cdecl Lifecycle(const D2RL::PluginContext*,const D2RL::Lifecycle::Gamepla
     controllerTick.store(0);
     requestedDistance.store(Aim::DefaultDistance); previewSkill.store(-1); lastUiTick.store(0); queued.store(false); overlayReports.store(0);
     projectionReports.store(0); previewCandidateReports.store(0); lastProjectionStatus.store(99);
+    nativeUnitSelectionReports.store(0); nativeUnitCandidateReports.store(0);
     AcquireSRWLockExclusive(&stateLock); published={};treePublished={}; pending={}; observedDisplacement=-1; retainedOffsetValid=false; cursorMotion={}; snapBook={}; whirlLockActive=false; lastLookup={}; lastCastMarker={}; ReleaseSRWLockExclusive(&stateLock);
     if(inSession.load() && !installed.load()) Install();
 }

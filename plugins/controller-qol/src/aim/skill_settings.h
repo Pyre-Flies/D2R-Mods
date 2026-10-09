@@ -7,7 +7,10 @@
 
 namespace Aim {
 enum class TargetMode { Disabled, Ground, Snap };
-struct SkillSetting { int id{}; TargetMode mode{}; bool locked{}; TargetMode targeting{TargetMode::Snap}; };
+// Telekinesis operates on the selected unit (including objects/items). A point
+// cannot replace that identity as it can for projectile/area spells.
+inline bool UsesNativeUnitTarget(int skill) noexcept { return skill==43; }
+struct SkillSetting { int id{}; TargetMode mode{}; bool locked{}; TargetMode targeting{TargetMode::Snap}; unsigned leadMsPerTile{}; unsigned leadMaxMs{600}, leadMaxTiles{3}; };
 struct SkillSettings {
     static constexpr std::size_t Capacity=SkillCatalog.size()+32;
     std::array<SkillSetting,Capacity> entries{};
@@ -33,6 +36,18 @@ struct SkillSettings {
     }
     bool Enabled(int id) const noexcept { return Mode(id)!=TargetMode::Disabled; }
     bool Snaps(int id) const noexcept { return Mode(id)==TargetMode::Snap; }
+    unsigned LeadMaxMilliseconds(int id) const noexcept {
+        for(const auto& entry:entries) if(entry.id==id) return entry.leadMaxMs;
+        return 600;
+    }
+    unsigned LeadMaxTiles(int id) const noexcept {
+        for(const auto& entry:entries) if(entry.id==id) return entry.leadMaxTiles;
+        return 3;
+    }
+    unsigned LeadMillisecondsPerTile(int id) const noexcept {
+        for(const auto& entry:entries) if(entry.id==id) return entry.leadMsPerTile;
+        return 0;
+    }
 };
 // Class headings organize IDs only. Legacy name keys remain readable for migration.
 inline bool ParseSkills(std::string_view text,SkillSettings& output) {
@@ -105,6 +120,34 @@ inline bool ParseSkills(std::string_view text,SkillSettings& output) {
         }
         if(!found) return false;
     }
+    // Independent integer maps: estimates never enable a skill; limits retain
+    // the original 600 ms / 3-tile defaults unless explicitly overridden.
+    struct LeadOption { const char* section; unsigned SkillSetting::*member; unsigned minimum, maximum; };
+    for(const auto option : {LeadOption{"aim.leading", &SkillSetting::leadMsPerTile, 0, 200},
+            LeadOption{"aim.leading_max_ms", &SkillSetting::leadMaxMs, 100, 1500},
+            LeadOption{"aim.leading_max_tiles", &SkillSetting::leadMaxTiles, 1, 8}}) {
+        std::string leading;
+        if(!QolAim::Section(text,option.section,leading)) return false;
+        remaining=leading; targeted={}; targetCount=0;
+        while(!remaining.empty()) {
+            const auto end=remaining.find('\n'); auto line=QolAim::Trim(remaining.substr(0,end));
+            remaining=end==remaining.npos?std::string_view{}:remaining.substr(end+1);
+            if(line.empty()) continue;
+            const auto eq=line.find('='); if(eq==line.npos) return false;
+            auto key=QolAim::Trim(line.substr(0,eq)); const auto value=QolAim::Trim(line.substr(eq+1));
+            if(key.size()>=2 && key.front()=='"' && key.back()=='"') key=key.substr(1,key.size()-2);
+            int id{}; unsigned valueNumber{};
+            const auto idResult=std::from_chars(key.data(),key.data()+key.size(),id);
+            const auto timeResult=std::from_chars(value.data(),value.data()+value.size(),valueNumber);
+            if(idResult.ec!=std::errc{} || idResult.ptr!=key.data()+key.size() || id<=0 || id>65534 ||
+                timeResult.ec!=std::errc{} || timeResult.ptr!=value.data()+value.size() || valueNumber<option.minimum || valueNumber>option.maximum || targetCount==targeted.size()) return false;
+            for(std::size_t i=0;i<targetCount;++i) if(targeted[i]==id) return false;
+            targeted[targetCount++]=id;
+            bool found=false;
+            for(auto& entry:parsed.entries) if(entry.id==id) { entry.*(option.member)=valueNumber; found=true; break; }
+            if(!found) return false;
+        }
+    }
     // Catch misspelled aim sections instead of silently enabling their defaults.
     while(!text.empty()) {
         const auto end=text.find('\n'); auto line=QolAim::Trim(text.substr(0,end));
@@ -112,7 +155,7 @@ inline bool ParseSkills(std::string_view text,SkillSettings& output) {
         line=QolAim::Trim(QolAim::WithoutComment(line));
         if(line.size()>=6 && line.substr(0,5)=="[aim.") {
             bool known=false;
-            for(const auto name:{"[aim.amazon]","[aim.sorceress]","[aim.necromancer]","[aim.barbarian]","[aim.paladin]","[aim.druid]","[aim.assassin]","[aim.warlock]","[aim.custom]","[aim.targeting]"}) if(line==name) known=true;
+            for(const auto name:{"[aim.amazon]","[aim.sorceress]","[aim.necromancer]","[aim.barbarian]","[aim.paladin]","[aim.druid]","[aim.assassin]","[aim.warlock]","[aim.custom]","[aim.targeting]","[aim.leading]","[aim.leading_max_ms]","[aim.leading_max_tiles]"}) if(line==name) known=true;
             if(!known) return false;
         }
     }
@@ -128,7 +171,17 @@ inline bool OverrideScoring(bool armed,int activeSkill,const auto& settings,int 
         (activeSkill==-1 && settings.Enabled(previewSkill)));
 }
 inline bool CoordinateRoute(bool armed,int requestedSkill,int activeSkill,const auto& settings) noexcept {
-    return armed && requestedSkill==activeSkill && settings.Enabled(activeSkill);
+    return armed && requestedSkill==activeSkill && settings.Enabled(activeSkill) && !UsesNativeUnitTarget(activeSkill);
+}
+inline bool NativeUnitScoring(bool armed,int activeSkill,int previewSkill,unsigned unitType,const auto& settings) noexcept {
+    if(!armed || !settings.Snaps(43)) return false;
+    // Objects/items must already be ranked before the first Telekinesis query.
+    // As with the shared monster preview, the previous enabled skill may be
+    // Teleport or another spell. Never extend this to a different active cast.
+    if(activeSkill==-1 && settings.Enabled(previewSkill) && (unitType==2 || unitType==4)) return true;
+    const int skill=activeSkill==-1?previewSkill:activeSkill;
+    return UsesNativeUnitTarget(skill) &&
+        (unitType==1 || unitType==2 || unitType==4);
 }
 inline bool ReleaseForSkill(int activeSkill,const auto& settings) noexcept {
     // Selected is also queried while idle; its request is not evidence of a cast.

@@ -15,6 +15,9 @@ struct LiveSkills {
         return value?static_cast<TargetMode>(value-1):baseline.Mode(id);
     }
     TargetMode Targeting(int id) const noexcept { return baseline.Targeting(id); }
+    unsigned LeadMaxMilliseconds(int id) const noexcept { return baseline.LeadMaxMilliseconds(id); }
+    unsigned LeadMaxTiles(int id) const noexcept { return baseline.LeadMaxTiles(id); }
+    unsigned LeadMillisecondsPerTile(int id) const noexcept { return baseline.LeadMillisecondsPerTile(id); }
     bool CanToggle(int id) const noexcept { return baseline.CanToggle(id); }
     bool Enabled(int id) const noexcept { return Mode(id)!=TargetMode::Disabled; }
     bool Snaps(int id) const noexcept { return Mode(id)==TargetMode::Snap; }
@@ -53,7 +56,7 @@ inline bool RewriteSkillToggle(const std::string& text,int id,bool enabled,std::
             if(section==desired) sectionEnd=pos;
             section=std::string(line.substr(1,line.size()-2));
             if(section==desired) foundSection=true;
-        } else if(section.starts_with("aim.") && section!="aim.custom" && section!="aim.targeting") {
+        } else if(section.starts_with("aim.") && section!="aim.custom" && section!="aim.targeting" && section!="aim.leading" && section!="aim.leading_max_ms" && section!="aim.leading_max_tiles") {
             const auto eq=line.find('=');
             if(eq!=line.npos) {
                 auto key=QolAim::Trim(line.substr(0,eq));
