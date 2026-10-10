@@ -1,6 +1,6 @@
 # Item Roll Ranges
 
-**By PyreFly · Version 1.3.1+rev.21**
+**By PyreFly · Version 1.3.1+rev.22**
 
 Show item roll ranges beside actual values in light blue:
 `[+80 - +120] +118 Defense`.
@@ -68,3 +68,5 @@ validated. Ranges reflect the active item definitions, including mod changes.
 Close the game and loader, remove this DLL from the active plugins folder and
 relaunch. Core's native range behavior remains. `SHA256SUMS` records runtime
 archive contents; the source archive is supplied separately.
+
+Revision22 fixes Defense publication after Core restores its range context. The Iceblink header fix is user-confirmed in game; all five automated suites pass.

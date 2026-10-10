@@ -1,56 +1,26 @@
-# D2R Mods release 2026.10.09.1
+# D2R Mods release 2026.10.10.1
 
-This stable release contains fresh runtime packages for:
+## Item Roll Ranges 1.3.1+rev.22
 
-- **Controller QOL Updates 1.3.1+rev.73**
-- **Item Roll Ranges 1.3.1+rev.21**
-- **Map Assistance 1.3.1+rev.1**
+Fix armor Defense headers reverting to Core's range-only replacement. Iceblink
+now retains actual Defense and the verified `(Base: ...)` display, consistent
+with weapons and belts. Core restores its range context before publishing the
+Defense header; the plugin uses its saved receiver/text proof at that step.
+Focus/panel checks and fail-open behavior on proof mismatch remain in place.
+Native Ctrl/controller input and Controller QOL behavior are unchanged.
 
-## Controller QOL
+The user confirmed the Iceblink fix in game. All five Item Roll Ranges suites
+pass, including restored-context and invalid-proof regressions. This does not
+establish coverage for every item, localization or plugin combination.
 
-Promotes the tested rev.72 beta behavior without gameplay changes. Since the
-previous stable QOL release, this includes remote-client LB item actions and
-Ladder hook coexistence, vendor scroll purchases that fill tomes, improved
-Telekinesis/Fire Blast targeting, neutral-A object priority, and first-press NPC
-interaction after snap aiming.
-
-Projectile leading uses observed enemy motion and bounded per-skill estimates.
-The config supplies 42 projectile baselines and explicit zero-lead choices for
-the remaining 198 catalog skills. Tuned ice limits and Shock Web, Holy/Miasma Bolt
-and Blade Fury values are retained. Reimagined replacement skills are labelled;
-automatic vanilla/Reimagined behavior detection remains deferred.
-
-Detailed aim logging defaults off with `[aim] verbose = false`, including for
-existing configs that omit the flag. Quiet mode skips diagnostic formatting and
-logging-only work; warnings remain visible. Set true and restart for diagnostics.
-
-Aim defaults: deadzone 0.22, speeds 8.0/48, acceleration 0.35 seconds, ground
-reticle `#C2B596`, lock reticle `#CC9C52F2`, thickness 2.0.
-
-Item Roll Ranges and Map Assistance receive fresh builds with no source changes.
-
-## Validation and scope
-
-The user reports the current QOL features are working well following beta
-playtesting, including earlier confirmations of projectile tuning and interaction
-fixes. Individual new skill estimates still benefit from gameplay feedback.
-Handheld frame-time improvement has not been benchmarked; earlier full-Ladder
-exit-crash investigations do not become confirmed fixes through this promotion.
-
-Fresh local builds pass Controller QOL 28/28, Item Roll Ranges 5/5 and Map
-Assistance 2/2 suites, including DLL artifact checks. Runtime ZIP layout and
-checksums are verified before publication. Native hooks remain guarded to reviewed builds.
-Offline and non-Ladder routes remain included; remote Identify All targets are
-limited to Inventory, and Cube/Shared identification supplies are unsupported.
+Controller QOL 1.3.1+rev.73 and Map Assistance 1.3.1+rev.1 are included unchanged
+from the previous stable release. Their clean automated suites also pass.
 
 ## Installation
 
-Close the game and back up the existing plugin/config files. Extract each wanted
-ZIP into the game directory; DLLs install under `d2rloader/plugins/` and configs
-under `d2rloader/config/`. Merge new defaults into customized TOML files rather
-than overwriting personal toggles. Restart after installation. Item Roll Ranges
-requires `d2rcore.items.item_stat_ranges = true`.
-
-Pack-managed Ladder installations should use the pack author's normal revision
-process. Each ZIP contains file checksums; the release `SHA256SUMS` covers all
-three ZIPs. Source archives are provided by GitHub for this tag.
+Close the game and loader and back up existing files. Extract the wanted ZIP
+into the game directory: DLLs install under `d2rloader/plugins/`, configs under
+`d2rloader/config/`. Keep only one active copy per plugin. For a mod-scoped
+install, extract into the active mod folder. Preserve customized TOML files.
+Item Roll Ranges requires `d2rcore.items.item_stat_ranges = true` and the
+qualified D2RCore/game build in its compatibility notes. Cold restart required.

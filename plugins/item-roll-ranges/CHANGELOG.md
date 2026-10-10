@@ -3,6 +3,16 @@
 All notable changes to Item Roll Ranges are recorded here. Versions before the
 GitHub migration are reconstructed from release and validation records.
 
+## [1.3.1+rev.22] - 2026-10-10
+
+- Fix variable Defense headers reverting to Core's range-only replacement.
+  Core restores range TLS before publishing Defense; use the saved receiver/text
+  proof from the guarded builder instead of requiring that expired context.
+- Keep focus/panel gating and fail open on proof mismatch. Input queries remain
+  native. Regression fixture covers restored context and invalid proofs.
+- User confirmed the Iceblink Defense header fix in game. All five automated
+  suites pass, including restored-context and invalid-proof regressions.
+
 ## [1.3.1+rev.21] - 2026-10-05
 
 - Remove keyboard/controller query adapters and physical key/XInput polling.

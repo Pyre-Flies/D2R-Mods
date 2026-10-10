@@ -1,6 +1,6 @@
 # Item Roll Ranges
 
-Experimental 1.3.1+rev.21, PyreFly. Separate client plugin for the installed D2RLoader.
+Experimental 1.3.1+rev.22, PyreFly. Separate client plugin for the installed D2RLoader.
 
 Light-blue `[P] [Name] [Tn]` / `[S] [Name] [Tn]` labels identify verified rolled
 magic/rare/crafted affix contributions, including fixed-value affixes. Repeated
@@ -245,3 +245,5 @@ Unknown contribution values retain their gray `?`/`?%` display below the combine
 See docs/PRODUCTION-1.3.1.0.md for the production snapshot and version policy.
 
 Version policy: `1.3.1+rev.N` identifies the qualified loader target and the independent plugin revision. Build metadata does not participate in SemVer precedence. Native fingerprints remain authoritative.
+
+Revision22 fixes Defense publication after Core restores its range context. The Iceblink header fix is user-confirmed in game; all five automated suites pass.

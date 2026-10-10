@@ -84,6 +84,7 @@ __declspec(noinline) std::uint64_t __fastcall DamageAdapter(unsigned char mode,v
     return result;
 }
 bool Held() noexcept;
+bool Allowed() noexcept;
 bool AddUnobservedCompositeIdentities(std::vector<CapturedLine>& lines,std::string_view actual,
     std::span<const Affixes::Rolled> rolled,std::span<const Affixes::Property> properties,
     Affixes::LayerEncoding encoding,std::span<const Affixes::PropertyGroup> groups,
@@ -571,18 +572,23 @@ __declspec(noinline) NativeText* __fastcall HeaderBuilderAdapter(void* a,void* b
     } catch (...) { /* Keep native output if observation/allocation fails. */ }
     return result;
 }
-__declspec(noinline) void* __fastcall HeaderAssignAdapter(NativeText* text,const char* data,std::size_t size) noexcept {
-    if (reinterpret_cast<std::uintptr_t>(_ReturnAddress())==assignReturn && Held() &&
+void* PublishHeader(bool permitted,NativeText* text,const char* data,std::size_t size) noexcept {
+    if (permitted &&
         TextReadable(text) && size>0 && size<=65536 && Readable(data,size)) {
         try {
             auto proof=std::move(pendingHeader); pendingHeader={};
             if (proof.receiver==text && proof.actual==std::string_view(text->data,text->size))
                 return originalAssign(text,proof.annotated.data(),proof.annotated.size());
+            if (!Held()) return originalAssign(text,data,size);
             const auto changed=HeaderText::Merge({text->data,text->size},{data,size});
             if (changed.size()<=65536) return originalAssign(text,changed.data(),changed.size());
         } catch (...) { }
     }
     return originalAssign(text,data,size);
+}
+__declspec(noinline) void* __fastcall HeaderAssignAdapter(NativeText* text,const char* data,std::size_t size) noexcept {
+    // Core has restored TLS by this point; pendingHeader owns the earlier proof.
+    return PublishHeader(reinterpret_cast<std::uintptr_t>(_ReturnAddress())==assignReturn && Allowed(),text,data,size);
 }
 void* SourceFromOverlay(const void* overlay,void* item) noexcept {
     if (!Readable(overlay,16)) return nullptr;
@@ -637,7 +643,7 @@ void TraceProperties(unsigned annotated,unsigned unmatched,const char* actual,co
     try { seen.emplace_back(actual); } catch (...) { return; }
     char message[14000]{};
     const int n=std::snprintf(message,sizeof(message),
-        "v1.3.1+rev.21 properties annotated=%u unmatched=%u labeled=%u captured=%u\r\nACTUAL: %.4095s\r\nRANGED: %.4095s\r\nRESULT: %.4095s\r\n",annotated,unmatched,labeled,captured,actual,ranged,result);
+        "v1.3.1+rev.22 properties annotated=%u unmatched=%u labeled=%u captured=%u\r\nACTUAL: %.4095s\r\nRANGED: %.4095s\r\nRESULT: %.4095s\r\n",annotated,unmatched,labeled,captured,actual,ranged,result);
     if (n<=0 || n>=static_cast<int>(sizeof(message))) return;
     HANDLE file=CreateFileW(diagnosticPath,FILE_APPEND_DATA,FILE_SHARE_READ|FILE_SHARE_WRITE,nullptr,OPEN_ALWAYS,FILE_ATTRIBUTE_NORMAL,nullptr);
     if (file==INVALID_HANDLE_VALUE) return;
@@ -932,14 +938,14 @@ bool Install(const D2RL::PluginContext* context) noexcept {
         return false;
     }
     active.store(true, std::memory_order_release);
-    context->LogInfo("Item Roll Ranges 1.3.1+rev.21 by PyreFly: Ctrl / RT(R2), or QOL range override; inventory, stash, Cube and vendor only. Actual values, native ranges, named P/S tiers and guarded stacked-damage details. Unsupported or ambiguous provenance is omitted.");
+    context->LogInfo("Item Roll Ranges 1.3.1+rev.22 by PyreFly: Ctrl / RT(R2), or QOL range override; inventory, stash, Cube and vendor only. Actual values, native ranges, named P/S tiers and guarded stacked-damage details. Unsupported or ambiguous provenance is omitted.");
     return true;
 }
 }
 
 D2RL_PLUGIN_EXPORT const D2RL::PluginInfo* __cdecl D2RLoaderGetPluginInfo() noexcept {
     static const D2RL::PluginInfo info{sizeof(D2RL::PluginInfo), D2RL_PLUGIN_ABI_VERSION,
-        "item-roll-ranges", "Item Roll Ranges", "1.3.1+rev.21", "PyreFly",
+        "item-roll-ranges", "Item Roll Ranges", "1.3.1+rev.22", "PyreFly",
         "Hold Ctrl or RT/R2 (R1/RB with Controller QOL) for native item stat ranges in item-management screens.",
         D2RL::PluginFlags::Client | D2RL::PluginFlags::NativeHooks, {}};
     return &info;

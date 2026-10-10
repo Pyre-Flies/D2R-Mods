@@ -16,7 +16,28 @@ void TestHeaderDelegation();
 void TestCalculatedHeaders();
 
 }
+namespace {
+std::string publishedHeader;
+void* __fastcall RecordHeader(NativeText* receiver,const char* data,std::size_t size) {
+    publishedHeader.assign(data,size);return receiver;
+}
+void TestRestoredHeaderContext() {
+    NativeText text{"Defense: 164",12};
+    originalAssign=RecordHeader;
+    pendingHeader={&text,"Defense: 164","Defense: 164 (Base: 96 - 96)"};
+    check(!RangeFromOverlay(nullptr)); // Native range TLS already restored.
+    check(PublishHeader(true,&text,"Defense: (163-172)",18)==&text);
+    check(publishedHeader=="Defense: 164 (Base: 96 - 96)");
+    pendingHeader={&text,"changed original","wrong"};
+    PublishHeader(true,&text,"native fallback",15);
+    check(publishedHeader=="native fallback");
+    pendingHeader={&text,"Defense: 164","wrong"};
+    PublishHeader(false,&text,"native fallback",15);
+    check(publishedHeader=="native fallback");pendingHeader={};
+}
+}
 int main() {
+    TestRestoredHeaderContext();
     unsigned char sourceUnit[0x90]{},cloneUnit[0x90]{};
     const unsigned itemType=4;
     std::memcpy(sourceUnit,&itemType,4);std::memcpy(cloneUnit,&itemType,4);
@@ -110,7 +131,7 @@ int main() {
     check(!D2RLoaderLoadPlugin(nullptr));
     auto info=D2RLoaderGetPluginInfo();
     check(std::strcmp(info->id,"item-roll-ranges")==0);
-    check(std::strcmp(info->version,"1.3.1+rev.21")==0);
+    check(std::strcmp(info->version,"1.3.1+rev.22")==0);
     std::puts("Passed real adapter passthrough/ABI, inactive late calls, atomic slot conflict/restore, exported identity.");
 }
 

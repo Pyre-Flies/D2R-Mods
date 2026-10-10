@@ -506,8 +506,8 @@ Live revision19 display confirmation remains pending.
 
 ## Revision20: intrinsic Base display
 
-The user confirmed revision19 Cruel Reflex Bow displayed current32–69 and
-Total30–32 /63–69; Reflex Bow of Armageddon remained unavailable because its
+The user confirmed revision19 Cruel Reflex Bow displayed current32â€“69 and
+Total30â€“32 /63â€“69; Reflex Bow of Armageddon remained unavailable because its
 proc source blocked total qualification. The requested UX now preserves the
 native current number and displays intrinsic Base instead:32 to69
 (Base:9 -19). Bloodrune25 displays Base2 -2.
@@ -568,3 +568,20 @@ changed, and no push/release will happen before the user's validation.
 Revision21 local deployment: all five suites pass; installed ABI/export/metadata check passes. Built/installed SHA256: E78B883AA7BFAF61B10034E3141B8F3ED577EFC965D6BAEE86CEBF4E05872917. Previous DLL: <game directory>/d2rloader/backups/Item Roll Ranges-before-rev21-20261005-140000.dll.bak. Game and loader confirmed closed before copying. No QOL DLL/config changes; no publication. Live validation pending.
 
 Publication authorized after discussion of revision21 compatibility limits. Release notes retain the distinction between user-confirmed Base displays and pending dedicated native controller checks.
+
+## Revision22: Defense publication after TLS restoration
+
+Iceblink screenshot showed range-only Defense163-172 while Be eswarm retained
+its current/base damage display. Attested Core disk disassembly confirms
+Core81a360 stores the builder result to frame1900,81a367 forms TLS1840,
+81a36e loads previous context from frameb70 and81a375 restores it. Defense
+publication at81a6bd therefore occurs after the range context ends. Rev21's
+Held() recheck at that later caller rejected its own saved header proof.
+Rev22 uses the earlier builder's owned actual/annotated text and receiver
+equality proof, with current active/focus/panel gating, to publish the Base
+header. Mismatched proof retains native output when no current range context
+exists. No additional native hook or input override. Regression fixtures
+cover restored TLS, mismatched original text and disabled publication. Live
+Iceblink display remains pending.
+
+User confirmed revision22 fixes the Iceblink Defense header in game on 2026-10-10. Both installed artifacts passed ABI checks; release publication authorized.
