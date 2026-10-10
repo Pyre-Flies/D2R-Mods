@@ -37,6 +37,9 @@ void TestRestoredHeaderContext() {
 }
 }
 int main() {
+    check(FixedHeaderRequest(true,2,0));check(!FixedHeaderRequest(true,0,1));
+    check(FixedHeaderRequest(false,0,1));check(!FixedHeaderRequest(false,2,0));
+
     TestRestoredHeaderContext();
     unsigned char sourceUnit[0x90]{},cloneUnit[0x90]{};
     const unsigned itemType=4;
@@ -131,7 +134,7 @@ int main() {
     check(!D2RLoaderLoadPlugin(nullptr));
     auto info=D2RLoaderGetPluginInfo();
     check(std::strcmp(info->id,"item-roll-ranges")==0);
-    check(std::strcmp(info->version,"1.3.1+rev.22")==0);
+    check(std::strcmp(info->version,"1.3.1+rev.23")==0);
     std::puts("Passed real adapter passthrough/ABI, inactive late calls, atomic slot conflict/restore, exported identity.");
 }
 
@@ -159,7 +162,7 @@ void TestHeaderDelegation() {
     lookupHeader=FakeHeaderLookup;
     check(DefenseHeaderKey()==RangeText::Analyze("Defense: 2").key);
     originalBuilder=FakeBuilder; builderReturn=0;
-    check(HeaderBuilderAdapter(reinterpret_cast<void*>(1),reinterpret_cast<void*>(2),
+    check(reinterpret_cast<BuilderFn>(&HeaderBuilderEntry)(reinterpret_cast<void*>(1),reinterpret_cast<void*>(2),
         reinterpret_cast<void*>(3),reinterpret_cast<void*>(4),5,6,7,
         reinterpret_cast<void*>(8),reinterpret_cast<void*>(9))==&headerFixture);
     originalAssign=FakeAssign; assignReturn=0;

@@ -3,6 +3,16 @@
 All notable changes to Item Roll Ranges are recorded here. Versions before the
 GitHub migration are reconstructed from release and validation records.
 
+## [1.3.1+rev.23] - 2026-10-10
+
+- Restore fixed Base headers when the gesture is held but Core creates no range
+  clone, including a plain Sash with Defense2 (Base:2-2).
+- Observe native controller hold at the guarded header entry; keyboard fallback
+  reads the native modifier query. Input slots/events and QOL remain unchanged.
+- Five suites pass, including nine-argument ABI forwarding and native keyboard/
+  controller hold/release fixtures. User confirmed a plain Sash shows its
+  Base range while Ctrl is held and returns to the normal header on release.
+
 ## [1.3.1+rev.22] - 2026-10-10
 
 - Fix variable Defense headers reverting to Core's range-only replacement.

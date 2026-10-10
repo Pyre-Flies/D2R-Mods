@@ -20,6 +20,8 @@
 #include "weapon_profile.h"
 #include <vector>
 
+extern "C" void HeaderBuilderEntry();
+
 namespace {
 using PanelFn = bool(__fastcall*)(int);
 PanelFn testPanel{};
@@ -85,6 +87,9 @@ __declspec(noinline) std::uint64_t __fastcall DamageAdapter(unsigned char mode,v
 }
 bool Held() noexcept;
 bool Allowed() noexcept;
+const void* NativeOverlay() noexcept;
+bool RangeFromOverlay(const void*) noexcept;
+thread_local bool fixedHeaderRequested{};
 bool AddUnobservedCompositeIdentities(std::vector<CapturedLine>& lines,std::string_view actual,
     std::span<const Affixes::Rolled> rolled,std::span<const Affixes::Property> properties,
     Affixes::LayerEncoding encoding,std::span<const Affixes::PropertyGroup> groups,
@@ -526,9 +531,28 @@ std::string AnnotateWeaponHeader(std::string_view text,std::string_view actual,c
     }
     return result;
 }
-__declspec(noinline) NativeText* __fastcall HeaderBuilderAdapter(void* a,void* b,void* c,void* item,
+bool FixedHeaderRequest(bool keyboard,std::uint64_t keys,std::uint64_t nativeButtons) noexcept {
+    return keyboard?(keys&2)!=0:(nativeButtons&0xff)==1;
+}
+extern "C" void ObserveHeaderRequest(std::uint64_t buttons,std::uintptr_t caller,const unsigned char* frame) noexcept {
+    fixedHeaderRequested=false;
+    if (caller!=builderReturn || !Allowed() || RangeFromOverlay(NativeOverlay()) || !Readable(frame,0x18f0)) return;
+    const auto keyboard=Affixes::Read<unsigned>(frame,0x18ec);
+    if (keyboard>1) return;
+    std::uint64_t keys{};
+    if (keyboard) {
+        using KeyQuery=std::uint64_t(__fastcall*)();
+        if (!coreBase || !Readable(coreBase+0x6fe3b0,8)) return;
+        const auto query=Affixes::Read<KeyQuery>(coreBase,0x6fe3b0);
+        if (!query) return;
+        keys=query(); // Native modifier query, read only; no physical polling.
+    }
+    fixedHeaderRequested=FixedHeaderRequest(keyboard!=0,keys,buttons);
+}
+extern "C" __declspec(noinline) NativeText* __fastcall HeaderBuilderAdapter(void* a,void* b,void* c,void* item,
     int flags,unsigned char d,unsigned char e,void* f,void* g) noexcept {
-    const bool scoped=reinterpret_cast<std::uintptr_t>(_ReturnAddress())==builderReturn && Held();
+    const bool scoped=reinterpret_cast<std::uintptr_t>(_ReturnAddress())==builderReturn && (Held() || fixedHeaderRequested);
+    fixedHeaderRequested=false;
     if (scoped) pendingHeader={};
     // Frame is qualified byte-for-byte; derive its address before the native
     // call. No frame, item or definition memory is written by this adapter.
@@ -643,7 +667,7 @@ void TraceProperties(unsigned annotated,unsigned unmatched,const char* actual,co
     try { seen.emplace_back(actual); } catch (...) { return; }
     char message[14000]{};
     const int n=std::snprintf(message,sizeof(message),
-        "v1.3.1+rev.22 properties annotated=%u unmatched=%u labeled=%u captured=%u\r\nACTUAL: %.4095s\r\nRANGED: %.4095s\r\nRESULT: %.4095s\r\n",annotated,unmatched,labeled,captured,actual,ranged,result);
+        "v1.3.1+rev.23 properties annotated=%u unmatched=%u labeled=%u captured=%u\r\nACTUAL: %.4095s\r\nRANGED: %.4095s\r\nRESULT: %.4095s\r\n",annotated,unmatched,labeled,captured,actual,ranged,result);
     if (n<=0 || n>=static_cast<int>(sizeof(message))) return;
     HANDLE file=CreateFileW(diagnosticPath,FILE_APPEND_DATA,FILE_SHARE_READ|FILE_SHARE_WRITE,nullptr,OPEN_ALWAYS,FILE_ATTRIBUTE_NORMAL,nullptr);
     if (file==INVALID_HANDLE_VALUE) return;
@@ -812,7 +836,7 @@ void Restore() noexcept {
     active.store(false, std::memory_order_release);
     if (damageSlot) Exchange(damageSlot,reinterpret_cast<void*>(&DamageAdapter),reinterpret_cast<void*>(originalDamage));
     if (assignSlot) Exchange(assignSlot,reinterpret_cast<void*>(&HeaderAssignAdapter),reinterpret_cast<void*>(originalAssign));
-    if (builderSlot) Exchange(builderSlot,reinterpret_cast<void*>(&HeaderBuilderAdapter),reinterpret_cast<void*>(originalBuilder));
+    if (builderSlot) Exchange(builderSlot,reinterpret_cast<void*>(&HeaderBuilderEntry),reinterpret_cast<void*>(originalBuilder));
     if (specialSlot) Exchange(specialSlot,reinterpret_cast<void*>(&SpecialAdapter),reinterpret_cast<void*>(originalSpecial));
     if (rangeHelperSlot) Exchange(rangeHelperSlot,reinterpret_cast<void*>(&RangeHelperAdapter),reinterpret_cast<void*>(originalRangeHelper));
     if (singleSlot) Exchange(singleSlot,reinterpret_cast<void*>(&SingleAdapter),reinterpret_cast<void*>(originalSingle));
@@ -928,7 +952,7 @@ bool Install(const D2RL::PluginContext* context) noexcept {
     }
     if (!Exchange(specialSlot,reinterpret_cast<void*>(originalSpecial),reinterpret_cast<void*>(&SpecialAdapter)) ||
         !Exchange(damageSlot,reinterpret_cast<void*>(originalDamage),reinterpret_cast<void*>(&DamageAdapter)) ||
-        !Exchange(builderSlot,reinterpret_cast<void*>(originalBuilder),reinterpret_cast<void*>(&HeaderBuilderAdapter)) ||
+        !Exchange(builderSlot,reinterpret_cast<void*>(originalBuilder),reinterpret_cast<void*>(&HeaderBuilderEntry)) ||
         !Exchange(assignSlot,reinterpret_cast<void*>(originalAssign),reinterpret_cast<void*>(&HeaderAssignAdapter)) ||
         !Exchange(rangeHelperSlot,reinterpret_cast<void*>(originalRangeHelper),reinterpret_cast<void*>(&RangeHelperAdapter)) ||
         !Exchange(singleSlot,reinterpret_cast<void*>(originalSingle),reinterpret_cast<void*>(&SingleAdapter)) ||
@@ -938,14 +962,14 @@ bool Install(const D2RL::PluginContext* context) noexcept {
         return false;
     }
     active.store(true, std::memory_order_release);
-    context->LogInfo("Item Roll Ranges 1.3.1+rev.22 by PyreFly: Ctrl / RT(R2), or QOL range override; inventory, stash, Cube and vendor only. Actual values, native ranges, named P/S tiers and guarded stacked-damage details. Unsupported or ambiguous provenance is omitted.");
+    context->LogInfo("Item Roll Ranges 1.3.1+rev.23 by PyreFly: Ctrl / RT(R2), or QOL range override; inventory, stash, Cube and vendor only. Actual values, native ranges, named P/S tiers and guarded stacked-damage details. Unsupported or ambiguous provenance is omitted.");
     return true;
 }
 }
 
 D2RL_PLUGIN_EXPORT const D2RL::PluginInfo* __cdecl D2RLoaderGetPluginInfo() noexcept {
     static const D2RL::PluginInfo info{sizeof(D2RL::PluginInfo), D2RL_PLUGIN_ABI_VERSION,
-        "item-roll-ranges", "Item Roll Ranges", "1.3.1+rev.22", "PyreFly",
+        "item-roll-ranges", "Item Roll Ranges", "1.3.1+rev.23", "PyreFly",
         "Hold Ctrl or RT/R2 (R1/RB with Controller QOL) for native item stat ranges in item-management screens.",
         D2RL::PluginFlags::Client | D2RL::PluginFlags::NativeHooks, {}};
     return &info;

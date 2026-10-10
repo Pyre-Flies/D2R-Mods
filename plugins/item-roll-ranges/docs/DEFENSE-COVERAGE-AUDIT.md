@@ -585,3 +585,24 @@ cover restored TLS, mismatched original text and disabled publication. Live
 Iceblink display remains pending.
 
 User confirmed revision22 fixes the Iceblink Defense header in game on 2026-10-10. Both installed artifacts passed ABI checks; release publication authorized.
+
+## Revision23: native gesture without a range clone
+
+Core376740 can return no range eligibility for a plain fixed-base item.
+Core819805 then follows81a2c4 without a range clone despite a held gesture.
+On that no-clone path, BL retains the native controller query after feature/
+identified gating (819639 and81974a..8197d7);81a2c4 and81a318 do not change
+RBX. Frame18ec=1 indicates keyboard: original modifier slot6fe3b0 supplies
+Ctrl bit2. Mode0 observes BL==1; mode>1 rejects. Existing Core caller81995a
+and QOL remap remain unchanged. HeaderProfile guards81974a..819816.
+
+HeaderBuilderEntry allocates48h with unwind metadata, saves/restores RCX/RDX/
+R8/R9, observes original RBX, return and frame(originalRSP+88h), and tail-jumps
+to the builder adapter. All nine native arguments and caller stack remain
+intact. Built CFG table entry verified (entry stride includes GuardFlags
+metadata size). Request is consumed once at the qualified builder. No input
+query slot or held state is changed. Existing clone/property paths persist.
+Automated: five suites, real thunk forwarding, native keyboard/controller
+hold/release cases and Base2-2 text. Live plain-sash/controller checks pending.
+
+User confirmed revision23 plain-sash Base range display while Ctrl is held and normal Defense display after release on 2026-10-10. Controller-specific no-clone live checks remain unconfirmed. Release publication authorized.

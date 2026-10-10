@@ -1,6 +1,6 @@
 # Item Roll Ranges
 
-**By PyreFly · Version 1.3.1+rev.22**
+**By PyreFly · Version 1.3.1+rev.23**
 
 Show item roll ranges beside actual values in light blue:
 `[+80 - +120] +118 Defense`.
@@ -70,3 +70,5 @@ relaunch. Core's native range behavior remains. `SHA256SUMS` records runtime
 archive contents; the source archive is supplied separately.
 
 Revision22 fixes Defense publication after Core restores its range context. The Iceblink header fix is user-confirmed in game; all five automated suites pass.
+
+Revision23 restores the Base label on fixed items with no rollable modifiers. A plain Sash displaying Base2-2 while Ctrl is held and returning to normal on release is user-confirmed. Controller-specific no-clone checks remain unconfirmed.
