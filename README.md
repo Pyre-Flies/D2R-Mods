@@ -5,16 +5,41 @@ D2RLoader plugins for Diablo II: Resurrected.
 
 ## Plugins
 
-| Plugin | Current source version | Status |
+| Plugin | Stable release version | Status |
 |---|---:|---|
-| [Controller QOL Updates](plugins/controller-qol/README.md) | 1.3.1+rev.48 | Production; build-specific native hooks |
-| [Item Roll Ranges](plugins/item-roll-ranges/README.md) | 1.3.1+rev.13 | Production; build-specific formatter/table integration |
+| [Controller QOL Updates](plugins/controller-qol/README.md) | 1.3.1+rev.75 | Production; build-specific native hooks |
+| [Item Roll Ranges](plugins/item-roll-ranges/README.md) | 1.3.1+rev.23 | Production; build-specific formatter/table integration |
 | [Map Assistance](plugins/map-assistance/README.md) | 1.3.1+rev.1 | Configurable non-town campaign coverage |
 
 Each plugin is independently buildable and keeps its own README, changelog,
 tests, configuration, and detailed compatibility evidence. The D2RLoader SDK is
-a pinned submodule at `third_party/D2RLoader-PluginSDK`, so both projects use the
+a pinned submodule at `third_party/D2RLoader-PluginSDK`, so all three projects use the
 same reviewed upstream interface without copying that project into this history.
+
+## Install and configuration
+
+Download the runtime ZIPs from the [latest stable release](https://github.com/Pyre-Flies/D2R-Mods/releases/latest).
+Close the game and extract into the game directory so DLLs land under
+`d2rloader/plugins/`. Managed mod packs must distribute the update through their
+normal package/revision process. Do not install duplicate copies of a plugin.
+
+Current archives keep reference TOMLs under `defaults/` and contain no live
+`d2rloader/config/` paths. Extraction preserves existing settings. Missing live
+configs are created from the DLL's embedded defaults.
+
+Controller QOL rev.75 uses two editable configuration layers:
+
+| Location under `d2rloader/config/` | Contents |
+| --- | --- |
+| `controller-qol-updates.toml` | Shared QOL actions and general aim controls: speed, deadzone, colors, smoothing, logging |
+| `controller-qol-skills/<scope>.overrides.toml` | Complete skill enable states, targeting, leading and Whirlwind settings for one mod or Vanilla; R3 saves here |
+
+Find the profile by its `# Mod:` header. Matching `.catalog.toml` files are
+generated references, not active settings. Upgrades migrate old skill settings
+with verification and backups; they preserve user choices. R3 uses one rolling
+backup per profile. New installs default to 60 ms display smoothing; explicit
+older values are kept. Read the [configuration, migration and recovery guide](plugins/controller-qol/docs/SKILL-DISCOVERY-CONFIG.md)
+for profile scope, editing, default changes and rollback.
 
 ## Repository layout
 
@@ -75,9 +100,8 @@ For a compact map of the evidence and validation boundaries, start with the
   hash, or native call contract is discovered or changed.
 - Do not commit game binaries, crash dumps, local logs, build products, or
   extracted proprietary assets.
-- Release tags should be plugin-scoped: `controller-qol/vX.Y.Z`,
-  `item-roll-ranges/vX.Y.Z`, and `map-assistance/vX.Y.Z` (including `+rev.N`
-  where required).
+- Stable releases use suite tags `release-YYYY.MM.DD.N`; each included plugin
+  retains its independent version. QOL-only prereleases use `beta-controller-qol-*`.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the validation and release checklist.
 Production DLLs are distributed as versioned GitHub Release ZIP assets. See

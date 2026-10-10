@@ -12,8 +12,10 @@
 #include "coexistence_policy.h"
 #include "cast_observer_policy.h"
 #include "skill_toggle.h"
+#include "skill_discovery.h"
 #include "tree_layout.h"
 #include "tree_layout_profile.h"
+#include "general_skill_profile.h"
 #include "filter_focus_signatures.h"
 #include "controller_input.h"
 #include "physical_input.h"
@@ -123,6 +125,10 @@ bool ReadView(void* expectedPlayer, View& result, bool allowPreview=false) noexc
         void* const aim=NativeFunction<GetObjectFn>(Native::GetAimRva)();
         if(!aim) return false;
         int skill=NativeFunction<ActiveSkillFn>(Native::ActiveSkillRva)(aim,index);
+        // This is an observed native request, before any preview fallback. It
+        // also confirms saved discovered skills on remote clients without a
+        // local game scheduler or a compulsory visit to the skill tree.
+        skillSettings.Confirm(skill);
         result.activeSkill=skill;
         // Active skill is -1 after release. UI-only distance adjustment may
         // retain the last test skill. Passive candidate observation may also use
@@ -538,10 +544,19 @@ Aim::TreePress treePress{}; // UI thread only.
 Aim::TreeSequence treeSequence{};
 std::atomic<bool> treeReset{true};
 bool treeAdmitted=false;
+bool generalTreeAdmitted=false;
 struct TreeIcon {int skill{};Aim::ScreenRect rect{};};
 struct TreeView {bool valid{},stripValid{};std::uint64_t tick{};Aim::ScreenRect strip{};unsigned count{};std::array<TreeIcon,64> icons{};};
 TreeView treePublished{}; // Copied values only, under stateLock.
 bool treeLayoutAdmitted=false;
+int ReadTreeButtonSkill(unsigned char* node) noexcept {
+    const int id=GeneralSkillNative::ReadId(reinterpret_cast<uintptr_t>(node),ctx->exeBase,generalTreeAdmitted,
+        [](uintptr_t address) noexcept {return *reinterpret_cast<const uintptr_t*>(address);},
+        [](uintptr_t address) noexcept {return *reinterpret_cast<const int*>(address);});
+    if(!skillSettings.Contains(id))return -1;
+    skillSettings.Confirm(id); // Copied ID from the guarded live tree, also works remotely.
+    return id;
+}
 bool ReadWidgetBounds(unsigned char* node,Aim::ScreenRect& result) noexcept {
     std::array<Aim::LayoutNode,16> chain{};std::array<unsigned char*,16> seen{};unsigned count=0;
     __try {
@@ -561,10 +576,10 @@ void GatherTreeIcons(unsigned char* node,TreeView& result,unsigned depth,unsigne
     --budget;
     if(!node[0x51])return; // Ancestor visibility is required, not just the icon.
     const auto type=*reinterpret_cast<uintptr_t*>(node)-ctx->exeBase;
-    if(type==0x1ce4148) {
-        auto record=*reinterpret_cast<int**>(node+0x668);
+    if(type==GeneralSkillNative::ClassButton || type==GeneralSkillNative::GeneralButton) {
+        const int id=ReadTreeButtonSkill(node);
         Aim::ScreenRect rect{};
-        if(record && Aim::FindCatalogSkill(*record) && result.count<result.icons.size() && ReadWidgetBounds(node,rect))result.icons[result.count++]={*record,rect};
+        if(id>0 && result.count<result.icons.size() && ReadWidgetBounds(node,rect))result.icons[result.count++]={id,rect};
         return;
     }
     if(type!=0x1fd82b0 && type!=0x1d82da0 && type!=0x1d72670)return;
@@ -608,19 +623,21 @@ int FocusedTreeSkill() noexcept {
         if(!focus)return -1;
         auto widget=*reinterpret_cast<unsigned char**>(focus+0x190);
         auto root=*reinterpret_cast<unsigned char**>(focus+0x188);
-        if(!widget || !root || *reinterpret_cast<uintptr_t*>(widget)!=ctx->exeBase+0x1ce4148 ||
+        if(!widget || !root || !widget[0x51] || !root[0x51] ||
            *reinterpret_cast<uintptr_t*>(root)!=ctx->exeBase+0x1fd82b0)return -1;
         auto ancestor=widget;
         bool belongs=false;
         for(unsigned n=0;n<8 && ancestor;++n) {
+            if(!ancestor[0x51])return -1;
             if(ancestor==root){belongs=true;break;}
+            if(ancestor!=widget) {
+                const auto type=*reinterpret_cast<uintptr_t*>(ancestor)-ctx->exeBase;
+                if(type!=0x1d82da0 && type!=0x1d72670)return -1;
+            }
             ancestor=*reinterpret_cast<unsigned char**>(ancestor+0x30);
         }
         if(!belongs)return -1;
-        auto record=*reinterpret_cast<unsigned char**>(widget+0x668);
-        if(!record)return -1;
-        const int id=*reinterpret_cast<int*>(record);
-        return Aim::FindCatalogSkill(id)?id:-1; // Unknown mod IDs need explicit target-mode design.
+        return ReadTreeButtonSkill(widget);
     } __except(EXCEPTION_EXECUTE_HANDLER){return -1;}
 }
 void SkillTreeTick(std::uint64_t now) noexcept {
@@ -636,12 +653,10 @@ void SkillTreeTick(std::uint64_t now) noexcept {
         treePress.Update(valid,(input.buttons&0x80)!=0,input.valid);
     if(!pressed)return;
     try {
-        std::array<char,65536> buffer{};
-        std::string updated;
         const bool value=!skillSettings.Enabled(id);
         // No runtime change unless the preserved document is successfully saved.
-        if(!ctx->ReadConfig(buffer.data(),static_cast<unsigned>(buffer.size()-1)) ||
-           !Aim::RewriteSkillToggle(buffer.data(),id,value,updated) || !ctx->WriteConfig(updated.c_str())) {
+        const bool saved=QolSkillDiscovery::Save(id,value);
+        if(!saved) {
             treeSaveFailureUntil.store(now+3000);
             ctx->LogWarn("[QOL/Aim] Skill-tree toggle could not save configuration; setting unchanged.");return;
         }
@@ -725,16 +740,29 @@ void Line(D2RL::Overlay::CanvasHandle canvas,Aim::Point a,Aim::Point b,D2RL::Ove
 void Cross(D2RL::Overlay::CanvasHandle canvas,Aim::Point p,D2RL::Overlay::Color color) noexcept {
     Line(canvas,{p.x-5,p.y},{p.x+5,p.y},color); Line(canvas,{p.x,p.y-5},{p.x,p.y+5},color);
 }
-// Muted bone/brass strokes with a dark under-stroke for terrain contrast.
-void ReticleStroke(D2RL::Overlay::CanvasHandle canvas,Aim::Point a,Aim::Point b,D2RL::Overlay::Color color,float scale,float thickness=1) noexcept {
-    D2RL::Overlay::LineRequest request{sizeof(request),0,canvas,{a.x,a.y},{b.x,b.y},{0.035f,0.025f,0.015f,color.alpha*0.8f},3.2f*scale*thickness,0};
-    overlay->drawLine(ctx,&request);
-    request.color=color; request.thickness=1.25f*scale*thickness;
-    overlay->drawLine(ctx,&request);
+// A narrow, strong dark edge separates the light core from bright spell effects.
+// Keep the existing two draws per segment and avoid adding glow or animation.
+struct ReticleSegment {Aim::Point start,end;};
+void ReticleShape(D2RL::Overlay::CanvasHandle canvas,const ReticleSegment* segments,unsigned count,D2RL::Overlay::Color color,float scale,float thickness) noexcept {
+    const float coreWidth=1.5f*scale*thickness;
+    // Draw the whole border before any colored segments. Interleaving the two
+    // passes lets later borders paint over the earlier core at connected joints.
+    for(unsigned pass=0;pass<2;++pass)for(unsigned i=0;i<count;++i) {
+        const auto& segment=segments[i];
+        const D2RL::Overlay::LineRequest request{sizeof(request),0,canvas,
+            {segment.start.x,segment.start.y},{segment.end.x,segment.end.y},
+            pass?color:D2RL::Overlay::Color{0.015f,0.018f,0.022f,std::min(1.0f,color.alpha*1.2f)},
+            pass?coreWidth:coreWidth+2.3f*scale,0};
+        overlay->drawLine(ctx,&request);
+    }
 }
-void GroundReticle(D2RL::Overlay::CanvasHandle canvas,const Aim::Projection& projection,Aim::Point world,float scale,float alpha) noexcept {
+void ReticleStroke(D2RL::Overlay::CanvasHandle canvas,Aim::Point a,Aim::Point b,D2RL::Overlay::Color color,float scale,float thickness=1) noexcept {
+    const ReticleSegment segment{a,b};ReticleShape(canvas,&segment,1,color,scale,thickness);
+}
+void GroundReticle(D2RL::Overlay::CanvasHandle canvas,const Aim::Projection& projection,Aim::Point world,float scale,float alpha,Aim::Point correction={}) noexcept {
     const auto& configured=motionSettings.groundReticleColor;
-    const D2RL::Overlay::Color bone{configured.red,configured.green,configured.blue,configured.alpha*alpha};
+    const D2RL::Overlay::Color color{configured.red,configured.green,configured.blue,configured.alpha*alpha};
+    std::array<ReticleSegment,32> segments{};unsigned count=0;
     // Four broken ground-plane arcs: an aiming mark, not a skill-area outline.
     for(unsigned quadrant=0;quadrant<4;++quadrant) {
         Aim::Point previous{}; bool havePrevious=false;
@@ -742,24 +770,28 @@ void GroundReticle(D2RL::Overlay::CanvasHandle canvas,const Aim::Projection& pro
             const float angle=static_cast<float>(quadrant)*1.5707963f+0.20f+static_cast<float>(segment)*1.17f/8;
             Aim::Point point{};
             const bool valid=projection.Project({world.x+0.65f*std::cos(angle),world.y+0.65f*std::sin(angle)},point);
-            if(valid && havePrevious) ReticleStroke(canvas,previous,point,bone,scale,motionSettings.reticleThickness);
+            point.x+=correction.x;point.y+=correction.y;
+            if(valid && havePrevious)segments[count++]={previous,point};
             previous=point; havePrevious=valid;
         }
     }
+    ReticleShape(canvas,segments.data(),count,color,scale,motionSettings.reticleThickness);
 }
 void EnemyReticle(D2RL::Overlay::CanvasHandle canvas,Aim::Point point,float scale) noexcept {
     const auto& configured=motionSettings.lockReticleColor;
-    const D2RL::Overlay::Color brass{configured.red,configured.green,configured.blue,configured.alpha};
+    const D2RL::Overlay::Color color{configured.red,configured.green,configured.blue,configured.alpha};
+    std::array<ReticleSegment,8> segments{};unsigned count=0;
     // Four open diamond corners around the enemy's ground position.
     for(unsigned corner=0;corner<4;++corner) {
         const float angle=static_cast<float>(corner)*1.5707963f;
-        const Aim::Point tip{point.x+14*scale*std::cos(angle),point.y+9*scale*std::sin(angle)};
+        const Aim::Point tip{point.x+18*scale*std::cos(angle),point.y+12*scale*std::sin(angle)};
         const float previous=angle-1.5707963f,next=angle+1.5707963f;
-        const Aim::Point a{point.x+14*scale*std::cos(previous),point.y+9*scale*std::sin(previous)};
-        const Aim::Point b{point.x+14*scale*std::cos(next),point.y+9*scale*std::sin(next)};
-        ReticleStroke(canvas,{tip.x+(a.x-tip.x)*0.34f,tip.y+(a.y-tip.y)*0.34f},tip,brass,scale,motionSettings.reticleThickness);
-        ReticleStroke(canvas,tip,{tip.x+(b.x-tip.x)*0.34f,tip.y+(b.y-tip.y)*0.34f},brass,scale,motionSettings.reticleThickness);
+        const Aim::Point a{point.x+18*scale*std::cos(previous),point.y+12*scale*std::sin(previous)};
+        const Aim::Point b{point.x+18*scale*std::cos(next),point.y+12*scale*std::sin(next)};
+        segments[count++]={{tip.x+(a.x-tip.x)*0.34f,tip.y+(a.y-tip.y)*0.34f},tip};
+        segments[count++]={tip,{tip.x+(b.x-tip.x)*0.34f,tip.y+(b.y-tip.y)*0.34f}};
     }
+    ReticleShape(canvas,segments.data(),count,color,scale,motionSettings.reticleThickness);
 }
 void Label(D2RL::Overlay::CanvasHandle canvas,Aim::Point p,const char* text,D2RL::Overlay::Color color) noexcept {
     const D2RL::Overlay::TextRequest request{sizeof(request),0,canvas,{p.x,p.y},color,18,0,text,
@@ -789,12 +821,18 @@ struct DrawingClip {
     void* draw{};
     ~DrawingClip() { EndDrawingClip(draw); }
 };
+struct ReticleDisplayState {
+    Aim::DisplayPoint ground{},target{},landing{};
+    Aim::Point offset{},player{},screenOrigin{};
+    unsigned playerId{},targetId{};int skill{-1};float step{};bool valid{};
+};
 void __cdecl Frame(const D2RL::PluginContext*,const D2RL::Overlay::Frame* frame,void*) noexcept {
-    if(!frame || frame->structSize<D2RL::Overlay::FrameRequiredSize || !installed.load() || !inSession.load()) return;
+    static ReticleDisplayState display{};
+    if(!frame || frame->structSize<D2RL::Overlay::FrameRequiredSize || !installed.load() || !inSession.load()) {display={};return;}
     if(!queued.exchange(true) && threads->runOnUiThread(ctx,&UiTick,nullptr)!=D2RL::Threads::Result::Success) queued.store(false);
     View view{}; float actual{}; CastMarker castMarker{};TreeView tree{};
     AcquireSRWLockShared(&stateLock); view=published; actual=observedDisplacement; castMarker=lastCastMarker;tree=treePublished; ReleaseSRWLockShared(&stateLock);
-    if(!Foreground() || !motionSettings.overlay) return;
+    if(!Foreground() || !motionSettings.overlay) {display={};return;}
     const DrawingClip clip{BeginDrawingClip(frame->screenWidth,frame->screenHeight)};
     const bool fresh=view.valid && Aim::Fresh(GetTickCount64(),view.tick);
     // Status must not depend on a successfully resolved aim or projection.
@@ -802,6 +840,7 @@ void __cdecl Frame(const D2RL::PluginContext*,const D2RL::Overlay::Frame* frame,
     const bool active=enabled.load() && manualAim.load();
     const int focused=treeSkill.load();
     if(tree.valid && Aim::Fresh(GetTickCount64(),tree.tick)) {
+        display={};
         for(unsigned i=0;i<tree.count;++i) {
             const auto& icon=tree.icons[i];Aim::Point center{};float radius{};
             if(!skillSettings.Enabled(icon.skill) || !Aim::IconBadge(icon.rect,center,radius) ||
@@ -851,7 +890,7 @@ void __cdecl Frame(const D2RL::PluginContext*,const D2RL::Overlay::Frame* frame,
     Label(frame->canvas,{barStart,barY+8},"0",{1,1,1,1});
     Label(frame->canvas,{barEnd-18,barY+8},"30",{1,1,1,1});
     }
-    if(!active || !fresh) return;
+    if(!active || !fresh) {display={};return;}
     if(motionSettings.debugOverlay) {
     char text[320];
     const int length=std::snprintf(text,sizeof(text),"AIM CURSOR | %s | range %.1f / 30 | stick %+.2f,%+.2f%s\nSnap radius %.1f | %s | Teleport sample %.1f | F8 toggle  F9 recenter  F10 invert Y\nGround marker: %s",
@@ -861,9 +900,7 @@ void __cdecl Frame(const D2RL::PluginContext*,const D2RL::Overlay::Frame* frame,
         static_cast<unsigned>(std::min(length,static_cast<int>(sizeof(text)-1))),0};
     overlay->drawText(ctx,&request);
     }
-    if(!view.projectionValid) return;
-    static Aim::DisplayProjection displayProjection{};
-    view.projection=displayProjection.Update(view.projection,GetTickCount64(),motionSettings.overlaySmoothingMs);
+    if(!view.projectionValid) {display={};return;}
     if(motionSettings.debugOverlay && castMarker.valid && castMarker.playerId==view.playerId && Aim::Fresh(GetTickCount64(),castMarker.tick,2500)) {
         Aim::Point castScreen{};
         if(view.projection.Project(castMarker.position,castScreen)) {
@@ -873,16 +910,37 @@ void __cdecl Frame(const D2RL::PluginContext*,const D2RL::Overlay::Frame* frame,
     }
     if(!motionSettings.debugOverlay) {
         const float scale=std::clamp(frame->screenHeight/1080.0f,0.75f,2.0f);
-        GroundReticle(frame->canvas,view.projection,view.center,scale,view.target?0.38f:0.82f);
+        const auto now=GetTickCount64();
+        if(display.playerId!=view.playerId || display.skill!=view.skill ||
+            display.step!=view.projection.step || Aim::DistanceSquared(display.screenOrigin,view.projection.screenOrigin)>1 ||
+            Aim::DistanceSquared(display.player,view.player)>64)display={};
+        Aim::Point center{};
+        if(view.projection.Project(view.center,center)) {
+            Aim::Point immediate{},oldOffsetScreen{};
+            if(display.valid && view.projection.Project({view.player.x+display.offset.x,view.player.y+display.offset.y},oldOffsetScreen))
+                immediate={center.x-oldOffsetScreen.x,center.y-oldOffsetScreen.y};
+            const auto smooth=display.ground.Update(center,now,motionSettings.overlaySmoothingMs,immediate,128*scale);
+            GroundReticle(frame->canvas,view.projection,view.center,scale,1.0f,{smooth.x-center.x,smooth.y-center.y});
+        } else display.ground={};
+        if(display.targetId!=view.targetId){display.target={};display.landing={};}
         if(view.target) {
             Aim::Point enemy{};
-            if(view.projection.Project(view.targetPosition,enemy)) EnemyReticle(frame->canvas,enemy,scale);
+            if(view.projection.Project(view.targetPosition,enemy))
+                EnemyReticle(frame->canvas,display.target.Update(enemy,now,motionSettings.overlaySmoothingMs,{},128*scale),scale);
+            else display.target={};
             // Whirlwind's landing point is separate from the enemy lock.
-            if(view.skill==Aim::Whirlwind && Aim::DistanceSquared(view.destination,view.targetPosition)>0.01f)
-                GroundReticle(frame->canvas,view.projection,view.destination,scale,0.9f);
-        }
+            Aim::Point landing{};
+            if(view.skill==Aim::Whirlwind && Aim::DistanceSquared(view.destination,view.targetPosition)>0.01f && view.projection.Project(view.destination,landing)) {
+                const auto smooth=display.landing.Update(landing,now,motionSettings.overlaySmoothingMs,{},128*scale);
+                GroundReticle(frame->canvas,view.projection,view.destination,scale,0.9f,{smooth.x-landing.x,smooth.y-landing.y});
+            } else display.landing={};
+        } else {display.target={};display.landing={};}
+        display.offset={view.center.x-view.player.x,view.center.y-view.player.y};display.player=view.player;
+        display.playerId=view.playerId;display.targetId=view.targetId;display.skill=view.skill;
+        display.step=view.projection.step;display.screenOrigin=view.projection.screenOrigin;display.valid=true;
         return;
     }
+    display={}; // Debug graphics deliberately show raw targeting/projection.
     const D2RL::Overlay::Color color{0.2f,0.8f,1,0.85f};
     Aim::Point playerScreen{},aimScreen{};
     if(view.projection.Project(view.player,playerScreen) && view.projection.Project(view.center,aimScreen)) {
@@ -1046,8 +1104,6 @@ bool QolAim::Initialize(const D2RL::PluginContext* context,bool qolEnabled) noex
         std::snprintf(featureMessage,sizeof(featureMessage),"[QOL/Aim] Features: snapping=%u radius=%.2f switch_advantage=%.2f overlay=%u debug=%u projection_hz=%.1f smoothing_ms=%.1f.",
             motionSettings.snapping,motionSettings.snapRadius,motionSettings.switchAdvantage,motionSettings.overlay,motionSettings.debugOverlay,motionSettings.projectionHz,motionSettings.overlaySmoothingMs);
         ctx->LogInfo(featureMessage);
-        std::snprintf(featureMessage,sizeof(featureMessage),"[QOL/Aim] Whirlwind: pass_through_enabled=%u pass_through_distance=%.2f (restart to reload).",motionSettings.whirlwindPassThrough,motionSettings.whirlwindPassThroughDistance);
-        ctx->LogInfo(featureMessage);
     }
     constexpr unsigned char hash[]={0x2a,0x86,0x8d,0x01,0x3d,0x2e,0x08,0x30,0xbd,0x2d,0x9e,0x04,0xb9,0x18,0xb1,0x9e,0x46,0xa7,0x3c,0xf7,0x26,0xc8,0x33,0xe7,0x0d,0x08,0x9b,0x94,0x8f,0xde,0xb5,0xa2};
     const auto core=GetModuleHandleW(L"D2RCore.dll");
@@ -1065,7 +1121,11 @@ bool QolAim::Initialize(const D2RL::PluginContext* context,bool qolEnabled) noex
     if(!treeLayoutAdmitted) ctx->LogWarn("[QOL/Aim] Skill-tree layout guard mismatch; icon indicators disabled, existing toggle retained.");
     else if(motionSettings.verbose) ctx->LogInfo("[QOL/Aim] Skill-tree icon corner indicators/layout admitted; no additional hooks.");
     if(!treeAdmitted) ctx->LogWarn("[QOL/Aim] Skill-tree focus guard mismatch; tree toggle disabled, gameplay aim retained.");
-    else if(motionSettings.verbose) ctx->LogInfo("[QOL/Aim] Skill-tree R3 toggle admitted; numeric class settings saved through SDK.");
+    else if(motionSettings.verbose) ctx->LogInfo("[QOL/Aim] Skill-tree R3 toggle admitted; numeric skill settings saved to the active mod profile.");
+    generalTreeAdmitted=treeAdmitted && GeneralSkillNative::Admit(
+        [](const auto& guard) noexcept {return ctx->CheckExpectedBytes(guard.rva,guard.bytes,guard.size);},
+        [](uintptr_t rva) noexcept {uintptr_t value{};return ReadBytes(ctx->exeBase+rva,&value,sizeof(value))?value-ctx->exeBase:0;});
+    if(treeAdmitted && !generalTreeAdmitted)ctx->LogWarn("[QOL/Aim] General Skills guard mismatch; class-tree controls retained.");
     inGame=reinterpret_cast<InGameFn>(GetProcAddress(core,"IsInGame"));
     const D2RL::LifecycleService* lifecycle{};
     const D2RL::InputService* input{};
@@ -1074,6 +1134,17 @@ bool QolAim::Initialize(const D2RL::PluginContext* context,bool qolEnabled) noex
         ctx->QueryService(&lifecycle)!=D2RL::ServiceQueryResult::Success || !D2RL::HasLifecycleServiceField(lifecycle,D2RL::LifecycleServiceRequiredSize) ||
         ctx->QueryService(&input)!=D2RL::ServiceQueryResult::Success || !D2RL::HasInputServiceField(input,D2RL::InputServiceRequiredSize) ||
         !overlay->registerFrameCallback || !overlay->getMetrics || !overlay->drawLine || !overlay->drawText || !threads->runOnUiThread || !lifecycle->registerGameplayEventListener || !input->registerAction) return false;
+    if(!QolSkillDiscovery::Prepare(ctx,config.data(),skillSettings)) {
+        ctx->LogWarn("[QOL/Skills] Profile validation/migration failed; aim disabled, existing files retained for recovery.");return false;
+    }
+    motionSettings.whirlwindPassThrough=skillSettings.baseline.whirlwindPassThrough;
+    motionSettings.whirlwindPassThroughDistance=skillSettings.baseline.whirlwindPassThroughDistance;
+    if(motionSettings.verbose) {
+        char message[224];
+        std::snprintf(message,sizeof(message),"[QOL/Aim] Whirlwind profile: pass_through_enabled=%u pass_through_distance=%.2f (restart to reload).",motionSettings.whirlwindPassThrough,motionSettings.whirlwindPassThroughDistance);
+        ctx->LogInfo(message);
+    }
+    QolSkillDiscovery::Register(ctx,lifecycle,threads);
     for(const auto kind:{D2RL::Lifecycle::GameplayEventKind::GameJoined,D2RL::Lifecycle::GameplayEventKind::LocalPlayerReady,D2RL::Lifecycle::GameplayEventKind::GameLeft}) {
         const D2RL::Lifecycle::GameplayEventListener listener{sizeof(listener),0,kind,0,&Lifecycle,nullptr};
         D2RL::Lifecycle::ListenerHandle handle{};
@@ -1098,6 +1169,7 @@ bool QolAim::Initialize(const D2RL::PluginContext* context,bool qolEnabled) noex
     return true;
 }
 void QolAim::Shutdown() noexcept {
+    QolSkillDiscovery::Stop();
     ready.store(false);
     enabled.store(false); manualAim.store(false); installed.store(false); inSession.store(false); castObserverInstalled.store(false);
     // SDK removes owned callbacks/hooks. Keep context and original pointers

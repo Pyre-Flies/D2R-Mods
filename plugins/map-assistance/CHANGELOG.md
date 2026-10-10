@@ -1,3 +1,9 @@
+# Packaging update - 2026-10-10
+
+- Runtime archives now place reference settings under `defaults/` so extracting
+  an update preserves the live configuration. Missing configs still use embedded
+  defaults. No Map Assistance DLL or gameplay behavior change.
+
 # Packaging update - 2026-10-04
 
 - Put the shipped TOML at `d2rloader/config/map-assistance.toml` so the runtime

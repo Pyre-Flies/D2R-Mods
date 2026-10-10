@@ -38,6 +38,9 @@ publication, visible rendering, and persistence when applicable.
 - Version metadata, README, and changelog agree.
 - Clean Release build and all tests pass.
 - Compatibility hashes and guards match the tested deployment.
-- Runtime ZIP contains only installable files and user documentation.
+- Runtime ZIP contains only installable DLLs, reference defaults and user documentation.
+- Reference TOMLs live under `defaults/`; archives contain no live `d2rloader/config/` paths.
+- Configuration documentation explains migration, preserved values and rollback.
+- Run `python tools/test_package_runtime.py` and audit extraction/checksums.
 - Source ZIP excludes build output, logs, backups, and private game artifacts.
 - `SHA256SUMS` or the release manifest covers every published artifact.

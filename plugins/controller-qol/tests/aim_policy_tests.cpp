@@ -5,6 +5,8 @@
 #include "cast_observer_policy.h"
 #include "skill_toggle.h"
 #include "tree_layout.h"
+#include "general_skill_profile.h"
+#include <map>
 #include <array>
 #include <cstdio>
 #include <cstdlib>
@@ -89,7 +91,57 @@ int main() {
     Check(RewriteSkillToggle("[aim.sorceress]\n[aim]\nenabled=true",54,false,toggled) && toggled.find("\"54\" = false\n[aim]")!=toggled.npos,"missing key inserted before next section");
     Check(RewriteSkillToggle("[aim.amazon]\n\"Guided Arrow\"=true",22,false,toggled) && toggled.find("false")!=toggled.npos,"legacy supported name entry updated without duplicate ID");
     Check(!RewriteSkillToggle("[aim.amazon]\n\"12\"=true\n\"12\"=false",12,false,toggled),"ambiguous duplicate document refused");
-    Check(!RewriteSkillToggle("[aim.custom]\n\"900\"=\"snap\"",900,false,toggled),"unknown skill mode not guessed by tree toggle");
+    Check(RewriteSkillToggle("[aim.custom]\n\"900\"=\"snap\"",900,false,toggled),"explicit custom snap skill can be disabled");
+    Check(!RewriteSkillToggle("[aim.custom]\n",900,true,toggled),"undeclared custom skill is never invented by R3");
+    const std::string warp="[aim.custom]\r\n\"429\" = \"ground\" # Warp\r\n\"900\" = false\r\n[aim.leading]\r\n\"429\" = 0\r\n";
+    SkillSettings warpSettings;
+    Check(RewriteSkillToggle(warp,429,false,toggled) && ParseSkills(toggled,warpSettings) && !warpSettings.Enabled(429) && warpSettings.Targeting(429)==TargetMode::Ground,"legacy custom ground mode survives disable and a fresh parse");
+    Check(toggled.find("false # Warp\r\n")!=toggled.npos && toggled.find("\"900\" = false\r\n")!=toggled.npos,"custom save preserves comments newlines and unrelated settings");
+    Check(RewriteSkillToggle(toggled,429,true,toggled) && ParseSkills(toggled,warpSettings) && warpSettings.Mode(429)==TargetMode::Ground && warpSettings.LeadMillisecondsPerTile(429)==0,"custom Warp off/on across reload keeps ground routing and zero lead");
+    Check(CoordinateRoute(true,429,429,warpSettings) && !CoordinateRoute(true,54,429,warpSettings) && !OverrideScoring(true,429,warpSettings),"Warp uses its own authorized ground cast without enemy snap");
+    for(const std::string suffix:{"[aim.targeting]\n", "[aim.targeting]\n\"12\"=\"snap\"\n[aim]\nverbose=false"}) {
+        Check(RewriteSkillToggle("[aim.custom]\n\"429\"=\"ground\"\n"+suffix,429,false,toggled) && ParseSkills(toggled,warpSettings) && warpSettings.Targeting(429)==TargetMode::Ground,"legacy mode migration uses existing targeting section including one at EOF");
+    }
+    const std::string explicitWarp="[aim.custom]\n\"429\"=false\n[aim.targeting]\n\"429\"=\"ground\" # retain\n";
+    Check(RewriteSkillToggle(explicitWarp,429,true,toggled) && toggled==std::string(explicitWarp).replace(explicitWarp.find("false"),5,"true"),"declared Warp with explicit mode changes only the enable flag");
+    Check(RewriteSkillToggle("[aim.custom]\n\"429\"=\"ground\"\n[aim.targeting]\n\"429\"=\"snap\"",429,false,toggled) && ParseSkills(toggled,warpSettings) && warpSettings.Targeting(429)==TargetMode::Snap,"explicit targeting takes priority over legacy ground spelling");
+    Check(!RewriteSkillToggle("[aim.custom]\n\"429\"=\"disabled\"",429,true,toggled),"locked custom skills remain locked");
+    LiveSkills customLive;
+    Check(ParseSkills("[aim.custom]\n\"429\"=false\n\"900\"=\"disabled\"\n[aim.targeting]\n\"429\"=\"ground\"",customLive.baseline),"custom live settings parse");
+    customLive.Publish(429,customLive.Targeting(429));customLive.Publish(900,TargetMode::Snap);customLive.Publish(901,TargetMode::Snap);
+    Check(customLive.Mode(429)==TargetMode::Ground && !customLive.Enabled(900) && !customLive.Enabled(901) && !customLive.CanToggle(0),"live overrides respect declared custom identity and locked state");
+    // Synthetic native widgets exercise the actual decoder at the captured
+    // offsets; IDs move between buttons when equipment rearranges General Skills.
+    constexpr std::uintptr_t base=0x140000000,button1=0x300000000,button2=0x300002000,record=0x300004000;
+    std::map<std::uintptr_t,std::uintptr_t> memory{{button1,base+GeneralSkillNative::GeneralButton},{button2,base+GeneralSkillNative::GeneralButton},
+        {button1+0xb88,0},{button1+0xc0c,static_cast<std::uintptr_t>(-1)},{button1+0xc08,429},
+        {button2+0xb88,0},{button2+0xc0c,static_cast<std::uintptr_t>(-1)},{button2+0xc08,12}};
+    auto pointer=[&](std::uintptr_t address) noexcept {const auto it=memory.find(address);return it==memory.end()?std::uintptr_t{}:it->second;};
+    unsigned integerReads{};
+    auto integer=[&](std::uintptr_t address) noexcept {++integerReads;return static_cast<int>(pointer(address));};
+    auto readButton=[&](std::uintptr_t button) {return GeneralSkillNative::ReadId(button,base,true,pointer,integer);};
+    Check(readButton(button1)==429 && readButton(button2)==12,"Warp and item-granted Multi Shot use actual General button IDs");
+    std::swap(memory[button1+0xc08],memory[button2+0xc08]);
+    Check(readButton(button1)==12 && readButton(button2)==429,"rearranged widgets cannot retain old skill identity");
+    integerReads=0;
+    Check(GeneralSkillNative::ReadId(button1,base,false,pointer,integer)==-1 && integerReads==0,"failed General guard prevents all extended field reads");
+    for(int id:{-1,0,1,2,3,4,5,357,358,359,360,361,362,363,364,370,65535}) {
+        memory[button1+0xc08]=static_cast<std::uintptr_t>(id);
+        Check(readButton(button1)==-1,"template native utility and out-of-range IDs do not expose toggles");
+    }
+    memory[button1+0xc08]=429;memory[button1+0xb88]=1;
+    Check(readButton(button1)==-1,"unreviewed General button kinds fail open");
+    memory[button1+0xb88]=0;memory[button1+0xc0c]=123;
+    Check(readButton(button1)==-1,"unreviewed charged/item-specific representation fails open");
+    memory[button1]=base+GeneralSkillNative::ClassButton;memory[button1+0x668]=record;memory[record]=12;
+    Check(GeneralSkillNative::ReadId(button1,base,false,pointer,integer)==12,"class skill reader remains available when General support is unavailable");
+    memory[button1+0x668]=0;Check(readButton(button1)==-1,"class record null is rejected");
+    memory[button1]=base+0x1234;Check(readButton(button1)==-1,"unknown widget type is rejected");
+    auto slots=[](std::uintptr_t rva) noexcept {return rva==GeneralSkillNative::GeneralButton+0x20?std::uintptr_t{0x238c20}:std::uintptr_t{0x2382d0};};
+    Check(GeneralSkillNative::Admit([](const auto&) noexcept {return true;},slots),"verified General witnesses and vtables admit decoder");
+    for(const auto& failed:GeneralSkillNative::Guards)
+        Check(!GeneralSkillNative::Admit([&](const auto& g) noexcept {return g.rva!=failed.rva;},slots),"each General field guard is required");
+    Check(!GeneralSkillNative::Admit([](const auto&) noexcept {return true;},[](auto) noexcept {return 0u;}),"foreign vtable ownership refuses General support");
     SkillSettings locked{};
     Check(ParseSkills("[aim.amazon]\n\"9\"=\"disabled\"\n\"12\"=false",locked) && !locked.Enabled(9) && !locked.CanToggle(9) && locked.CanToggle(12),"locked catalog skill differs from toggleable false");
     Check(!CoordinateRoute(true,9,9,locked) && !OverrideScoring(true,9,locked),"locked skill never routes or overrides scoring");
@@ -190,10 +242,11 @@ int main() {
     Check(!CoordinateRoute(true,Meteor,-1,skills),"idle acquisition never authorizes a cast coordinate route");
     Check(!DeliberateStick({0.1f,0.1f},0.22f) && DeliberateStick({0.23f,0},0.22f),"activation uses radial deadzone");
     std::string extensions="[aim.custom]\n";
-    for(int id=300;id<332;++id) extensions+='"'+std::to_string(id)+"\"=\"snap\"\n";
-    Check(ParseSkills(allSkills+extensions,skills) && skills.Snaps(331),"full class catalog plus 32 custom entries fit bounded storage");
-    extensions+="\"332\"=\"ground\"\n";
-    Check(!ParseSkills(allSkills+extensions,skills) && skills.Snaps(331) && !skills.Enabled(332),"overflow is rejected without partial settings assignment");
+    constexpr int customEnd=1000+static_cast<int>(SkillSettings::Capacity-SkillCatalog.size());
+    for(int id=1000;id<customEnd;++id) extensions+='"'+std::to_string(id)+"\"=\"snap\"\n";
+    Check(ParseSkills(allSkills+extensions,skills) && skills.Snaps(customEnd-1),"full class catalog plus expanded custom capacity fit bounded storage");
+    extensions+='"'+std::to_string(customEnd)+"\"=\"ground\"\n";
+    Check(!ParseSkills(allSkills+extensions,skills) && skills.Snaps(customEnd-1) && !skills.Enabled(customEnd),"overflow is rejected without partial settings assignment");
     Check(ParseSkills("[aim.custom]\n\"357\"=\"disabled\"",skills) && !skills.Enabled(357),"explicit disabled custom skill keeps native targeting");
     Check(ParseQolSettings("[qol]\nenabled=true",integrated,enabled) && enabled,"missing aim section defaults enabled");
     Check(ParseQolSettings("[qol]\nenabled=true\n[aim]\nenabled=false",integrated,enabled) && !enabled,"qol enabled cannot enable aim");
@@ -425,14 +478,32 @@ int main() {
     book={}; book.Observe(1,10,{115,100},100,true);
     Check(!book.Choose(1,{110,100},{100,100},100,nullptr,4,0).valid,"configured snap radius excludes outside candidate");
     Check(book.Choose(1,{110,100},{100,100},100,nullptr,6,0).valid,"configured larger radius admits candidate");
-    DisplayProjection smoothing{};
-    auto first=smoothing.Update(projection,1000,35);
-    auto moved=projection; moved.worldOrigin.x+=1; moved.worldX.x+=1; moved.worldY.x+=1;
-    auto filtered=smoothing.Update(moved,1016,35);
-    Check(filtered.worldOrigin.x>first.worldOrigin.x && filtered.worldOrigin.x<moved.worldOrigin.x,"display-only camera correction interpolates");
-    auto jump=moved; jump.worldOrigin.x+=20; jump.worldX.x+=20; jump.worldY.x+=20;
-    Check(smoothing.Update(jump,1032,35).worldOrigin.x==jump.worldOrigin.x,"teleport-sized projection jump resets filter");
-    Check(smoothing.Update(projection,1048,0).worldOrigin.x==projection.worldOrigin.x,"zero smoothing uses raw projection");
+    DisplayPoint smoothing{};
+    smoothing.Update({100,100},1000,60);
+    float filteredError=0,rawError=0;
+    for(unsigned i=1;i<=40;++i) {
+        const Point raw{100+(i%2?3.0f:-3.0f),100};
+        const auto filtered=smoothing.Update(raw,1000+i*16,60);
+        rawError+=std::abs(raw.x-100);filteredError+=std::abs(filtered.x-100);
+    }
+    Check(filteredError<rawError*0.3f,"walking/camera screen-position jitter is reduced at 60 ms");
+    DisplayPoint coherent{};Point walkingScreen{};
+    auto walkingProjection=projection;
+    Check(walkingProjection.Project(center,walkingScreen),"walking fixture projects");
+    const auto stationaryScreen=walkingScreen;
+    coherent.Update(walkingScreen,1000,60);
+    for(unsigned i=1;i<=20;++i) {
+        walkingProjection.worldOrigin.x+=1;walkingProjection.worldX.x+=1;walkingProjection.worldY.x+=1;
+        Check(walkingProjection.Project({center.x+static_cast<float>(i),center.y},walkingScreen),"moving player/camera project together");
+        const auto filtered=coherent.Update(walkingScreen,1000+i*16,60);
+        Check(DistanceSquared(filtered,stationaryScreen)<0.001f,"coherent player/camera movement introduces no artificial display drift");
+    }
+    DisplayPoint direct{};direct.Update({100,100},1000,60);
+    Check(direct.Update({125,100},1016,60,{25,0}).x==125,"right-stick offset change bypasses display smoothing");
+    Check(direct.Update({125,100},1032,60).x==125,"released stick keeps its immediate display position");
+    Check(direct.Update({500,100},1048,60).x==500,"large screen jump snaps without sweeping reticle");
+    Check(direct.Update({505,100},1500,60).x==505,"stale display history resets");
+    Check(direct.Update({510,100},1516,0).x==510,"zero smoothing uses raw screen position");
     projection.worldY=projection.worldX;
     Check(!projection.Project(center,screen),"degenerate projection rejected");
     std::array<unsigned char,2480> expected{}, actual{};

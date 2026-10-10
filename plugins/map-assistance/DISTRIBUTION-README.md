@@ -13,7 +13,8 @@ tooltip in Diablo II: Resurrected through D2RLoader.
 
 Existing configuration files are intentionally preserved. To adopt a newer
 default configuration, compare your file with the standalone
-`map-assistance.toml` included in this archive.
+`defaults/map-assistance.toml` included in this archive. That reference is
+outside the live configuration folder, so extracting an update preserves settings.
 
 ## Remove
 

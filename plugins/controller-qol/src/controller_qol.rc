@@ -5,10 +5,10 @@ D2RL_PLUGIN_MANIFEST_RESOURCE_ID RCDATA { D2RL_PLUGIN_RESOURCE_DWORD(D2RL_PLUGIN
 
 #include <winver.h>
 1 VERSIONINFO
- FILEVERSION 1,3,1,73
- PRODUCTVERSION 1,3,1,73
+ FILEVERSION 1,3,1,75
+ PRODUCTVERSION 1,3,1,75
  FILEFLAGSMASK 0x3fL
- FILEFLAGS 0x0L
+ FILEFLAGS 0x2L
  FILEOS VOS_NT_WINDOWS32
  FILETYPE VFT_DLL
  FILESUBTYPE 0
@@ -19,11 +19,11 @@ BEGIN
   BEGIN
    VALUE "CompanyName", "PyreFly\0"
    VALUE "FileDescription", "Controller QOL Updates for D2RLoader\0"
-   VALUE "FileVersion", "1.3.1+rev.73\0"
+   VALUE "FileVersion", "1.3.1+rev.75\0"
    VALUE "InternalName", "controller-qol-updates\0"
    VALUE "OriginalFilename", "Controller QOL Updates.dll\0"
    VALUE "ProductName", "Controller QOL Updates\0"
-   VALUE "ProductVersion", "1.3.1+rev.73\0"
+   VALUE "ProductVersion", "1.3.1+rev.75\0"
   END
  END
  BLOCK "VarFileInfo"

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import re
 import zipfile
 
@@ -21,8 +21,13 @@ def read_version(source: Path, pattern: str) -> str:
 
 def make_archive(path: Path, files: dict[str, bytes]) -> None:
     for name in files:
-        if name.endswith(".toml") and not name.startswith("d2rloader/config/"):
-            raise SystemExit(f"Config is outside the installable layout: {name}")
+        parts = PurePosixPath(name).parts
+        if name.startswith("/") or "\\" in name or ":" in name or ".." in parts:
+            raise SystemExit(f"Unsafe archive path: {name}")
+        if name.lower().startswith("d2rloader/config/"):
+            raise SystemExit(f"Runtime archives must not overwrite user configuration: {name}")
+        if name.lower().endswith(".toml") and not name.startswith("defaults/"):
+            raise SystemExit(f"Reference config must be under defaults/ (never overwrite user config): {name}")
         if name.endswith(".dll") and not name.startswith("d2rloader/plugins/"):
             raise SystemExit(f"DLL is outside the installable layout: {name}")
     checksums = "".join(
@@ -95,9 +100,10 @@ mismatch. Close D2R before installing or replacing the DLL.
 """.encode("utf-8")
     controller_files = {
         "d2rloader/plugins/Controller QOL Updates.dll": require_file(args.controller_dll),
-        "d2rloader/config/controller-qol-updates.toml": require_file(
+        "defaults/controller-qol-updates.toml": require_file(
             controller / "controller-qol-updates.toml"
         ),
+        "defaults/controller-qol-skills.toml": require_file(controller / "skill-defaults.toml"),
         "README.md": require_file(controller / "README.md"),
         "CHANGELOG.md": require_file(controller / "CHANGELOG.md"),
         "COMPATIBILITY.txt": controller_compatibility,
@@ -108,7 +114,7 @@ mismatch. Close D2R before installing or replacing the DLL.
     controller_files["docs/IDENTIFY-REV11.md"] = require_file(controller / "docs" / "IDENTIFY-REV11.md")
     # Include the release's focused compatibility and native-contract records.
     for name in (
-        "PRODUCTION-1.3.1-rev.60.md", "PRODUCTION-1.3.1-rev.73.md", "SKILL-TREE-AIM-TOGGLE.md",
+        "PRODUCTION-1.3.1-rev.60.md", "PRODUCTION-1.3.1-rev.73.md", "PRODUCTION-1.3.1-rev.75.md", "CRASH-TRIAGE-2026-10-10.md", "SKILL-TREE-AIM-TOGGLE.md", "GENERAL-SKILLS-OSKILLS.md", "SKILL-DISCOVERY-CONFIG.md",
         "PROJECTILE-LEADING.md", "LEADING-BASELINES-REV71.md", "leading-baselines.json",
         "NEUTRAL-A-2026-10-08.md", "NPC-INTERACTION-2026-10-08.md",
         "CRASH-TRIAGE-2026-10-08.md", "interaction-priority-evidence.json",
@@ -159,7 +165,7 @@ before installing or replacing the DLL.
 
     map_assistance_files = {
         "d2rloader/plugins/Map Assistance.dll": require_file(args.map_assistance_dll),
-        "d2rloader/config/map-assistance.toml": require_file(
+        "defaults/map-assistance.toml": require_file(
             map_assistance / "map-assistance.toml"
         ),
         "README.md": require_file(map_assistance / "DISTRIBUTION-README.md"),

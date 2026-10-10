@@ -2,10 +2,14 @@
 
 This is an entry point to the tracked evidence, not a substitute for the feature
 records or executable guards. Read the linked document and current source before
-changing a hook, layout, controller action, or release. This handoff describes
-the published `main` baseline through Controller QOL rev.48, Item Roll Ranges
-rev.13, and Map Assistance rev.1. Local experiments and later revisions may not
-be represented here.
+changing a hook, layout, controller action, or release. The stable release baseline is Controller QOL rev.75, Item Roll Ranges rev.23,
+and Map Assistance rev.1. The detailed native summaries below retain historical
+evidence; follow the current feature records before treating them as active code.
+QOL shared controls remain in the main config; all per-skill settings and R3 saves
+now belong in complete per-mod profiles. See the
+[configuration/migration guide](../plugins/controller-qol/docs/SKILL-DISCOVERY-CONFIG.md)
+and [rev.75 production record](../plugins/controller-qol/docs/PRODUCTION-1.3.1-rev.75.md).
+Release ZIPs use reference-only `defaults/` TOMLs; never overwrite user configs.
 
 ## Where to start
 

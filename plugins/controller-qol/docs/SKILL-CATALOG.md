@@ -1,5 +1,8 @@
 # Rev.53 class skill catalog and review defaults
 
+Historical baseline: rev.75 includes a separate mod discovery layer, raises
+the total capacity to 1024 and moves all skill settings into per-mod profiles. See [Skill discovery](SKILL-DISCOVERY-CONFIG.md).
+
 2026-10-03. The config enumerates 240 player class skills, 30 each for Amazon,
 Sorceress, Necromancer, Paladin, Barbarian, Druid, Assassin and Warlock. It does
 not enumerate monster-only skills or internal item/utility actions. Class names

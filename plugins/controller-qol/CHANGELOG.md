@@ -1,5 +1,107 @@
 # Controller QOL changelog
 
+## 1.3.1+rev.75 - 2026-10-10
+
+- Promote the rev.74/rev.75 beta work: dynamic General Skills support, guarded
+  active-mod skill discovery and complete per-mod skill profiles. Keep shared
+  controls in the main config; migrate existing skill choices with backups,
+  read-back verification and preservation of shared settings/comments.
+- R3 saves only the active profile and keeps one rolling prior-state backup.
+  Generated catalogs are reference-only. Release TOMLs now live under
+  `defaults/`, so extracting an update cannot overwrite live configurations.
+- Improve reticle contrast and smooth final screen positions during character
+  movement while applying stick adjustments immediately. Set embedded and
+  fallback smoothing to 60 ms; existing explicit values remain unchanged.
+- Live feedback confirms General Skills behavior, the profile layout, bounded
+  R3 backups and improved reticle motion. Automated coverage is recorded in the
+  production record. Full-Ladder Save & Exit crashes remain unresolved.
+
+## 1.3.1+rev.75-beta.5 - 2026-10-10
+
+- Smooth final reticle screen positions instead of camera projection alone,
+  avoiding a filtered camera paired with unsmoothed character movement.
+- Apply right-stick cursor-offset changes immediately. Reset display history on
+  target/skill/player changes, large jumps, layout changes and stale/hidden views.
+  Targeting and cast coordinates remain raw; no new native reads or draw calls.
+- Automated motion traces cover walking jitter, coherent player/camera movement,
+  direct stick response and discontinuities. Live walking validation is pending.
+
+## 1.3.1+rev.75-beta.4 - 2026-10-10
+
+- Draw each gameplay reticle's complete dark border before its colored strokes,
+  preventing later segment borders from covering earlier colored joints.
+- Remove the ground marker's lock fade, increase core stroke width by 20%,
+  and enlarge the lock's open-corner half-extents from 14x9 to 18x12 at 1080p.
+  Preserve configured colors/opacity, ground ring size and draw-call count.
+- Beta.3 loaded correctly but the user found the visual difference too subtle.
+  Readability of this follow-up still needs live confirmation.
+
+## 1.3.1+rev.75-beta.3 - 2026-10-10
+
+- Use pale cyan (`#8FE8FF`) and amber (`#FFD166`) as the shipped ground/lock
+  reticle defaults. Existing user colors remain preserved.
+- Strengthen the dark edge while narrowing it at the default thickness. Keep
+  the free cursor opaque and reduce the locked cursor fade from 38% to 72%.
+  Shape, size, targeting and draw-call count are unchanged; no glow or flashing.
+- Dense-combat readability needs live feedback. This is not an exit-crash fix.
+
+## 1.3.1+rev.75-beta.2 - 2026-10-10
+
+- Keep one rolling R3 backup per skill profile instead of creating a timestamped
+  file for every toggle. Preserve separate migration recovery copies.
+- Retain atomic saves and snapshot checks; failed backup updates leave the
+  current profile and runtime toggle unchanged. Automated checks cover 100
+  consecutive toggles, prior-state recovery, unchanged saves and write failures.
+- Live validation of the bounded backup behavior remains pending.
+
+## 1.3.1+rev.75-beta.1 - 2026-10-10
+
+- Keep QOL options and general aim preferences in the main config. Move all
+  skill enable states, targeting, leading and Whirlwind options into one editable profile per mod,
+  including vanilla and packs without readable skill tables.
+- Import existing main-file skill choices and R3 overrides with backups and an
+  effective-settings comparison before removing old sections. Shared controls
+  remain unchanged; failed migration preserves recovery files and disables aim.
+- Separate embedded shared/skill defaults and release reference files. Rewrite
+  config comments and generated headers to distinguish active profiles from
+  reference catalogs, explain Warp discovery and identify the R3 save location.
+- Live migration and gameplay checks remain pending.
+
+## 1.3.1+rev.74-beta.2 - 2026-10-10
+
+- Discover candidate skill IDs/names from the active mod's readable skill table;
+  confirm new IDs through SDK tables or the guarded live skill tree. Unknown
+  skills start off; reviewed Warp uses ground aim. Missing sources retain manual
+  configuration. No new native hooks or per-frame filesystem scans.
+- Generate a separate catalog and preserve user-owned per-mod skill overrides.
+  R3 updates one setting with an atomic replacement and backup. Main aim tuning,
+  colors, comments, leading values and existing skill choices are preserved.
+- Move release reference TOMLs to `defaults/`; archive extraction no longer
+  overwrites live configs. Missing configs still use the DLL's embedded defaults.
+- All 29 Controller QOL suites and both archive tests pass, including discovery,
+  configuration preservation and extraction regression coverage. Live testing
+  of the new discovery layer remains pending; see `docs/SKILL-DISCOVERY-CONFIG.md`.
+
+## 1.3.1+rev.74-beta.1 - 2026-10-10
+
+- Support the reviewed General Skills buttons for equipment-granted skills.
+  Read each live button's numeric ID and geometry; equipment can reorder Warp,
+  Multi Shot and other entries without fixed slots or cached skill identities.
+- Share existing catalog settings for item-granted class skills; allow R3 and
+  indicators for explicitly declared custom IDs. Preserve ground targeting
+  when legacy custom settings are disabled/re-enabled and after config reload.
+- Keep unknown IDs, locked settings, native utility buttons and unreviewed
+  charged/item-specific widget variants out of the new toggle path. General
+  compatibility failure retains class-tree controls and native game behavior.
+- Document the live Warp 429 field and native witnesses; replace misleading
+  utility-ID config examples with an opt-in Reimagined Warp ground-mode example.
+  No additional hooks, gameplay polling, verbose logs or global OSkill defaults.
+- All 28 automated suites passed, including custom ground-mode persistence,
+  dynamic button IDs, native guard failures and DLL artifacts. Installed in the
+  local Ladder plugin directory with verified hash and preserved configuration.
+  Live casting, equipment reordering and offline checks remain pending; see
+  `docs/GENERAL-SKILLS-OSKILLS.md`.
+
 ## 1.3.1+rev.73 - 2026-10-09
 
 - Promote the rev.72 beta behavior to a stable release after the user reports

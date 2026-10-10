@@ -8,9 +8,17 @@ Keep detailed feature evidence here and cross-project summaries there.
 
 ## Current status and validation
 
+- [PRODUCTION-1.3.1-rev.75.md](PRODUCTION-1.3.1-rev.75.md) - current stable release, reticle changes and validation limits.
+- [SKILL-DISCOVERY-CONFIG.md](SKILL-DISCOVERY-CONFIG.md) - current shared/per-mod configuration, R3 saves, discovery, migration, backups and rollback.
+- [GENERAL-SKILLS-OSKILLS.md](GENERAL-SKILLS-OSKILLS.md) - dynamic equipment-granted skill buttons and guarded native evidence.
+- [CRASH-TRIAGE-2026-10-10.md](CRASH-TRIAGE-2026-10-10.md) - unresolved full-Ladder exit crashes and investigation limits.
+
+Older versioned records below document the behavior and evidence at that revision;
+their config/install paths may have been superseded by rev.75.
+
 - [LADDER-CONTROLLER-SCHEDULING.md](LADDER-CONTROLLER-SCHEDULING.md) - remote TCP/IP input/label scheduler mismatch and remaining authoritative item-action limitations.
 
-- [PRODUCTION-1.3.1-rev.60.md](PRODUCTION-1.3.1-rev.60.md) - current production release, skill settings, indicators and installable ZIP layout.
+- [PRODUCTION-1.3.1-rev.60.md](PRODUCTION-1.3.1-rev.60.md) - historical rev.60 production release, skill settings, indicators and ZIP layout.
 
 - [SKILL-TREE-AIM-TOGGLE.md](SKILL-TREE-AIM-TOGGLE.md) - rev.56 R3 per-skill toggle, guarded focused skill ID and persistence.
 

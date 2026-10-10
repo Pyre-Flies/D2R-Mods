@@ -81,10 +81,10 @@ struct MotionSettings {
     bool castObserver=true;
     bool verbose=false;
     bool skillTreeToggle=true;
-    ReticleColor groundReticleColor{194.0f/255,181.0f/255,150.0f/255,1},lockReticleColor{204.0f/255,156.0f/255,82.0f/255,242.0f/255};
+    ReticleColor groundReticleColor{143.0f/255,232.0f/255,1,1},lockReticleColor{1,209.0f/255,102.0f/255,1};
     float reticleThickness=2.0f;
     float whirlwindPassThroughDistance=1.5f;
-    float snapRadius=6, switchAdvantage=1.5f, projectionHz=60, overlaySmoothingMs=35;
+    float snapRadius=6, switchAdvantage=1.5f, projectionHz=60, overlaySmoothingMs=60;
     bool Valid() const noexcept {
         return std::isfinite(reticleThickness) && reticleThickness>=0.5f && reticleThickness<=4 &&
             std::isfinite(whirlwindPassThroughDistance) && whirlwindPassThroughDistance>=0 && whirlwindPassThroughDistance<=15 &&
@@ -146,20 +146,18 @@ struct CursorMotion {
 }
 
 namespace Aim {
-// Render-only filtering: raw projection remains authoritative for stick movement.
-struct DisplayProjection {
-    Projection value{}; std::uint64_t tick{};
-    Projection Update(const Projection& next,std::uint64_t now,float smoothingMs) noexcept {
-        Point test{};
-        if(!tick || !Fresh(now,tick,250) || smoothingMs<=0 ||
-            DistanceSquared(value.worldOrigin,next.worldOrigin)>64 ||
-            DistanceSquared(value.screenOrigin,next.screenOrigin)>1 || value.step!=next.step ||
-            !value.Project(value.worldOrigin,test)) { value=next; tick=now; return value; }
+// Filter final screen positions, never camera and player coordinates separately.
+// Explicit cursor-offset changes bypass smoothing so stick response stays direct.
+struct DisplayPoint {
+    Point value{}; std::uint64_t tick{};
+    Point Update(Point next,std::uint64_t now,float smoothingMs,Point immediateDelta={},float jumpPixels=128) noexcept {
+        const Point adjusted{value.x+immediateDelta.x,value.y+immediateDelta.y};
+        if(!tick || !Fresh(now,tick,250) || smoothingMs<=0 || !Finite(adjusted) ||
+            !Finite(next) || DistanceSquared(adjusted,next)>jumpPixels*jumpPixels) {
+            value=next;tick=now;return value;
+        }
         const float alpha=1-std::exp(-static_cast<float>(now-tick)/smoothingMs);
-        auto mix=[&](Point a,Point b) { return Point{a.x+(b.x-a.x)*alpha,a.y+(b.y-a.y)*alpha}; };
-        value.worldOrigin=mix(value.worldOrigin,next.worldOrigin);
-        value.worldX=mix(value.worldX,next.worldX); value.worldY=mix(value.worldY,next.worldY);
-        if(!value.Project(value.worldOrigin,test)) value=next;
+        value={adjusted.x+(next.x-adjusted.x)*alpha,adjusted.y+(next.y-adjusted.y)*alpha};
         tick=now; return value;
     }
 };

@@ -12,8 +12,10 @@ enum class TargetMode { Disabled, Ground, Snap };
 inline bool UsesNativeUnitTarget(int skill) noexcept { return skill==43; }
 struct SkillSetting { int id{}; TargetMode mode{}; bool locked{}; TargetMode targeting{TargetMode::Snap}; unsigned leadMsPerTile{}; unsigned leadMaxMs{600}, leadMaxTiles{3}; };
 struct SkillSettings {
-    static constexpr std::size_t Capacity=SkillCatalog.size()+32;
+    static constexpr std::size_t Capacity=1024;
     std::array<SkillSetting,Capacity> entries{};
+    bool whirlwindPassThrough=true;
+    float whirlwindPassThroughDistance=1.5f;
     SkillSettings() noexcept {
         for(std::size_t i=0;i<SkillCatalog.size();++i) {
             const auto& skill=SkillCatalog[i];
@@ -22,36 +24,41 @@ struct SkillSettings {
     }
     TargetMode Mode(int id) const noexcept {
         if(id<=0) return TargetMode::Disabled;
-        for(const auto& entry:entries) if(entry.id==id) return entry.mode;
+        for(const auto& entry:entries) {if(!entry.id)break;if(entry.id==id)return entry.mode;}
         return TargetMode::Disabled;
     }
     TargetMode Targeting(int id) const noexcept {
-        for(const auto& entry:entries) if(entry.id==id) return entry.targeting;
+        for(const auto& entry:entries) {if(!entry.id)break;if(entry.id==id)return entry.targeting;}
         return TargetMode::Snap;
     }
     bool CanToggle(int id) const noexcept {
-        if(!FindCatalogSkill(id)) return false;
-        for(const auto& entry:entries) if(entry.id==id) return !entry.locked;
+        if(id<=0 || id>=65535) return false;
+        for(const auto& entry:entries) {if(!entry.id)break;if(entry.id==id)return !entry.locked;}
+        return false;
+    }
+    bool Contains(int id) const noexcept {
+        if(id<=0 || id>=65535) return false;
+        for(const auto& entry:entries) {if(!entry.id)break;if(entry.id==id)return true;}
         return false;
     }
     bool Enabled(int id) const noexcept { return Mode(id)!=TargetMode::Disabled; }
     bool Snaps(int id) const noexcept { return Mode(id)==TargetMode::Snap; }
     unsigned LeadMaxMilliseconds(int id) const noexcept {
-        for(const auto& entry:entries) if(entry.id==id) return entry.leadMaxMs;
+        for(const auto& entry:entries) {if(!entry.id)break;if(entry.id==id)return entry.leadMaxMs;}
         return 600;
     }
     unsigned LeadMaxTiles(int id) const noexcept {
-        for(const auto& entry:entries) if(entry.id==id) return entry.leadMaxTiles;
+        for(const auto& entry:entries) {if(!entry.id)break;if(entry.id==id)return entry.leadMaxTiles;}
         return 3;
     }
     unsigned LeadMillisecondsPerTile(int id) const noexcept {
-        for(const auto& entry:entries) if(entry.id==id) return entry.leadMsPerTile;
+        for(const auto& entry:entries) {if(!entry.id)break;if(entry.id==id)return entry.leadMsPerTile;}
         return 0;
     }
 };
 // Class headings organize IDs only. Legacy name keys remain readable for migration.
-inline bool ParseSkills(std::string_view text,SkillSettings& output) {
-    SkillSettings parsed{};
+inline bool ParseSkills(std::string_view text,SkillSettings& output,const SkillSettings* defaults=nullptr) {
+    SkillSettings parsed=defaults?*defaults:SkillSettings{};
     std::array<int,SkillSettings::Capacity> seen{}; std::size_t count=0;
     for(const auto sectionName:{"aim.amazon","aim.sorceress","aim.necromancer","aim.barbarian","aim.paladin","aim.druid","aim.assassin","aim.warlock","aim.custom"}) {
         std::string section;
@@ -68,8 +75,10 @@ inline bool ParseSkills(std::string_view text,SkillSettings& output) {
             if(std::string_view(sectionName)=="aim.custom") {
                 const auto result=std::from_chars(key.data(),key.data()+key.size(),id);
                 if(result.ec!=std::errc{} || result.ptr!=key.data()+key.size() || id<=0 || id>65534 || FindCatalogSkill(id)) return false;
+                targeting=parsed.Targeting(id);
                 if(value=="\"ground\"") mode=targeting=TargetMode::Ground;
-                else if(value=="true" || value=="\"snap\"") mode=TargetMode::Snap;
+                else if(value=="true") mode=targeting;
+                else if(value=="\"snap\"") mode=targeting=TargetMode::Snap;
                 else if(value=="\"disabled\"") locked=true;
                 else if(value!="false") return false;
             } else {
@@ -80,9 +89,9 @@ inline bool ParseSkills(std::string_view text,SkillSettings& output) {
                 }
                 const auto* catalog=FindCatalogSkill(id);
                 if(!catalog || (value!="true" && value!="false" && value!="\"disabled\"")) return false;
-                targeting=catalog->snap?TargetMode::Snap:TargetMode::Ground;
+                targeting=parsed.Targeting(id);
                 locked=value=="\"disabled\"";
-                mode=(value=="false" || locked)?TargetMode::Disabled:(catalog->snap?TargetMode::Snap:TargetMode::Ground);
+                mode=(value=="false" || locked)?TargetMode::Disabled:targeting;
             }
             if(count==seen.size()) return false;
             for(std::size_t i=0;i<count;++i) if(seen[i]==id) return false;
@@ -148,13 +157,32 @@ inline bool ParseSkills(std::string_view text,SkillSettings& output) {
             if(!found) return false;
         }
     }
+    std::string whirlwind;
+    if(!QolAim::Section(text,"aim.whirlwind",whirlwind))return false;
+    std::string_view options=whirlwind;unsigned whirlwindSeen=0;
+    while(!options.empty()) {
+        const auto end=options.find('\n');const auto line=QolAim::Trim(options.substr(0,end));
+        options=end==options.npos?std::string_view{}:options.substr(end+1);
+        if(line.empty())continue;
+        const auto eq=line.find('=');if(eq==line.npos)return false;
+        const auto key=QolAim::Trim(line.substr(0,eq)),value=QolAim::Trim(line.substr(eq+1));
+        if(key=="whirlwind_pass_through_enabled") {
+            if((whirlwindSeen&1) || (value!="true" && value!="false"))return false;
+            whirlwindSeen|=1;parsed.whirlwindPassThrough=value=="true";
+        } else if(key=="whirlwind_pass_through_distance") {
+            if(whirlwindSeen&2)return false;whirlwindSeen|=2;
+            float distance{};const auto number=std::from_chars(value.data(),value.data()+value.size(),distance);
+            if(number.ec!=std::errc{} || number.ptr!=value.data()+value.size() || !std::isfinite(distance) || distance<0 || distance>15)return false;
+            parsed.whirlwindPassThroughDistance=distance;
+        } else return false;
+    }
     // Catch misspelled aim sections instead of silently enabling their defaults.
     while(!text.empty()) {
         const auto end=text.find('\n'); auto line=QolAim::Trim(text.substr(0,end));
         text=end==text.npos?std::string_view{}:text.substr(end+1);
         line=QolAim::Trim(QolAim::WithoutComment(line));
         if(line.size()>=6 && line.substr(0,5)=="[aim.") {
-            bool known=false;
+            bool known=line=="[aim.whirlwind]";
             for(const auto name:{"[aim.amazon]","[aim.sorceress]","[aim.necromancer]","[aim.barbarian]","[aim.paladin]","[aim.druid]","[aim.assassin]","[aim.warlock]","[aim.custom]","[aim.targeting]","[aim.leading]","[aim.leading_max_ms]","[aim.leading_max_tiles]"}) if(line==name) known=true;
             if(!known) return false;
         }

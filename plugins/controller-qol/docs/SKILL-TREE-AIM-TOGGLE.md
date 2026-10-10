@@ -1,5 +1,9 @@
 # Skill-tree R3 aim toggle, rev.56
 
+Historical rev.56 record. Rev.75 moves all skill settings and R3 saves into a
+mod-specific profile; the SDK-only persistence description below is historical.
+See [current configuration and migration](SKILL-DISCOVERY-CONFIG.md).
+
 2026-10-04. Build-specific contracts, not portable SDK widget layouts.
 Game disk SHA256: `1E2AC459FEB3F4BBFA818CDFF49800480502BEAE9F90CFA4CBA9E7E1F8BFA3B7`.
 Core SHA256: `2A868D013D2E0830BD2D9E04B918B19E46A73CF726C833E70D089B948FDEB5A2`.
@@ -232,3 +236,12 @@ Built/deployed DLL SHA256: A5A5C316FF9A56F4161C7B03221F498FFCB2F6F65DD98C91ED67C
 Runtime config contains no active custom entries. Updated comments/examples and
 added empty aim.targeting; semantic comparison confirmed all prior values
 unchanged. Live testing of modded/custom targeting overrides remains pending.
+
+## General Skills and equipment-granted OSkills (2026-10-10)
+
+The highlighted Reimagined Warp was captured as ID 429 on the separate General
+Skills button type. That type stores a numeric ID at +0xC08, not the class-tree
+record at +0x668. See [GENERAL-SKILLS-OSKILLS.md](GENERAL-SKILLS-OSKILLS.md) for
+artifact identities, exact native witnesses, configuration policy and the
+remaining R3/indicator implementation boundary. No runtime behavior changed in
+this read-only investigation.

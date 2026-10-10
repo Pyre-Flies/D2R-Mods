@@ -32,6 +32,7 @@ add_library(controller-qol SHARED
     src/client_loot.cpp
     src/belt_actions.cpp
     src/aim/controller_aim.cpp
+    src/aim/skill_discovery.cpp
     src/plugin_main.cpp
     src/controller_input.cpp
     src/d2r_memory.cpp
@@ -61,6 +62,13 @@ d2rlplugin_embed_config(
     TARGET controller-qol
     FILE "${CMAKE_CURRENT_SOURCE_DIR}/controller-qol-updates.toml"
 )
+
+# Skill defaults are private to QOL; the loader creates only the shared config.
+configure_file(skill-defaults.toml "${CMAKE_CURRENT_BINARY_DIR}/skill-defaults.toml" COPYONLY)
+file(TO_CMAKE_PATH "${CMAKE_CURRENT_BINARY_DIR}/skill-defaults.toml" QOL_SKILL_DEFAULTS_PATH)
+configure_file(src/skill_defaults.rc.in "${CMAKE_CURRENT_BINARY_DIR}/skill-defaults.rc" @ONLY)
+set_property(SOURCE "${CMAKE_CURRENT_BINARY_DIR}/skill-defaults.rc" APPEND PROPERTY OBJECT_DEPENDS "${QOL_SKILL_DEFAULTS_PATH}")
+target_sources(controller-qol PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/skill-defaults.rc")
 
 set_target_properties(controller-qol PROPERTIES
     OUTPUT_NAME "Controller QOL Updates"
@@ -183,7 +191,7 @@ add_executable(qol-artifact-tests tests/artifact_tests.cpp)
 target_include_directories(qol-artifact-tests PRIVATE src "${PLUGIN_SDK}/include")
 target_compile_definitions(qol-artifact-tests PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 add_dependencies(qol-artifact-tests controller-qol)
-add_test(NAME qol-artifact COMMAND qol-artifact-tests "$<TARGET_FILE:controller-qol>" "1.3.1+rev.73")
+add_test(NAME qol-artifact COMMAND qol-artifact-tests "$<TARGET_FILE:controller-qol>" "1.3.1+rev.75")
 
 add_executable(qol-shared-sdk-tests tests/shared_sdk_tests.cpp)
 target_include_directories(qol-shared-sdk-tests PRIVATE src "${PLUGIN_SDK}/include")
@@ -201,10 +209,19 @@ target_compile_options(qol-aim-tests PRIVATE /W4 /WX)
 add_test(NAME qol-aim COMMAND qol-aim-tests)
 set_source_files_properties(src/aim/controller_aim.cpp PROPERTIES COMPILE_OPTIONS "/W4;/WX")
 
-add_executable(qol-aim-gating-tests tests/aim_gating_tests.cpp src/aim/controller_aim.cpp)
+add_executable(qol-aim-gating-tests tests/aim_gating_tests.cpp src/aim/controller_aim.cpp src/aim/skill_discovery.cpp)
 target_include_directories(qol-aim-gating-tests PRIVATE src "${PLUGIN_SDK}/include")
 target_include_directories(qol-aim-gating-tests PRIVATE include)
 target_compile_definitions(qol-aim-gating-tests PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX QOL_AIM_TEST_INSTALL)
 target_compile_options(qol-aim-gating-tests PRIVATE /W4 /WX)
 target_link_libraries(qol-aim-gating-tests PRIVATE bcrypt)
 add_test(NAME qol-aim-gating COMMAND qol-aim-gating-tests)
+
+add_executable(qol-skill-discovery-tests tests/skill_discovery_tests.cpp src/aim/skill_discovery.cpp)
+target_include_directories(qol-skill-discovery-tests PRIVATE src/aim "${PLUGIN_SDK}/include")
+target_compile_definitions(qol-skill-discovery-tests PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_compile_options(qol-skill-discovery-tests PRIVATE /W4 /WX)
+set_source_files_properties(src/aim/skill_discovery.cpp PROPERTIES COMPILE_OPTIONS "/W4;/WX")
+add_test(NAME qol-skill-discovery COMMAND qol-skill-discovery-tests)
+target_sources(qol-aim-gating-tests PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/skill-defaults.rc")
+target_sources(qol-skill-discovery-tests PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/skill-defaults.rc")

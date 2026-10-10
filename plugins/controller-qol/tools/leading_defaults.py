@@ -8,9 +8,9 @@ def render_leading_defaults() -> str:
     records = ledger['records']
     assert len(records) == 240 and len({row['id'] for row in records}) == 240
     lines = [
-        '# Reimagined-oriented projectile baselines; numeric IDs are not mod-detected.',
+        '# Reviewed Reimagined projectile estimates; discovery does not calculate travel times.',
         '# Milliseconds per world tile (0..200). Zero retains current-position aim.',
-        '# Does not enable a skill. R3 and [aim.targeting] still control snap aiming.',
+        '# Leading requires an enabled skill using snap targeting; these values do not enable it.',
         '# New estimates need gameplay testing; see docs/PROJECTILE-LEADING.md.',
         '[aim.leading]',
     ]

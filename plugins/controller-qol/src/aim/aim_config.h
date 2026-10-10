@@ -77,11 +77,11 @@ inline bool ParseSettings(std::string_view text,MotionSettings& output,bool* ena
     if(enabled) *enabled=parsedEnabled;
     return true;
 }
-inline bool ParseQolSettings(std::string_view text,MotionSettings& output,bool& enabled,SkillSettings* skills=nullptr) {
+inline bool ParseQolSettings(std::string_view text,MotionSettings& output,bool& enabled,SkillSettings* skills=nullptr,const SkillSettings* defaults=nullptr) {
     std::string section;
     if(!QolAim::Section(text,"aim",section)) return false;
     MotionSettings parsed{}; bool parsedEnabled{}; SkillSettings parsedSkills{};
-    if(!ParseSettings(std::string("[aim]\n")+section,parsed,&parsedEnabled) || !ParseSkills(text,parsedSkills)) return false;
+    if(!ParseSettings(std::string("[aim]\n")+section,parsed,&parsedEnabled) || !ParseSkills(text,parsedSkills,defaults)) return false;
     output=parsed; enabled=parsedEnabled;
     if(skills) *skills=parsedSkills;
     return true;

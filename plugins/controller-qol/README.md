@@ -1,7 +1,7 @@
 # Controller QOL Updates
 
 **Made by PyreFly for D2RLoader**  
-Version **1.3.1+rev.73** | Windows x64 | Diablo II: Resurrected
+Version **1.3.1+rev.75** | Windows x64 | Diablo II: Resurrected
 
 Controller QOL Updates adds direct controller looting, contextual item actions,
 stash and Cube transfers, belt management, clearer controller prompts, and
@@ -11,9 +11,11 @@ storage, vendor, and interaction rules.
 Xbox button names are used below. On a PlayStation-style controller, LB/RB are
 L1/R1, LT/RT are L2/R2, and A/X/Y/B are Cross/Square/Triangle/Circle.
 
-This beta includes private-server and Ladder compatibility changes. Unexpected
-client crashes in the full Ladder setup remain under investigation, and the
-final beta needs an offline smoke test. See the included crash-triage record.
+Rev.75 includes per-mod skill profiles, General Skills support and clearer,
+smoother reticles. See the [configuration guide](docs/SKILL-DISCOVERY-CONFIG.md)
+before editing or rolling back. Full-Ladder Save & Exit crashes remain under
+investigation; this release does not claim to fix them. See the
+[production record](docs/PRODUCTION-1.3.1-rev.75.md) for validation limits.
 
 ## Shortcuts
 
@@ -129,12 +131,24 @@ these menus so navigation cannot queue a world pickup.
 
 Vendor scroll refill requires a matching non-full tome in Inventory. It sends one
 native purchase request and observes charge growth; missing/full tomes cause no
-purchase. Native gold and capacity rules apply. This addition awaits live testing.
+purchase. Native gold and capacity rules apply. Vendor tome refill was confirmed
+in live Ladder testing after providing sufficient gold.
 
 ## Configuration
 
 Edit `d2rloader/config/controller-qol-updates.toml` while the game is closed.
-All settings live under `[qol]` and are read when the plugin loads.
+The action settings below live under `[qol]`; shared aim controls live under
+`[aim]` in the same file. All per-skill settings live in
+`d2rloader/config/controller-qol-skills/<scope>.overrides.toml`, including R3
+choices, targeting, leading and Whirlwind options. Find the active profile by
+its `# Mod:` header. The matching `.catalog.toml` is generated reference data,
+not active configuration. See the [complete configuration and upgrade guide](docs/SKILL-DISCOVERY-CONFIG.md).
+
+Updates preserve existing choices. Release ZIPs carry reference TOMLs under
+`defaults/`, with no files that extract over live configs. The loader creates
+a missing main file; QOL creates and completes the active skill profile when
+aim initializes. Old skill settings migrate with backups and verification.
+R3 keeps only one rolling `.r3.bak` per profile; migration backups are separate.
 
 | Variable | Default | Purpose |
 |---|---:|---|
@@ -207,19 +221,27 @@ keeps direct enemy snapping; disabling snapping uses only the ground cursor.
 | F10 | Invert right-stick Y for this session |
 
 Bindings appear under Controller QOL Aim in the loader controls menu. The normal
-bone reticle marks the cursor, brass corners mark the enemy, and a separate bone
+cyan reticle marks the cursor, amber corners mark the enemy, and a separate cyan
 ring marks a Whirlwind pass-through endpoint. Debug mode restores diagnostic
 lines/circles/text. These are aim indicators, not skill area-of-effect outlines.
 
 ### Aim configuration
 
-All keys below belong in `[aim]`, separately from `[qol]`. Restart after edits.
+All keys below belong in the main file's `[aim]`, separately from `[qol]`.
+Restart after manual edits; R3 skill changes apply immediately.
+The 60 ms smoothing default applies to fresh configs and omitted keys; an
+existing explicit value (including 35 or 0) remains unchanged. Larger values
+can add visible tracking lag, so 60 ms is a default rather than a forced upgrade.
 Missing values use defaults; an invalid aim section disables aim and logs a warning
 without disabling other QOL features. Overlay settings do not affect targeting.
 
 | Key | Default | Purpose / allowed values |
 | --- | --- | --- |
 | `enabled` | `true` | Enable aim hooks, controls and overlay |
+| `skill_tree_toggle_enabled` | `true` | R3 toggles a supported skill and saves its mod profile |
+| `ground_reticle_color` | `"#8FE8FF"` | Cursor color, quoted #RRGGBB or #RRGGBBAA |
+| `lock_reticle_color` | `"#FFD166"` | Target-lock color with optional opacity |
+| `reticle_thickness` | `2.0` | Line-width multiplier, 0.5-4 |
 | `verbose` | `false` | Detailed aim file logging; restart required. Warnings remain visible. |
 | `deadzone` | `0.22` | Radial stick dead zone, 0-0.9 |
 | `initial_speed` | `8.0` | Initial full-tilt speed, 0.1-100 tiles/sec |
@@ -232,9 +254,7 @@ without disabling other QOL features. Overlay settings do not affect targeting.
 | `debug_overlay` | `false` | Show detailed HUD, lines and submitted-cast marker |
 | `cast_observer_enabled` | `true` | Optional cast diagnostics/reset observer; false leaves its hook site free |
 | `projection_hz` | `60.0` | Ground projection sampling, 10-120; limited by UI rate |
-| `overlay_smoothing_ms` | `35.0` | Display-only smoothing, 0-150 ms |
-| `whirlwind_pass_through_enabled` | `true` | Extend Whirlwind beyond retained enemy |
-| `whirlwind_pass_through_distance` | `1.5` | Extension, 0-15 tiles; zero targets enemy directly |
+| `overlay_smoothing_ms` | `60.0` | Display-only screen-motion smoothing, 0-150 ms; zero disables; direct stick adjustments remain immediate |
 
 Disable/remove the standalone `Controller Aim Test.dll` before enabling this
 feature. Its old TOML is not read by QOL. For migration, copy its `[aim]` values
@@ -253,68 +273,71 @@ guarantee compatibility between two plugins changing Whirlwind movement. QOL's
 Whirlwind toggle and pass-through settings are preserved; choose which plugin
 controls that skill if their behaviors compete.
 
-### Skills and mod extensions
+### Skills and mod profiles
 
-The config includes `[aim.amazon]`, `[aim.sorceress]`, `[aim.necromancer]`,
-`[aim.barbarian]`, `[aim.paladin]`, `[aim.druid]`, `[aim.assassin]` and
-`[aim.warlock]` headings, listing all 240 class skills (30 per class).
-They organize settings for readability only: an Amazon skill granted to another
-class still uses the same setting. The ten previously tested skill IDs default true;
-The 30 cataloged passive skills default to `"disabled"`; the other 200 newly
-cataloged skills default false for review. Corpse Explosion, Nova,
-Poison Nova, passives, auras and self-casts retain native behavior by default.
-Comments give a preliminary behavior/review category; they are not compatibility
-guarantees. Enabling a newly listed skill opts into its provisional ground or
-enemy-snap coordinate mode and requires testing. The list covers player class
-skills, including Warlock, not monster-only actions or item/utility internals.
-Set any skill to false to keep native targeting while allowing R3 to enable it.
-Set it to `"disabled"` to lock aim off and ignore the R3 shortcut for that skill.
-For example, `[aim.amazon]` with `"9" = "disabled"` locks Critical Strike off.
-Locked entries show `Auto-aim: DISABLED` with no toggle hint. Numeric IDs are quoted TOML keys;
-comments label their names. Legacy name keys remain readable for migration.
-Unlisted IDs in class sections, duplicate skill entries or malformed aim settings
-disable only the aim module with a warning. Restart after editing.
+Whirlwind's two pass-through options also belong in the skill profile, under
+`[aim.whirlwind]`: `whirlwind_pass_through_enabled` (default `true`) and
+`whirlwind_pass_through_distance` (default `1.5`, range 0–15 tiles). Zero distance
+targets the enemy directly. Their old `[aim]` values migrate automatically.
 
-See [the catalog provenance and validation notes](docs/SKILL-CATALOG.md) for
-ID sources, review categories and the distinction between listed and tested skills.
+The main `controller-qol-updates.toml` holds `[qol]` and shared `[aim]` preferences:
+cursor speed, deadzone, acceleration, colors, snapping radius and logging.
+All per-skill enable states, targeting modes and leading values belong in
+`config/controller-qol-skills/<scope>.overrides.toml`. Open the profile whose
+`# Mod:` line matches the active pack, or `Vanilla`. R3 writes to that same file.
+These profiles are shared by characters using that mod and main config scope.
+
+The adjacent `.catalog.toml` is generated reference data. It is not loaded as
+settings or a report of your current choices. For example, its Warp entry can
+say `false` while your skill profile says `true` and Warp aim works in game.
+Do not edit or copy the whole catalog over your profile.
+
+Profiles organize the 240 built-in class IDs under `[aim.amazon]`,
+`[aim.sorceress]`, `[aim.necromancer]`, `[aim.barbarian]`, `[aim.paladin]`,
+`[aim.druid]`, `[aim.assassin]` and `[aim.warlock]`. Extra IDs belong in
+`[aim.custom]`. Headings organize settings only: equipment-granted Multi Shot
+uses the same numeric ID and preference on any class. Names are labels; a mod
+can change the skill behind an ID.
+
+- `true`: enable QOL aim using the skill's targeting mode.
+- `false`: keep native targeting; R3 can enable QOL aim.
+- `"disabled"`: lock QOL aim off and remove that skill's R3 toggle.
+- `[aim.targeting]`: `"ground"` uses the cursor; `"snap"` uses an eligible enemy
+  near the cursor, falling back to the cursor when none is selected. This mode
+  does not enable a skill or bypass the shared snapping toggle.
+- `[aim.leading]` and prediction-limit sections tune enabled snap skills only.
+
+Manual edits load after restart. R3 applies immediately after a successful save,
+with one rolling `.r3.bak` per profile containing the preceding saved state.
+Migration backups remain separate. Existing choices win over defaults; startup
+adds missing entries without replacing settings already in the profile. Review
+new skills in game before enabling them. Discovery does not infer every custom
+spell's correct targeting or projectile speed.
+
+Recognized Reimagined Warp (429) is discovered with ground targeting and starts
+off unless an existing preference enables it. R3 can enable it directly; no
+uncommenting in the main file is required. For a pack where discovery cannot
+read the skill data, this manual fallback belongs in its **skill profile**:
 
 ```toml
-[aim.amazon]
-# Guided Arrow
-"22" = true
-# Multi Shot
-"12" = false
-
+# Merge into existing sections; do not duplicate the headers.
 [aim.custom]
-# Examples only: obtain the actual IDs from the active mod's skills table.
-"357" = true
-"358" = false
-"359" = "disabled"
-
+"429" = false # Warp: R3 can enable it after the active mod's ID is verified
 [aim.targeting]
-"357" = "ground"
-# Optional override for a built-in skill too:
-# "56" = "ground"
+"429" = "ground"
 ```
 
-`[aim.custom]` accepts up to 32 additional unique numeric skill IDs (1..65534),
-including mod-added skills or otherwise unlisted base skills. Values are `true`,
-`false`, or `"disabled"`, as in class sections. Enabled custom skills default to
-circular enemy snapping with ground fallback. Catalog IDs belong in class
-sections and cannot be redefined here. Optional `[aim.targeting]` numeric entries
-select `"ground"` (cursor coordinates) or `"snap"` (enemy snapping with ground
-fallback) for either built-in or declared custom IDs. Overrides never enable a
-skill, unlock `"disabled"`, or bypass global `snapping_enabled = false`. They remain
-in effect when R3 disables/re-enables a catalog skill. Unknown custom IDs must be
-declared under `[aim.custom]` first. Legacy custom `"ground"` and `"snap"` values
-remain readable with their existing behavior; explicit targeting overrides win.
-Custom R3 toggling remains limited to the verified built-in skill-tree catalog.
-Names alone do not identify
-custom skills, and IDs must be checked against the active mod rather than an
-unrelated installation. Configuration does not prove compatibility with every
-native skill implementation: self-cast, aura, summon or unusual targeting paths
-may not consume these coordinates. Custom entries are explicit experiments;
-test each skill's landing, targeting and collision behavior in game.
+Profiles also work for vanilla and packs without readable loose tables. Unknown
+IDs must be discovered or declared manually before targeting/leading entries can
+refer to them. The total limit is 1024 IDs, including the built-in catalog.
+Legacy custom `"ground"`/`"snap"` enable values remain readable. Duplicate IDs,
+invalid profiles or failed migration stop aim initialization and log a warning;
+other QOL features remain available and original files are retained for recovery.
+
+On upgrade, the plugin imports old main-file skill sections and existing mod R3
+overrides, verifies equivalent skill behavior, then removes only the migrated
+sections from the main file. Shared setting bytes remain intact; backups and a
+legacy import archive preserve the originals. See [migration and recovery](docs/SKILL-DISCOVERY-CONFIG.md).
 
 ## Install or update
 
@@ -324,14 +347,18 @@ test each skill's landing, targeting and collision behavior in game.
    active.
 4. Copy `d2rloader/plugins/Controller QOL Updates.dll` into the loader's active
    plugins directory.
-5. Launch through D2RLoader. A missing configuration file is created from the
-   embedded defaults.
+5. Launch through D2RLoader. A missing main file is created from embedded
+   shared defaults; QOL creates/migrates the active skill profile when aim initializes.
 
 The plugin ID is `controller-qol-updates`, so its configuration file is
 `controller-qol-updates.toml`. If upgrading from the older `qol` identity,
 rename `qol.toml` and update any explicit loader ordering entry that names it.
-Do not overwrite an existing customized configuration with the loose reference
-copy included in the release ZIP.
+Runtime ZIPs put reference settings under `defaults/`, outside the live config
+folder. Extracting an update preserves existing settings; first installs use the
+DLL's embedded defaults. Do not manually copy a reference over a customized file.
+
+Mod-aware skill discovery and separate per-mod overrides are described in
+[Skill discovery and configuration](docs/SKILL-DISCOVERY-CONFIG.md).
 
 ## Requirements and support information
 
@@ -358,23 +385,26 @@ ctest --test-dir build/controller-qol -C Release --output-on-failure
 The output is `Controller QOL Updates.dll`. The repository pins the D2RLoader
 PluginSDK as a submodule; clone with submodules or initialize it before building.
 
-### Skill-tree aim shortcut (rev.56)
+### Skill-tree aim shortcut
 
 Highlight a skill in the controller skill tree and click R3 to toggle its aim
 setting. A control-strip `Auto-aim: ON/OFF` hint shows the highlighted skill's setting.
-The change takes effect immediately and is saved to its numeric config entry;
-comments, tuning and other skills remain intact. These are shared plugin settings,
-not character-specific preferences. Hold does not repeat; release before pressing
+The change takes effect immediately and is saved to the active mod skill profile;
+comments, tuning and other skills remain intact. These preferences apply to characters using the same mod profile. Hold does not repeat; release before pressing
 again. A save failure leaves the runtime setting unchanged and shows an error.
 
 `[aim] skill_tree_toggle_enabled = true` enables this shortcut by default.
 Set it false to disable the shortcut. Catalog skill IDs are accepted regardless
-of character class; unknown mod IDs still require explicit `[aim.custom]` modes
-and cannot be toggled from the tree in this iteration. Enabling an untested skill
+of character class. Discovered or manually declared custom IDs can also be toggled.
+General Skills indicators follow each live button's ID and geometry as equipment
+rearranges the tab. Enabling an untested skill
 does not establish that its provisional ground/snap behavior is appropriate.
 The shortcut reads the existing controller input snapshot on the UI thread and
 leaves native button delivery intact; R3 is currently blocked by the native tree.
-See [skill-tree compatibility evidence](docs/SKILL-TREE-AIM-TOGGLE.md).
+See [skill-tree compatibility evidence](docs/SKILL-TREE-AIM-TOGGLE.md) and
+[General Skills / OSkill support](docs/GENERAL-SKILLS-OSKILLS.md).
+The reviewed General representation excludes native utility actions and
+item-specific/charged variants; unknown widget layouts retain native behavior.
 
 Rev.65 defaults offensive ground placement (including Fire Blast, Shock Web,
 Fissure, Volcano and sentries) to enemy snapping when enabled. A ground-cast
@@ -401,7 +431,8 @@ in milliseconds per world tile for individual numeric skill IDs:
 "253" = 100 # Ice Barrage in the inspected Reimagined version
 ```
 
-Values are integers from 0 to 200; missing or zero means no leading. These are
+Values are integers from 0 to 200 in the skill profile; zero explicitly disables
+leading. Missing values use profile initialization defaults (zero for new, unreviewed skills). These are
 initial tuning estimates, not measured flight times. The skill must also be
 enabled and use snap targeting. R3 preserves its leading preference. Prediction
 requires consistent recent movement, defaults to caps of 600 ms and three tiles, and falls
@@ -409,8 +440,9 @@ back to current-position snapping when samples are unreliable. The lock marker
 stays on the enemy. Telekinesis, ground-only targeting and Whirlwind do not use
 leading. Rev.71 ships Reimagined-oriented baselines for all 240 IDs: 42
 projectile estimates and 198 zero-lead settings. Values apply only when a skill
-is enabled for snap aim; existing saved configs are not migrated automatically.
-Replacement IDs are labelled, but mod behavior is not detected automatically.
+is enabled for snap aim. Existing leading preferences are preserved during
+profile migration. Discovery identifies candidate skills, but does not calculate
+projectile speed or qualify replacement targeting behavior.
 See [baseline scope and variant limits](docs/LEADING-BASELINES-REV71.md) and
 [the evidence and limitations](docs/PROJECTILE-LEADING.md).
 
@@ -452,13 +484,23 @@ Reticle appearance can be adjusted under `[aim]` (restart to load):
 ```toml
 ground_reticle_color = "#FFFFFF"   # bright white aim point
 lock_reticle_color = "#FFD166"     # bright gold enemy lock
-reticle_thickness = 2.0            # double the stroke/outline widths
+reticle_thickness = 2.0            # double the colored stroke width
 ```
 
 Colors accept `"#RRGGBB"` or `"#RRGGBBAA"`; the last two digits set opacity.
 Thickness ranges from 0.5 to 4.0 and changes stroke width, not reticle size or
-snapping radius. Ground opacity still follows its contextual fade when locked.
-Defaults retain the original gameplay colors/widths. The tree marker uses a
+snapping radius. A narrow dark border stays proportional to screen resolution
+instead of growing with the colored stroke. The ground marker keeps configured
+opacity both free and locked. Borders are drawn for the complete shape before
+any colored strokes, so adjacent borders cannot darken the colored joints.
+The lock has slightly larger open corners; the ground ring stays the same size.
+There is no glow or flashing, and drawing still uses two passes per segment.
+Screen-motion smoothing filters the final projected positions, keeping player
+and camera movement together. Cursor-offset changes from the right stick apply
+immediately; target changes, large jumps and stale views reset visual history.
+Higher smoothing values reduce small display jumps but let moving lock markers
+trail slightly. Cast coordinates, snap selection and leading remain unfiltered.
+Shipped defaults are #8FE8FF for the cursor, #FFD166 for the lock, and thickness 2.0. The tree marker uses a
 brighter gold and slightly thicker stroke independently of gameplay styling.
 
 ### Ladder plugin coexistence

@@ -44,6 +44,9 @@ jobs:
       - name: Test Map Assistance
         run: ctest --test-dir build/map-assistance -C Release --output-on-failure
 
+      - name: Test update-safe archive layout
+        run: python tools/test_package_runtime.py
+
       - name: Package runtime ZIPs
         run: >-
           python tools/package_runtime.py

@@ -35,6 +35,10 @@ D2RLoader creates `d2rloader/config/map-assistance.toml` from the default
 embedded in the DLL when the file is missing. It does not replace an existing
 file, so local edits survive plugin updates. Restart D2RLoader after editing it.
 
+Current runtime ZIPs contain `defaults/map-assistance.toml` as a reference only,
+with no live `d2rloader/config/` paths. Extracting an update preserves your file;
+compare and copy individual new settings if wanted instead of replacing it.
+
 Each `[[zones]]` entry uses the numeric Levels.txt id for matching while keeping
 the display name human-readable:
 

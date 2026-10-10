@@ -1,5 +1,12 @@
 # Experimental projectile leading: rev.67
 
+Current configuration (rev.75): all per-skill targeting, leading and prediction
+limits live in the active mod's `.overrides.toml` profile. Shipped skill defaults
+are maintained in `skill-defaults.toml`; the generated catalog is reference-only.
+See [configuration and migration](SKILL-DISCOVERY-CONFIG.md). The revision-specific
+trials and source evidence below are historical; discovery does not infer new
+lead estimates for arbitrary mod replacements.
+
 ## Rev.71 packaged baselines
 
 The user confirmed the rev.70 NPC first-press fix and Shock Web tuning.

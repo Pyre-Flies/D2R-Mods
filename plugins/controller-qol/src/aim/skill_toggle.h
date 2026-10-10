@@ -8,20 +8,30 @@ namespace Aim {
 struct LiveSkills {
     SkillSettings baseline{};
     std::array<std::atomic<unsigned char>,65535> overrides{};
+    // Share the existing byte per ID; no second large per-ID table or hot-path scan.
+    static constexpr unsigned char PendingConfirmation=0x80;
+    void RequireConfirmation(int id) noexcept {if(id>0 && id<65535)overrides[id].fetch_or(PendingConfirmation);}
+    bool NeedsConfirmation(int id) const noexcept {return id>0 && id<65535 && (overrides[id].load()&PendingConfirmation)!=0;}
+    void Confirm(int id) noexcept {if(id>0 && id<65535)overrides[id].fetch_and(static_cast<unsigned char>(~PendingConfirmation));}
     TargetMode Mode(int id) const noexcept {
         if(id<=0 || id>=65535) return TargetMode::Disabled;
-        if(!baseline.CanToggle(id) && FindCatalogSkill(id)) return TargetMode::Disabled;
-        const auto value=overrides[id].load();
+        if(!CanToggle(id)) return TargetMode::Disabled;
+        const auto value=overrides[id].load()&~PendingConfirmation;
         return value?static_cast<TargetMode>(value-1):baseline.Mode(id);
     }
     TargetMode Targeting(int id) const noexcept { return baseline.Targeting(id); }
     unsigned LeadMaxMilliseconds(int id) const noexcept { return baseline.LeadMaxMilliseconds(id); }
     unsigned LeadMaxTiles(int id) const noexcept { return baseline.LeadMaxTiles(id); }
     unsigned LeadMillisecondsPerTile(int id) const noexcept { return baseline.LeadMillisecondsPerTile(id); }
-    bool CanToggle(int id) const noexcept { return baseline.CanToggle(id); }
+    bool CanToggle(int id) const noexcept { return id>0 && id<65535 && !NeedsConfirmation(id) && baseline.CanToggle(id); }
+    bool Contains(int id) const noexcept { return baseline.Contains(id); }
     bool Enabled(int id) const noexcept { return Mode(id)!=TargetMode::Disabled; }
     bool Snaps(int id) const noexcept { return Mode(id)==TargetMode::Snap; }
-    void Publish(int id,TargetMode mode) noexcept { if(id>0 && id<65535) overrides[id].store(static_cast<unsigned char>(mode)+1); }
+    void Publish(int id,TargetMode mode) noexcept {
+        if(id<=0 || id>=65535)return;
+        auto previous=overrides[id].load();
+        while(!overrides[id].compare_exchange_weak(previous,static_cast<unsigned char>((previous&PendingConfirmation)|(static_cast<unsigned char>(mode)+1)))){}
+    }
 };
 struct TreePress {
     bool held{},observed{};
@@ -39,14 +49,14 @@ struct TreeSequence {
         seen=sequence;primed=true;return valid && changed;
     }
 };
-// Rewrite just the selected catalog setting, preserving comments and other bytes.
-inline bool RewriteSkillToggle(const std::string& text,int id,bool enabled,std::string& output) {
+// Rewrite the selected setting, preserving comments and unrelated bytes.
+inline bool RewriteSkillToggle(const std::string& text,int id,bool enabled,std::string& output,const SkillSettings* defaults=nullptr) {
     const auto* skill=FindCatalogSkill(id);
     SkillSettings parsed;
-    if(!skill || !ParseSkills(text,parsed) || !parsed.CanToggle(id)) return false;
+    if(!ParseSkills(text,parsed,defaults) || !parsed.CanToggle(id)) return false;
     std::string section;
     std::size_t sectionEnd=text.size(),match=std::string::npos,valueStart=0,valueEnd=0;
-    const std::string desired="aim."+std::string(skill->className);
+    const std::string desired=skill?"aim."+std::string(skill->className):"aim.custom";
     bool foundSection=false;
     for(std::size_t pos=0;pos<text.size();) {
         auto end=text.find('\n',pos);if(end==text.npos)end=text.size();
@@ -56,7 +66,7 @@ inline bool RewriteSkillToggle(const std::string& text,int id,bool enabled,std::
             if(section==desired) sectionEnd=pos;
             section=std::string(line.substr(1,line.size()-2));
             if(section==desired) foundSection=true;
-        } else if(section.starts_with("aim.") && section!="aim.custom" && section!="aim.targeting" && section!="aim.leading" && section!="aim.leading_max_ms" && section!="aim.leading_max_tiles") {
+        } else if(skill?(section.starts_with("aim.") && section!="aim.custom" && section!="aim.targeting" && section!="aim.leading" && section!="aim.leading_max_ms" && section!="aim.leading_max_tiles"):section=="aim.custom") {
             const auto eq=line.find('=');
             if(eq!=line.npos) {
                 auto key=QolAim::Trim(line.substr(0,eq));
@@ -74,14 +84,34 @@ inline bool RewriteSkillToggle(const std::string& text,int id,bool enabled,std::
     output=text;
     if(match!=text.npos) output.replace(valueStart,valueEnd-valueStart,enabled?"true":"false");
     else {
+        if(!skill && (!defaults || !defaults->Contains(id)))return false;
         const std::string newline=text.find("\r\n")!=text.npos?"\r\n":"\n";
-        const std::string entry="# "+std::string(skill->name)+newline+"\""+std::to_string(id)+"\" = "+(enabled?"true":"false")+newline;
+        const std::string entry="# "+(skill?std::string(skill->name):"Skill "+std::to_string(id))+newline+"\""+std::to_string(id)+"\" = "+(enabled?"true":"false")+newline;
         if(foundSection) {
             const std::string prefix=sectionEnd && text[sectionEnd-1]!='\n'?newline:"";
             output.insert(sectionEnd,prefix+entry);
         } else output+=(output.empty() || output.back()=='\n'?"":newline)+newline+"["+desired+"]"+newline+entry;
     }
     SkillSettings verify;
-    return output.size()<65535 && ParseSkills(output,verify) && verify.Enabled(id)==enabled;
+    if(!ParseSkills(output,verify,defaults))return false;
+    if(!skill && verify.Targeting(id)!=parsed.Targeting(id)) {
+        // Legacy custom "ground" combined enable state and targeting. Preserve
+        // its mode in the separate map before saving a boolean (including off).
+        const std::string newline=output.find("\r\n")!=output.npos?"\r\n":"\n";
+        const std::string entry="\""+std::to_string(id)+"\" = \"ground\""+newline;
+        bool inTarget=false,foundTarget=false;std::size_t insert=output.size();
+        for(std::size_t pos=0;pos<output.size();) {
+            auto end=output.find('\n',pos);if(end==output.npos)end=output.size();
+            const auto line=QolAim::Trim(QolAim::WithoutComment(std::string_view(output).substr(pos,end-pos)));
+            if(!line.empty() && line.front()=='[' && line.back()==']') {
+                if(inTarget){insert=pos;break;}
+                inTarget=line=="[aim.targeting]";foundTarget=foundTarget || inTarget;
+            }
+            pos=end==output.size()?end:end+1;
+        }
+        if(foundTarget)output.insert(insert,(insert && output[insert-1]!='\n'?newline:"")+entry);
+        else output+=(output.empty() || output.back()=='\n'?"":newline)+newline+"[aim.targeting]"+newline+entry;
+    }
+    return output.size()<65535 && ParseSkills(output,verify,defaults) && verify.Enabled(id)==enabled && verify.Targeting(id)==parsed.Targeting(id);
 }
 }

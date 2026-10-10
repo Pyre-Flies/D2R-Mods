@@ -1,4 +1,12 @@
-# Controller QOL 1.3.1+rev.72-beta.1
+# Historical Controller QOL 1.3.1+rev.72-beta.1
+
+This archived prerelease has been superseded by stable rev.75. Use the
+[current release notes](RELEASE-NOTES.md) and [configuration guide](../plugins/controller-qol/docs/SKILL-DISCOVERY-CONFIG.md)
+for installation and editing. The old archive/config paths below describe that
+beta only; current ZIPs carry reference configs under `defaults/` and preserve
+live configs. All skill settings now belong in per-mod profiles.
+
+## Original prerelease notes
 
 This is a **GitHub prerelease** of Controller QOL only.
 

@@ -92,7 +92,7 @@ inline const char* CatalogSkillName(int id) noexcept {
 }
 '''
 (root/'src/aim/skill_catalog.h').write_text(header,encoding='utf-8')
-config = (root/'controller-qol-updates.toml').read_text()
+config = (root/'skill-defaults.toml').read_text()
 config = config[:config.index('# Class headings')]
 config += '# Class headings are readability only; IDs apply on any character.\n'
 config += '# true enables aim; false is off but R3-toggleable; "disabled" locks off.\n'
@@ -106,22 +106,21 @@ for cls in classes.values():
             config += f'# {label} — {behavior}\n"{sid}" = {value}\n'
 config += '''
 # Additional IDs outside the class catalog; use the active mod's skills table.
-# true enables snap aim; false is off; "disabled" locks off. Maximum 32 IDs (1..65534).
+# true enables the configured targeting mode; false is off; "disabled" locks off. 1024 total IDs including class/discovered entries (1..65534).
 [aim.custom]
-# "357" = true
-# "358" = false
-# "359" = "disabled"
+# Recognized Warp is discovered automatically. Manual fallback in a skill profile:
+# "429" = false # verify the active mod ID and set its ground mode below
 
 # Optional targeting overrides for built-in or declared custom IDs.
 # Changes targeting only; does not enable a skill.
 [aim.targeting]
 "136" = "snap" # Reimagined Winter's Gambit
 "141" = "snap" # Reimagined Chasm Break
-# "357" = "ground"
-# "54" = "snap"
+# "429" = "ground" # manual Warp fallback only
 
 '''
 from leading_defaults import render_leading_defaults
 config += render_leading_defaults()
-(root/'controller-qol-updates.toml').write_text(config,encoding='utf-8')
+config += '\n[aim.whirlwind]\n# false snaps onto the enemy without extending past it.\nwhirlwind_pass_through_enabled = true\nwhirlwind_pass_through_distance = 1.5 # world tiles beyond enemy, 0..15\n'
+(root/'skill-defaults.toml').write_text(config,encoding='utf-8')
 print('Generated 240 class entries and reviewed leading baselines.')
