@@ -108,7 +108,7 @@ mismatch. Close D2R before installing or replacing the DLL.
     controller_files["docs/IDENTIFY-REV11.md"] = require_file(controller / "docs" / "IDENTIFY-REV11.md")
     # Include the release's focused compatibility and native-contract records.
     for name in (
-        "PRODUCTION-1.3.1-rev.60.md", "SKILL-TREE-AIM-TOGGLE.md",
+        "PRODUCTION-1.3.1-rev.60.md", "PRODUCTION-1.3.1-rev.73.md", "SKILL-TREE-AIM-TOGGLE.md",
         "PROJECTILE-LEADING.md", "LEADING-BASELINES-REV71.md", "leading-baselines.json",
         "NEUTRAL-A-2026-10-08.md", "NPC-INTERACTION-2026-10-08.md",
         "CRASH-TRIAGE-2026-10-08.md", "interaction-priority-evidence.json",

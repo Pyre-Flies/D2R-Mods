@@ -1,5 +1,17 @@
 # Controller QOL changelog
 
+## 1.3.1+rev.73 - 2026-10-09
+
+- Promote the rev.72 beta behavior to a stable release after the user reports
+  the current features are working well. No gameplay or aim-tuning changes.
+- Retain quiet aim logging by default, Reimagined-oriented leading baselines,
+  native NPC/object interactions and offline/remote item-action paths.
+- Package with fresh Item Roll Ranges rev.21 and Map Assistance rev.1 builds.
+- Fresh Release builds pass Controller QOL 28/28, Item Roll Ranges 5/5 and Map
+  Assistance 2/2 suites, including DLL artifact checks. Runtime ZIPs are audited
+  for layout, checksums and privacy. Broad user confirmation is not a measured
+  handheld benchmark or proof that earlier full-Ladder exit crashes are fixed.
+
 ## 1.3.1+rev.72-beta.1 - 2026-10-08
 
 - Add `[aim] verbose = false`. Omitted settings also default false, so existing

@@ -1,7 +1,7 @@
 # Controller QOL Updates
 
 **Made by PyreFly for D2RLoader**  
-Version **1.3.1+rev.72-beta.1 (beta)** | Windows x64 | Diablo II: Resurrected
+Version **1.3.1+rev.73** | Windows x64 | Diablo II: Resurrected
 
 Controller QOL Updates adds direct controller looting, contextual item actions,
 stash and Cube transfers, belt management, clearer controller prompts, and
