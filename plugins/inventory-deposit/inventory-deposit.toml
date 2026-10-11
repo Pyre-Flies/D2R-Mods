@@ -1,0 +1,13 @@
+# Standalone mouse Deposit All button; restart the game after editing.
+[inventory_deposit]
+enabled = true
+# Follow the current gold display in the HD inventory panel.
+anchor_to_gold = true
+# Space after the gold amount's right edge; vertical offset from centered.
+# These use the inventory's UI units and scale with the panel.
+gold_gap = 85
+gold_offset_y = 1
+# Manual placement, used only when anchor_to_gold = false. Existing values are
+# retained so switching back restores your previous panel-local placement.
+button_x = 860
+button_y = 1620

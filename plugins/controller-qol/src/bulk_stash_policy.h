@@ -7,7 +7,7 @@ using Info=D2RL::Items::ItemInfo;
 inline bool Source(const Info& i) noexcept {return i.container==D2RL::Items::ItemContainer::Inventory && i.inventoryPage==0;}
 struct Plan {
     std::array<Info,256> items{};unsigned count{},next{},submitted{},removed{},skipped{};bool overflow{};
-    std::array<bool,256> sent{},present{};
+    std::array<bool,256> sent{},present{},notified{};
     void Submitted(unsigned index) noexcept {if(index<count && !sent[index]){sent[index]=true;++submitted;}}
     void BeginVerification() noexcept {present.fill(false);}
     void ObserveRemaining(const Info& i) noexcept {
@@ -16,6 +16,16 @@ struct Plan {
     unsigned Remaining() noexcept {
         unsigned remaining=0;for(unsigned n=0;n<count;++n)if(sent[n] && present[n])++remaining;
         removed=submitted-remaining;return remaining;
+    }
+    template<class Notify> void ConfirmRemoval(unsigned index,Notify notify) noexcept {
+        if(index>=count || !sent[index] || notified[index])return;
+        notified[index]=true;notify(items[index]);
+    }
+    template<class Notify> void ConfirmAbsent(bool enumerationSucceeded,Notify notify) noexcept {
+        // A failed/partial enumeration must never turn an unobserved identity
+        // into removal feedback. Repeated successful polls notify only once.
+        if(!enumerationSucceeded)return;
+        for(unsigned n=0;n<count;++n)if(!present[n])ConfirmRemoval(n,notify);
     }
     void Observe(const Info& i) noexcept {
         if(!Source(i))return;

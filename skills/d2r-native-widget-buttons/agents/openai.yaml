@@ -1,0 +1,4 @@
+interface:
+  display_name: "D2R Native Widget Buttons"
+  short_description: "Embedded D2R buttons, anchoring and visual states"
+  default_prompt: "Use $d2r-native-widget-buttons to implement or debug this native D2RLoader panel button in the specified repository."

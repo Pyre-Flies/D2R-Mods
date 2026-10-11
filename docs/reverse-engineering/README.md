@@ -10,6 +10,12 @@ workflow used to produce these records.
 
 Cross-project summaries:
 
+- [Inventory Deposit native button and batch integration](../../plugins/inventory-deposit/docs/INVENTORY-DEPOSIT-BUTTON.md),
+  [gold-relative geometry](../../plugins/inventory-deposit/docs/GOLD-ANCHOR.md),
+  [embedded sprites](../../plugins/inventory-deposit/docs/BUTTON-SPRITES.md),
+  [independent stash-tab feedback](../../plugins/inventory-deposit/docs/STASH-FEEDBACK.md),
+  and [input versus disabled-artwork state](../../plugins/inventory-deposit/docs/BUTTON-STATE.md).
+
 - [Autosort transaction research](autosort-transactions.md)
 - [Controller QOL native-contract registry](controller-qol-native-contracts.md)
 - [Guided Arrow controller targeting candidate](guided-arrow-controller-targeting.md)

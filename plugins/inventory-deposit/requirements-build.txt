@@ -1,0 +1,2 @@
+# Build dependency only; Pillow is not needed in the game installation.
+Pillow==12.2.0

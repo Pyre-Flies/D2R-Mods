@@ -10,10 +10,11 @@ D2RLoader plugins for Diablo II: Resurrected.
 | [Controller QOL Updates](plugins/controller-qol/README.md) | 1.3.1+rev.75 | Production; build-specific native hooks |
 | [Item Roll Ranges](plugins/item-roll-ranges/README.md) | 1.3.1+rev.23 | Production; build-specific formatter/table integration |
 | [Map Assistance](plugins/map-assistance/README.md) | 1.3.1+rev.1 | Configurable non-town campaign coverage |
+| [Inventory Deposit](plugins/inventory-deposit/README.md) | — | [0.1.0-beta.13 prerelease](https://github.com/Pyre-Flies/D2R-Mods/releases/tag/beta-inventory-deposit-0.1.0-beta.13); standalone mouse Deposit All button |
 
 Each plugin is independently buildable and keeps its own README, changelog,
 tests, configuration, and detailed compatibility evidence. The D2RLoader SDK is
-a pinned submodule at `third_party/D2RLoader-PluginSDK`, so all three projects use the
+a pinned submodule at `third_party/D2RLoader-PluginSDK`, so all projects use the
 same reviewed upstream interface without copying that project into this history.
 
 ## Install and configuration
@@ -48,6 +49,7 @@ plugins/
   controller-qol/       Controller QOL Updates source, tests, and docs
   item-roll-ranges/     Item Roll Ranges source, tests, and docs
   map-assistance/       Keys-tooltip pathfinding tips
+  inventory-deposit/    Embedded Deposit All inventory button
 third_party/
   D2RLoader-PluginSDK/  Pinned upstream build-time SDK submodule
 docs/
@@ -60,6 +62,8 @@ skills/                 Reusable D2R engineering and gameplay skill source
 
 Requirements: Windows x64, Visual Studio 2022 with the C++ workload, Windows
 SDK, CMake 3.29+, and Python 3 for the optional local build helpers.
+Inventory Deposit additionally requires Python 3.10+ and Pillow for embedding
+its original button artwork; these are build dependencies only.
 
 Clone with submodules, or initialize them after a normal clone:
 
@@ -102,6 +106,7 @@ For a compact map of the evidence and validation boundaries, start with the
   extracted proprietary assets.
 - Stable releases use suite tags `release-YYYY.MM.DD.N`; each included plugin
   retains its independent version. QOL-only prereleases use `beta-controller-qol-*`.
+  Inventory Deposit prereleases use `beta-inventory-deposit-*`.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the validation and release checklist.
 Production DLLs are distributed as versioned GitHub Release ZIP assets. See

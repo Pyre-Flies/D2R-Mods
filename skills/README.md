@@ -9,6 +9,7 @@ its `references/` files contain the procedure and source-routing detail. The
 |---|---|
 | [d2rloader-development](d2rloader-development/SKILL.md) | Native plugin investigation, build guards, ABI checks, validation, deployment and packaging |
 | [d2r-gameplay-context](d2r-gameplay-context/SKILL.md) | Gameplay and player-facing feature reasoning across vanilla D2R and Reimagined |
+| [d2r-native-widget-buttons](d2r-native-widget-buttons/SKILL.md) | DLL-embedded native panel buttons, sibling-relative placement, input and visual states, and callback lifecycle |
 
 An AI system without Codex skill support can read the Markdown directly. These
 files give process and source priorities; the current native contracts and

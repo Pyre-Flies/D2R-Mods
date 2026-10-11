@@ -30,6 +30,30 @@ int main(){
     batch.BeginVerification();Require(batch.Remaining()==0 && batch.removed==8,"later empty scan confirms all removals without resubmission");
     Plan refused{};refused.Observe(i);refused.Observe(x);refused.Submitted(0);refused.BeginVerification();
     refused.ObserveRemaining(x);Require(refused.Remaining()==0 && refused.removed==1,"unsubmitted items do not block partial-batch verification");
+    Plan feedback{};for(unsigned n=1;n<=4;++n){x=i;x.runtimeId=n;x.itemSeed=100+n;feedback.Observe(x);}
+    feedback.Submitted(0);feedback.Submitted(1);feedback.Submitted(2);
+    std::array<Info,4> notifications{};unsigned notificationCount=0;
+    auto notify=[&](const Info& item) noexcept {Require(notificationCount<notifications.size(),"notification bounds");notifications[notificationCount++]=item;};
+    feedback.BeginVerification();feedback.ObserveRemaining(feedback.items[1]);
+    feedback.ConfirmAbsent(false,notify);
+    Require(notificationCount==0,"partial failed enumeration never reports absent identities");
+    feedback.BeginVerification();feedback.ObserveRemaining(feedback.items[1]);feedback.ObserveRemaining(feedback.items[2]);
+    feedback.ConfirmAbsent(true,notify);
+    Require(notificationCount==1 && notifications[0].runtimeId==1 && notifications[0].itemSeed==101,"first confirmed removal reports copied submitted snapshot");
+    feedback.ConfirmAbsent(true,notify);
+    Require(notificationCount==1,"same successful observation does not duplicate feedback");
+    feedback.BeginVerification();feedback.ObserveRemaining(feedback.items[2]);feedback.ConfirmAbsent(true,notify);
+    Require(notificationCount==2 && notifications[1].runtimeId==2,"later successful partial observation adds only new removal");
+    feedback.BeginVerification();feedback.ObserveRemaining(feedback.items[0]);feedback.ConfirmAbsent(true,notify);
+    Require(notificationCount==3 && notifications[2].runtimeId==3,"reappearing prior identity cannot reset a confirmed notification");
+    feedback.BeginVerification();feedback.ConfirmAbsent(true,notify);
+    Require(notificationCount==3 && !feedback.notified[3],"unsubmitted absence and repeated polls never emit feedback");
+    feedback.ConfirmRemoval(feedback.count,notify);feedback.ConfirmRemoval(256,notify);feedback.ConfirmRemoval(3,notify);
+    Require(notificationCount==3,"remote-style confirmation refuses out of bounds and unsubmitted identities");
+    Plan remoteFeedback{};remoteFeedback.Observe(i);remoteFeedback.ConfirmRemoval(0,notify);
+    Require(notificationCount==3,"remote source absence before successful submission cannot report removal");
+    remoteFeedback.Submitted(0);remoteFeedback.ConfirmRemoval(0,notify);remoteFeedback.ConfirmRemoval(0,notify);
+    Require(notificationCount==4 && notifications[3].runtimeId==1,"remote-style confirmed removal notifies once after submission");
     Gesture g;unsigned requests=0;bool open=false;auto request=[&]() noexcept {++requests;return open;};
     Require(!g.Update(false,true,request) && requests==0,"normal L3 preserved");
     Require(!g.Update(true,true,request) && requests==1,"outside stash chord not consumed");
@@ -38,5 +62,5 @@ int main(){
     Require(g.Update(true,true,request) && requests==2,"held chord does not repeat");
     open=false;Require(g.Update(false,true,request),"modifier release does not emit spurious Cube press");
     Require(!g.Update(false,false,request),"stick release clears suppression");
-    std::puts("Bulk stash scope, snapshot bounds, identity and chord lifecycle passed.");
+    std::puts("Bulk stash scope, snapshot bounds, identity, removal observation and chord lifecycle passed.");
 }

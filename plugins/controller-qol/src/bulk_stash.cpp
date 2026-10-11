@@ -15,6 +15,7 @@ std::recursive_mutex mutex;
 const D2RL::PluginContext* context{};const D2RL::ItemService* items{};
 const D2RL::InventoryService* inventory{};const D2RL::ThreadService* threads{};
 Available available{};bool active{},collected{},waiting{};uintptr_t generation{};
+Observer observer{};
 bool remote{},sessionEvents{};uint32_t tab{UINT32_MAX};QolSharedSdk::Selection selection{};
 D2RL::PlayerHandle player{};Plan plan{};ULONGLONG started{},submittedAt{};const char* stopReason{};
 // Full inherited eligibility body from reviewed runtime capture; see BULK-STASH-REV37.md.
@@ -35,8 +36,10 @@ bool Guard() noexcept {
 }
 void Finish(const char* reason) noexcept {
     char line[256];std::snprintf(line,sizeof(line),"[QOL/BulkStash] %s snapshot=%u submitted=%u removedFromInventory=%u skipped=%u.",reason,plan.count,plan.submitted,plan.removed,plan.skipped);
-    if(context)context->LogInfo(line);active=false;waiting=false;
+    if(context)context->LogInfo(line);const bool wasActive=active;active=false;waiting=false;
+    if(wasActive && observer.end)observer.end(observer.user);
 }
+void NotifyRemoved(const Info& item) noexcept {if(observer.removed)observer.removed(observer.user,item);}
 void __cdecl Ui(const D2RL::PluginContext*,void*) noexcept;
 void __cdecl Game(const D2RL::PluginContext*,void*) noexcept;
 void Remote(const D2RL::PluginContext*) noexcept;
@@ -79,7 +82,7 @@ void Remote(const D2RL::PluginContext* ctx) noexcept {
         return D2RL::Inventory::IterationAction::Continue;
     },&search)!=D2RL::Inventory::Result::Success) {Finish("Remote observation unavailable; no retry");return;}
     switch(CheckRemote(expected,search.found?&search.live:nullptr,waiting,GetTickCount64()-submittedAt>=1500)) {
-    case RemoteStep::Removed: ++plan.removed;++plan.next;waiting=false;QueueUi();return;
+    case RemoteStep::Removed: plan.ConfirmRemoval(plan.next,NotifyRemoved);++plan.removed;++plan.next;waiting=false;QueueUi();return;
     case RemoteStep::Wait: QueueUi();return;
     case RemoteStep::Stop: Finish("Remote source changed or deposit not observed; no retry");return;
     case RemoteStep::Ready: break;
@@ -118,6 +121,7 @@ void __cdecl Game(const D2RL::PluginContext* ctx,void* token) noexcept {
         const auto result=inventory->forEachInventoryItem(ctx,player,&filter,[](const D2RL::PluginContext*,const Info* i,void*) noexcept {
             if(i)plan.ObserveRemaining(*i);return D2RL::Inventory::IterationAction::Continue;
         },nullptr);
+        plan.ConfirmAbsent(result==D2RL::Inventory::Result::Success,NotifyRemoved);
         if(result!=D2RL::Inventory::Result::Success){Finish("Batch verification unavailable; no retry");return;}
         if(plan.Remaining()==0){Finish(stopReason?stopReason:"Complete");return;}
         if(GetTickCount64()-submittedAt>=1000){Finish("Batch partially unconfirmed; no retry");return;}
@@ -144,8 +148,8 @@ void __cdecl Game(const D2RL::PluginContext* ctx,void* token) noexcept {
     waiting=true;submittedAt=GetTickCount64();QueueUi();
 }
 }
-void Initialize(const D2RL::PluginContext* ctx,Available check) noexcept {
-    std::lock_guard lock(mutex);context=ctx;available=check;
+void Initialize(const D2RL::PluginContext* ctx,Available check,const Observer* feedback) noexcept {
+    std::lock_guard lock(mutex);context=ctx;available=check;observer=feedback?*feedback:Observer{};
     sessionEvents=false;
     if(ctx){
         if(ctx->QueryService(&items)!=D2RL::ServiceQueryResult::Success)items=nullptr;
@@ -170,7 +174,14 @@ bool Request() noexcept {
     if(active && GetTickCount64()-started<=30000)return true;
     if(!items || !items->editNativeItem || !inventory || !inventory->getLocalPlayer || !inventory->forEachInventoryItem || !threads || !threads->runOnUiThread || !threads->runOnGameThread)return false;
     if(!Guard()){context->LogWarn("[QOL/BulkStash] Native deposit contract unavailable; batch disabled.");return true;}
-    ++generation;active=true;remote=false;tab=UINT32_MAX;selection={};collected=waiting=false;player=0;plan={};stopReason=nullptr;started=GetTickCount64();QueueUi();return true;
+    if(active && observer.end)observer.end(observer.user);
+    ++generation;active=true;remote=false;tab=UINT32_MAX;selection={};collected=waiting=false;player=0;plan={};stopReason=nullptr;started=GetTickCount64();
+    if(observer.begin)observer.begin(observer.user);
+    QueueUi();return true;
 }
-void Shutdown() noexcept {std::lock_guard lock(mutex);++generation;active=false;context=nullptr;available=nullptr;items=nullptr;inventory=nullptr;threads=nullptr;}
+void Shutdown() noexcept {
+    std::lock_guard lock(mutex);++generation;const bool wasActive=active;active=false;
+    if(wasActive && observer.end)observer.end(observer.user);
+    observer={};context=nullptr;available=nullptr;items=nullptr;inventory=nullptr;threads=nullptr;
+}
 }

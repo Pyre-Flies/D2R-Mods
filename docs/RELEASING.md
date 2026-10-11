@@ -1,5 +1,28 @@
 # Publishing releases
 
+## Inventory Deposit prerelease
+
+The standalone `inventory-deposit-beta` workflow runs for annotated tags
+`beta-inventory-deposit-*`. It builds/tests Inventory Deposit, packages one
+runtime ZIP plus `SHA256SUMS`, and publishes a prerelease without changing the
+latest stable suite release. Its version, resources, changelog and
+`plugins/inventory-deposit/RELEASE-NOTES.md` must agree before tagging.
+
+Install Python 3.10+ and the plugin's pinned Pillow dependency for the embedded
+sprite conversion. For local packaging after a Release build and CTest pass:
+
+```powershell
+python tools/test_package_inventory_deposit.py
+python tools/package_inventory_deposit.py --dll "build/inventory-deposit/Release/Inventory Deposit.dll" --artifact-verifier "build/inventory-deposit/Release/inventory-deposit-artifact-tests.exe" --tag beta-inventory-deposit-0.1.0-beta.13 --output dist/inventory-deposit
+```
+
+The archive contains only this plugin's DLL, reference config under `defaults/`,
+distribution docs, licenses and internal checksums. Editable original PNGs live
+in the source archive; no MPQ or generated sprite files need separate install.
+Verify the tag commit, CI, prerelease status, downloaded archive checksums and
+DLL identity after publication. Preserve the existing stable release and all
+unrelated working-tree changes.
+
 Runtime DLLs and ZIPs are GitHub Release assets, not source-controlled files.
 This keeps normal clones small and prevents compiled binaries from obscuring
 source history.

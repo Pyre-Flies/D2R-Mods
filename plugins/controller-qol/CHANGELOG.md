@@ -1,5 +1,13 @@
 # Controller QOL changelog
 
+## Unreleased
+
+- Add an optional batch observer for Inventory Deposit's stash-tab feedback.
+  Notify copied submitted items only after a successful source-removal scan,
+  once per item, with begin/end lifecycle callbacks. Existing Controller QOL
+  callers omit the observer and retain their transfer behavior. No new QOL
+  runtime package is published with the Inventory Deposit prerelease.
+
 ## 1.3.1+rev.75 - 2026-10-10
 
 - Promote the rev.74/rev.75 beta work: dynamic General Skills support, guarded

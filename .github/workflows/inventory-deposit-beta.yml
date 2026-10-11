@@ -1,0 +1,73 @@
+name: inventory-deposit-beta
+
+on:
+  push:
+    tags:
+      - "beta-inventory-deposit-*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-package-prerelease:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install artwork converter dependency
+        run: python -m pip install -r plugins/inventory-deposit/requirements-build.txt
+
+      - name: Configure
+        run: cmake -S plugins/inventory-deposit -B build/inventory-deposit -A x64
+
+      - name: Build
+        run: cmake --build build/inventory-deposit --config Release --parallel
+
+      - name: Test plugin and built DLL
+        run: ctest --test-dir build/inventory-deposit -C Release --output-on-failure
+
+      - name: Test archive layout, checksums and privacy
+        run: python -m unittest discover -s tools -p test_package_inventory_deposit.py -v
+
+      - name: Verify and package Inventory Deposit
+        run: >-
+          python tools/package_inventory_deposit.py
+          --dll "build/inventory-deposit/Release/Inventory Deposit.dll"
+          --artifact-verifier "build/inventory-deposit/Release/inventory-deposit-artifact-tests.exe"
+          --tag "${{ github.ref_name }}"
+          --output dist
+
+      - name: Upload workflow artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Inventory-Deposit-${{ github.ref_name }}
+          path: |
+            dist/*.zip
+            dist/SHA256SUMS
+          if-no-files-found: error
+
+      - name: Resolve release display version
+        id: version
+        shell: pwsh
+        run: |
+          $prefix = 'beta-inventory-deposit-'
+          $version = $env:GITHUB_REF_NAME.Substring($prefix.Length)
+          "value=$version" >> $env:GITHUB_OUTPUT
+
+      - name: Publish Inventory Deposit prerelease
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Inventory Deposit ${{ steps.version.outputs.value }}
+          prerelease: true
+          make_latest: "false"
+          body_path: plugins/inventory-deposit/RELEASE-NOTES.md
+          fail_on_unmatched_files: true
+          files: |
+            dist/*.zip
+            dist/SHA256SUMS
