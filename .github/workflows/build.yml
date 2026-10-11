@@ -16,15 +16,25 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        plugin: [controller-qol, item-roll-ranges, map-assistance, inventory-deposit]
+        plugin: [controller-qol, item-roll-ranges, map-assistance, inventory-deposit, floating-damage]
+        include:
+          - plugin: controller-qol
+            dll: Controller QOL Updates.dll
+          - plugin: item-roll-ranges
+            dll: Item Roll Ranges.dll
+          - plugin: map-assistance
+            dll: Map Assistance.dll
+          - plugin: inventory-deposit
+            dll: Inventory Deposit.dll
+          - plugin: floating-damage
+            dll: Floating Damage.dll
 
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
 
-      - name: Set up Python for embedded button artwork
-        if: matrix.plugin == 'inventory-deposit'
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -46,9 +56,13 @@ jobs:
         if: matrix.plugin == 'inventory-deposit'
         run: python -m unittest discover -s tools -p test_package_inventory_deposit.py -v
 
+      - name: Test five-plugin packaging and update-safe archive layout
+        if: matrix.plugin == 'floating-damage'
+        run: python tools/test_package_runtime.py
+
       - name: Upload DLL
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.plugin }}-${{ github.sha }}
-          path: build/${{ matrix.plugin }}/Release/*.dll
+          path: build/${{ matrix.plugin }}/Release/${{ matrix.dll }}
           if-no-files-found: error

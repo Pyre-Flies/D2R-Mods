@@ -1,0 +1,58 @@
+[floating-damage]
+enabled = true
+# Optional enemy count/projection diagnostics and sample logging.
+debug = false
+# Font size in screen pixels (12 to 64).
+text_size = 26
+# Native critical/deadly hits retain their element color, grow and append !!.
+critical_hits = true
+# Font multiplier (1 to 2); normal text_size remains unchanged.
+critical_size_scale = 1.35
+# Quoted hex RGB (#RRGGBB). Silver fallback and solid charcoal outline.
+text_color = "#D5DAE2"
+# Verified damage components; unmatched/unsupported decreases use text_color.
+element_colors = true
+physical_color = "#F1E3CA"
+fire_color = "#FF8B68"
+cold_color = "#8DD8FF"
+lightning_color = "#F6DC78"
+magic_color = "#B6A1F5"
+poison_color = "#C6F69B"
+# Several verified components in one HP decrease or merged number.
+mixed_color = "#F58CB6"
+outline_color = "#101215"
+# Solid stroke radius in pixels (0 disables it; maximum 3).
+outline_width = 2
+# Fraction of lifetime before fading begins (0.0 to 0.95).
+fade_start = 0.8
+lifetime_ms = 1000
+rise_pixels = 64
+# Rise, then fall and drift to alternating sides. False keeps straight rise.
+falling_motion = true
+side_pixels = 48
+fall_pixels = 96
+# Draw a soft offset shadow behind the outline and fill.
+shadow = true
+shadow_color = "#000000"
+shadow_offset_x = 4
+shadow_offset_y = 4
+shadow_opacity = 0.75
+# Approximate softness with text passes (0 is crisp; maximum 2).
+shadow_softness = 1
+# Compact translucent backing separates poison from green terrain/skills.
+# Includes mixed numbers containing poison. False applies it to all numbers.
+backing = true
+backing_poison_only = true
+backing_color = "#0A0D10"
+backing_opacity = 0.68
+# Padding outside the outline (0 to 12 pixels); corner radius (0 to 12).
+backing_padding_x = 4
+backing_padding_y = 1
+backing_rounding = 3
+anchor_offset_pixels = 46
+lane_spacing_pixels = 22
+# Merge rapid decreases of at most 2 HP. Zero shows each observed decrease.
+tick_merge_ms = 120
+# Zero rounds display to whole HP; raw fractions remain in merged totals.
+decimal_places = 0
+max_numbers = 128

@@ -21,7 +21,8 @@ distribution docs, licenses and internal checksums. Editable original PNGs live
 in the source archive; no MPQ or generated sprite files need separate install.
 Verify the tag commit, CI, prerelease status, downloaded archive checksums and
 DLL identity after publication. Preserve the existing stable release and all
-unrelated working-tree changes.
+unrelated working-tree changes. This focused path does not replace the five-plugin
+suite workflow.
 
 Runtime DLLs and ZIPs are GitHub Release assets, not source-controlled files.
 This keeps normal clones small and prevents compiled binaries from obscuring
@@ -43,22 +44,34 @@ source history.
    ```
 
 The `release` workflow performs clean Release builds, runs all tests, creates
-the three versioned runtime ZIPs, creates `SHA256SUMS`, and attaches all four
+the five versioned runtime ZIPs, creates `SHA256SUMS`, and attaches all six
 files to the GitHub release. GitHub separately supplies repository source
 archives.
+
+The suite includes Controller QOL Updates, Item Roll Ranges, Map Assistance,
+Inventory Deposit (the Deposit All Button), and Floating Damage. Preserve each
+plugin's independent version and beta status in the release notes. A suite tag
+does not turn the two beta plugins into exhaustively validated stable features.
+Inventory Deposit's artwork conversion requires Python 3.10+ and Pillow in
+the build environment; generated sprites are embedded in its DLL, not shipped
+as loose runtime assets.
 
 The release is not published if any build, test suite, ZIP integrity check,
 or packaging step fails.
 
 ## Local package verification
 
-After building all three plugins, run:
+After building all five plugins, run:
 
 ```powershell
 python tools/package_runtime.py `
   --controller-dll "build/controller-qol/Release/Controller QOL Updates.dll" `
   --ranges-dll "build/item-roll-ranges/Release/Item Roll Ranges.dll" `
   --map-assistance-dll "build/map-assistance/Release/Map Assistance.dll" `
+  --inventory-deposit-dll "build/inventory-deposit/Release/Inventory Deposit.dll" `
+  --inventory-deposit-artifact-verifier "build/inventory-deposit/Release/inventory-deposit-artifact-tests.exe" `
+  --floating-damage-dll "build/floating-damage/Release/Floating Damage.dll" `
+  --floating-damage-artifact-verifier "build/floating-damage/Release/floating-damage-artifact-tests.exe" `
   --output dist
 ```
 
@@ -66,8 +79,10 @@ DLLs install at `d2rloader/plugins/*.dll`. Extract into the game directory.
 Reference TOMLs belong only under `defaults/`, outside the live loader config
 directory. **Do not ship any `d2rloader/config/` paths**, even for fresh installs:
 the loader creates a missing main config from embedded defaults. QOL creates
-the active skill profile on aim initialization. Map Assistance follows the same
-reference-only archive rule for its main config.
+the active skill profile on aim initialization. All five plugins follow the same
+reference-only archive rule for their main configs. An embedded default does not
+replace a saved value; document new settings and let users merge only the keys
+they want to change.
 
 Run `python tools/test_package_runtime.py` before packaging. Both the packager
 and regression tests enforce safe paths and preservation of customized configs.
@@ -83,13 +98,15 @@ After publication, verify the tag's exact commit, successful CI, stable/prerelea
 status, all expected assets and downloaded checksums.
 
 Each ZIP contains its own `SHA256SUMS` for installed files. The adjacent release
-`SHA256SUMS` covers the three ZIP assets themselves.
+`SHA256SUMS` covers the five ZIP assets themselves. Verify that there are exactly
+five plugin ZIPs and one adjacent `SHA256SUMS`, and that each ZIP installs exactly
+its own DLL. Source archives are separate GitHub-generated downloads.
 
 ## Manual upload
 
 If GitHub Actions is unavailable, build, test, and run the same packaging script
 locally. On the repository's GitHub page, open **Releases**, choose **Draft a
-new release**, select or create the suite tag, and drag the three ZIPs plus
+new release**, select or create the suite tag, and drag the five ZIPs plus
 `SHA256SUMS` into the release assets area. Do not commit them to `main`.
 
 ## Controller QOL beta prereleases

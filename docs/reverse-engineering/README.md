@@ -17,6 +17,11 @@ Cross-project summaries:
   and [input versus disabled-artwork state](../../plugins/inventory-deposit/docs/BUTTON-STATE.md).
 
 - [Autosort transaction research](autosort-transactions.md)
+- [Floating Damage HP and projection](floating-damage-numbers-feasibility.md): authoritative HP layout, owned snapshots and admitted projection.
+- [Floating Damage components and poison](floating-damage-elemental-probe.md): guarded combat ABI, six components and periodic state/endpoint matching.
+- [Floating Damage Critical/Deadly Strike](floating-damage-critical-strike-probe.md): shared native marker and display association.
+- [Floating Damage native commands](floating-damage-chat-command.md): parser registration, callback lifetime and local toggles.
+- [Floating Damage crash triage](floating-damage-crash-triage-2026-10-11.md): recurring browser read faults, separate teardown failures and attribution limits.
 - [Controller QOL native-contract registry](controller-qol-native-contracts.md)
 - [Guided Arrow controller targeting candidate](guided-arrow-controller-targeting.md)
 - [Integrated controller aim](../../plugins/controller-qol/docs/PRODUCTION-1.3.1-rev.50.md): opt-in cursor/snapping, native guards, render projection and archived prototype evidence; combined-runtime validation pending.

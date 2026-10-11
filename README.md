@@ -5,17 +5,21 @@ D2RLoader plugins for Diablo II: Resurrected.
 
 ## Plugins
 
-| Plugin | Stable release version | Status |
+| Plugin | Suite version | Status |
 |---|---:|---|
 | [Controller QOL Updates](plugins/controller-qol/README.md) | 1.3.1+rev.75 | Production; build-specific native hooks |
 | [Item Roll Ranges](plugins/item-roll-ranges/README.md) | 1.3.1+rev.23 | Production; build-specific formatter/table integration |
 | [Map Assistance](plugins/map-assistance/README.md) | 1.3.1+rev.1 | Configurable non-town campaign coverage |
-| [Inventory Deposit](plugins/inventory-deposit/README.md) | — | [0.1.0-beta.13 prerelease](https://github.com/Pyre-Flies/D2R-Mods/releases/tag/beta-inventory-deposit-0.1.0-beta.13); standalone mouse Deposit All button |
+| [Inventory Deposit (Deposit All Button)](plugins/inventory-deposit/README.md) | 0.1.0-beta.13 | Beta; mouse button for eligible advanced-storage deposits; [standalone prerelease](https://github.com/Pyre-Flies/D2R-Mods/releases/tag/beta-inventory-deposit-0.1.0-beta.13) |
+| [Floating Damage](plugins/floating-damage/README.md) | 0.1.0-beta.11 | Beta; local enemy HP-loss overlay with damage colors |
 
 Each plugin is independently buildable and keeps its own README, changelog,
 tests, configuration, and detailed compatibility evidence. The D2RLoader SDK is
-a pinned submodule at `third_party/D2RLoader-PluginSDK`, so all projects use the
+a pinned submodule at `third_party/D2RLoader-PluginSDK`, so all five projects use the
 same reviewed upstream interface without copying that project into this history.
+Inventory Deposit reuses Controller QOL's batch source at build time; it does
+not require the Controller QOL DLL at runtime. Each runtime ZIP can be installed
+separately.
 
 ## Install and configuration
 
@@ -27,6 +31,20 @@ normal package/revision process. Do not install duplicate copies of a plugin.
 Current archives keep reference TOMLs under `defaults/` and contain no live
 `d2rloader/config/` paths. Extraction preserves existing settings. Missing live
 configs are created from the DLL's embedded defaults.
+
+Inventory Deposit adds **Deposit All** beside the inventory gold display while
+the HD stash is open in keyboard/mouse mode. It deposits eligible gems, runes,
+materials and rejuvenation potions into advanced storage. Equipment and other
+ineligible items remain in inventory. Its custom button artwork is embedded in
+the DLL.
+
+Floating Damage shows observed enemy HP loss in local single player, including
+the remaining HP on confirmed deaths. It supports elemental/mixed colors,
+configurable font size, outline, shadow, poison backing and rise/fall motion.
+Matched native Critical/Deadly Strike events use larger numbers with `!!`.
+Use `/damagenumbers on`, `/damagenumbers off` or `/damagenumbers status` in
+game chat. The new enlarged critical styling still needs a live visual check;
+the plugin does not provide numbers for remote clients.
 
 Controller QOL rev.75 uses two editable configuration layers:
 
@@ -49,7 +67,8 @@ plugins/
   controller-qol/       Controller QOL Updates source, tests, and docs
   item-roll-ranges/     Item Roll Ranges source, tests, and docs
   map-assistance/       Keys-tooltip pathfinding tips
-  inventory-deposit/    Embedded Deposit All inventory button
+  inventory-deposit/    Standalone Deposit All inventory button
+  floating-damage/      Enemy HP-loss numbers and styling
 third_party/
   D2RLoader-PluginSDK/  Pinned upstream build-time SDK submodule
 docs/
@@ -61,9 +80,9 @@ skills/                 Reusable D2R engineering and gameplay skill source
 ## Build
 
 Requirements: Windows x64, Visual Studio 2022 with the C++ workload, Windows
-SDK, CMake 3.29+, and Python 3 for the optional local build helpers.
-Inventory Deposit additionally requires Python 3.10+ and Pillow for embedding
-its original button artwork; these are build dependencies only.
+SDK, and CMake 3.29+. Inventory Deposit also requires Python 3.10+ with Pillow
+to convert its original button artwork into embedded sprites at build time.
+Python is used by the release packager and optional local build helpers.
 
 Clone with submodules, or initialize them after a normal clone:
 
@@ -74,6 +93,8 @@ git submodule update --init --recursive
 ```
 
 ```powershell
+python -m pip install -r plugins/inventory-deposit/requirements-build.txt
+
 cmake -S plugins/controller-qol -B build/controller-qol -A x64
 cmake --build build/controller-qol --config Release
 ctest --test-dir build/controller-qol -C Release --output-on-failure
@@ -85,6 +106,14 @@ ctest --test-dir build/item-roll-ranges -C Release --output-on-failure
 cmake -S plugins/map-assistance -B build/map-assistance -A x64
 cmake --build build/map-assistance --config Release
 ctest --test-dir build/map-assistance -C Release --output-on-failure
+
+cmake -S plugins/inventory-deposit -B build/inventory-deposit -A x64
+cmake --build build/inventory-deposit --config Release
+ctest --test-dir build/inventory-deposit -C Release --output-on-failure
+
+cmake -S plugins/floating-damage -B build/floating-damage -A x64
+cmake --build build/floating-damage --config Release
+ctest --test-dir build/floating-damage -C Release --output-on-failure
 ```
 
 Native offsets, byte signatures, structures, hashes, and live-validation claims

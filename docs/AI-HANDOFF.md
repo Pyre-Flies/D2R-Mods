@@ -2,9 +2,12 @@
 
 This is an entry point to the tracked evidence, not a substitute for the feature
 records or executable guards. Read the linked document and current source before
-changing a hook, layout, controller action, or release. The stable release baseline is Controller QOL rev.75, Item Roll Ranges rev.23,
-and Map Assistance rev.1. The detailed native summaries below retain historical
-evidence; follow the current feature records before treating them as active code.
+changing a hook, layout, controller action, or release. The stable release
+baseline is Controller QOL rev.75, Item Roll Ranges rev.23,
+and Map Assistance rev.1. The five-plugin suite also includes Inventory Deposit
+`0.1.0-beta.13` and Floating Damage `0.1.0-beta.11`; both retain beta status.
+The detailed native summaries below retain historical evidence; follow the
+current feature records before treating them as active code.
 QOL shared controls remain in the main config; all per-skill settings and R3 saves
 now belong in complete per-mod profiles. See the
 [configuration/migration guide](../plugins/controller-qol/docs/SKILL-DISCOVERY-CONFIG.md)
@@ -25,6 +28,8 @@ reference files are useful to AI systems that do not load Codex skills.
 | Controller QOL reusable native contracts | [Native-contract registry](reverse-engineering/controller-qol-native-contracts.md) | Cross-plugin index; follow links to feature evidence and source guards |
 | Item Roll Ranges | [Native contract](../plugins/item-roll-ranges/docs/NATIVE-CONTRACT.md), [reverse-engineering evidence](../plugins/item-roll-ranges/docs/reverse-engineering/README.md), [validation](../plugins/item-roll-ranges/docs/VALIDATION.md) | Formatter, provider, property and range provenance |
 | Map Assistance | [Design and provenance](../plugins/map-assistance/docs/DESIGN.md), [compatibility](../plugins/map-assistance/COMPATIBILITY.md) | Public SDK tooltip path and static map-data limits |
+| Inventory Deposit / Deposit All Button | [Plugin guide](../plugins/inventory-deposit/README.md), [button investigation](../plugins/inventory-deposit/docs/INVENTORY-DEPOSIT-BUTTON.md), [button state](../plugins/inventory-deposit/docs/BUTTON-STATE.md), [stash feedback](../plugins/inventory-deposit/docs/STASH-FEEDBACK.md) | Standalone embedded button, guarded native deposits, placement, availability and tab feedback |
+| Floating Damage | [Plugin guide](../plugins/floating-damage/README.md), [native contract](../plugins/floating-damage/NATIVE-CONTRACT.md), [elemental investigation](reverse-engineering/floating-damage-elemental-probe.md), [critical marker](reverse-engineering/floating-damage-critical-strike-probe.md) | Authoritative HP-loss observation, endpoint-matched colors, bounded poison tracking, projection and shared Critical/Deadly Strike marker |
 | Release process | [Publishing releases](RELEASING.md), plugin changelogs | Build, package, checksum and publication workflow |
 
 ## Rules for carrying a finding forward
@@ -65,6 +70,24 @@ reference files are useful to AI systems that do not load Codex skills.
   [design record](../plugins/map-assistance/docs/DESIGN.md) distinguishes the
   small set of user-confirmed visible tips from broader data and automated
   coverage.
+- Inventory Deposit's mouse button reuses Controller QOL's batch implementation
+  at build time without a runtime QOL dependency. It moves eligible ordinary
+  inventory items to advanced storage, with native eligibility and fresh
+  preflight checks. User feedback confirms deposits, artwork, gold-relative
+  placement, disabled/hover presentation, tooltip and once-per-batch tab feedback
+  in the reviewed setup. Source removal alone does not prove destination counts
+  or save persistence. Remote play, simultaneous cross-plugin batches, low-end
+  rendering and multiple resolutions remain separate validation targets.
+- Floating Damage observes authoritative local monster HP. Exact component/HP
+  correlation supplies physical, fire, cold, lightning, magic, poison and mixed
+  colors; ambiguous observations retain the fallback color. Controlled native
+  captures establish the shared Critical/Deadly Strike bit on tested paths.
+  Beta.11's larger suffixed critical rendering, dense-combat performance and
+  poison expiration on a survivor still require live checks. There is no
+  attacker attribution, damage-size critical guess or remote-client reader.
+  The [crash triage](reverse-engineering/floating-damage-crash-triage-2026-10-11.md)
+  distinguishes Unique-tab faults and separate cleanup failures from a proven
+  Floating Damage root cause; this release does not claim to fix those crashes.
 
 ## Handoff checklist
 

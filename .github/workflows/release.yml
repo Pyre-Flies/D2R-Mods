@@ -17,6 +17,13 @@ jobs:
         with:
           submodules: recursive
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Inventory Deposit artwork converter dependency
+        run: python -m pip install -r plugins/inventory-deposit/requirements-build.txt
+
       - name: Configure Controller QOL Updates
         run: cmake -S plugins/controller-qol -B build/controller-qol -A x64
 
@@ -44,8 +51,26 @@ jobs:
       - name: Test Map Assistance
         run: ctest --test-dir build/map-assistance -C Release --output-on-failure
 
+      - name: Configure Inventory Deposit
+        run: cmake -S plugins/inventory-deposit -B build/inventory-deposit -A x64
+
+      - name: Build Inventory Deposit
+        run: cmake --build build/inventory-deposit --config Release --parallel
+
+      - name: Test Inventory Deposit
+        run: ctest --test-dir build/inventory-deposit -C Release --output-on-failure
+
+      - name: Configure Floating Damage
+        run: cmake -S plugins/floating-damage -B build/floating-damage -A x64
+
+      - name: Build Floating Damage
+        run: cmake --build build/floating-damage --config Release --parallel
+
+      - name: Test Floating Damage
+        run: ctest --test-dir build/floating-damage -C Release --output-on-failure
+
       - name: Test update-safe archive layout
-        run: python tools/test_package_runtime.py
+        run: python -m unittest discover -s tools -p "test_package*.py" -v
 
       - name: Package runtime ZIPs
         run: >-
@@ -53,6 +78,10 @@ jobs:
           --controller-dll "build/controller-qol/Release/Controller QOL Updates.dll"
           --ranges-dll "build/item-roll-ranges/Release/Item Roll Ranges.dll"
           --map-assistance-dll "build/map-assistance/Release/Map Assistance.dll"
+          --inventory-deposit-dll "build/inventory-deposit/Release/Inventory Deposit.dll"
+          --inventory-deposit-artifact-verifier "build/inventory-deposit/Release/inventory-deposit-artifact-tests.exe"
+          --floating-damage-dll "build/floating-damage/Release/Floating Damage.dll"
+          --floating-damage-artifact-verifier "build/floating-damage/Release/floating-damage-artifact-tests.exe"
           --output dist
 
       - name: Upload workflow artifacts
