@@ -44,6 +44,20 @@ int wmain(int argc, wchar_t** argv) {
     const auto* abi = static_cast<const DWORD*>(LockResource(LoadResource(resources, manifest)));
     Check(abi != nullptr && *abi == D2RL_PLUGIN_ABI_VERSION, "resource ABI matches SDK");
     const DWORD manifestAbi = *abi;
+    HRSRC version = FindResourceW(resources, MAKEINTRESOURCEW(1), RT_VERSION);
+    Check(version != nullptr, "Windows version resource exists");
+    const auto versionSize=SizeofResource(resources,version);
+    const auto* versionData=static_cast<const unsigned char*>(LockResource(LoadResource(resources,version)));
+    Check(versionData != nullptr && versionSize>=sizeof(VS_FIXEDFILEINFO), "Windows version resource is readable");
+    bool versionMatches{};
+    for(std::size_t offset=0;offset+sizeof(VS_FIXEDFILEINFO)<=versionSize;offset+=sizeof(DWORD)) {
+        VS_FIXEDFILEINFO fixed{};std::memcpy(&fixed,versionData+offset,sizeof(fixed));
+        if(fixed.dwSignature!=0xFEEF04BD || fixed.dwStrucVersion!=0x10000) continue;
+        versionMatches=fixed.dwFileVersionMS==0x00000001 && fixed.dwFileVersionLS==12 &&
+            fixed.dwProductVersionMS==fixed.dwFileVersionMS && fixed.dwProductVersionLS==fixed.dwFileVersionLS;
+        break;
+    }
+    Check(versionMatches,"Windows file/product resources identify beta.12 (0.1.0.12)");
     HRSRC config = FindResourceW(resources, MAKEINTRESOURCEW(D2RL_PLUGIN_CONFIG_RESOURCE_ID), RT_RCDATA);
     Check(config != nullptr && SizeofResource(resources, config) > 0 && SizeofResource(resources, config) <= 1024 * 1024,
         "embedded default config exists and is within loader limit");
@@ -59,8 +73,10 @@ int wmain(int argc, wchar_t** argv) {
         defaults.outlineWidth==2 && defaults.fadeStart==0.8f && defaults.fallingMotion && defaults.shadow &&
         defaults.backing && defaults.backingPoisonOnly && defaults.poisonColor==Damage::Settings{}.poisonColor &&
         defaults.mixedColor==Damage::Settings{}.mixedColor && defaults.criticalHits && defaults.criticalScale==1.35f &&
+        defaults.resolutionScaling && defaults.criticalStyle==Damage::CriticalStyle::Both &&
+        configText.find("resolution_scaling")!=std::string_view::npos && configText.find("critical_style")!=std::string_view::npos &&
         configText.find("\"#D5DAE2\"")!=std::string_view::npos,
-        "embedded defaults parse with diagnostics off, updated palette and poison backing enabled");
+        "embedded defaults include resolution scaling, combined critical styling, diagnostics off and poison backing");
     FreeLibrary(resources);
 
     HMODULE dll = LoadLibraryExW(argv[1], nullptr, LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
@@ -72,7 +88,7 @@ int wmain(int argc, wchar_t** argv) {
     const auto* info = getInfo();
     Check(info != nullptr && info->infoSize == D2RL::PluginInfoSize && info->abiVersion == manifestAbi,
         "metadata layout and ABI match manifest");
-    Check(std::strcmp(info->id, "floating-damage") == 0 && std::strcmp(info->version, "0.1.0-beta.11") == 0 &&
+    Check(std::strcmp(info->id, "floating-damage") == 0 && std::strcmp(info->version, "0.1.0-beta.12") == 0 &&
         D2RL::HasValidPluginRole(info->flags), "plugin identity, version, and role are valid");
     Check((info->flags&D2RL::PluginFlags::NativeHooks)!=D2RL::PluginFlags::None,"combat observer declares required native-hook capability");
     const auto load=reinterpret_cast<D2RL::LoadPluginFn>(GetProcAddress(dll,"D2RLoaderLoadPlugin"));

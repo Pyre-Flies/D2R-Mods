@@ -5,13 +5,16 @@ unsigned calls{}; bool argsMatch{},die{},marked{},markedElement{};
 unsigned logged{}; char lastLog[640]{};
 unsigned rectangles{};D2RL::Overlay::FilledRectangleRequest lastRectangle{};
 D2RL::Overlay::Result rectangleResult=D2RL::Overlay::Result::Success;
-unsigned glyphs{};float measuredSize{},glyphSize{};char measuredText[64]{},glyphText[64]{};
+unsigned glyphs{};float measuredSize{},glyphSize{},metricWidth=80;char measuredText[64]{},glyphText[64]{};
 D2RL::Overlay::Point glyphPosition{};D2RL::Overlay::Color glyphColor{};bool glyphsConsistent=true;
+struct GlyphPass {D2RL::Overlay::Point position{};D2RL::Overlay::Color color{};};
+std::array<GlyphPass,128> passes{};
 D2RL::Overlay::Result __cdecl Measure(const D2RL::PluginContext*,const D2RL::Overlay::MeasureTextRequest* request,D2RL::Overlay::TextMetrics* metrics) noexcept {
     measuredSize=request->textSize;std::snprintf(measuredText,sizeof(measuredText),"%.*s",static_cast<int>(request->textLength),request->text);
-    metrics->width=80;metrics->height=request->textSize;return D2RL::Overlay::Result::Success;
+    metrics->width=metricWidth;metrics->height=request->textSize;return D2RL::Overlay::Result::Success;
 }
 D2RL::Overlay::Result __cdecl Glyph(const D2RL::PluginContext*,const D2RL::Overlay::TextRequest* request) noexcept {
+    if(glyphs<passes.size()) passes[glyphs]={request->position,request->color};
     ++glyphs;glyphSize=request->textSize;glyphPosition=request->position;glyphColor=request->color;
     std::snprintf(glyphText,sizeof(glyphText),"%.*s",static_cast<int>(request->textLength),request->text);
     glyphsConsistent=glyphsConsistent && glyphSize==measuredSize && std::strcmp(glyphText,measuredText)==0;
@@ -63,6 +66,43 @@ int main() {
         "real drawing adapter measures larger suffixed text, centers it and uses it for every glyph/backing layer");
     display.critical=false;DrawNumber(7,{100,200},display,1);
     Check(std::strcmp(glyphText,"64")==0 && measuredSize==36 && glyphSize==36 && glyphsConsistent,"normal drawing retains ordinary text and configured size");
+    settings=Damage::Settings{};metricWidth=160;glyphs=0;glyphsConsistent=true;display.critical=true;
+    const auto before4K=rectangles;
+    DrawNumber(7,{100,200},display,0.5f,2);
+    Check(std::strcmp(measuredText,"64!!")==0 && std::abs(measuredSize-70.2f)<0.001f && glyphsConsistent && glyphs==90 &&
+        glyphPosition.x==20 && glyphPosition.y==200 && glyphColor.red==settings.mixedColor[0] && glyphColor.alpha==0.5f,
+        "4K adapter doubles configured text size and applies combined critical styling consistently to all ninety passes");
+    Check(rectangles==before4K+1 && lastRectangle.rect.left==8 && lastRectangle.rect.top==194 && lastRectangle.rect.right==192 &&
+        std::abs(lastRectangle.rect.bottom-276.2f)<0.001f && lastRectangle.rounding==6 && std::abs(lastRectangle.color.alpha-0.34f)<0.001f,
+        "4K backing uses scaled padding plus the actual four-pixel outline, scaled rounding and unchanged fade opacity");
+    Check(passes[0].position.x==26 && passes[0].position.y==206 &&
+        std::abs(passes[1].position.x-passes[0].position.x)+std::abs(passes[1].position.y-passes[0].position.y)==2 &&
+        passes[8].position.x==30 && passes[8].position.y==210 && passes[4].position.x==28 && passes[4].position.y==208 &&
+        std::abs(passes[0].color.alpha-0.0234375f)<0.00001f,
+        "4K shadow doubles offset and kernel spacing without changing opacity weights");
+    std::array<bool,81> covered{};
+    for(unsigned i=9;i<89;++i) {
+        const float dx=passes[i].position.x-20,dy=passes[i].position.y-200;
+        Check(dx>=-4 && dx<=4 && dy>=-4 && dy<=4 && std::floor(dx)==dx && std::floor(dy)==dy && (dx!=0 || dy!=0),
+            "scaled outline uses dense integer pixel offsets within its four-pixel radius");
+        const auto index=static_cast<unsigned>((dy+4)*9+dx+4);
+        Check(!covered[index] && passes[i].color.red==settings.outlineColor[0] && passes[i].color.alpha==0.5f,
+            "each scaled outline position is drawn once with the shared fade alpha");
+        covered[index]=true;
+    }
+    for(unsigned i=0;i<covered.size();++i) Check(covered[i]==(i!=40),"4K outline covers every pixel around the glyph without sparse scaled gaps");
+    for(const auto mode:{Damage::CriticalStyle::Suffix,Damage::CriticalStyle::Size,Damage::CriticalStyle::Both}) {
+        settings.criticalStyle=mode;glyphs=0;glyphsConsistent=true;
+        DrawNumber(7,{100,200},display,1,2);
+        Check(std::strcmp(glyphText,mode==Damage::CriticalStyle::Size?"64":"64!!")==0 &&
+            std::abs(measuredSize-(mode==Damage::CriticalStyle::Suffix?52.0f:70.2f))<0.001f && glyphsConsistent && glyphs==90,
+            "actual 4K rendering honors each critical style across measurement, shadow, outline and fill");
+    }
+    display.critical=false;glyphs=0;glyphsConsistent=true;DrawNumber(7,{100,200},display,1,2);
+    Check(std::strcmp(glyphText,"64")==0 && measuredSize==52 && glyphSize==52 && glyphsConsistent && glyphs==90,
+        "actual ordinary 4K rendering retains normal styling at twice the base font size");
+    display.critical=true;settings.criticalHits=false;glyphs=0;glyphsConsistent=true;DrawNumber(7,{100,200},display,1,2);
+    Check(std::strcmp(glyphText,"64")==0 && measuredSize==52 && glyphsConsistent,"critical opt-out leaves viewport scaling active in the real drawing adapter");
     settings=Damage::Settings{};overlay=nullptr;
     std::uintptr_t game=0x12345678; std::array<unsigned char,0x160> unit{}; std::array<unsigned char,0xc0> list{};
     struct Stat {std::uint32_t layer,id;std::int64_t value;}; std::array<Stat,2> stats{{{0,6,1000},{0,7,2000}}};

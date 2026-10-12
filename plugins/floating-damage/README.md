@@ -1,6 +1,6 @@
 # Floating Damage
 
-Version **0.1.0-beta.11** by PyreFly. A standalone D2RLoader client plugin
+Version **0.1.0-beta.12** by PyreFly. A standalone D2RLoader client plugin
 that displays floating numbers when nearby hostile enemies lose HP, regardless
 of who dealt the damage. It includes killing blows, damage-type colors,
 Critical/Deadly Strike emphasis, and configurable movement and visibility.
@@ -50,7 +50,8 @@ use `text_color`; `element_colors = false` uses that color for all numbers.
 Poison ticks require matching guarded rate/frame/expiration evidence.
 
 Native Critical and Deadly Strike share one marker. Matched numbers retain
-their damage color, become 35% larger and end in `!!`. The plugin does not
+their damage color and use the selected critical style: suffix, larger text,
+or both. The default remains 35% larger with `!!`. The plugin does not
 guess critical hits from damage size, identify which of the two mechanisms
 triggered, or multiply the displayed HP loss. Fresh poison-only groups do not
 inherit an earlier weapon hit's critical emphasis.
@@ -64,7 +65,9 @@ lists all settings. Important defaults include:
 
 ```toml
 text_size = 26
+resolution_scaling = true
 critical_hits = true
+critical_style = "both"
 critical_size_scale = 1.35
 lifetime_ms = 1000
 falling_motion = true
@@ -84,9 +87,37 @@ fade_start = 0.8
 debug = false
 ```
 
-`text_size` accepts 12–64 screen pixels; critical scaling accepts 1–2.
-Disabling `critical_hits` removes both enlargement and `!!`. Colors accept
-quoted `#RRGGBB`; legacy RGB arrays remain supported. Outline width is 0–3.
+`text_size` accepts 12–64 base pixels at **1920 × 1080**. With
+`resolution_scaling = true`, the plugin applies one uniform factor:
+`min(screenWidth / 1920, screenHeight / 1080)`. A 3840 × 2160 overlay viewport uses
+2×; 2560 × 1440 uses 4/3×. For example, the default size 26 draws at 52 pixels
+in 4K and about 34.7 pixels in 1440p. The factor is bounded to 0.25–4;
+invalid screen dimensions use 1×.
+
+Font size, number offsets, lane spacing, motion distances, outline, shadow and
+backing geometry scale together. Projected target positions remain the anchor.
+Animation lifetime, fade timing, opacity, HP amounts and grouping do not change.
+Set `resolution_scaling = false` to keep fixed screen pixels at every resolution.
+
+Choose the presentation for matched critical hits with `critical_style`:
+
+| Value | Example | Size relative to an ordinary number |
+| --- | --- | --- |
+| `"suffix"` | `64!!` | Normal size |
+| `"size"` | `64` | Multiplied by `critical_size_scale` |
+| `"both"` | `64!!` | Multiplied by `critical_size_scale` |
+
+`critical_size_scale` accepts 1–2, defaults to 1.35, and affects `"size"` and
+`"both"` only. A value of 1 keeps the normal size. Resolution scaling applies
+to all three styles. `critical_hits = false` disables both emphasis effects.
+
+Older configs that omit the new keys use `resolution_scaling = true` and
+`critical_style = "both"`. Existing saved values are preserved; extraction does
+not replace the live TOML. To retain the earlier fixed-pixel appearance, add
+`resolution_scaling = false`. Restart to apply saved configuration changes.
+
+Colors accept quoted `#RRGGBB`; legacy RGB arrays remain supported. Outline width
+is 0–3 base pixels.
 Shadow offsets, softness, opacity and backing padding/radius are configurable.
 Poison backing also applies to mixed numbers containing poison; set
 `backing_poison_only = false` for backing on every number.
@@ -113,17 +144,20 @@ Capture defaults off, stops at 128 records or game exit, and adds no screen text
 
 ## Validation and limits
 
-Seven automated suites cover HP/death modeling, guarded readers, six-component
-classification, poison predictions, critical association, native chat lifetime,
-real drawing/call adapters and exact-DLL ABI/config/export checks. These tests
-are separate from visible gameplay validation.
+Beta.12's MSVC Release build with `/W4 /WX` and all seven automated suites pass.
+Coverage includes viewport/mode/config controls, production drawing-adapter
+checks at 2× scale with dense outline, shadow and backing, HP/death modeling,
+guarded readers, element/poison/critical correlation, native chat lifetime and
+exact-DLL ABI/defaults/exports/file-version checks. These tests are separate
+from visible gameplay validation.
 
 Live testing established ordinary/killing numbers, projection, motion/chat
 toggles, fire/cold/lightning/magic/poison colors, surviving and killing poison
 ticks, mixed-to-poison transitions, and shared native critical-marker controls.
-The new beta.11 enlarged `!!` rendering, dense-combat performance, poison
+Beta.12 resolution scaling at 4K and the three critical-style modes still need
+live visual checks. Enlarged critical rendering, dense-combat performance, poison
 expiration on a surviving target and broader camera/resolution/session coverage
-remain pending. Multiple unseen changes can merge or net healing can obscure
+also remain pending. Multiple unseen changes can merge or net healing can obscure
 damage. Missing evidence declines classification rather than borrowing a nearby
 hit's element. No attacker identification, DPS meter or live config reload is
 provided.
@@ -150,3 +184,6 @@ The source includes the user-owned native-chat/image-reader subset with
 provenance in `vendor/README.md`. Test fixture DLLs are build-only and must not
 be installed. Native evidence is recorded in the repository's
 `docs/reverse-engineering/floating-damage-*.md` records.
+The [viewport scaling and native font-size record](../../docs/reverse-engineering/floating-damage-resolution-scaling.md)
+documents the SDK coordinate space, static Core forwarding/bounds and remaining
+live-resolution limits.

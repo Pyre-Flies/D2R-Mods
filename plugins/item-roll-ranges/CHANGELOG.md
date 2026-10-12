@@ -3,6 +3,23 @@
 All notable changes to Item Roll Ranges are recorded here. Versions before the
 GitHub migration are reconstructed from release and validation records.
 
+## [1.3.1+rev.25] - 2026-10-12
+
+- Shorten the unique source marker from [Unique] to [U], including fixed-value
+  modifier lines. Provenance/range calculations are unchanged.
+- Set items retain native range annotations without added set source labels.
+- All five suites pass. User confirmed the shortened unique marker in game.
+
+## [1.3.1+rev.24] - 2026-10-12
+
+- Remove the indirect Chronicle Items dependency for hidden unique/set roll
+  definitions. Exact tooltip selectors receive private visibility snapshots;
+  shared flags, table rows, Chronicle discovery and save data stay unchanged.
+- Preserve original getter calls and returns outside the qualified tooltip
+  chain; reject disabled/out-of-bounds definitions and incompatible code.
+- Five suites pass, including immutable originals, copied unique/set rows,
+  invalid records and caller-chain exclusion. User confirmed standalone Lustwander ranges/labels and Heartbane ED range/Base display.
+
 ## [1.3.1+rev.23] - 2026-10-10
 
 - Restore fixed Base headers when the gesture is held but Core creates no range

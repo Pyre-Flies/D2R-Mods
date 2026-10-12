@@ -1,6 +1,7 @@
-# Floating Damage native contract — beta.11
+# Floating Damage native contract — beta.12
 
-Reviewed 2026-10-11. All addresses and layouts below are qualified for the
+Reviewed native profile 2026-10-11; display-policy update 2026-10-12.
+All addresses and layouts below are qualified for the
 tested loader-hosted profile. Full byte guards are versioned in the source
 headers and the linked research records; no future-build offsets are inferred.
 
@@ -95,6 +96,30 @@ formatted string and effective size; optional SDK filled-rectangle backing
 uses bounded geometry, zero flags/reserved and the same fade. Missing metrics
 or rectangle support skips backing. Soft shadow uses weighted text passes.
 
+Beta.12 changes display policy without adding native hooks or admission gates.
+`resolution_scaling = true` uniformly scales pixel geometry by
+`min(screenWidth / 1920, screenHeight / 1080)`, bounded to 0.25–4 and falling
+back to 1 for invalid dimensions. This includes text, anchor offsets, lanes,
+motion, outline, shadow and backing; the projected target remains the anchor.
+`text_size` remains bounded to 12–64 base pixels. Disabling the setting keeps
+fixed screen pixels. HP, grouping, lifetime, fade timing and opacity are unchanged.
+
+`critical_style` selects normal-size suffix (`"suffix"`), enlargement without
+suffix (`"size"`), or both (`"both"`, the default). Size/both apply the existing
+1–2 `critical_size_scale`, default 1.35; `critical_hits = false` disables both
+effects. Formatting, measurement and every drawing layer use the selected
+style and the same effective font size. Resolution scaling applies uniformly
+to ordinary and critical numbers; classification and native marker provenance
+are unchanged. Omitted new keys enable scaling and select both-effects style,
+without rewriting existing saved configuration values.
+
+Static inspection of the exact Core above confirms explicit requested font
+sizes are honored and both drawText and measureText accept at most 512 pixels,
+inclusive. The maximum effective size is `64 × 4 × 2 = 512`, within that bound.
+The repository's viewport-scaling record preserves the new exact-byte witnesses;
+they are research evidence, not additional runtime gates. This establishes the
+native input bound, not live appearance or rendering performance.
+
 ## Commands and lifetime
 
 Bounded local debug-console callbacks consume arguments synchronously. The
@@ -112,12 +137,16 @@ records, and stops on game exit. No borrowed native event/packet is retained.
 
 ## Evidence and limits
 
-Seven automated suites validate models, readers, adapters, chat cancellation,
-ABI/resources and exact artifact metadata. Live numbers/projection, lethal and
-surviving component/poison/mixed behavior and the native marker are established.
-The beta.11 enlarged suffix display, dense combat, poison expiration on a
-survivor and broader resolution/session behavior remain pending. The reported
-Unique-browser crash predates the critical presentation; root cause is unproven.
+Beta.12's MSVC Release `/W4 /WX` build and all seven automated suites pass,
+including viewport/mode/config coverage, production drawing-adapter checks at
+2× scale with dense outline/shadow/backing, models, readers, chat cancellation
+and exact-DLL ABI/defaults/exports/file-version checks. Earlier live checks
+establish numbers/projection, lethal and surviving
+component/poison/mixed behavior and the native marker.
+Beta.12's 4K scaling and critical-style modes, enlarged critical display, dense
+combat, poison expiration on a survivor and broader resolution/session behavior
+remain pending live checks. The reported Unique-browser crash predates the
+critical presentation; root cause is unproven.
 
 Canonical records (public source):
 

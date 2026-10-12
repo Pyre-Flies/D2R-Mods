@@ -606,3 +606,77 @@ Automated: five suites, real thunk forwarding, native keyboard/controller
 hold/release cases and Base2-2 text. Live plain-sash/controller checks pending.
 
 User confirmed revision23 plain-sash Base range display while Ctrl is held and normal Defense display after release on 2026-10-10. Controller-specific no-clone live checks remain unconfirmed. Release publication authorized.
+
+## Standalone hidden unique/set reports (2026-10-12)
+
+User screenshots: standalone Lustwander has Base59-68 but no unique modifier
+ranges/labels; standalone Chiad's Heartbane has Defense1381 (?) and no ED
+range. Ladder screenshots show Lustwander unique labels/ranges and Heartbane
+Defense1421(Base497-497), ED186 with175-200 bounds. These are different rolls
+and runtime configurations; screenshots alone do not prove equal item state.
+
+Chronicle Items source (the Chronicle Items plugin) clears only
+disableChronicle bit8 at loaded unique/set row2c, after table load. Core's
+unique range selector377cc0 tests [row+2c]&8 at377d0d and returns false at
+377d49 when set; otherwise copies row98..158 into twelve range definitions,
+sets count2f0=12, kind2f8=7 and record2fc. Set selector377af0 reads loaded
+table pointer13a8/count13b0, stride1cc, tests bit8 at377b68, returns false at
+377bc9 when set; otherwise copies nine definitions from98 and ten from128,
+sets count2f0=19,kind2f8=6,record2fc. Selector dispatch376e1d (quality5) and
+376e37 (quality7) is called from tooltip selection819777. These paths are
+build-specific to the currently qualified Core hash. Source names alone are
+not proof of loaded rows; read-only standalone live inspection pending.
+
+The plugin's property adapter still requires a native range clone. The existing
+rev23 no-clone hold fallback covers headers only, so it can show a Base header
+without activating unique labels or property ranges. Chronicle visibility
+therefore indirectly affects range eligibility. A standalone fix must keep
+shared Chronicle flags/tables unchanged and supply qualified tooltip-only
+definition/provenance handling. Heartbane's ED base failure needs separate
+loaded primary/child-stat evidence; do not attribute it to missing item IDs.
+
+## Revision24: tooltip-only visibility snapshots
+
+Read-only standalone game hosted in D2RLoader process19528 (window Diablo II:
+Resurrected), game140000000/Corec0de5000000. Loaded Lustwander bank3 record1115
+flags11, primary Defense64, aggregate171, permanent child +107 Defense and
+GoldFind190. Heartbane bank3 record268 flags9, primary497, aggregate1421,
+permanent state-zero child ED186. User clarified screenshots are separate
+items: ED178 yields floor497*2.78=1381; ED186 yields floor497*2.86=1421.
+The earlier full-set character state is not directly established by this read.
+
+New getter contract: Core702260 points game194320; ABI const row*
+__fastcall(unsigned char bank,unsigned record). Original getter is delegated
+and then an owned348-byte unique row snapshot masks only bit8 for the tooltip
+selector. Core701e70 game300a90 remains the original bank getter. For the set
+selector an owned bank prefix13b8 points to an owned460-byte-stride row array;
+only the current validated record is copied and bit8 masked. Disabled bit4
+rejects snapshots. Counts bounded32768; all native table bytes remain untouched.
+
+Caller proof: getter return377cfc(unique) /377b2e(set), saved return+50h must
+be376e3c /376e22, return+130h must be81977c. Both selectors push4 registers
+and subtract28h; eligibility376740 pushes8 and subtracts98h, proving those
+stack offsets. Set selector's saved parent RBX at getter-return-stack+30h is
+the source unit; validate type4, quality5 and data34 record. A per-thread bank
+view may contain only the selected copied row: exact selector reads that row
+only and immediately copies its definitions. It must never escape this call
+chain. Thread-owned snapshots contain no writes to game tables; future IDs
+come from loaded tables, not an item-name list.
+
+VisibilityProfile guards unique377cc0..377d53, set377af0..377bd3, selector
+dispatch376e17..376e3b, tooltip eligibility819769..81977b, eligibility frame
+376740..376762 and live game194320 getter prefix. Same qualified Core hash,
+new slot targets admitted exactly; ownership-checked exchange/restore and
+process-lifetime pinning match the existing plugin. Tests prove original-row
+immutability, visible/disabled exclusions, copied set-index bounds and wrong
+caller rejection. Standalone UI validation pending; no item-sdk or Chronicle
+flag patch is introduced.
+
+Revision24 installed locally in the active global plugins folder after game/loader closure, with revision23 backup Item Roll Ranges-before-rev24-20261012-071427.dll.bak. Built/installed SHA256 DA37E33ADDBF6C867B41AF5C8D712544EEEA6E5EAC13916E8F7ECD391C31FE36; installed ABI/export/metadata check passed. Ladder DLL untouched. Standalone UI and shared-flag preservation check pending; no publication.
+
+User confirmed revision24 standalone Lustwander ranges/labels and Heartbane
+ED range/Base display on 2026-10-12. Revision25 abbreviates unique source
+markers to [U], without native contract or range arithmetic changes. Set
+source labels remain unimplemented; set modifier ranges still use Core.
+
+Revision 25 deployment: installed in the standalone global d2rloader/plugins directory after confirming game and loader closure; revision 24 retained in a timestamped backup. Built and installed SHA-256 match (4666A4F1AA252BBC6DF453621F613F480680F4E5E2411A542A1B1F4318DEC213), and the installed artifact check passes. User confirmed the [U] label visually; Ladder was not changed.

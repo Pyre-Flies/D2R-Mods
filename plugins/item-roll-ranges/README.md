@@ -1,13 +1,13 @@
 # Item Roll Ranges
 
-Experimental 1.3.1+rev.23, PyreFly. Separate client plugin for the installed D2RLoader.
+Experimental 1.3.1+rev.25, PyreFly. Separate client plugin for the installed D2RLoader.
 
 Light-blue `[P] [Name] [Tn]` / `[S] [Name] [Tn]` labels identify verified rolled
 magic/rare/crafted affix contributions, including fixed-value affixes. Repeated
 names show when multiple property lines come from the same affix. T1 is the
 highest distinct affix level in the applicable family, filtered by item type,
 quality and version. Version 0.4.2 expands skill and grouped-line matching and
-adds `[Unique]` / `[Base]` source labels. Original values remain intact.
+adds `[U]` / `[Base]` source labels. Original values remain intact.
 See [the source audit](docs/SOURCE-AUDIT-0.4.2.md) for current coverage, evidence
 and limitations. All five test suites pass; 0.4.2 visual checks remain pending.
 
@@ -111,7 +111,7 @@ Class/element skill bonuses, packed skill-tab selectors, parameterized skills,
 fixed-level triggered/charged skills and fully accounted-for grouped lines now
 participate in provenance matching. Fixed-value affixes still receive tags and
 applicable progression tiers. Unique definitions (including Renewed Sunder
-property groups) receive `[Unique]`, not fabricated Prefix/Suffix tiers.
+property groups) receive `[U]`, not fabricated Prefix/Suffix tiers.
 Inherent automagic is presented as `[Base]`. Labels identify matching source contributions,
 not a guarantee that the source accounts for an entire stacked stat value.
 
@@ -126,7 +126,7 @@ need separate treatment. See `docs/SOURCE-AUDIT-0.4.2.md` in the source package.
 Enhanced Damage now supplies its stat identity through the native range/paired
 formatter, allowing verified Prefix/Suffix tiers alongside its existing range.
 Identified original items can receive source labels even when Core creates no
-range clone. This fixes `[Unique]` labeling on Renewed Sunders with unique flag8.
+range clone. This fixes `[U]` labeling on Renewed Sunders with unique flag8.
 It does not force Core to calculate ranges that its provider declines to build.
 Diagnostics retain up to32 distinct actual tooltip texts, including comparisons.
 The five suites pass; in-game visual confirmation of0.4.3 remains pending.
@@ -236,7 +236,7 @@ Ambiguous, incomplete, and out-of-range cases retain the existing `?` rows.
 
 ## 0.4.7: detail layout and unique ranges
 
-Multi-source details now appear below their combined total in gray. Supported unique scalar properties gain roll ranges from loaded game definitions, including Renewed Black Cleft's Faster Run/Walk (5-10%), Life (10-65), Magic Find (14-25%), Damage Reduced (5-10), and enemy magic resistance (-10% to -5%). Fixed properties keep [Unique] without a range. Native endpoint formatting preserves wording and signs. See docs/SUNDER-RANGES-AND-LAYOUT-0.4.7.md in the source package for verified tables, functions and exclusions.
+Multi-source details now appear below their combined total in gray. Supported unique scalar properties gain roll ranges from loaded game definitions, including Renewed Black Cleft's Faster Run/Walk (5-10%), Life (10-65), Magic Find (14-25%), Damage Reduced (5-10), and enemy magic resistance (-10% to -5%). Fixed properties keep [U] without a range. Native endpoint formatting preserves wording and signs. See docs/SUNDER-RANGES-AND-LAYOUT-0.4.7.md in the source package for verified tables, functions and exclusions.
 
 ## 0.4.8 display cleanup
 
@@ -249,3 +249,5 @@ Version policy: `1.3.1+rev.N` identifies the qualified loader target and the ind
 Revision22 fixes Defense publication after Core restores its range context. The Iceblink header fix is user-confirmed in game; all five automated suites pass.
 
 Revision23 restores the Base label on fixed items with no rollable modifiers. A plain Sash displaying Base2-2 while Ctrl is held and returning to normal on release is user-confirmed. Controller-specific no-clone checks remain unconfirmed.
+
+Revision 24 removes the Chronicle Items dependency for hidden unique/set definitions through private tooltip-only snapshots; shared flags and discovery remain unchanged. User confirmed standalone Lustwander and Heartbane ranges and Base headers. Revision 25 uses [U] on unique property lines; user confirmed its display. Set properties retain native ranges without added set source labels. All five automated suites pass. Socket, enchantment and corruption source breakdowns remain incomplete.

@@ -225,36 +225,37 @@ void Text(D2RL::Overlay::CanvasHandle canvas,Damage::Point position,const char* 
     const D2RL::Overlay::TextRequest request{sizeof(request),0,canvas,{position.x,position.y},color,size,0,text,static_cast<unsigned>(std::strlen(text)),0};
     overlay->drawText(ctx,&request);
 }
-bool Backing(D2RL::Overlay::CanvasHandle canvas,Damage::Point position,const D2RL::Overlay::TextMetrics& metrics,unsigned elements,float alpha) noexcept {
+bool Backing(D2RL::Overlay::CanvasHandle canvas,Damage::Point position,const D2RL::Overlay::TextMetrics& metrics,unsigned elements,float alpha,float scale=1.0f) noexcept {
     if(!Damage::ShowBacking(elements,settings) || !overlay || !overlay->drawFilledRectangle ||
         !std::isfinite(position.x) || !std::isfinite(position.y) || !std::isfinite(metrics.width) || !std::isfinite(metrics.height) ||
         metrics.width<=0 || metrics.height<=0 || !std::isfinite(alpha) || alpha<=0) return false;
-    const float x=settings.backingPaddingX+static_cast<float>(settings.outlineWidth),y=settings.backingPaddingY+static_cast<float>(settings.outlineWidth);
+    const float stroke=static_cast<float>(Damage::OutlineRadius(settings,scale));
+    const float x=settings.backingPaddingX*scale+stroke,y=settings.backingPaddingY*scale+stroke;
     const D2RL::Overlay::FilledRectangleRequest request{sizeof(request),0,canvas,
         {position.x-x,position.y-y,position.x+metrics.width+x,position.y+metrics.height+y},
-        {settings.backingColor[0],settings.backingColor[1],settings.backingColor[2],alpha*settings.backingOpacity},settings.backingRounding,0};
+        {settings.backingColor[0],settings.backingColor[1],settings.backingColor[2],alpha*settings.backingOpacity},settings.backingRounding*scale,0};
     return overlay->drawFilledRectangle(ctx,&request)==D2RL::Overlay::Result::Success;
 }
-void DrawNumber(D2RL::Overlay::CanvasHandle canvas,Damage::Point position,const Damage::Number& number,float alpha) noexcept {
+void DrawNumber(D2RL::Overlay::CanvasHandle canvas,Damage::Point position,const Damage::Number& number,float alpha,float scale=1.0f) noexcept {
     char text[64]{};Damage::FormatNumber(number,settings,text);
-    const float size=Damage::TextSize(number,settings);
+    const float size=Damage::TextSize(number,settings,scale);
     D2RL::Overlay::TextMetrics metrics{};metrics.structSize=sizeof(metrics);
     const D2RL::Overlay::MeasureTextRequest request{sizeof(request),0,canvas,size,0,text,static_cast<unsigned>(std::strlen(text)),0};
     if(overlay->measureText(ctx,&request,&metrics)!=D2RL::Overlay::Result::Success) return;
     position.x-=metrics.width*0.5f;
-    Backing(canvas,position,metrics,number.elements,alpha);
+    Backing(canvas,position,metrics,number.elements,alpha,scale);
     // Approximate a soft offset shadow using weighted glyph passes;
     // the public overlay API has no text blur/shadow shader.
     if(settings.shadow && settings.shadowOpacity>0) {
         const auto radius=static_cast<int>(settings.shadowSoftness);
         for(int x=-radius;x<=radius;++x) for(int y=-radius;y<=radius;++y)
-            Text(canvas,{position.x+settings.shadowX+static_cast<float>(x),position.y+settings.shadowY+static_cast<float>(y)},
+            Text(canvas,{position.x+(settings.shadowX+static_cast<float>(x))*scale,position.y+(settings.shadowY+static_cast<float>(y))*scale},
                 text,size,{settings.shadowColor[0],settings.shadowColor[1],settings.shadowColor[2],
                     alpha*settings.shadowOpacity*Damage::ShadowWeight(x,y,settings.shadowSoftness)});
     }
     // Fill every offset in the configured stroke so the outline
     // stays continuous around corners and inside digit counters.
-    const auto width=static_cast<int>(settings.outlineWidth);
+    const auto width=static_cast<int>(Damage::OutlineRadius(settings,scale));
     for(int x=-width;x<=width;++x) for(int y=-width;y<=width;++y) if(x || y)
         Text(canvas,{position.x+static_cast<float>(x),position.y+static_cast<float>(y)},text,size,
             {settings.outlineColor[0],settings.outlineColor[1],settings.outlineColor[2],alpha});
@@ -330,13 +331,14 @@ void __cdecl Frame(const D2RL::PluginContext*,const D2RL::Overlay::Frame* frame,
             model.Expire(now,settings); numbers=model.numbers; anchor=player; anchorValid=playerValid; count=enemyCount;
         }
         Damage::Projection projection{};
+        const float scale=Damage::ResolutionScale(frame->screenWidth,frame->screenHeight,settings);
         const bool projected=anchorValid && Projection(frame->screenWidth,frame->screenHeight,anchor,projection);
         const Clip clip{BeginClip(frame->screenWidth,frame->screenHeight)};
         if(!clip.list) return;
         if(settings.debug) {
             char message[160]{};
             std::snprintf(message,sizeof(message),"Floating Damage beta | %zu enemies | projection %s",count,projected?"ready":"unavailable");
-            Text(frame->canvas,{20,80},message,16,{1,0.85f,0.5f,1});
+            Text(frame->canvas,{20*scale,80*scale},message,16*scale,{1,0.85f,0.5f,1});
         }
         if(!projected) return;
         for(const auto& n:numbers) {
@@ -345,10 +347,11 @@ void __cdecl Frame(const D2RL::PluginContext*,const D2RL::Overlay::Frame* frame,
             if(!projection.Project(n.target.position,screen)) continue;
             const float age=static_cast<float>(now-n.born)/static_cast<float>(settings.lifetime);
             const float alpha=Damage::Opacity(age,settings);
-            const auto motion=Damage::Motion(n,age,settings,fallingMotion.load());
+            const auto motion=Damage::Motion(n,age,settings,fallingMotion.load(),scale);
             screen.x+=motion.x;screen.y+=motion.y;
-            if(screen.x<-100 || screen.y<-100 || screen.x>frame->screenWidth+100 || screen.y>frame->screenHeight+100) continue;
-            DrawNumber(frame->canvas,screen,n,alpha);
+            const float margin=100*scale;
+            if(screen.x<-margin || screen.y<-margin || screen.x>frame->screenWidth+margin || screen.y>frame->screenHeight+margin) continue;
+            DrawNumber(frame->canvas,screen,n,alpha,scale);
         }
     } catch(...) {ctx->LogWarn("Floating Damage: overlay frame failed.");}
 }
@@ -386,7 +389,7 @@ void Stop() noexcept {
 }
 D2RL_PLUGIN_EXPORT auto D2RLoaderGetPluginInfo() noexcept -> const D2RL::PluginInfo* {
     static constexpr D2RL::PluginInfo info{.infoSize=D2RL::PluginInfoSize,.abiVersion=D2RL_PLUGIN_ABI_VERSION,
-        .id="floating-damage",.name="Floating Damage",.version="0.1.0-beta.11",.author="PyreFly",
+        .id="floating-damage",.name="Floating Damage",.version="0.1.0-beta.12",.author="PyreFly",
         .description="Floating numbers for observed enemy HP loss.",.flags=D2RL::PluginFlags::Client|D2RL::PluginFlags::NativeHooks};
     return &info;
 }
@@ -427,13 +430,13 @@ D2RL_PLUGIN_EXPORT auto D2RLoaderLoadPlugin(const D2RL::PluginContext* context) 
         else if(combatReady.load()) ctx->LogWarn("Floating Damage: poison layout guards refused; direct hit colors remain available.");
         criticalReady.store(combatReady.load() && Damage::Native::CriticalLayoutMatches(ctx->exeBase));
         if(criticalReady.load()) ctx->LogInfo(settings.criticalHits?
-            "Floating Damage: native critical/deadly writer guards matched; marked HP numbers use larger text and !!.":
+            "Floating Damage: native critical/deadly writer guards matched; configured critical styling enabled.":
             "Floating Damage: native critical/deadly writer guards matched; critical emphasis disabled in configuration.");
         else if(combatReady.load()) ctx->LogWarn("Floating Damage: critical writer guards refused; raw result flags remain diagnostic only.");
         if(!chatCommands.Start(ctx) || !chatCommands.Register("damagenumbers",ChatCommand,nullptr,"Toggle floating damage: on/off/status; motion on/off/status."))
             ctx->LogWarn("Floating Damage: native chat registration unavailable; debug-console command remains available.");
-        ctx->LogInfo(settings.enabled?"Floating Damage 0.1.0-beta.11: admitted; waiting for local gameplay lifecycle.":
-            "Floating Damage 0.1.0-beta.11: admitted; disabled in configuration; /damagenumbers on enables it.");return true;
+        ctx->LogInfo(settings.enabled?"Floating Damage 0.1.0-beta.12: admitted; waiting for local gameplay lifecycle.":
+            "Floating Damage 0.1.0-beta.12: admitted; disabled in configuration; /damagenumbers on enables it.");return true;
     } catch(...) {Stop();return false;}
 }
 D2RL_PLUGIN_EXPORT void D2RLoaderUnloadPlugin() noexcept {Stop();}
