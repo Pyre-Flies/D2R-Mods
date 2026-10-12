@@ -2,6 +2,7 @@
 #include "config.h"
 #include <cstdlib>
 #include <cstring>
+#include <limits>
 using namespace Damage;
 void Check(bool value,const char* text){if(!value){std::fprintf(stderr,"FAIL: %s\n",text);std::exit(1);}}
 int main() {
@@ -19,6 +20,22 @@ int main() {
         "marked display grows 35 percent, appends !! and retains mixed color");
     visible.raw=1;FormatNumber(visible,config,text);Check(std::strcmp(text,"<1!!")==0,"sub-unit critical preserves the real fraction display");
     visible.raw=257;config.precision=2;FormatNumber(visible,config,text);Check(std::strcmp(text,"1.00!!")==0,"precision and critical suffix coexist");
+    config.precision=0;visible.raw=64*256;
+    for(const auto mode:{CriticalStyle::Suffix,CriticalStyle::Size,CriticalStyle::Both}) {
+        config.criticalStyle=mode;
+        const bool suffix=mode!=CriticalStyle::Size;
+        const float expectedSize=mode==CriticalStyle::Suffix?36.0f:48.6f;
+        FormatNumber(visible,config,text);
+        Check(std::strcmp(text,suffix?"64!!":"64")==0 && std::abs(TextSize(visible,config)-expectedSize)<0.001f &&
+            std::abs(TextSize(visible,config,2)-expectedSize*2)<0.001f,
+            "critical mode independently selects suffix and size at baseline and 4K scales");
+        visible.critical=false;FormatNumber(visible,config,text);
+        Check(std::strcmp(text,"64")==0 && TextSize(visible,config,2)==72,"ordinary hits stay ordinary in every critical mode");
+        visible.critical=true;config.criticalHits=false;FormatNumber(visible,config,text);
+        Check(std::strcmp(text,"64")==0 && TextSize(visible,config,2)==72,"master disable overrides every critical mode while retaining resolution scaling");
+        config.criticalHits=true;
+    }
+    config.criticalStyle=CriticalStyle::Both;visible.raw=257;config.precision=2;
     config.criticalHits=false;FormatNumber(visible,config,text);
     Check(std::strcmp(text,"1.00")==0 && TextSize(visible,config)==36,"critical styling can be disabled without changing data");
     config.criticalHits=true;config.precision=0;
@@ -77,5 +94,57 @@ int main() {
     Check(rejected==0 && !styled.criticalHits && styled.criticalScale==2,"critical enable/scale configuration parses");
     const auto bad=Parse("[floating-damage]\ncritical_hits=maybe\ncritical_size_scale=0.9\ncritical_size_scale=2.1\ncritical_size_scale=nan\n",rejected);
     Check(rejected==4 && bad.criticalHits && bad.criticalScale==Settings{}.criticalScale,"invalid critical settings keep bounded defaults");
-    std::puts("Native hit association, critical formatting, death timing, mixed merging, poison isolation and bounded config pass.");
+    const auto legacy=Parse("[floating-damage]\ntext_size=36\ncritical_size_scale=1.5\n",rejected);
+    Check(rejected==0 && legacy.resolutionScaling && legacy.criticalStyle==CriticalStyle::Both && legacy.textSize==36 && legacy.criticalScale==1.5f,
+        "existing configs keep saved sizes and gain default resolution scaling and combined critical styling");
+    const auto suffix=Parse("[floating-damage]\ncritical_style=\"suffix\" # suffix only\nresolution_scaling=false\n",rejected);
+    Check(rejected==0 && suffix.criticalStyle==CriticalStyle::Suffix && !suffix.resolutionScaling,"quoted suffix style and resolution scaling opt-out parse");
+    const auto size=Parse("[floating-damage]\ncritical_style='size'\nresolution_scaling=true\n",rejected);
+    Check(rejected==0 && size.criticalStyle==CriticalStyle::Size && size.resolutionScaling,"single-quoted size style and scaling opt-in parse");
+    const auto both=Parse("[floating-damage]\ncritical_style = 'both'\n",rejected);
+    Check(rejected==0 && both.criticalStyle==CriticalStyle::Both,"explicit combined critical style parses");
+    for(const auto invalid:{"critical_style=\"large\"", "critical_style=both", "critical_style=\"BOTH\"", "critical_style=\"both",
+                           "critical_style=1", "resolution_scaling=maybe", "resolution_scaling=\"true\"", "resolution_scaling=1"}) {
+        char input[128]{};std::snprintf(input,sizeof(input),"[floating-damage]\n%s\n",invalid);
+        const auto refused=Parse(input,rejected);
+        Check(rejected==1 && refused.criticalStyle==CriticalStyle::Both && refused.resolutionScaling,
+            "unsupported or malformed styling settings are rejected without replacing defaults");
+    }
+    Settings scaleConfig;
+    struct Viewport {float width,height,expected;};
+    for(const auto view:{Viewport{1920,1080,1},Viewport{3840,2160,2},Viewport{2560,1440,4.0f/3},
+                         Viewport{1280,720,2.0f/3},Viewport{3440,1440,4.0f/3},Viewport{1920,1200,1},
+                         Viewport{1600,1080,5.0f/6},Viewport{320,180,0.25f},Viewport{10240,5760,4}}) {
+        Check(std::abs(ResolutionScale(view.width,view.height,scaleConfig)-view.expected)<0.0001f,
+            "viewport scaling uses the smaller 1080p-relative dimension and stays within bounded limits");
+    }
+    const auto maximum=Parse("[floating-damage]\ntext_size=64\ncritical_size_scale=2\ncritical_style=\"both\"\n",rejected);
+    Number maximumDisplay{};maximumDisplay.critical=true;
+    const float maximumScale=ResolutionScale(15360,8640,maximum);
+    Check(rejected==0 && maximumScale==4 && TextSize(maximumDisplay,maximum,maximumScale)==512,
+        "maximum admitted font, resolution and critical multiplier reach the inclusive SDK limit of 512");
+    maximumDisplay.critical=false;
+    Check(TextSize(maximumDisplay,maximum,maximumScale)==256,"maximum unmarked text remains within the same SDK font limit");
+    const float nan=std::numeric_limits<float>::quiet_NaN(),inf=std::numeric_limits<float>::infinity();
+    for(const auto view:{Viewport{0,1080,1},Viewport{1920,0,1},Viewport{-1,1080,1},Viewport{1920,-1,1},
+                         Viewport{nan,1080,1},Viewport{1920,nan,1},Viewport{inf,1080,1},Viewport{1920,inf,1}}) {
+        Check(ResolutionScale(view.width,view.height,scaleConfig)==1,"invalid viewport dimensions safely retain baseline pixel sizes");
+    }
+    scaleConfig.resolutionScaling=false;
+    Check(ResolutionScale(3840,2160,scaleConfig)==1 && ResolutionScale(320,180,scaleConfig)==1,"resolution scaling can be disabled at any viewport size");
+    scaleConfig=Settings{};Number moving{};moving.target.id=17;moving.lane=2;
+    for(const bool falling:{false,true}) for(const float age:{0.0f,0.42f,0.75f,1.0f}) {
+        const auto baseline=Motion(moving,age,scaleConfig,falling),scaled=Motion(moving,age,scaleConfig,falling,2);
+        Check(std::abs(scaled.x-baseline.x*2)<0.001f && std::abs(scaled.y-baseline.y*2)<0.001f,
+            "viewport scaling applies to rise, fall, side drift, anchor offset and lane spacing in both motion modes");
+    }
+    const auto start=Motion(moving,0,scaleConfig,false,2);
+    const auto peak=Motion(moving,0.42f,scaleConfig,true,2);
+    Check(start.x==0 && start.y==-180 && std::abs(peak.x-16.9344f)<0.001f && peak.y==-308,
+        "4K motion doubles the configured pixel distances rather than animation duration");
+    Check(OutlineRadius(scaleConfig)==2 && OutlineRadius(scaleConfig,2)==4 && OutlineRadius(scaleConfig,0.25f)==1 &&
+        OutlineRadius(scaleConfig,1.2f)==3,"outline coverage rounds scaled fractional radii upward to dense pixels");
+    scaleConfig.outlineWidth=3;Check(OutlineRadius(scaleConfig,4)==12 && OutlineRadius(scaleConfig,5)==12,"outline radius is capped at twelve pixels");
+    scaleConfig.outlineWidth=0;Check(OutlineRadius(scaleConfig,2)==0,"zero outline stays disabled under resolution scaling");
+    std::puts("Native critical association, presentation modes, viewport scaling, motion and bounded config pass.");
 }

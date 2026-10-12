@@ -38,8 +38,8 @@ int main() {
     check(Affixes::DamageEndpointBounds(flameRoll,damageProperties,48,49,
         minLow,minHigh,maxLow,maxHigh));
     check(minLow==1 && minHigh==1 && maxLow==2 && maxHigh==5);
-    savage.source="[Unique]";
-    check(Affixes::NamedLabel(savage)=="[Unique] [T3]");
+    savage.source="[U]";
+    check(Affixes::NamedLabel(savage)=="[U] [T3]");
     check(!Affixes::ScalarBounds(savage,{&physical,1},17,0,low,high));
     savage.source="[Base]"; savage.tier=0;
     check(Affixes::NamedLabel(savage)=="[Base]");
@@ -112,8 +112,8 @@ int main() {
     const int complete[]={31}, incomplete[]={31,39};
     check(Affixes::GroupLabel(rolled,props,complete,0)=="[S] [T2] [P] [T1]");
     check(Affixes::GroupLabel(rolled,props,incomplete,0).empty());
-    const std::vector<Affixes::Rolled> unique={{1,defense,false,0,"[Unique]"},{2,defense,false,0,"[Unique]"}};
-    check(Affixes::Label(unique,props,31,0)=="[Unique]");
+    const std::vector<Affixes::Rolled> unique={{1,defense,false,0,"[U]"},{2,defense,false,0,"[U]"}};
+    check(Affixes::Label(unique,props,31,0)=="[U]");
     std::vector<RangeText::Label> labels={{RangeText::Analyze("+118 Defense").key,"[S] [T2]"}};
     const std::string mark="\xee\x81\xbe";
     const std::string ranged="+"+mark+"U(80-120)"+mark+"3 Defense";

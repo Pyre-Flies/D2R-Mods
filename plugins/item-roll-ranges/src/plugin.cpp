@@ -18,6 +18,7 @@
 #include "header_text.h"
 #include "base_ranges.h"
 #include "weapon_profile.h"
+#include "visibility_profile.h"
 #include <vector>
 
 extern "C" void HeaderBuilderEntry();
@@ -54,6 +55,64 @@ thread_local bool rendering{};
 wchar_t diagnosticPath[MAX_PATH]{};
 std::atomic<unsigned> diagnostics{0};
 bool Readable(const void*,std::size_t) noexcept;
+using UniqueRowFn=const unsigned char*(__fastcall*)(unsigned char,unsigned);
+UniqueRowFn originalUniqueRow{};
+void** uniqueRowSlot{};
+void** visibilityTablesSlot{};
+bool Allowed() noexcept;
+bool TooltipSelectorScope(const void* stack,std::uintptr_t caller,bool unique) noexcept {
+    if (!coreBase || !Readable(stack,0x138)) return false;
+    const auto* bytes=static_cast<const unsigned char*>(stack);
+    const auto base=reinterpret_cast<std::uintptr_t>(coreBase);
+    return caller==base+(unique?0x377cfc:0x377b2e) &&
+        Affixes::Read<std::uintptr_t>(bytes,0x50)==base+(unique?0x376e3c:0x376e22) &&
+        Affixes::Read<std::uintptr_t>(bytes,0x130)==base+0x81977c;
+}
+const unsigned char* VisibleUniqueRow(const unsigned char* row,std::array<unsigned char,0x15c>& snapshot) noexcept {
+    if (!Readable(row,snapshot.size()) || !(row[0x2c]&8) || (row[0x2c]&4)) return row;
+    std::memcpy(snapshot.data(),row,snapshot.size());snapshot[0x2c]&=~8u;
+    return snapshot.data();
+}
+struct SetVisibilityView {std::array<unsigned char,0x13b8> tables{};std::vector<unsigned char> rows;};
+const unsigned char* VisibleSetTables(const unsigned char* tables,const unsigned char* source,SetVisibilityView& snapshot) {
+    if (!Readable(tables,0x13b8) || !Readable(source,0x18) || Affixes::Read<unsigned>(source,0)!=4) return tables;
+    const auto* data=Affixes::Read<const unsigned char*>(source,0x10);
+    if (!Readable(data,0x38) || Affixes::Read<unsigned>(data,0)!=5) return tables;
+    const int record=Affixes::Read<int>(data,0x34);
+    const auto count=Affixes::Read<std::uint64_t>(tables,0x13b0);
+    const auto* rows=Affixes::Read<const unsigned char*>(tables,0x13a8);
+    if (record<0 || count>32768 || static_cast<std::uint64_t>(record)>=count || !Readable(rows,count*0x1cc)) return tables;
+    const auto* row=rows+static_cast<std::size_t>(record)*0x1cc;
+    if (!(row[0x2c]&8) || (row[0x2c]&4)) return tables;
+    // Only this qualified selector reads this view, and it reads this record only.
+    snapshot.rows.resize(static_cast<std::size_t>(count)*0x1cc);
+    std::memcpy(snapshot.rows.data()+static_cast<std::size_t>(record)*0x1cc,row,0x1cc);
+    snapshot.rows[static_cast<std::size_t>(record)*0x1cc+0x2c]&=~8u;
+    std::memcpy(snapshot.tables.data(),tables,snapshot.tables.size());
+    const auto* copied=snapshot.rows.data();std::memcpy(snapshot.tables.data()+0x13a8,&copied,sizeof(copied));
+    return snapshot.tables.data();
+}
+__declspec(noinline) const unsigned char* __fastcall UniqueVisibilityAdapter(unsigned char bank,unsigned record) noexcept {
+    const auto caller=reinterpret_cast<std::uintptr_t>(_ReturnAddress());
+    const auto* stack=_AddressOfReturnAddress();
+    const auto* row=originalUniqueRow(bank,record);
+    if (!Allowed() || !TooltipSelectorScope(stack,caller,true)) return row;
+    thread_local std::array<unsigned char,0x15c> snapshot;
+    return VisibleUniqueRow(row,snapshot);
+}
+__declspec(noinline) const unsigned char* __fastcall SetVisibilityAdapter(unsigned char bank) noexcept {
+    const auto caller=reinterpret_cast<std::uintptr_t>(_ReturnAddress());
+    const auto* stack=static_cast<const unsigned char*>(_AddressOfReturnAddress());
+    const auto* tables=getTables(bank);
+    if (!Allowed() || !TooltipSelectorScope(stack,caller,false)) return tables;
+    try {
+        // Saved parent RBX is the source unit in the guarded eligibility frame.
+        const auto* source=Affixes::Read<const unsigned char*>(stack,0x30);
+        thread_local SetVisibilityView snapshot;
+        return VisibleSetTables(tables,source,snapshot);
+    } catch (...) {return tables;}
+}
+
 struct NativeText { const char* data; std::size_t size; };
 using BuilderFn=NativeText*(__fastcall*)(void*,void*,void*,void*,int,unsigned char,unsigned char,void*,void*);
 using AssignFn=void*(__fastcall*)(NativeText*,const char*,std::size_t);
@@ -237,7 +296,7 @@ void AddUniqueSource(const unsigned char* spec,const unsigned char* groups,std::
         const int absent=-1;
         std::memcpy(row.bytes.data()+0x34,&absent,4);
         std::memcpy(row.bytes.data()+0x44,&absent,4);
-        out.push_back({id,row,false,0,"[Unique]",scalarAllowed});
+        out.push_back({id,row,false,0,"[U]",scalarAllowed});
     }
 }
 std::string UniqueRange(void* source,const CapturedLine& line,const std::vector<Affixes::Rolled>& sources,
@@ -667,7 +726,7 @@ void TraceProperties(unsigned annotated,unsigned unmatched,const char* actual,co
     try { seen.emplace_back(actual); } catch (...) { return; }
     char message[14000]{};
     const int n=std::snprintf(message,sizeof(message),
-        "v1.3.1+rev.23 properties annotated=%u unmatched=%u labeled=%u captured=%u\r\nACTUAL: %.4095s\r\nRANGED: %.4095s\r\nRESULT: %.4095s\r\n",annotated,unmatched,labeled,captured,actual,ranged,result);
+        "v1.3.1+rev.25 properties annotated=%u unmatched=%u labeled=%u captured=%u\r\nACTUAL: %.4095s\r\nRANGED: %.4095s\r\nRESULT: %.4095s\r\n",annotated,unmatched,labeled,captured,actual,ranged,result);
     if (n<=0 || n>=static_cast<int>(sizeof(message))) return;
     HANDLE file=CreateFileW(diagnosticPath,FILE_APPEND_DATA,FILE_SHARE_READ|FILE_SHARE_WRITE,nullptr,OPEN_ALWAYS,FILE_ATTRIBUTE_NORMAL,nullptr);
     if (file==INVALID_HANDLE_VALUE) return;
@@ -834,6 +893,8 @@ bool Exchange(void** slot, void* expected, void* replacement) noexcept {
 }
 void Restore() noexcept {
     active.store(false, std::memory_order_release);
+    if (uniqueRowSlot) Exchange(uniqueRowSlot,reinterpret_cast<void*>(&UniqueVisibilityAdapter),reinterpret_cast<void*>(originalUniqueRow));
+    if (visibilityTablesSlot) Exchange(visibilityTablesSlot,reinterpret_cast<void*>(&SetVisibilityAdapter),reinterpret_cast<void*>(getTables));
     if (damageSlot) Exchange(damageSlot,reinterpret_cast<void*>(&DamageAdapter),reinterpret_cast<void*>(originalDamage));
     if (assignSlot) Exchange(assignSlot,reinterpret_cast<void*>(&HeaderAssignAdapter),reinterpret_cast<void*>(originalAssign));
     if (builderSlot) Exchange(builderSlot,reinterpret_cast<void*>(&HeaderBuilderEntry),reinterpret_cast<void*>(originalBuilder));
@@ -867,6 +928,15 @@ bool Install(const D2RL::PluginContext* context) noexcept {
     if (!Readable(base+0x702ae0, 8) || !Readable(base+0x6fe3b0, 8) || !Readable(base+0x6fe470, 8) || !Readable(base+0x704490,8)) return false;
     coreBase=base;
     const auto* game=reinterpret_cast<const unsigned char*>(context->exeBase);
+    for (const auto& witness:VisibilityProfile::Witnesses)
+        if (!Match(witness.core?base:game,witness.rva,witness.bytes,witness.size)) {
+            context->LogError("Item Roll Ranges: tooltip visibility witness mismatch.");return false;
+        }
+    if (!Readable(base+0x702260,8)) return false;
+    uniqueRowSlot=reinterpret_cast<void**>(base+0x702260);
+    originalUniqueRow=reinterpret_cast<UniqueRowFn>(*uniqueRowSlot);
+    if (reinterpret_cast<const void*>(originalUniqueRow)!=game+0x194320) return false;
+    visibilityTablesSlot=reinterpret_cast<void**>(base+0x701e70);
     for (const auto& witness:HeaderProfile::Witnesses)
         if (!Match(witness.core?base:game,witness.rva,witness.bytes,witness.size)) {
             context->LogError("Item Roll Ranges: Defense header instruction witness mismatch."); return false;
@@ -950,7 +1020,9 @@ bool Install(const D2RL::PluginContext* context) noexcept {
             swprintf_s(diagnosticPath,L"%s\\logs\\item-roll-ranges-format.log",modulePath);
         }
     }
-    if (!Exchange(specialSlot,reinterpret_cast<void*>(originalSpecial),reinterpret_cast<void*>(&SpecialAdapter)) ||
+    if (!Exchange(uniqueRowSlot,reinterpret_cast<void*>(originalUniqueRow),reinterpret_cast<void*>(&UniqueVisibilityAdapter)) ||
+        !Exchange(visibilityTablesSlot,reinterpret_cast<void*>(getTables),reinterpret_cast<void*>(&SetVisibilityAdapter)) ||
+        !Exchange(specialSlot,reinterpret_cast<void*>(originalSpecial),reinterpret_cast<void*>(&SpecialAdapter)) ||
         !Exchange(damageSlot,reinterpret_cast<void*>(originalDamage),reinterpret_cast<void*>(&DamageAdapter)) ||
         !Exchange(builderSlot,reinterpret_cast<void*>(originalBuilder),reinterpret_cast<void*>(&HeaderBuilderEntry)) ||
         !Exchange(assignSlot,reinterpret_cast<void*>(originalAssign),reinterpret_cast<void*>(&HeaderAssignAdapter)) ||
@@ -962,14 +1034,14 @@ bool Install(const D2RL::PluginContext* context) noexcept {
         return false;
     }
     active.store(true, std::memory_order_release);
-    context->LogInfo("Item Roll Ranges 1.3.1+rev.23 by PyreFly: Ctrl / RT(R2), or QOL range override; inventory, stash, Cube and vendor only. Actual values, native ranges, named P/S tiers and guarded stacked-damage details. Unsupported or ambiguous provenance is omitted.");
+    context->LogInfo("Item Roll Ranges 1.3.1+rev.25 by PyreFly: Ctrl / RT(R2), or QOL range override; inventory, stash, Cube and vendor only. Actual values, native ranges, named P/S tiers and guarded stacked-damage details. Unsupported or ambiguous provenance is omitted.");
     return true;
 }
 }
 
 D2RL_PLUGIN_EXPORT const D2RL::PluginInfo* __cdecl D2RLoaderGetPluginInfo() noexcept {
     static const D2RL::PluginInfo info{sizeof(D2RL::PluginInfo), D2RL_PLUGIN_ABI_VERSION,
-        "item-roll-ranges", "Item Roll Ranges", "1.3.1+rev.23", "PyreFly",
+        "item-roll-ranges", "Item Roll Ranges", "1.3.1+rev.25", "PyreFly",
         "Hold Ctrl or RT/R2 (R1/RB with Controller QOL) for native item stat ranges in item-management screens.",
         D2RL::PluginFlags::Client | D2RL::PluginFlags::NativeHooks, {}};
     return &info;

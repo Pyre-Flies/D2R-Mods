@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.1.0-beta.12 — 2026-10-12
+
+- Add `resolution_scaling = true`. Treat pixel settings as base values at
+  1920 × 1080 and uniformly scale font size, offsets, lanes, motion, outline,
+  shadow and backing by `min(screenWidth / 1920, screenHeight / 1080)`.
+  Use 2× at 4K and 4/3× at 1440p; bound the factor to 0.25–4 and use 1× for
+  invalid dimensions. HP amounts, grouping, lifetime, fade timing and opacity
+  are unchanged. Setting false retains the previous fixed-pixel rendering.
+- Add `critical_style = "both"`: `"suffix"` uses normal-size `!!`, `"size"`
+  enlarges without a suffix, and `"both"` retains enlarged `!!`. The existing
+  1–2 `critical_size_scale` defaults to 1.35 and applies only to size/both;
+  `critical_hits = false` disables both emphasis effects. All modes retain
+  the damage-type color and the same native critical association.
+- Existing saved settings are preserved. Omitted new keys select resolution
+  scaling and the existing both-effects critical style; add
+  `resolution_scaling = false` to retain fixed screen pixels. Reference configs
+  stay under `defaults/`; the loader creates only a missing live config.
+- Preserve native hooks, admission guards, observations, critical-marker
+  association and gameplay semantics. Static inspection records the reviewed
+  Core's inclusive 512-pixel draw/measure font limit; the maximum configured
+  base size, viewport factor and critical multiplier fit it exactly.
+- MSVC Release `/W4 /WX` and all seven automated suites pass, including
+  viewport/mode/config cases, production drawing-adapter checks at 2× scale
+  with dense outline/shadow/backing, and exact-DLL ABI/defaults/exports/version
+  checks. 4K scaling and the critical-style modes still need live visual checks.
+
 ## 0.1.0-beta.11 — 2026-10-11
 
 - Enlarge matched native Critical/Deadly Strike numbers by 35% and append `!!`,

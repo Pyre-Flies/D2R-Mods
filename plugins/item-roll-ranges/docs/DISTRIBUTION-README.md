@@ -1,6 +1,6 @@
 # Item Roll Ranges
 
-**By PyreFly · Version 1.3.1+rev.23**
+**By PyreFly · Version 1.3.1+rev.25**
 
 Show item roll ranges beside actual values in light blue:
 `[+80 - +120] +118 Defense`.
@@ -26,7 +26,7 @@ Unresolved expected ranges show `(?)` and
 
 Magic/rare/crafted affixes can show `[P] [Name] [Tn]` / `[S] [Name] [Tn]` labels.
 T1 is the highest distinct affix level in the applicable family for that item
-type/quality; duplicate levels share a tier. Unique properties use `[Unique]`
+type/quality; duplicate levels share a tier. Unique properties use `[U]`
 and verified inherent contributions use `[Base]`. Ambiguous contributions are
 not assigned invented ranges or tiers. Coverage is not universal, especially
 for conditional, socket, set and crafting recipe contributions.
@@ -72,3 +72,5 @@ archive contents; the source archive is supplied separately.
 Revision22 fixes Defense publication after Core restores its range context. The Iceblink header fix is user-confirmed in game; all five automated suites pass.
 
 Revision23 restores the Base label on fixed items with no rollable modifiers. A plain Sash displaying Base2-2 while Ctrl is held and returning to normal on release is user-confirmed. Controller-specific no-clone checks remain unconfirmed.
+
+Revision 24 removes the Chronicle Items dependency for hidden unique/set definitions through private tooltip-only snapshots; shared flags and discovery remain unchanged. User confirmed standalone Lustwander and Heartbane ranges and Base headers. Revision 25 uses [U] on unique property lines; user confirmed its display. Set properties retain native ranges without added set source labels. All five automated suites pass. Socket, enchantment and corruption source breakdowns remain incomplete.

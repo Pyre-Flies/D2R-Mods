@@ -36,7 +36,38 @@ void TestRestoredHeaderContext() {
     check(publishedHeader=="native fallback");pendingHeader={};
 }
 }
+namespace {
+void TestTooltipVisibilitySnapshots() {
+    std::array<unsigned char,0x15c> row{},copy{};row[0x2c]=11;row[0x98]=37;
+    const auto original=row;
+    check(VisibleUniqueRow(row.data(),copy)==copy.data());check(copy[0x2c]==3 && copy[0x98]==37 && row==original);
+    row[0x2c]=3;check(VisibleUniqueRow(row.data(),copy)==row.data());
+    row[0x2c]=15;check(VisibleUniqueRow(row.data(),copy)==row.data());
+    std::array<unsigned char,0x13b8> bank{};
+    std::array<unsigned char,0x1cc*2> rows{};
+    unsigned char unit[0x18]{},data[0x38]{};
+    const unsigned type=4,quality=5;const int record=1;
+    const auto* itemData=data;const auto* tableRows=rows.data();const std::uint64_t count=2;
+    std::memcpy(unit,&type,4);std::memcpy(unit+0x10,&itemData,8);
+    std::memcpy(data,&quality,4);std::memcpy(data+0x34,&record,4);
+    std::memcpy(bank.data()+0x13a8,&tableRows,8);std::memcpy(bank.data()+0x13b0,&count,8);
+    rows[0x1cc+0x2c]=9;rows[0x1cc+0x98]=27;const auto originalRows=rows;
+    SetVisibilityView view;auto* result=VisibleSetTables(bank.data(),unit,view);
+    check(result!=bank.data() && rows==originalRows);
+    auto* copied=Affixes::Read<const unsigned char*>(result,0x13a8);
+    check(copied[0x1cc+0x2c]==1 && copied[0x1cc+0x98]==27);
+    data[0]=7;check(VisibleSetTables(bank.data(),unit,view)==bank.data());data[0]=5;
+    const int invalid=2;std::memcpy(data+0x34,&invalid,4);check(VisibleSetTables(bank.data(),unit,view)==bank.data());
+    unsigned char stack[0x138]{};const auto* oldBase=coreBase;coreBase=reinterpret_cast<const unsigned char*>(0x10000000);
+    const std::uintptr_t parent=0x10000000+0x376e3c,outer=0x10000000+0x81977c;
+    std::memcpy(stack+0x50,&parent,8);std::memcpy(stack+0x130,&outer,8);
+    check(TooltipSelectorScope(stack,0x10000000+0x377cfc,true));
+    check(!TooltipSelectorScope(stack,0x10000000+0x377cfc,false));stack[0x130]^=1;
+    check(!TooltipSelectorScope(stack,0x10000000+0x377cfc,true));coreBase=oldBase;
+}
+}
 int main() {
+    TestTooltipVisibilitySnapshots();
     check(FixedHeaderRequest(true,2,0));check(!FixedHeaderRequest(true,0,1));
     check(FixedHeaderRequest(false,0,1));check(!FixedHeaderRequest(false,2,0));
 
@@ -134,7 +165,7 @@ int main() {
     check(!D2RLoaderLoadPlugin(nullptr));
     auto info=D2RLoaderGetPluginInfo();
     check(std::strcmp(info->id,"item-roll-ranges")==0);
-    check(std::strcmp(info->version,"1.3.1+rev.23")==0);
+    check(std::strcmp(info->version,"1.3.1+rev.25")==0);
     std::puts("Passed real adapter passthrough/ABI, inactive late calls, atomic slot conflict/restore, exported identity.");
 }
 
@@ -251,12 +282,12 @@ void TestAffixRead() {
     put(fakeTables,0x13c8,unique+0); put(fakeTables,0x13d0,std::uint64_t{1});
     put(fakeTables,0x258,groups+0); put(fakeTables,0x260,std::uint64_t{1});
     labels=AffixLabels(unit,lines);
-    check(labels.size()==1 && labels[0].text=="[Unique]");
+    check(labels.size()==1 && labels[0].text=="[U]");
     originalProperties=FakeNoCloneProperties;
     char noCloneOutput[256]{};
     check(RenderProperties(unit,unit,noCloneOutput,256,1,0,0,0,0,nullptr,nullptr)==0xfedcba9876543210ull);
     check(noCloneCalls==1);
-    check(std::strstr(noCloneOutput,"+118 Defense") && std::strstr(noCloneOutput,"[Unique]"));
+    check(std::strstr(noCloneOutput,"+118 Defense") && std::strstr(noCloneOutput,"[U]"));
     put(data,0,4); auto grouped=lines; grouped[0].grouped=true;
     check(AffixLabels(unit,grouped).empty());
     put(fakeTables,0x1608,rows+3); check(AffixLabels(unit,lines).empty());
@@ -344,7 +375,7 @@ void TestUniqueRange() {
     Affixes::Property property{}; property.bytes[0x18]=8; property.bytes[0x20]=96;
     Affixes::Row row{}; put(row.bytes.data(),0x34,-1); put(row.bytes.data(),0x44,-1);
     put(row.bytes.data(),0x2c,5); put(row.bytes.data(),0x30,10);
-    std::vector<Affixes::Rolled> sources={{0,row,false,0,"[Unique]",true}};
+    std::vector<Affixes::Rolled> sources={{0,row,false,0,"[U]",true}};
     const CapturedLine line{RangeText::Analyze("+6% Faster Run/Walk").key,96,0,false,0};
     auto source=reinterpret_cast<void*>(0x1234);
     check(UniqueRange(source,line,sources,{&property,1},tables,"+6% Faster Run/Walk")=="5% - 10%");

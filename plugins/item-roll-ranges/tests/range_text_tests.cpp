@@ -130,9 +130,9 @@ int main() {
     check(RangeText::EndpointRange("+6% Faster Run/Walk","+5% Faster Hit Recovery","+10% Faster Hit Recovery").empty());
     check(RangeText::EndpointRange("+60% Faster Run/Walk","+5% Faster Run/Walk","+10% Faster Run/Walk").empty());
     check(RangeText::EndpointRange("Damage Reduced by 5","Damage Reduced by 5","Damage Reduced by 5").empty());
-    std::vector<RangeText::Label> unique={{RangeText::Analyze("+6% Faster Run/Walk").key,"[Unique]",{},false,"5% - 10%"}};
+    std::vector<RangeText::Label> unique={{RangeText::Analyze("+6% Faster Run/Walk").key,"[U]",{},false,"5% - 10%"}};
     result=RangeText::Merge("+6% Faster Run/Walk","+6% Faster Run/Walk",512,unique);
-    check(result.annotated==1 && result.text.find("[5% - 10%]")!=std::string::npos && result.text.find("[Unique]")!=std::string::npos);
+    check(result.annotated==1 && result.text.find("[5% - 10%]")!=std::string::npos && result.text.find("[U]")!=std::string::npos);
     result=RangeText::Merge("+6% Faster Run/Walk","+"+range("(1-20)")+"% Faster Run/Walk",512,unique);
     check(result.text.find("[+1 - +20]")!=std::string::npos && result.text.find("[5% - 10%]")==std::string::npos);
     check(HeaderText::Merge("Defense: 5\n+28% Enhanced Defense",

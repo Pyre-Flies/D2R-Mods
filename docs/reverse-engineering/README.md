@@ -77,3 +77,5 @@ alongside it. Never assume ASLR-stable process addresses.
 
 Feature documents contain the authoritative signatures and surrounding context.
 This table is an index, not sufficient justification for an unguarded hook.
+
+- [Floating Damage viewport scaling and native font-size bounds](floating-damage-resolution-scaling.md).

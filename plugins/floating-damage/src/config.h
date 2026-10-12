@@ -55,6 +55,17 @@ inline Settings Parse(std::string_view text,unsigned& rejected) noexcept {
         const auto eq=line.find('=');
         if(eq==line.npos) {++rejected; continue;}
         const auto key=Trim(line.substr(0,eq)), value=Trim(line.substr(eq+1));
+        if(key=="resolution_scaling") {
+            if(value!="true" && value!="false") {++rejected;continue;}
+            config.resolutionScaling=value=="true";continue;
+        }
+        if(key=="critical_style") {
+            if(value=="\"suffix\"" || value=="'suffix'") config.criticalStyle=CriticalStyle::Suffix;
+            else if(value=="\"size\"" || value=="'size'") config.criticalStyle=CriticalStyle::Size;
+            else if(value=="\"both\"" || value=="'both'") config.criticalStyle=CriticalStyle::Both;
+            else ++rejected;
+            continue;
+        }
         if(key=="critical_hits") {
             if(value!="true" && value!="false") {++rejected;continue;}
             config.criticalHits=value=="true";continue;

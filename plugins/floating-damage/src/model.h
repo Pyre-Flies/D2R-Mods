@@ -44,8 +44,11 @@ struct Number {
     PoisonStamp fromPoison{};
     bool critical{};
 };
+enum class CriticalStyle { Suffix, Size, Both };
 struct Settings {
     bool enabled=true, debug=false, fallingMotion=true, shadow=true, elementColors=true, backing=true, backingPoisonOnly=true, criticalHits=true;
+    bool resolutionScaling=true;
+    CriticalStyle criticalStyle=CriticalStyle::Both;
     float textSize=26, rise=64, offset=46, laneSpacing=22;
     std::array<float,3> textColor{213.0f/255,218.0f/255,226.0f/255}, outlineColor{16.0f/255,18.0f/255,21.0f/255}, shadowColor{0,0,0};
     std::array<float,3> physicalColor{241.0f/255,227.0f/255,202.0f/255}, fireColor{1,139.0f/255,104.0f/255},

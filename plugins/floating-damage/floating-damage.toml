@@ -2,11 +2,16 @@
 enabled = true
 # Optional enemy count/projection diagnostics and sample logging.
 debug = false
-# Font size in screen pixels (12 to 64).
+# Scale pixel sizes/motion uniformly from a 1920x1080 reference (4K = 2x).
+# False uses fixed pixel sizes. Automatic factor is bounded to 0.25 to 4.
+resolution_scaling = true
+# Base font size at the reference resolution (12 to 64).
 text_size = 26
-# Native critical/deadly hits retain their element color, grow and append !!.
+# Native critical/deadly hits retain their element color and actual HP loss.
 critical_hits = true
-# Font multiplier (1 to 2); normal text_size remains unchanged.
+# "suffix" = !! only; "size" = larger only; "both" = larger with !!.
+critical_style = "both"
+# Extra font multiplier for "size"/"both" (1 to 2), after resolution scaling.
 critical_size_scale = 1.35
 # Quoted hex RGB (#RRGGBB). Silver fallback and solid charcoal outline.
 text_color = "#D5DAE2"
@@ -21,7 +26,7 @@ poison_color = "#C6F69B"
 # Several verified components in one HP decrease or merged number.
 mixed_color = "#F58CB6"
 outline_color = "#101215"
-# Solid stroke radius in pixels (0 disables it; maximum 3).
+# Base solid stroke radius (0 disables it; maximum 3), resolution-scaled.
 outline_width = 2
 # Fraction of lifetime before fading begins (0.0 to 0.95).
 fade_start = 0.8
@@ -45,7 +50,7 @@ backing = true
 backing_poison_only = true
 backing_color = "#0A0D10"
 backing_opacity = 0.68
-# Padding outside the outline (0 to 12 pixels); corner radius (0 to 12).
+# Base padding outside the outline (0 to 12); corner radius (0 to 12).
 backing_padding_x = 4
 backing_padding_y = 1
 backing_rounding = 3

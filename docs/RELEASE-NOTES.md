@@ -1,132 +1,60 @@
-# D2R Mods release 2026.10.11.1
+# D2R Mods release 2026.10.12.1
 
-Five independently installable runtime packages:
+## Item Roll Ranges 1.3.1+rev.25
 
-| Plugin | Version |
-| --- | --- |
-| Controller QOL Updates | **1.3.1+rev.75** |
-| Item Roll Ranges | **1.3.1+rev.23** |
-| Map Assistance | **1.3.1+rev.1** |
-| Inventory Deposit (Deposit All Button) | **0.1.0-beta.13** |
-| Floating Damage | **0.1.0-beta.11** |
+Restore modifier ranges and source labels for Reimagined unique/set definitions
+hidden from the Chronicle. Item Roll Ranges now supplies guarded, private
+tooltip-only definition snapshots, so Chronicle Items is no longer required
+for those ranges. Shared definition flags, Chronicle visibility and save data
+are unchanged. Unique property labels are shortened from `[Unique]` to `[U]`,
+including fixed-value properties. Set properties retain native ranges without
+additional set source labels.
 
-This suite adds Floating Damage and includes the already-published Inventory
-Deposit beta.13. Controller QOL, Item Roll Ranges and Map Assistance retain
-their stable versions and behavior. The two new suite members retain beta
-status and their documented validation limits.
+The user confirmed Lustwander's ranges/labels, Chiad's Heartbane's Enhanced
+Defense range and Base Defense, and the shortened unique marker in game with
+the standalone setup. All five automated suites pass, including immutable
+definition snapshots and exclusion of unrelated callers. Existing Base headers
+and native Ctrl/controller input handling are retained. Dedicated controller,
+localization and every item-family/plugin combination are not fully validated.
+Socket, enchantment and corruption contributions do not yet have complete
+source attribution or expanded breakdowns; this release does not add `[E]`.
 
-## Floating Damage
+## Floating Damage 0.1.0-beta.12
 
-- Draw outlined floating numbers for observed enemy HP loss in local single
-  player, regardless of attacker. Confirmed deaths show the enemy's last
-  remaining HP rather than the attack's overkill amount.
-- Color matching physical, fire, cold, lightning, magic, poison and mixed
-  damage. Unexplained or ambiguous decreases use the fallback color.
-- Configure font size, quoted hex colors, solid outline, shadow, translucent
-  poison backing, fade timing and optional rise/fall/sideways motion.
-- Matched native Critical/Deadly Strike events display 35% larger by default
-  with `!!`; both mechanics share the native marker. The damage amount stays
-  the observed HP loss.
-- Toggle with `/damagenumbers on`, `/damagenumbers off` or
-  `/damagenumbers status` in game chat. Configuration edits and DLL updates
-  require a restart.
+Scale text and its offsets, lanes, motion, outline, shadow and backing to the
+viewport, using 1920 x 1080 as the baseline. `resolution_scaling = true` is the
+default: 4K uses 2x and 1440p uses 4/3x, bounded to 0.25-4x. Set it to false
+to retain fixed screen pixels. HP values, grouping and timing are unchanged.
 
-There is no DPS meter or attacker attribution. Native hashes/byte guards admit
-only the reviewed loader-hosted build. Remote clients cannot use this local
-authoritative HP reader. Controlled captures and user feedback confirm normal
-numbers, elemental colors, poison ticks/deaths, mixed damage, commands and
-motion. Native positive/negative captures establish the Critical/Deadly Strike
-marker; beta.11's enlarged/suffixed rendering still needs a live visual check.
-Dense-combat performance and poison expiration on a survivor remain unverified.
+Choose `critical_style = "suffix"`, `"size"` or `"both"` (default). Suffix uses
+normal-size `!!`; size enlarges without the suffix; both retains the existing
+enlarged `!!`. `critical_size_scale` and `critical_hits` keep their existing
+meaning. Damage-type colors and native critical association are unchanged.
+Saved config files are preserved; omitted new keys select these defaults.
 
-## Inventory Deposit / Deposit All Button
+All seven automated suites pass, including the production drawing adapter at
+2x scale, configuration/mode cases and exact-DLL ABI/default/version checks.
+New resolution scaling and critical-style modes remain pending live visual
+validation. Floating Damage retains beta status and targets local single
+player; remote-client, dense-combat and broader session/resolution coverage
+remain limited. No new native hook or gameplay behavior is introduced.
 
-- Add a mouse-clickable **Deposit All** button beside the gold display in the
-  HD inventory footer while the stash is open.
-- Deposit eligible gems, runes, materials and rejuvenation potions into
-  advanced storage. Equipment and other ineligible items remain in inventory;
-  the Cube, belt and Charm Inventory are not sources.
-- Include embedded stone-and-gold artwork and automatic gold-relative
-  placement, with no loose sprite/MPQ files or Controller QOL runtime dependency.
-- Grey out the button with no eligible items, while holding a cursor item or
-  during a batch. Available items restore hover presentation; each affected
-  advanced-stash tab gets supplemental feedback once per batch.
-- Tooltip: **Deposit All Gems, Materials and Runes**.
+## Included packages and installation
 
-The user confirmed deposits and these visible behaviors in the reviewed setup.
-Remote play, simultaneous mouse/controller bulk actions, pressed/low-end
-rendering, multiple resolutions, destination counts and save persistence are
-not fully validated. Native eligibility and per-item checks remain authoritative;
-the operation is not atomic and stops on partial or unconfirmed transfers.
+Controller QOL Updates 1.3.1+rev.75, Map Assistance 1.3.1+rev.1 and Inventory
+Deposit 0.1.0-beta.13 are included unchanged from release-2026.10.11.1. The
+separate Controller QOL rev.76 beta is not promoted by this release.
 
-## Controller QOL: new configuration layout
+Close the game and loader, back up installed DLLs, and extract only the wanted
+ZIPs into the game directory or active mod directory. Keep one active copy
+per plugin. DLLs install under `d2rloader/plugins/`; reference TOMLs are under
+`defaults/`, never live config paths. Keep customized settings. The loader
+creates missing configs; merge new keys manually if desired. A cold restart
+is required. Item Roll Ranges requires Core item stat ranges enabled. All
+native features require their documented exact build/provider admission.
 
-Shared actions and aim preferences stay in
-`d2rloader/config/controller-qol-updates.toml`: deadzone, cursor speed,
-acceleration, reticle appearance/smoothing and logging.
-
-All per-skill settings now live in
-`d2rloader/config/controller-qol-skills/<scope>.overrides.toml`: enable/lock
-states, targeting, leading/prediction caps and Whirlwind behavior. This is a
-complete editable profile for the mod or Vanilla, shared across its characters.
-Find it by the `# Mod:` header. R3 saves here and applies successful toggles
-immediately. Manual edits require a restart. The matching `.catalog.toml`
-contains generated reference data and is never loaded as active settings.
-
-Upgrading imports old main-file skill choices and R3 preferences with recovery
-backups and a comparison of effective settings before removing old sections.
-Shared settings/comments and existing skill choices are preserved. R3 keeps
-one rolling `.r3.bak` per profile; migration recovery copies are separate.
-Read the [configuration, migration and rollback guide](https://github.com/Pyre-Flies/D2R-Mods/blob/release-2026.10.11.1/plugins/controller-qol/docs/SKILL-DISCOVERY-CONFIG.md)
-before editing or downgrading. Moving/renaming a mod directory selects a new
-profile; separate loader config directories are not automatically merged.
-
-## Skills and reticles
-
-- General Skills supports reviewed equipment-granted skill buttons using live
-  IDs and layout, including Warp and class OSkills. Supported loose mod tables
-  supply discovery candidates, which require runtime confirmation. Discovery
-  does not infer arbitrary replacement skill behavior or projectile speeds.
-- Reticles have stronger dark borders, brighter strokes and clearer lock corners.
-  Fresh defaults use pale cyan (`#8FE8FF`) and amber (`#FFD166`). Custom colors stay.
-- Screen-position smoothing reduces jitter as the character moves, without
-  changing cast coordinates or delaying direct stick adjustments. New configs
-  and omitted `overlay_smoothing_ms` keys default to **60 ms**. Existing explicit
-  values remain unchanged; zero disables smoothing. Larger values can add visible lag.
-- Detailed aim logging remains off by default (`[aim] verbose = false`).
-
-## Install and update safely
-
-Close the client and extract the desired ZIP into the game directory. DLLs land
-under `d2rloader/plugins/`. **Current archives contain no live config paths.**
-Reference TOMLs are under `defaults/`; do not copy them over customized files.
-The loader creates missing main configs from embedded defaults, and QOL creates
-its active skill profile when aim initializes. Every packaged reference
-config uses `defaults/`. Each ZIP includes checksums; the release `SHA256SUMS`
-covers all five ZIPs. Install each DLL in one active scope only. Back up existing
-DLLs and live configs before replacing them; new settings do not require
-overwriting saved preferences.
-
-Use matching QOL versions if multiple loader locations share one main config.
-Managed Ladder packages should carry this update in their normal package revision.
-Do not replace signed/managed pack contents outside that process. Rolling back
-to an older QOL DLL requires its matching pre-migration main config backup.
-
-## Validation and known limits
-
-Fresh local MSVC Release builds passed all **55 CTest suites**: Controller QOL
-**29/29**, Item Roll Ranges **5/5**, Map Assistance **2/2**, Inventory Deposit
-**12/12**, and Floating Damage **7/7**, including built-DLL artifact checks.
-All **19 packaging tests** passed and all five runtime archives were created
-with ZIP integrity, internal/external checksums, reference-only config paths
-and preservation of customized settings verified. Publication also requires successful GitHub CI and checksum verification
-of the published downloads. These automated checks are separate
-from the live-game evidence described above.
-
-Live user feedback confirms General Skills behavior, profile layout, bounded R3
-backups and improved reticle readability/motion in Ladder. This is not exhaustive
-testing of every mod, offline upgrade, equipment layout or recovery scenario.
-Full-Ladder Save & Exit crashes remain unresolved; this release does not claim
-to fix them. The separate item-browser **Unique**-tab investigation likewise
-establishes no Floating Damage root cause or crash fix. See the included
-plugin compatibility and validation records.
+Local verification: all 55 CTest suites (29 QOL, 5 ranges, 2 map assistance,
+12 inventory deposit and 7 floating damage), all 19 packaging tests, five ZIP
+integrity/content/config-preservation audits and internal/external checksums.
+These checks are separate from the live-game evidence above. GitHub CI and
+published download checksums are verified as part of publication.
