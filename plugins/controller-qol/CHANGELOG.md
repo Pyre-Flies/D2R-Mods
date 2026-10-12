@@ -1,5 +1,11 @@
 # Controller QOL changelog
 
+## 1.3.1+rev.76 - 2026-10-12
+
+- Publish the reviewed rev.76 beta.4 implementation as rev.76 at the user's request, with stable version metadata. Native behavior and settings are unchanged.
+- The user confirmed Cube self-insertion prevention, overlapping Shared-trigger ownership and Cube behavior through rejoins, and accepted non-online gameplay. Online qualification remains open; retain the detailed audit evidence and test cases.
+- All 33 automated suites and the exact DLL artifact test pass for this release.
+
 ## 1.3.1+rev.76-beta.4 - 2026-10-11 (testing prerelease)
 
 **Please test this release and report all bugs. Online play remains unvalidated.**

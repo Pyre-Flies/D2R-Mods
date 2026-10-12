@@ -7,11 +7,11 @@ D2RLoader plugins for Diablo II: Resurrected.
 
 | Plugin | Suite version | Status |
 |---|---:|---|
-| [Controller QOL Updates](plugins/controller-qol/README.md) | 1.3.1+rev.75 | Production; build-specific native hooks |
-| [Item Roll Ranges](plugins/item-roll-ranges/README.md) | 1.3.1+rev.23 | Production; build-specific formatter/table integration |
+| [Controller QOL Updates](plugins/controller-qol/README.md) | 1.3.1+rev.76 | Production; build-specific native hooks |
+| [Item Roll Ranges](plugins/item-roll-ranges/README.md) | 1.3.1+rev.34 | Production; build-specific formatter/table integration |
 | [Map Assistance](plugins/map-assistance/README.md) | 1.3.1+rev.1 | Configurable non-town campaign coverage |
 | [Inventory Deposit (Deposit All Button)](plugins/inventory-deposit/README.md) | 0.1.0-beta.13 | Beta; mouse button for eligible advanced-storage deposits; [standalone prerelease](https://github.com/Pyre-Flies/D2R-Mods/releases/tag/beta-inventory-deposit-0.1.0-beta.13) |
-| [Floating Damage](plugins/floating-damage/README.md) | 0.1.0-beta.11 | Beta; local enemy HP-loss overlay with damage colors |
+| [Floating Damage](plugins/floating-damage/README.md) | 0.1.0-beta.12 | Beta; local enemy HP-loss overlay with damage colors |
 
 Each plugin is independently buildable and keeps its own README, changelog,
 tests, configuration, and detailed compatibility evidence. The D2RLoader SDK is

@@ -1,6 +1,6 @@
 # Item Roll Ranges
 
-Experimental 1.3.1+rev.25, PyreFly. Separate client plugin for the installed D2RLoader.
+Version 1.3.1+rev.34, PyreFly. Separate client plugin for the installed D2RLoader.
 
 Light-blue `[P] [Name] [Tn]` / `[S] [Name] [Tn]` labels identify verified rolled
 magic/rare/crafted affix contributions, including fixed-value affixes. Repeated
@@ -8,8 +8,8 @@ names show when multiple property lines come from the same affix. T1 is the
 highest distinct affix level in the applicable family, filtered by item type,
 quality and version. Version 0.4.2 expands skill and grouped-line matching and
 adds `[U]` / `[Base]` source labels. Original values remain intact.
-See [the source audit](docs/SOURCE-AUDIT-0.4.2.md) for current coverage, evidence
-and limitations. All five test suites pass; 0.4.2 visual checks remain pending.
+See [the historical source audit](docs/SOURCE-AUDIT-0.4.2.md) for that version's
+coverage and evidence, and the revision27 Status below for current validation.
 
 Hold **Ctrl** or controller **RT/R2** (**R1/RB** when Controller QOL range remapping is active) in inventory, stash, Cube or vendor to show
 native roll ranges as light-blue prefixes beside actual item properties, e.g.
@@ -26,6 +26,56 @@ prefix; no bounds are invented. If prefixes exceed the buffer capacity, the
 whole original property block is retained. Ranges reflect current definitions.
 
 ## Status
+
+Revision34 fixes socket capacity's placement using the actual localized header
+line rather than the start of the whole tooltip. The intended weapon order is
+Required Level / Max Sockets / Attack Speed. Full-tooltip fixtures cover affixes
+preceding requirements and items without a Required Level line. The user confirmed
+the corrected placement in-game after installing revision34. See [the correction](docs/SOURCE-CAPTURE-REV32.md#revision34-header-placement-correction).
+
+Revision33 moves socket capacity into the held-range header below Required
+Level and uses the native MaximumSockets localization key, correcting
+revision32's erroneous Required Level modifier row. All seven automated suites
+pass and the new native witnesses match the loaded build. Visible restart
+confirmation remains pending. See [the correction](docs/SOURCE-CAPTURE-REV32.md#revision33-header-correction).
+
+Revision32 corrects the live Eagleeye/Trump and Godly/Silver-Wrought breakdown
+failures, flat Thorns' false missing-range warning, and socketed-item capacity.
+Seven automated suites pass with the observed record shapes. Revision31's
+label color and absent-clone coverage were confirmed visually; its breakdown
+and socket-capacity fixtures missed production differences. Revision32 restart
+rendering remains pending. See [the evidence and limits](docs/SOURCE-CAPTURE-REV32.md).
+
+Revision29 compacts fixed modifier bounds, e.g. `[+38]`, and adds verified
+fixed P/S prefixes such as Loremaster's `[+2%]`. Base headers keep explicit
+endpoints. Low-quality armor/weapons now use reduced bases; normal and
+superior base behavior and the existing Base label are preserved.
+See [quality evidence](docs/ARMOR-QUALITY-REV29.md).
+Revision29 visual confirmation remains pending.
+
+Revision28 restores generated ED armor Base headers in the presence of socket
+stat lists. The user confirmed Beast Shell shows `Defense: 246 (Base: 127 - 127)`
+and preserves its Life/socket breakdown; all seven automated suites pass.
+
+Revision27 is a local candidate for socket and corruption source breakdowns.
+For example, a host's +96 maximum damage (81–100) and an inserted jewel's +11
+(10–15) show the native +107 total with combined bounds91–115, followed by
+gray source rows. `[Socket n]` uses native insertion order. Supported rune/gem
+lines use the active host context; proven completed corruption bonuses use
+`[C]`. Socket-only properties need only one labeled row. No new input hooks,
+remapping, gameplay writes or Item SDK dependency are added.
+
+Seven automated suites and a local replay of captured compiled tables pass.
+User screenshots confirm the Stone Fang ED/socket breakdown and Cold Absorb
+label, plus the preserved Cruel sword ED/corruption breakdown and Life Steal
+label. Releasing Ctrl restores normal tooltips. Other socket fixture rendering
+and converted-rare behavior still need candidate-specific live confirmation.
+Enchantments remain unexpanded because their values merge with ordinary host
+affixes; counters alone cannot establish `[E]`. Runewords, set bonuses, layered/
+grouped modifiers, poison duration/rate, paired physical damage properties and
+unsupported operations retain previous behavior. See the
+[source contracts](docs/CONTRIBUTION-SOURCES-REV27.md) and
+[sample evidence](docs/ITEM-CONTRIBUTION-VALIDATION.md).
 
 Live traces confirm the original-item pass produces +118 Defense and +30%
 Enhanced Weapon Damage, while the range-item pass produces 80..120 and25..50.
@@ -246,8 +296,9 @@ See docs/PRODUCTION-1.3.1.0.md for the production snapshot and version policy.
 
 Version policy: `1.3.1+rev.N` identifies the qualified loader target and the independent plugin revision. Build metadata does not participate in SemVer precedence. Native fingerprints remain authoritative.
 
-Revision22 fixes Defense publication after Core restores its range context. The Iceblink header fix is user-confirmed in game; all five automated suites pass.
+Unique source labels use `[U]` in revision25. Set modifier ranges remain native; the plugin does not currently add set source labels.
 
-Revision23 restores the Base label on fixed items with no rollable modifiers. A plain Sash displaying Base2-2 while Ctrl is held and returning to normal on release is user-confirmed. Controller-specific no-clone checks remain unconfirmed.
-
-Revision 24 removes the Chronicle Items dependency for hidden unique/set definitions through private tooltip-only snapshots; shared flags and discovery remain unchanged. User confirmed standalone Lustwander and Heartbane ranges and Base headers. Revision 25 uses [U] on unique property lines; user confirmed its display. Set properties retain native ranges without added set source labels. All five automated suites pass. Socket, enchantment and corruption source breakdowns remain incomplete.
+Revision27 supersedes the unshipped revision26 IAS prototype with shared
+socket/corruption attribution. Seven suites pass; Stone Fang and preserved
+Cruel corruption rendering and Ctrl release are user-confirmed. Enchantments
+are deferred while Reimagined restructures them. Revision27 is not published.

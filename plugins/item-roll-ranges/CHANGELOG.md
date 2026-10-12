@@ -3,12 +3,188 @@
 All notable changes to Item Roll Ranges are recorded here. Versions before the
 GitHub migration are reconstructed from release and validation records.
 
+## [1.3.1+rev.34] - 2026-10-12
+
+- Insert socket capacity beside the actual Required Level header line. The
+  builder returns the full tooltip including affixes; revision33 incorrectly
+  prepended to that entire buffer, displaying capacity below the affixes.
+- On weapons, retain Required Level / Max Sockets / Attack Speed order.
+  Without a level requirement, use the lowest recognized localized native
+  requirement, durability, quantity, Defense or damage header. Preserve native
+  text if the anchor is missing or ambiguous. Unsocketed capacity stays native.
+- Full-tooltip regression fixtures now include sockets, overlapping affixes,
+  attack speed and requirements in native bottom-to-top order, plus translated
+  templates, absent-level fallbacks and duplicate refusals. All seven automated
+  suites pass. The user confirmed the corrected placement in-game after
+  installing revision34. Included in release-2026.10.12.2.
+  See [the revision34 correction](docs/SOURCE-CAPTURE-REV32.md#revision34-header-placement-correction).
+
+## [1.3.1+rev.33] - 2026-10-12 (local candidate)
+
+- Move socket capacity into the held-range header, below Required Level,
+  matching the native unsocketed layout. Remove revision32's modifier-row
+  insertion and incorrect `Required Level: 2` label.
+- Use the actual native `d2rloader:D2RLoaderMaximumSockets` localization key;
+  the intermediate `ItemStats1p` lookup is Required Level, not Max Sockets.
+  Qualify the key and its native caller alongside the capacity helper.
+- Preserve capacity through the existing guarded header publication, including
+  weapon headers without Defense. Current sockets and socket contributions
+  remain unchanged; releasing ranges retains the ordinary native tooltip.
+- Seven automated suites pass, with the real key distinction, translated
+  templates, header ordering, capacity refusals and publication retention.
+  Read-only comparison confirms both new optional witnesses match the loaded
+  build. Visible restart rendering remains pending. Not published.
+  See [the revision33 correction](docs/SOURCE-CAPTURE-REV32.md#revision33-header-correction).
+
+## [1.3.1+rev.32] - 2026-10-12 (local candidate)
+
+- Admit the observed extended stat-list flags on Bramble Song while retaining
+  ownership, parent, vector and socket checks. This restores the Eagleeye/Trump
+  scaling breakdown and its level-100 bounds.
+- Support Enhanced Defense's actual property handler2 for magic/rare source
+  bounds. Godly and Silver-Wrought show combined bounds and separate source
+  rows; individual rolls remain unknown when the saved total is ambiguous.
+- Include flat Thorns in the scalar source model, removing the false missing
+  range warning for Shadow Mantle's known 1-3 roll.
+- Show native `Max Sockets` capacity for already socketed items while holding
+  ranges. The socket count is built outside the transformed property buffer,
+  so revision31's attempted suffix could never match it.
+- Seven automated suites pass with fixtures corrected to match the observed
+  flags, property handlers and multi-property affix records. Visible restart
+  rendering remains pending. See [revision32 evidence](docs/SOURCE-CAPTURE-REV32.md).
+  Not published; enchantments remain deferred.
+
+## [1.3.1+rev.31] - 2026-10-12 (local candidate)
+
+- Restore light-blue source labels on fixed modifier rows, including
+  Loremaster and of Speed, while preserving the original modifier color.
+- Extend the existing native hold request to identified tooltips without a
+  range clone. Consume that request only at the qualified property caller,
+  with matching source identity; release and the next tooltip clear it.
+- Recover missing scalar identities using exact localized native formatting
+  and owned source stats. Show complete magic/rare source bounds even when
+  Core omitted its range pass; ambiguous identities or unknown sources stay
+  native. Include the typed class-skill selector for Shadow Mantle.
+- Break down proven overlapping level-scaled sources, including Eagleeye and
+  Trump. Require unique actual contributions and compatible rounding; keep
+  ambiguous individual rolls unknown and retain the displayed total.
+- Show a socketed item's capacity beside its current socket count, such as
+  `Socketed (2) (Max: 4)`, using the guarded native Core capacity helper.
+  Preserve the existing unsocketed header and refuse invalid/mismatched data.
+- Read-only live captures confirmed Shadow Mantle's absent clone and the
+  source coefficients/operands. Seven automated suites pass, including
+  capacity, color, selector, duplicate-text, wrong-source, repeated-request,
+  release and rounding-refusal fixtures. Restart rendering is pending.
+  See [revision31 evidence](docs/CLONELESS-TOOLTIPS-REV31.md). Not published.
+
+## [1.3.1+rev.30] - 2026-10-12 (local candidate)
+
+- Include property-function8 scalars in fixed-value prefixes, covering fixed
+  Faster Hit Recovery and other additive speed properties under the already
+  guarded native handler. Raven Carapace should show `[+10%]` for of Balance.
+- Add a fixed proc chance prefix when the packed skill/level, independent
+  chance operand, actual text and owned stat lists agree. Keep the skill level
+  in the original line; do not treat chance/level as a scalar min/max range.
+- Use the loaded Experience MaxLvl header for proven level-based bounds,
+  correcting Thorns to 1-100 and Paleocene Defense to 6-600 in this setup.
+  Require uniform class caps, matching raw coefficients and supported active
+  operation metadata; unfamiliar bases or source totals retain native bounds.
+- Compare function17 coefficients as roll strength within a tier family.
+  Preserve different property IDs and selectors, so flat and per-level Thorns
+  are separate families despite sharing the displayed name. The observed
+  coefficient8 family member becomes T2 below coefficient12 at T1.
+- New optional byte witnesses gate scaling/proc additions and coefficient
+  families; mismatches retain previous behavior. Read-only source/stat/table
+  captures establish the reported values. All seven suites pass and all six
+  new optional byte windows match the loaded build. Restart rendering remains pending;
+  no release is published and no input or gameplay behavior changes.
+
+## [1.3.1+rev.29] - 2026-10-12 (local candidate)
+
+- Compact verified fixed modifier bounds to a singleton, such as `[+38]`
+  for Perfect Ruby Life and `[+50%]` for fixed corruption ED. Base headers
+  retain explicit endpoints. Add fixed P/S bounds when the captured values
+  exactly match the single actual number, including Loremaster's `[+2%]`.
+- Recognize crude/cracked/damaged armor's reduced base interval, with integer
+  truncation and observed intrinsic agreement; refuse unsupported ethereal or
+  custom low-quality bases. Normal and superior behavior stays intact:
+  durability-only superior armor varies; generated ED uses a fixed max+1 base.
+- Read-only inventory controls confirm normal121, crude87 and durability-only
+  superior118 with active Serpentskin bounds111–126. Regression tests cover
+  these shapes, refusals and fixed modifier formatting; all seven suites pass.
+  Visual confirmation for revision29 remains pending; no release is published.
+- Extend the same quality check to weapon Base headers. Live Long Sword
+  controls retain normal3-19 and superior3-19 (ED6% produces actual3-20),
+  while low quality uses2-14. Require native intrinsic agreement; cover
+  one-hand/two-hand/throw paths and minimum-one truncation in tests.
+
+## [1.3.1+rev.28] - 2026-10-12 (local candidate)
+
+- Restore generated Enhanced Defense armor Base headers when jewels/gems are
+  socketed. The legacy host operand reader rejected attached extended socket
+  siblings before reaching the own ED list. Reuse the guarded owned source
+  capture for the host-generation check, excluding socket ED and nested copies.
+- Beast Shell stores intrinsic Defense127 and own ED94%; the header should
+  retain actual246 and show `(Base: 127 - 127)`. No inverse rounding guess,
+  input change, gameplay write or new native hook is introduced.
+- Seven automated suites pass, including reversed child order with two socket
+  owners, native header colors, ethereal generation, excluding socket-only ED,
+  guard mismatch, bad parent/state and cyclic insertion refusal. Live read-only
+  capture confirms the failure mechanism and values; the user confirms
+  Defense246 with Base127–127 and the preserved Life/socket breakdown.
+
+## [1.3.1+rev.27] - 2026-10-12 (local candidate)
+
+- Replace host-only bounds on supported socket-overlap modifiers with the
+  complete combined range and gray source rows. Preserve the native actual
+  total; show the separately captured host/jewel values and each source's
+  own affix range, name and tier. Identify sockets in native insertion order.
+- Support variable IAS/Life/flat maximum damage/Enhanced Damage contributions,
+  socket-only scalar properties and paired elemental endpoints. Normalize Life
+  using the active stat shift; use leaf operands for consumed ED and computed
+  weapon damage rather than treating the aggregate as an additive modifier.
+- Resolve rune/gem effects from active compiled definitions and host context
+  through the public table service. Add source labels such as `[Socket 1]
+  [El Rune]`; fixed fire endpoints stay distinct from a random scalar roll.
+- Recover the observed completed preserved-item corruption outcome from its
+  saved roll and applicable active recipe. Split only proven fixed additive
+  bonuses and label them `[C]`. Pending/invalid states and converted rares gain
+  no guessed corruption contribution. Enchantments, runewords, conditional
+  lists, unresolved unique choices and unsupported transformations retain the
+  prior display; this candidate does not infer `[E]` from enchantment counters.
+- Seven automated suites pass, including the full production capture/label/
+  merge path and malformed ownership, cycles, capacity, metadata-revision and
+  total mismatch controls. Local replay of captured compiled tables confirms
+  the corruption ED50/Life Steal8 winner and El's context effects. Four new
+  byte witnesses match captured code. User screenshots confirm Stone Fang's
+  combined ED bounds/host and socket rows, socket-only Cold Absorb, and the
+  preserved Cruel sword's ED and Life Steal corruption labels. User confirms
+  releasing Ctrl restores normal tooltips. Converted-rare and other socket
+  fixture rendering remain unconfirmed for this candidate; no rev27 release.
+
+## [1.3.1+rev.26] - 2026-10-12 (local candidate)
+
+- Add a guarded fixed-IAS socket breakdown for magic/rare hosts with matching
+  fixed affix definitions. Preserve the actual combined total above gray
+  source rows; keep the host affix label and identify the inserted contribution
+  as `[Socket 1]` (native insertion order).
+- Capture socket-owned extended stat lists and verify inventory order, owner,
+  parent, identity/count and `host + sockets == total`. Decline partial reads,
+  cycles, conditional/timed host lists, disagreement and variable host rolls.
+  Existing tooltip behavior remains when the separate socket guards fail.
+- Admit property function 8 only for IAS stat 93 in scalar affix bounds. No
+  Item SDK dependency, new native hook, input remap or gameplay write.
+- Six automated suites pass, including production affix/merge regressions and
+  independent ownership/order/refusal fixtures. Live read-only Eagle Barb
+  control confirms host IAS 20, inserted jewel IAS 15 and total 35; the new
+  displayed breakdown remains pending a restart/visual check. Variable jewel
+  ranges and other modifier families are not yet implemented.
+
 ## [1.3.1+rev.25] - 2026-10-12
 
 - Shorten the unique source marker from [Unique] to [U], including fixed-value
   modifier lines. Provenance/range calculations are unchanged.
 - Set items retain native range annotations without added set source labels.
-- All five suites pass. User confirmed the shortened unique marker in game.
 
 ## [1.3.1+rev.24] - 2026-10-12
 

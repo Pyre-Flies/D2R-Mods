@@ -1,5 +1,6 @@
 #include "affixes.h"
 #include "range_text.h"
+#include "scaling_affixes.h"
 #include <cstdio>
 #include <cstdlib>
 #include <vector>
@@ -21,6 +22,16 @@ int main() {
     check(Affixes::ScalarBounds(savage,{&physical,1},17,0,low,high) && low==66 && high==80);
     check(!Affixes::ScalarBounds(savage,{&physical,1},17,1,low,high));
     check(!Affixes::ScalarBounds(savage,{&physical,1},39,0,low,high));
+    auto balance=row(5);number(balance,0x2c,10);number(balance,0x30,10);
+    Affixes::Property fixedSpeed{};fixedSpeed.bytes[0x18]=8;fixedSpeed.bytes[0x20]=99;
+    check(Affixes::ScalarBounds({1,balance,false,1},{&fixedSpeed,1},99,0,low,high) && low==10 && high==10);
+    check(!Affixes::ScalarBounds({1,balance,false,1},{&fixedSpeed,1},93,0,low,high));
+    auto enhanced=row(1);number(enhanced,0x2c,201);number(enhanced,0x30,225);
+    Affixes::Property armorPercent{};armorPercent.bytes[0x18]=2;armorPercent.bytes[0x20]=16;
+    check(Affixes::ScalarBounds({1,enhanced,true,1},{&armorPercent,1},16,0,low,high) && low==201 && high==225);
+    check(!Affixes::ScalarBounds({1,enhanced,true,1},{&armorPercent,1},16,1,low,high));
+    armorPercent.bytes[0x20]=85;
+    check(!Affixes::ScalarBounds({1,enhanced,true,1},{&armorPercent,1},85,0,low,high));
     std::vector<Affixes::Property> damageProperties(3);
     damageProperties[0].bytes[0x18]=15; damageProperties[0].bytes[0x20]=48;
     damageProperties[0].bytes[0x19]=16; damageProperties[0].bytes[0x22]=49;
@@ -53,6 +64,42 @@ int main() {
     check(Affixes::Tier(family[0],family,false,100,[](const Affixes::Row& r){return r.Number(0x58)<30;})==2);
     family[3].bytes[0x54]=0;
     check(Affixes::Tier(family[0],family,false,100,yes)==2);
+    std::vector<Affixes::Property> tierProperties(4);
+    tierProperties[0].bytes[0x18]=1;tierProperties[0].bytes[0x20]=78;
+    tierProperties[1].bytes[0x18]=17;tierProperties[1].bytes[0x20]=238;
+    tierProperties[2].bytes[0x18]=17;tierProperties[2].bytes[0x20]=214;
+    tierProperties[3].bytes[0x18]=22;tierProperties[3].bytes[0x20]=97;
+    std::vector<Affixes::Row> thorns={row(1,6),row(14,6),row(40,6),row(67,6)};
+    for(auto& r:thorns)std::memcpy(r.bytes.data(),"of Thorns",10);
+    number(thorns[0],0x2c,1);number(thorns[0],0x30,1);
+    number(thorns[1],0x2c,1);number(thorns[1],0x30,3);
+    number(thorns[2],0x24,1);number(thorns[2],0x28,8);
+    number(thorns[3],0x24,1);number(thorns[3],0x28,12);
+    check(Affixes::Tier(thorns[0],thorns,true,100,yes,tierProperties)==2);
+    check(Affixes::Tier(thorns[1],thorns,true,100,yes,tierProperties)==1);
+    check(Affixes::Tier(thorns[2],thorns,true,100,yes,tierProperties)==2);
+    check(Affixes::Tier(thorns[3],thorns,true,100,yes,tierProperties)==1);
+    check(Affixes::Tier(thorns[2],thorns,true,100,yes)==1); // Optional witness refusal preserves old family.
+    auto defenseTiers=thorns;for(auto& r:defenseTiers)number(r,0x24,2);
+    check(Affixes::Tier(defenseTiers[2],{defenseTiers.data()+2,2},true,100,yes,tierProperties)==2);
+    number(defenseTiers[2],0x24,3);number(defenseTiers[3],0x24,3);
+    check(!defenseTiers[2].SameFamily(defenseTiers[3],tierProperties)); // Skill selector stays distinct.
+    tierProperties[1].bytes[0x19]=1;
+    check(!thorns[2].SameFamily(thorns[3],tierProperties)); // Mixed handlers are not coefficients.
+    tierProperties[1].bytes[0x19]=0;
+    number(thorns[3],0x28,0);check(!thorns[2].SameFamily(thorns[3],tierProperties));
+    std::array<unsigned char,36> experience{};for(unsigned n=0;n<8;++n){int cap=100;std::memcpy(experience.data()+n*4,&cap,4);}
+    check(ScalingAffixes::LevelCap(experience,102)==100);
+    check(!ScalingAffixes::LevelCap(experience,101));
+    int cap=99;std::memcpy(experience.data()+28,&cap,4);check(!ScalingAffixes::LevelCap(experience,102));
+    std::array<unsigned char,0x144> scalingMetadata{};scalingMetadata[0x32]=19;scalingMetadata[0x50]=2;
+    scalingMetadata[0x51]=3;scalingMetadata[0x52]=12;
+    check(ScalingAffixes::Bounds(scalingMetadata,8,100)==std::pair{1,100});
+    check(ScalingAffixes::Bounds(scalingMetadata,12,100)==std::pair{1,150});
+    check(ScalingAffixes::Bounds(scalingMetadata,48,100)==std::pair{6,600});
+    check(ScalingAffixes::Bounds(scalingMetadata,8,99)==std::pair{1,99});
+    scalingMetadata[0x52]=0;check(!ScalingAffixes::Bounds(scalingMetadata,8,100));
+    scalingMetadata[0x52]=12;scalingMetadata[0x50]=6;check(!ScalingAffixes::Bounds(scalingMetadata,8,100));
     std::vector<Affixes::Property> props(1);
     props[0].bytes[0x18]=1; props[0].bytes[0x20]=31;
     auto defense=row(1);

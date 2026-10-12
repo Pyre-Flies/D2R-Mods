@@ -6,6 +6,8 @@
 #include <cstdio>
 #include <algorithm>
 #include <cerrno>
+#include <optional>
+#include <climits>
 namespace RangeText {
 struct Analysis { std::string key, prefix, marker; };
 inline std::size_t Color(std::string_view s,std::size_t i,char& color) {
@@ -107,6 +109,11 @@ inline std::string DisplayBounds(const std::string& bounds) {
         std::snprintf(result,sizeof(result),"%+lld - %+lld",firstLow,secondHigh);
         return result;
     }
+    used=0;
+    if(sscanf_s(bounds.c_str(),"%lld - %lld%n",&firstLow,&firstHigh,&used)==2 &&
+       used==static_cast<int>(bounds.size()) && firstLow==firstHigh){
+        char result[96]{};std::snprintf(result,sizeof(result),"%+lld",firstHigh);return result;
+    }
     return bounds;
 }
 inline std::vector<std::string_view> Lines(std::string_view s) {
@@ -119,6 +126,10 @@ struct PairedContribution {
     int minLow{},minHigh{},maxLow{},maxHigh{};
     std::string label;
 };
+struct OwnedContribution {
+    int low{},high{};std::optional<int> value;std::string label;
+    int maxLow{},maxHigh{};std::optional<int> maxValue;
+};
 struct Label {
     std::string key, text;
     std::vector<Contribution> parts{};
@@ -127,7 +138,76 @@ struct Label {
     std::vector<std::string> unknownSources{};
     std::vector<PairedContribution> pairedParts{};
     bool rangeExpected{};
+    bool fixedSocketParts{};
+    std::vector<OwnedContribution> ownedParts{};
+    std::optional<int> ownedTotal{},ownedMaxTotal{};
+    bool replaceNativeRange{};
 };
+// An owned source has independently captured actuals and agreeing definitions.
+// Native partial intervals are replaced only when every source is accounted for.
+inline std::string ExpandOwned(std::string_view original,const Label& label) {
+    if(label.ownedParts.empty()||label.ownedParts.size()>12||!label.ownedTotal)return {};
+    const bool paired=label.ownedMaxTotal.has_value();
+    std::string plain;
+    for(std::size_t i=0;i<original.size();){char color{};const auto n=Color(original,i,color);if(n)i+=n;else plain+=original[i++];}
+    struct Number {std::size_t start,finish;long long value;bool plus,percent;};
+    std::vector<Number> numbers;
+    for(std::size_t i=0;i<plain.size();){
+        if(!Digit(plain[i])){++i;continue;}
+        auto at=i;if(i && (plain[i-1]=='+'||plain[i-1]=='-') && (i<2||!Digit(plain[i-2])))--at;
+        char* end{};errno=0;const auto value=std::strtoll(plain.c_str()+at,&end,10);
+        const auto finish=static_cast<std::size_t>(end-plain.c_str());
+        if(errno||finish<=at||(finish<plain.size()&&(plain[finish]=='.'||plain[finish]==',')))return {};
+        numbers.push_back({at,finish,value,plain[at]=='+',finish<plain.size()&&plain[finish]=='%'});i=finish;
+    }
+    if(numbers.size()!=(paired?2u:1u)||numbers[0].value!=*label.ownedTotal||
+       (paired && (numbers[1].value!=*label.ownedMaxTotal||numbers[0].percent||numbers[1].percent)))return {};
+    long long lo=0,hi=0,maxLo=0,maxHi=0,valueSum=0,maxValueSum=0;bool allValues=true,allMaxValues=true;
+    for(const auto& p:label.ownedParts){
+        if(p.low>p.high||(p.value&&(*p.value<p.low||*p.value>p.high))||
+           (paired && (p.maxLow>p.maxHigh||(p.maxValue&&(*p.maxValue<p.maxLow||*p.maxValue>p.maxHigh)))))return {};
+        lo+=p.low;hi+=p.high;maxLo+=p.maxLow;maxHi+=p.maxHigh;
+        if(p.value)valueSum+=*p.value;else allValues=false;
+        if(p.maxValue)maxValueSum+=*p.maxValue;else allMaxValues=false;
+    }
+    if(*label.ownedTotal<lo||*label.ownedTotal>hi||
+       (paired&&(*label.ownedMaxTotal<maxLo||*label.ownedMaxTotal>maxHi))||
+       (allValues&&valueSum!=*label.ownedTotal)||(paired&&allMaxValues&&maxValueSum!=*label.ownedMaxTotal))return {};
+    auto valueText=[](std::optional<int> value,bool plus){return value?std::string(plus&&*value>=0?"+":"")+std::to_string(*value):std::string("?");};
+    auto bounds=[](long long a,long long b,bool plus,bool percent){
+        const auto text=[&](long long v){return std::string(plus&&v>=0?"+":"")+std::to_string(v)+(percent?"%":"");};
+        return a==b?text(b):text(a)+" - "+text(b);
+    };
+    const std::string marker="\xee\x81\xbe";
+    std::string combinedBounds=bounds(lo,hi,numbers[0].plus,numbers[0].percent);
+    if(paired)combinedBounds+=" / "+bounds(maxLo,maxHi,numbers[1].plus,false);
+    // A socket-only property has a single complete source and needs no duplicate
+    // total/child row. Fixed modifier bounds use a single signed value.
+    if(label.ownedParts.size()==1)return marker+"U["+combinedBounds+"]"+marker+"3 "+std::string(original)+" "+marker+"U"+label.ownedParts[0].label+marker+"3";
+    std::string result;
+    for(auto it=label.ownedParts.rbegin();it!=label.ownedParts.rend();++it){
+        std::string sourceBounds=bounds(it->low,it->high,numbers[0].plus,numbers[0].percent);
+        if(paired)sourceBounds+=" / "+bounds(it->maxLow,it->maxHigh,numbers[1].plus,false);
+        result+=marker+"5["+sourceBounds+"] "+plain.substr(0,numbers[0].start)+valueText(it->value,numbers[0].plus);
+        if(paired){result+=plain.substr(numbers[0].finish,numbers[1].start-numbers[0].finish);result+=valueText(it->maxValue,numbers[1].plus);result+=plain.substr(numbers[1].finish);}
+        else result+=plain.substr(numbers[0].finish);
+        result+=" "+it->label+marker+"3\n";
+    }
+    result+=marker+"U["+combinedBounds+"]"+marker+"3 "+std::string(original)+" [Combined]";
+    return result;
+}
+// Native range clones usually omit fixed affixes. Show their proven bound
+// only when the actual scalar equals the complete sum of fixed definitions.
+inline std::string ExpandFixedAffixes(std::string_view original,const std::vector<Contribution>& parts) {
+    if(parts.empty()||parts.size()>6)return {};
+    Label label;long long total=0;
+    for(const auto& part:parts){
+        if(part.low!=part.high)return {};
+        total+=part.high;label.ownedParts.push_back({part.low,part.high,part.high,part.label});
+    }
+    if(total<INT_MIN||total>INT_MAX)return {};
+    label.ownedTotal=static_cast<int>(total);return ExpandOwned(original,label);
+}
 // Compare two native scalar renders; preserve localized wording and signs.
 inline std::string EndpointRange(std::string_view actual,std::string_view low,std::string_view high) {
     if (Analyze(actual).key!=Analyze(low).key || Analyze(actual).key!=Analyze(high).key) return {};
@@ -157,6 +237,22 @@ inline std::string EndpointRange(std::string_view actual,std::string_view low,st
     if (value<lo || value>hi) return {};
     const std::string unit=lp?"%":"";
     return std::to_string(lo)+unit+" - "+std::to_string(hi)+unit;
+}
+inline std::string FixedProcChance(std::string_view original,int chance,int level) {
+    std::string plain;
+    for(std::size_t n=0;n<original.size();){char color{};const auto token=Color(original,n,color);
+        if(token)n+=token;else plain+=original[n++];}
+    std::vector<std::pair<long long,bool>> values;
+    for(std::size_t n=0;n<plain.size();++n)if(Digit(plain[n])){
+        char* end{};errno=0;const auto value=std::strtoll(plain.c_str()+n,&end,10);if(errno)return {};
+        const auto finish=static_cast<std::size_t>(end-plain.c_str());
+        if(n && (plain[n-1]=='-' || plain[n-1]=='+'))return {};
+        if(finish<plain.size() && (plain[finish]=='.' || plain[finish]==','))return {};
+        values.push_back({value,finish<plain.size() && plain[finish]=='%'});n=finish-1;
+    }
+    if(values.size()!=2 || values[0]!=std::pair<long long,bool>{chance,true} ||
+       values[1]!=std::pair<long long,bool>{level,false})return {};
+    return std::to_string(chance)+"%";
 }
 // A numeric split is valid only if the complete native interval agrees with
 // the sum of source intervals. Never choose an arbitrary solution to a sum.
@@ -223,8 +319,9 @@ inline std::string Expand(std::string_view original,const Analysis& native,
         const auto index=parts.size()-1-i;
         const auto& p=parts[index];
         const std::string tint=parts.size()>1?"5":"U";
-        result+=marker+tint+"["+std::to_string(p.low)+(percent?"%":"")+"-"+
-            std::to_string(p.high)+(percent?"%":"")+"]"+(parts.size()>1?" ":marker+"3 ");
+        result+=marker+tint+"["+std::to_string(p.low)+(percent?"%":"");
+        if(p.low!=p.high)result+="-"+std::to_string(p.high)+(percent?"%":"");
+        result+="]"+(parts.size()>1?" ":marker+"3 ");
         result+=plain.substr(0,number);
         if (exact) {
             if (plus && values[index]>=0) result+='+';
@@ -235,6 +332,40 @@ inline std::string Expand(std::string_view original,const Analysis& native,
         result+=marker+"3";
     }
     if (!exact) result+='\n'+marker+"3"+std::string(original)+" [Combined]";
+    return result;
+}
+// The first socket control is IAS: complete fixed host definitions plus owned
+// socket values. Keep the actual total above gray source rows, even with no
+// native range (fixed modifiers normally have none).
+inline std::string ExpandFixedSockets(std::string_view original,const std::vector<Contribution>& parts) {
+    if (parts.size()<2 || parts.size()>6) return {};
+    long long sum=0;
+    for (const auto& part:parts) {if (part.low!=part.high || part.low<0) return {};sum+=part.low;}
+    std::string plain;
+    for (std::size_t i=0;i<original.size();) {
+        char color{};const auto token=Color(original,i,color);
+        if (token) i+=token;else plain+=original[i++];
+    }
+    std::size_t start=plain.npos,finish=0;long long total=0;
+    for (std::size_t i=0;i<plain.size();++i) {
+        if (!Digit(plain[i])) continue;
+        if (start!=plain.npos) return {};
+        start=i;if (i && (plain[i-1]=='+' || plain[i-1]=='-')) --start;
+        char* end{};errno=0;total=std::strtoll(plain.c_str()+start,&end,10);
+        if (errno) return {};
+        finish=static_cast<std::size_t>(end-plain.c_str());
+        if (finish>=plain.size() || plain[finish]!='%') return {};
+        i=finish-1;
+    }
+    if (start==plain.npos || total!=sum) return {};
+    const std::string marker="\xee\x81\xbe";
+    std::string result;
+    for (auto p=parts.rbegin();p!=parts.rend();++p) {
+        result+=marker+"5"+plain.substr(0,start);
+        if (plain[start]=='+') result+='+';
+        result+=std::to_string(p->low)+plain.substr(finish)+" "+p->label+marker+"3\n";
+    }
+    result+=original;
     return result;
 }
 inline std::string ExpandUnknown(std::string_view original,const Analysis& native,
@@ -349,9 +480,34 @@ inline Result Merge(std::string_view actual,std::string_view ranged,std::size_t 
         } else if (actualCount!=1 || rangeCount!=1) ++result.unmatched;
         const Label* label=nullptr; unsigned labelCount=0;
         for (const auto& entry:labels) if (entry.key==a[i].key) { label=&entry; ++labelCount; }
-        if (prefix.empty() && actualCount==1 && labelCount==1 && label && !label->fallbackRange.empty()) {
+        if(actualCount==1&&labelCount==1&&label&&!label->ownedParts.empty()){
+            const auto expanded=ExpandOwned(originals[i],*label);
+            if(!expanded.empty()){
+                result.text+=expanded;++result.labeled;
+                if(i+1<originals.size()||actual.ends_with('\n'))result.text+='\n';
+                continue;
+            }
+        }
+        if (actualCount==1 && labelCount==1 && label && label->fixedSocketParts) {
+            const auto expanded=ExpandFixedSockets(originals[i],label->parts);
+            if (!expanded.empty()) {
+                result.text+=expanded;++result.labeled;
+                if (i+1<originals.size() || actual.ends_with('\n')) result.text+='\n';
+                continue;
+            }
+        }
+        if(actualCount==1&&labelCount==1&&label&&prefix.empty()){
+            const auto expanded=ExpandFixedAffixes(originals[i],label->parts);
+            if(!expanded.empty()){
+                result.text+=expanded;++result.labeled;
+                if(i+1<originals.size()||actual.ends_with('\n'))result.text+='\n';
+                continue;
+            }
+        }
+        if (actualCount==1 && labelCount==1 && label && !label->fallbackRange.empty() &&
+            (prefix.empty() || label->replaceNativeRange)) {
+            if(prefix.empty())++result.annotated;
             prefix="\xee\x81\xbe" "U["+label->fallbackRange+"]\xee\x81\xbe" "3 ";
-            ++result.annotated;
         }
         if (actualCount==1 && rangeCount==1 && labelCount==1 && label && match) {
             auto expanded=Expand(originals[i],*match,label->parts,label->allowPartialNativeRange);

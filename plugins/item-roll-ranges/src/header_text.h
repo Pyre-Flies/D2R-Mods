@@ -3,6 +3,40 @@
 #include <optional>
 namespace HeaderText {
 inline constexpr std::string_view Footer="(?) Range Unavailable - Please report item affixes";
+// The native builder returns the whole tooltip in bottom-to-top line order,
+// including modifiers. Capacity belongs just before Required Level in that
+// buffer, not at its beginning. For items without a level requirement, use
+// the first (lowest displayed) recognized native header line.
+inline std::string SocketCapacity(std::string_view text,std::string_view capacityKey,
+    std::string_view label,const std::vector<std::string>& anchors) {
+    const auto lines=RangeText::Lines(text);
+    for(const auto line:lines)if(RangeText::Analyze(line).key==capacityKey)return std::string(text);
+    if(anchors.empty() || anchors[0].empty())return std::string(text);
+    const auto matches=[](std::string_view line,const std::string& key) {
+        if(key.empty())return false;
+        const auto shape=RangeText::Analyze(line).key;
+        // Existing Base or unknown annotations can extend a Defense/damage
+        // key; accept only the suffix shapes produced by this header adapter.
+        return shape==key || shape==key+"#" || shape==key+"(?)";
+    };
+    std::size_t position=lines.size();unsigned count=0;
+    for(std::size_t n=0;n<lines.size();++n)if(matches(lines[n],anchors[0])){position=n;++count;}
+    if(count>1)return std::string(text);
+    if(!count)for(std::size_t a=1;a<anchors.size();++a){
+        std::size_t at=lines.size();count=0;
+        for(std::size_t n=0;n<lines.size();++n)if(matches(lines[n],anchors[a])){at=n;++count;}
+        if(count>1)return std::string(text);
+        if(count)position=std::min(position,at);
+    }
+    if(position==lines.size())return std::string(text);
+    std::string result;
+    for(std::size_t n=0;n<lines.size();++n){
+        if(n==position)result+="\xee\x81\xbe" "0"+std::string(label)+'\n';
+        result+=lines[n];result+='\n';
+    }
+    if(!text.ends_with('\n') && !result.empty())result.pop_back();
+    return result;
+}
 inline std::vector<long long> Numbers(std::string_view line) {
     std::string plain;
     for (std::size_t n=0;n<line.size();) {

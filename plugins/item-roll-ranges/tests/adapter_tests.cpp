@@ -9,6 +9,7 @@ void check(bool value) { if (!value) std::exit(1); }
 void* testSlot{};
 void TestPropertyPasses();
 void TestAffixRead();
+void TestOwnedContributionAdapter();
 void TestRangeHelper();
 void TestSpecial();
 void TestUniqueRange();
@@ -70,6 +71,19 @@ int main() {
     TestTooltipVisibilitySnapshots();
     check(FixedHeaderRequest(true,2,0));check(!FixedHeaderRequest(true,0,1));
     check(FixedHeaderRequest(false,0,1));check(!FixedHeaderRequest(false,2,0));
+    std::array<unsigned char,12> requestSource{};requestSource[0]=4;requestSource[8]=55;
+    PropertyRequest request{requestSource.data(),55,true};
+    check(MatchingPropertyRequest(request,requestSource.data()));
+    request.held=false;check(!MatchingPropertyRequest(request,requestSource.data()));request.held=true;
+    request.id=54;check(!MatchingPropertyRequest(request,requestSource.data()));request.id=55;
+    check(!MatchingPropertyRequest(request,nullptr));
+    BeginPropertyRequest(requestSource.data(),true);
+    check(!TakePropertyRequest(false,false).held && pendingPropertyRequest.held);
+    check(!TakePropertyRequest(true,true).held && pendingPropertyRequest.held);
+    check(MatchingPropertyRequest(TakePropertyRequest(true,false),requestSource.data()));
+    check(!TakePropertyRequest(true,false).held);
+    BeginPropertyRequest(requestSource.data(),true);BeginPropertyRequest(requestSource.data(),false);
+    check(!TakePropertyRequest(true,false).held); // Next tooltip observes release.
 
     TestRestoredHeaderContext();
     unsigned char sourceUnit[0x90]{},cloneUnit[0x90]{};
@@ -152,6 +166,7 @@ int main() {
     check(compositeLines.size()==2 && compositeLines[0].stat==57 && compositeLines[1].stat==48);
     TestPropertyPasses();
     TestAffixRead();
+    TestOwnedContributionAdapter();
     TestRangeHelper();
     TestSpecial();
     TestUniqueRange();
@@ -165,7 +180,7 @@ int main() {
     check(!D2RLoaderLoadPlugin(nullptr));
     auto info=D2RLoaderGetPluginInfo();
     check(std::strcmp(info->id,"item-roll-ranges")==0);
-    check(std::strcmp(info->version,"1.3.1+rev.25")==0);
+    check(std::strcmp(info->version,"1.3.1+rev.34")==0);
     std::puts("Passed real adapter passthrough/ABI, inactive late calls, atomic slot conflict/restore, exported identity.");
 }
 
@@ -225,9 +240,41 @@ void TestCalculatedHeaders() {
     put(child,0x20,0); put(data,0x18,0x10u); put(row,0xd4,29); put(row,0xd8,34); put(primary,8,30);
     base=ArmorBaseRange(unit,data,row); check(base && *base==std::pair{29,34}); // Variable intrinsic armor rolls.
     put(primary,8,40); check(!ArmorBaseRange(unit,data,row)); // No guessed custom base.
+    put(row,0xd4,111); put(row,0xd8,126); put(primary,8,121); put(data,0,2u);
+    base=ArmorBaseRange(unit,data,row); check(base && *base==std::pair{111,126});
+    put(data,0,3u); put(primary,8,118); put(modifiers,0,std::uint64_t{75}<<32); put(modifiers,8,11);
+    base=ArmorBaseRange(unit,data,row); check(base && *base==std::pair{111,126}); // Superior durability only.
+    put(primary,8,127); put(modifiers,0,std::uint64_t{16}<<32); put(modifiers,8,8);
+    base=ArmorBaseRange(unit,data,row); check(base && *base==std::pair{127,127}); // Superior ED.
+    put(data,0,1u); put(primary,8,87); put(child,0x38,std::uint64_t{0});
+    base=ArmorBaseRange(unit,data,row); check(base && *base==std::pair{83,94}); // Live crude control.
+    put(primary,8,83); check(ArmorBaseRange(unit,data,row)==std::pair{83,94});
+    put(primary,8,94); check(ArmorBaseRange(unit,data,row)==std::pair{83,94});
+    put(primary,8,95); check(!ArmorBaseRange(unit,data,row));
+    put(primary,8,121); check(!ArmorBaseRange(unit,data,row)); // Do not fall through to normal range.
+    put(primary,8,87); put(data,0x18,0x400010u); check(!ArmorBaseRange(unit,data,row));
+    put(data,0x18,0x10u); put(row,0xd4,1); put(row,0xd8,2); put(primary,8,0);
+    check(ArmorBaseRange(unit,data,row)==std::pair{0,1}); // Armor has no weapon minimum-one clamp.
+    check(!BaseRanges::LowArmor(-1)); check(BaseRanges::LowArmor(INT_MAX)==1610612735);
+    put(data,0,2u);
     row[0x113]=9; row[0x114]=19; put(primary,0,std::uint64_t{23}<<32); put(primary,8,9);
     put(primary,16,std::uint64_t{24}<<32); put(primary,24,19); put(stats,0x38,std::uint64_t{2});
     base=WeaponBaseRange(unit,data,row,23,24,0x113,0x114); check(base && *base==std::pair{9,19});
+    put(data,0,1u); put(primary,8,6); put(primary,24,14);
+    base=WeaponBaseRange(unit,data,row,23,24,0x113,0x114); check(base && *base==std::pair{6,14});
+    put(primary,24,15); check(!WeaponBaseRange(unit,data,row,23,24,0x113,0x114));
+    put(primary,24,14); put(data,0x18,0x400010u); check(!WeaponBaseRange(unit,data,row,23,24,0x113,0x114));
+    put(data,0x18,0x10u); row[0x113]=1; row[0x114]=5; put(primary,8,1); put(primary,24,3);
+    check(WeaponBaseRange(unit,data,row,23,24,0x113,0x114)==std::pair{1,3});
+    // Live Long Sword controls use one-hand stats21/22. Superior ED stays in own lists.
+    row[0x10f]=3; row[0x110]=19; put(primary,0,std::uint64_t{21}<<32); put(primary,16,std::uint64_t{22}<<32);
+    put(primary,8,2); put(primary,24,14);
+    check(WeaponBaseRange(unit,data,row,21,22,0x10f,0x110)==std::pair{2,14});
+    put(data,0,3u); put(primary,8,3); put(primary,24,19);
+    check(WeaponBaseRange(unit,data,row,21,22,0x10f,0x110)==std::pair{3,19});
+    check(!BaseRanges::LowWeapon(-1)); check(BaseRanges::LowWeapon(0)==1);
+    row[0x113]=9; row[0x114]=19; put(primary,0,std::uint64_t{23}<<32); put(primary,16,std::uint64_t{24}<<32);
+    put(primary,8,9); put(primary,24,19);
     // Base provenance is independent of proc, per-level, socket or ED sources.
     put(child,0x20,165); put(data,0,7);
     base=WeaponBaseRange(unit,data,row,23,24,0x113,0x114); check(base && *base==std::pair{9,19});
@@ -421,4 +468,6 @@ void TestSpecial() {
 }
 
 }
+
+#include "contribution_adapter_tests.h"
 

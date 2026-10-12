@@ -1,19 +1,19 @@
 # Controller QOL Updates
 
 **Made by PyreFly for D2RLoader**  
-Version **1.3.1+rev.76-beta.4** (testing prerelease) | Windows x64 | Diablo II: Resurrected
+Version **1.3.1+rev.76** | Windows x64 | Diablo II: Resurrected
 
 **Please test this release and report all bugs at
 [GitHub Issues](https://github.com/Pyre-Flies/D2R-Mods/issues/new). Online play
 has not yet been validated.** See the
-[testing release notes](https://github.com/Pyre-Flies/D2R-Mods/releases/tag/beta-controller-qol-2026.10.11.1).
+[release notes](https://github.com/Pyre-Flies/D2R-Mods/releases/tag/release-2026.10.12.2).
 
 Controller QOL Updates adds direct controller looting, contextual item actions,
 stash and Cube transfers, belt management, clearer controller prompts, and
 controller-friendly menu navigation. It preserves the game's native item,
 storage, vendor, and interaction rules.
 
-Rev.76-beta.4 adds Cube self-insertion guards and overlapping Shared-trigger
+Rev.76 adds Cube self-insertion guards and overlapping Shared-trigger
 ownership after beta.3 live failures. The local candidate passes 33 automated
 suites. The user confirmed Cube self-insertion prevention, the Shared Stash
 escape fix and Cube behavior through rejoins, and accepted non-online gameplay
@@ -198,14 +198,14 @@ R3 keeps only one rolling `.r3.bak` per profile; migration backups are separate.
 | `trigger_threshold` | `30` | Analog trigger threshold reserved by the configuration; the current build uses 30 |
 | `ground_pickup` | `true` | Enable direct ground-label assignments and pickup chords |
 | `ground_pickup_button` | `"bumper"` | Direct-loot modifier. Supports `lb`, `rb`, `lt`, `rt`, `l3`, `r3`, bracket/paddle aliases, or a single keyboard letter/number |
-| `ground_pickup_distance` | `6` | Direct-loot search distance, clamped to 1â€“20 game units |
+| `ground_pickup_distance` | `6` | Direct-loot search distance, clamped to 1Ã¢â‚¬â€œ20 game units |
 | `block_filtered_pickup` | `true` | Prevent controller pickup of ground items without an active visible label; mouse and keyboard pickup is unaffected |
 | `prioritize_portals` | `true` | Prefer eligible portals over ground loot for neutral A |
 | `prioritize_stash_boxes` | `true` | Prefer the town stash over ground loot for neutral A |
 | `prioritize_waypoints` | `true` | Prefer eligible waypoints over ground loot for neutral A |
 | `prioritize_shrines` | `true` | Prefer shrines and supported wells/fountains over ground loot for neutral A |
 | `prioritize_chests` | `true` | Prefer supported ordinary chests over ground loot for neutral A |
-| `portal_priority_distance` | `10` | Shared priority-object range, clamped to 1â€“20 game units |
+| `portal_priority_distance` | `10` | Shared priority-object range, clamped to 1Ã¢â‚¬â€œ20 game units |
 | `debug_logging` | `false` | Enable general diagnostic logging |
 | `portal_diagnostics` | `false` | Enable targeted, throttled object-priority diagnostics independently of general debug logging |
 
@@ -310,7 +310,7 @@ controls that skill if their behaviors compete.
 
 Whirlwind's two pass-through options also belong in the skill profile, under
 `[aim.whirlwind]`: `whirlwind_pass_through_enabled` (default `true`) and
-`whirlwind_pass_through_distance` (default `1.5`, range 0–15 tiles). Zero distance
+`whirlwind_pass_through_distance` (default `1.5`, range 0â€“15 tiles). Zero distance
 targets the enemy directly. Their old `[aim]` values migrate automatically.
 
 The main `controller-qol-updates.toml` holds `[qol]` and shared `[aim]` preferences:

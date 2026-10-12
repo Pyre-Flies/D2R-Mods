@@ -1,60 +1,72 @@
-# D2R Mods release 2026.10.12.1
+# D2R Mods release 2026.10.12.2
 
-## Item Roll Ranges 1.3.1+rev.25
+| Plugin | Version |
+| --- | --- |
+| Controller QOL Updates | 1.3.1+rev.76 |
+| Item Roll Ranges | 1.3.1+rev.34 |
+| Map Assistance | 1.3.1+rev.1 |
+| Inventory Deposit | 0.1.0-beta.13 |
+| Floating Damage | 0.1.0-beta.12 |
 
-Restore modifier ranges and source labels for Reimagined unique/set definitions
-hidden from the Chronicle. Item Roll Ranges now supplies guarded, private
-tooltip-only definition snapshots, so Chronicle Items is no longer required
-for those ranges. Shared definition flags, Chronicle visibility and save data
-are unchanged. Unique property labels are shortened from `[Unique]` to `[U]`,
-including fixed-value properties. Set properties retain native ranges without
-additional set source labels.
+## Item Roll Ranges
 
-The user confirmed Lustwander's ranges/labels, Chiad's Heartbane's Enhanced
-Defense range and Base Defense, and the shortened unique marker in game with
-the standalone setup. All five automated suites pass, including immutable
-definition snapshots and exclusion of unrelated callers. Existing Base headers
-and native Ctrl/controller input handling are retained. Dedicated controller,
-localization and every item-family/plugin combination are not fully validated.
-Socket, enchantment and corruption contributions do not yet have complete
-source attribution or expanded breakdowns; this release does not add `[E]`.
+Expand proven overlapping host affixes, socketed jewels/runes/gems and completed
+corruption bonuses into a combined total followed by gray source rows. Socket
+sources use insertion order; corruption bonuses use [C]. Individual rolls stay
+unknown when a saved combined value cannot uniquely identify them. Enchantments
+remain deferred; unsupported or ambiguous source operations retain native text.
 
-## Floating Damage 0.1.0-beta.12
+Show compact fixed modifier bounds such as [+38], including Loremaster and
+fixed speed/proc prefixes. Preserve explicit Base endpoints on Defense and
+physical-damage headers, with normal, generated-ED, ethereal and supported
+low-quality handling. Use the active level cap for verified scaling affixes,
+and distinguish property/coefficient families even when affix names repeat.
 
-Scale text and its offsets, lanes, motion, outline, shadow and backing to the
-viewport, using 1920 x 1080 as the baseline. `resolution_scaling = true` is the
-default: 4K uses 2x and 1440p uses 4/3x, bounded to 0.25-4x. Set it to false
-to retain fixed screen pixels. HP values, grouping and timing are unchanged.
+Restore ranges on identified items without a native range clone. Correct the
+observed extended stat-list flags, Enhanced Defense handler and flat Thorns
+fallback. Godly/Silver-Wrought and compatible Eagleeye/Trump overlaps receive
+source breakdowns with full bounds. Chronicle-hidden unique/set definition
+support and the compact [U] marker remain included; set labels are unchanged.
 
-Choose `critical_style = "suffix"`, `"size"` or `"both"` (default). Suffix uses
-normal-size `!!`; size enlarges without the suffix; both retains the existing
-enlarged `!!`. `critical_size_scale` and `critical_hits` keep their existing
-meaning. Damage-type colors and native critical association are unchanged.
-Saved config files are preserved; omitted new keys select these defaults.
+Socketed items show Max Sockets in the normal header position while ranges are
+held. Weapons retain Required Level / Max Sockets / Attack Speed order. Native
+Ctrl and controller range queries remain untouched; release restores ordinary
+tooltips. No Item SDK, gameplay writes or new input interception is added.
 
-All seven automated suites pass, including the production drawing adapter at
-2x scale, configuration/mode cases and exact-DLL ABI/default/version checks.
-New resolution scaling and critical-style modes remain pending live visual
-validation. Floating Damage retains beta status and targets local single
-player; remote-client, dense-combat and broader session/resolution coverage
-remain limited. No new native hook or gameplay behavior is introduced.
+Seven automated suites pass. User checks confirm the reviewed socket/corruption
+breakdowns, Defense headers, Shadow Mantle's ED/Thorns and corrected socket
+header placement. Every item family, localization, controller combination and
+unsupported operation has not been validated. Please report missing or incorrect
+ranges with the item tooltip, affixes and active mod version.
 
-## Included packages and installation
+## Controller QOL rev.76
 
-Controller QOL Updates 1.3.1+rev.75, Map Assistance 1.3.1+rev.1 and Inventory
-Deposit 0.1.0-beta.13 are included unchanged from release-2026.10.11.1. The
-separate Controller QOL rev.76 beta is not promoted by this release.
+Publish the reviewed rev.76 beta.4 implementation as rev.76, without a beta
+version suffix. Retain ordinary-chest priority defaults, guarded Cube
+self-insertion prevention, overlapping LT/RT Shared-page ownership, serialized
+shortcut routing and audited local/guest loot handling. Existing explicit
+settings are preserved. Includes native Mod Information bumper navigation and
+stash-tab feedback for bulk deposits.
 
-Close the game and loader, back up installed DLLs, and extract only the wanted
-ZIPs into the game directory or active mod directory. Keep one active copy
-per plugin. DLLs install under `d2rloader/plugins/`; reference TOMLs are under
-`defaults/`, never live config paths. Keep customized settings. The loader
-creates missing configs; merge new keys manually if desired. A cold restart
-is required. Item Roll Ranges requires Core item stat ranges enabled. All
-native features require their documented exact build/provider admission.
+All 33 automated suites pass. The user confirmed Cube self-insertion prevention,
+Shared Stash escape prevention and Cube behavior through rejoins, and accepted
+non-online gameplay. Online qualification and some navigation/feedback coverage
+remain open; review the included audit evidence. Please report bugs with the
+input sequence, active storage page, mod and local/hosted/remote context.
 
-Local verification: all 55 CTest suites (29 QOL, 5 ranges, 2 map assistance,
-12 inventory deposit and 7 floating damage), all 19 packaging tests, five ZIP
-integrity/content/config-preservation audits and internal/external checksums.
-These checks are separate from the live-game evidence above. GitHub CI and
-published download checksums are verified as part of publication.
+## Other included packages
+
+Floating Damage beta.12 retains viewport scaling and critical-style choices
+from the previous release. Inventory Deposit beta.13 and Map Assistance rev.1
+are included at their existing versions. Floating Damage remains a local-player
+HP-loss overlay; resolution/critical-style visual coverage is limited. Inventory
+Deposit's broader remote/resolution/persistence coverage remains incomplete.
+
+## Install
+
+Close the game and loader, back up installed DLLs and extract only the wanted
+plugin ZIPs into the game directory or active mod directory. Keep one active
+copy per plugin. DLLs install under d2rloader/plugins/. Reference TOMLs are under
+defaults/, never live configuration paths; preserve customized settings. Item
+Roll Ranges requires Core item stat ranges enabled. A cold restart is required.
+Each ZIP has internal SHA256SUMS; the release's SHA256SUMS covers all five ZIPs.

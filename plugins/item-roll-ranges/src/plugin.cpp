@@ -2,6 +2,7 @@
 #include <intrin.h>
 #include <bcrypt.h>
 #include <D2RLPlugin/context.h>
+#include <D2RLPlugin/data_tables.h>
 #include <algorithm>
 #include <atomic>
 #include <cstdint>
@@ -19,6 +20,13 @@
 #include "base_ranges.h"
 #include "weapon_profile.h"
 #include "visibility_profile.h"
+#include "socket_profile.h"
+#include "contribution_model.h"
+#include "contribution_definitions.h"
+#include "contribution_profile.h"
+#include "scaling_affixes.h"
+#include "scaling_profile.h"
+#include <deque>
 #include <vector>
 
 extern "C" void HeaderBuilderEntry();
@@ -28,6 +36,10 @@ using PanelFn = bool(__fastcall*)(int);
 PanelFn testPanel{};
 std::atomic<bool> active{false};
 std::atomic<bool> loaded{false};
+std::atomic<bool> contributionsReady{false};
+std::atomic<bool> scalingReady{false};
+const D2RL::PluginContext* contributionContext{};
+const D2RL::DataTableService* contributionTables{};
 using PropertiesFn=std::uint64_t(__fastcall*)(void*,char*,int,int,int,int,int,int,const void*,void*);
 PropertiesFn originalProperties{};
 void** propertiesSlot{};
@@ -122,6 +134,8 @@ BuilderFn originalBuilder{};
 AssignFn originalAssign{};
 ArmorFn getArmor{};
 LookupFn lookupHeader{};
+using SocketCapacityFn=unsigned char(__fastcall*)(void*);
+SocketCapacityFn nativeSocketCapacity{};
 void** builderSlot{}; void** assignSlot{};
 std::uintptr_t builderReturn{},assignReturn{};
 struct HeaderProof { NativeText* receiver{}; std::string actual,annotated; };
@@ -149,6 +163,22 @@ bool Allowed() noexcept;
 const void* NativeOverlay() noexcept;
 bool RangeFromOverlay(const void*) noexcept;
 thread_local bool fixedHeaderRequested{};
+struct PropertyRequest { const void* source{}; unsigned id{}; bool held{}; };
+thread_local PropertyRequest pendingPropertyRequest;
+void BeginPropertyRequest(const void* source,bool held) noexcept {
+    pendingPropertyRequest={};
+    if(held && Readable(source,12))pendingPropertyRequest={source,
+        Affixes::Read<unsigned>(static_cast<const unsigned char*>(source),8),true};
+}
+PropertyRequest TakePropertyRequest(bool callerMatches,bool nested) noexcept {
+    if(!callerMatches || nested)return {};
+    const auto request=pendingPropertyRequest;pendingPropertyRequest={};return request;
+}
+bool MatchingPropertyRequest(const PropertyRequest& request,const void* source) noexcept {
+    return request.held && request.source==source && Readable(source,12) &&
+        Affixes::Read<unsigned>(static_cast<const unsigned char*>(source),0)==4 &&
+        Affixes::Read<unsigned>(static_cast<const unsigned char*>(source),8)==request.id;
+}
 bool AddUnobservedCompositeIdentities(std::vector<CapturedLine>& lines,std::string_view actual,
     std::span<const Affixes::Rolled> rolled,std::span<const Affixes::Property> properties,
     Affixes::LayerEncoding encoding,std::span<const Affixes::PropertyGroup> groups,
@@ -324,6 +354,117 @@ std::string UniqueRange(void* source,const CapturedLine& line,const std::vector<
     }
     return actualMatches==1?found:std::string{};
 }
+#include "contribution_adapter.h"
+std::optional<int> ActiveLevelCap(const unsigned char* tables) {
+    if(!scalingReady.load() || !Readable(tables,0x14f0))return {};
+    const auto* rows=Affixes::Read<const unsigned char*>(tables,0x14e0);
+    const auto count=Affixes::Read<std::uint64_t>(tables,0x14e8);
+    if(!Readable(rows,36))return {};
+    return ScalingAffixes::LevelCap({rows,36},static_cast<std::size_t>(count));
+}
+std::string ScalingRange(void* source,const CapturedLine& line,std::span<const Affixes::Rolled> definitions,
+    std::span<const Affixes::Property> properties,const unsigned char* metadata,
+    const Contributions::Snapshot& snapshot,int cap,std::string_view actual) {
+    if(line.grouped || line.layer || !originalSingle || !Readable(metadata,0x144) ||
+       Affixes::Read<std::uint16_t>(metadata,0)!=line.stat)return {};
+    long long coefficient=0;unsigned matches=0;
+    for(const auto& affix:definitions)if(Affixes::Contributes(affix.row,properties,line.stat,0)) {
+        const auto value=ScalingAffixes::Coefficient(affix,properties,line.stat);
+        if(!value)return {};coefficient+=*value;++matches;
+    }
+    if(!matches || coefficient>INT_MAX ||
+       Contributions::Value(snapshot.own,static_cast<unsigned>(line.stat))!=coefficient ||
+       Contributions::Value(snapshot.total,static_cast<unsigned>(line.stat))!=coefficient)return {};
+    const auto bounds=ScalingAffixes::Bounds({metadata,0x144},static_cast<int>(coefficient),cap);
+    if(!bounds)return {};
+    char lower[256]{},upper[256]{};
+    if(!originalSingle(source,metadata,bounds->first,0,false,lower,1) ||
+       !originalSingle(source,metadata,bounds->second,0,false,upper,1))return {};
+    const auto ln=strnlen(lower,256),hn=strnlen(upper,256);if(ln==256 || hn==256)return {};
+    unsigned count=0;std::string range;
+    for(const auto text:RangeText::Lines(actual))if(RangeText::Analyze(text).key==line.key){
+        ++count;range=RangeText::EndpointRange(text,{lower,ln},{upper,hn});}
+    return count==1?range:std::string{};
+}
+std::string FixedProcRange(const CapturedLine& line,std::span<const Affixes::Rolled> definitions,
+    std::span<const Affixes::Property> properties,Affixes::LayerEncoding encoding,
+    const Contributions::Snapshot& snapshot,std::string_view actual) {
+    if(line.grouped || line.stat<0 || line.layer<0)return {};
+    unsigned matches=0;std::optional<std::pair<int,int>> operands;
+    for(const auto& affix:definitions)if(Affixes::Contributes(affix.row,properties,line.stat,line.layer,encoding)){
+        ++matches;operands=ScalingAffixes::Proc(affix,properties,line.stat,line.layer,encoding);}
+    if(matches!=1 || !operands)return {};
+    const auto key=std::uint64_t{static_cast<unsigned>(line.stat)}<<32 | static_cast<unsigned>(line.layer);
+    const auto find=[&](const Contributions::Stats& stats){
+        for(const auto& value:stats)if(value.key==key)return value.value;
+        return std::int64_t{0};};
+    if(find(snapshot.own)!=operands->first || find(snapshot.total)!=operands->first)return {};
+    unsigned count=0;std::string range;
+    for(const auto text:RangeText::Lines(actual))if(RangeText::Analyze(text).key==line.key){
+        ++count;range=RangeText::FixedProcChance(text,operands->first,operands->second);}
+    return count==1?range:std::string{};
+}
+void ScalingParts(const CapturedLine& line,std::span<const Affixes::Rolled> definitions,
+    std::span<const Affixes::Property> properties,const unsigned char* metadata,int cap,
+    std::string_view actual,RangeText::Label& label) {
+    if(!label.replaceNativeRange || line.layer || line.grouped || cap<1 || cap>255)return;
+    std::vector<int> coefficients;std::vector<RangeText::OwnedContribution> parts;
+    long long coefficient=0;
+    for(const auto& affix:definitions)if(Affixes::Contributes(affix.row,properties,line.stat,0)){
+        const auto value=ScalingAffixes::Coefficient(affix,properties,line.stat);
+        if(!value)return;const auto bounds=ScalingAffixes::Bounds({metadata,0x144},*value,cap);
+        if(!bounds)return;coefficient+=*value;coefficients.push_back(*value);
+        parts.push_back({bounds->first,bounds->second,{},Affixes::NamedLabel(affix)});
+    }
+    if(parts.size()<2 || parts.size()>6 || coefficient>INT_MAX)return;
+    unsigned matches=0;std::vector<long long> numbers;
+    for(const auto text:RangeText::Lines(actual))if(RangeText::Analyze(text).key==line.key){
+        ++matches;numbers=HeaderText::Numbers(text);}
+    if(matches!=1 || numbers.size()!=1 || numbers[0]<0 || numbers[0]>INT_MAX)return;
+    const auto factor=1ll<<metadata[0x51];
+    std::vector<int> values;bool found=false;
+    for(int level=1;level<=cap;++level){
+        std::vector<int> candidate;long long sum=0;
+        for(const auto c:coefficients){const auto v=static_cast<int>(static_cast<long long>(c)*level/factor);candidate.push_back(v);sum+=v;}
+        // A merged coefficient can round differently from separate coefficients.
+        // Refuse that decomposition rather than inventing a rounding remainder.
+        if(sum!=coefficient*level/factor)return;
+        if(sum==numbers[0]){if(found && candidate!=values)return;values=std::move(candidate);found=true;}
+    }
+    if(!found)return;
+    for(std::size_t n=0;n<parts.size();++n)parts[n].value=values[n];
+    label.ownedParts=std::move(parts);label.ownedTotal=static_cast<int>(numbers[0]);
+}
+// Recover identities when Core has no clone and its actual formatter bypasses
+// the range observers. Match exact native localized text to owned leaf stats.
+void AddOwnedScalarIdentities(void* source,const Contributions::Snapshot& snapshot,
+    std::string_view actual,std::span<const Affixes::Rolled> definitions,
+    std::span<const Affixes::Property> properties,Affixes::LayerEncoding encoding,
+    std::span<const Affixes::PropertyGroup> groups,const unsigned char* metadata,std::size_t count,
+    std::vector<CapturedLine>& observed) {
+    if(!originalSingle || snapshot.own.size()>256)return;
+    std::vector<CapturedLine> candidates;
+    for(const auto& value:snapshot.own){
+        const auto stat=static_cast<unsigned>(value.key>>32),layer=static_cast<unsigned>(value.key);
+        if(stat>=count || layer>INT_MAX)continue;const auto* row=metadata+stat*0x144;
+        const auto desc=Affixes::Read<std::uint16_t>(row,0x32);
+        if((desc!=19 || layer) && !(stat==83 && desc==13 && layer<8))continue;
+        if(Affixes::Read<std::uint16_t>(row,0)!=stat || Affixes::Read<std::uint16_t>(row,0x3a))continue;
+        if(Affixes::Label(definitions,properties,static_cast<int>(stat),static_cast<int>(layer),encoding,groups).empty())continue;
+        const auto normalized=Contributions::Normalize(value.value,row[0x14]);if(!normalized)continue;
+        char text[256]{};
+        if(!originalSingle(source,row,*normalized,static_cast<int>(layer),false,text,1))continue;
+        const auto size=strnlen(text,256);if(!size || size==256)continue;
+        const auto key=RangeText::Analyze({text,size}).key;
+        unsigned matches=0;
+        for(const auto line:RangeText::Lines(actual))if(RangeText::Analyze(line).key==key)++matches;
+        if(matches==1)candidates.push_back({key,static_cast<int>(stat),static_cast<int>(layer),false});
+    }
+    for(auto& candidate:candidates){
+        if(std::count_if(candidates.begin(),candidates.end(),[&](const CapturedLine& other){return other.key==candidate.key;})!=1)continue;
+        if(std::none_of(observed.begin(),observed.end(),[&](const CapturedLine& old){return old.key==candidate.key;}))observed.push_back(candidate);
+    }
+}
 std::vector<RangeText::Label> AffixLabels(void* source,const std::vector<CapturedLine>& lines,std::string_view actual={}) noexcept {
     try {
         if (!getTables || !eligibleAffix || (lines.empty() && actual.empty()) || !Readable(source,0x1be)) return {};
@@ -366,7 +507,8 @@ std::vector<RangeText::Label> AffixLabels(void* source,const std::vector<Capture
             const auto first=prefix?prefixIndex:0, last=prefix?autoIndex:prefixIndex;
             const auto& row=rows[index];
             const auto tier=Affixes::Tier(row,{rows+first,last-first},quality!=4,
-                Affixes::Read<std::uint16_t>(data,0x40),[&](const Affixes::Row& candidate) { return eligibleAffix(source,&candidate)!=0; });
+                Affixes::Read<std::uint16_t>(data,0x40),[&](const Affixes::Row& candidate) { return eligibleAffix(source,&candidate)!=0; },
+                scalingReady.load()?properties:std::span<const Affixes::Property>{});
             rolled.push_back({id,row,prefix,tier});
         }
         const auto autoId=Affixes::Read<std::uint32_t>(data-28,0);
@@ -396,13 +538,17 @@ std::vector<RangeText::Label> AffixLabels(void* source,const std::vector<Capture
         const auto itemStatCount=Affixes::Read<std::uint64_t>(tables,0x1260);
         const bool itemStatsValid=itemStatCount && itemStatCount<=4096 &&
             Readable(itemStats,static_cast<std::size_t>(itemStatCount)*0x144);
+        const auto scalingSnapshot=scalingReady.load()?CaptureItemContributions(source):std::optional<Contributions::Snapshot>{};
         std::vector<CapturedLine> observed=lines;
+        if(scalingSnapshot && itemStatsValid)AddOwnedScalarIdentities(source,*scalingSnapshot,actual,rolled,properties,
+            encoding,groups,itemStats,static_cast<std::size_t>(itemStatCount),observed);
         // Composite damage lines can bypass both native identity observers.
         // Require an exact line/family count; loaded native display priorities
         // provide the locale-independent mapping for different source labels.
         if (itemStatsValid) AddUnobservedCompositeIdentities(observed,actual,rolled,properties,
             encoding,groups,itemStats,static_cast<std::size_t>(itemStatCount));
         std::vector<RangeText::Label> labels;
+        const auto levelCap=ActiveLevelCap(tables);
         for (const auto& line:observed) {
             std::string text;
             if (line.grouped) {
@@ -458,6 +604,15 @@ std::vector<RangeText::Label> AffixLabels(void* source,const std::vector<Capture
                             label.rangeExpected=true;
                     }
                 }
+                if(scalingSnapshot && !line.grouped){
+                    if(line.stat>=0 && itemStatsValid && static_cast<std::uint64_t>(line.stat)<itemStatCount && levelCap){
+                        const auto range=ScalingRange(source,line,rolled,properties,itemStats+static_cast<std::size_t>(line.stat)*0x144,
+                            *scalingSnapshot,*levelCap,actual);
+                        if(!range.empty()){label.fallbackRange=range;label.replaceNativeRange=true;}
+                        ScalingParts(line,rolled,properties,itemStats+static_cast<std::size_t>(line.stat)*0x144,*levelCap,actual,label);
+                    }
+                    if(label.fallbackRange.empty())label.fallbackRange=FixedProcRange(line,rolled,properties,encoding,*scalingSnapshot,actual);
+                }
                 bool duplicate=false;
                 for (const auto& previous:labels) if (previous.key==label.key) {
                     // The same line can be observed in both actual/range passes,
@@ -466,6 +621,24 @@ std::vector<RangeText::Label> AffixLabels(void* source,const std::vector<Capture
                 }
                 if (!duplicate) labels.push_back(std::move(label));
             }
+        }
+        if(scalingSnapshot && itemStatsValid && (quality==4 || quality==6)){
+            const std::array<ContributionModel::Group,1> own={ContributionModel::Group{scalingSnapshot->own,rolled,""}};
+            for(auto& label:labels){
+                if(!label.ownedParts.empty() || label.parts.empty())continue;
+                const auto found=std::find_if(observed.begin(),observed.end(),[&](const CapturedLine& line){return line.key==label.key;});
+                if(found==observed.end() || found->layer || found->grouped || found->stat<0 || static_cast<std::uint64_t>(found->stat)>=itemStatCount)continue;
+                const auto stat=static_cast<unsigned>(found->stat);
+                if(stat!=16 && stat!=17 && stat!=18 && !(stat>=21&&stat<=24) && stat!=31 &&
+                   Contributions::Value(scalingSnapshot->own,stat)!=Contributions::Value(scalingSnapshot->total,stat))continue;
+                // A ranged source is useful even when Core supplied no clone.
+                const auto proven=ContributionModel::Build(label.key,stat,itemStats[stat*0x144+0x14],own,properties);
+                if(proven){label.ownedParts=proven->ownedParts;label.ownedTotal=proven->ownedTotal;}
+            }
+        }
+        if(itemStatsValid){
+            const auto sources=GatherSourceGroups(source,rolled,{rows,static_cast<std::size_t>(rowCount)},prefixIndex,autoIndex,properties);
+            if(sources)AddOwnedSourceLabels(*sources,observed,actual,properties,itemStats,static_cast<std::size_t>(itemStatCount),encoding,groups,labels);
         }
         return labels;
     } catch (...) { return {}; }
@@ -507,6 +680,14 @@ std::optional<int> RawOperand(const unsigned char* stats,unsigned at,unsigned st
     return value;
 }
 std::optional<int> ModifierOperand(const unsigned char* unit,unsigned stat) {
+    // Attached socket lists are valid siblings of the host's permanent lists.
+    // The shared capture proves ownership/order and excludes socket operands
+    // from this host-generation check; nested socket copies are never counted.
+    if(const auto sources=CaptureItemContributions(unit)) {
+        const auto value=Contributions::Value(sources->own,stat);
+        if(value<0||value>1000000)return {};
+        return static_cast<int>(value);
+    }
     const auto* parent=Affixes::Read<const unsigned char*>(unit,0x88);
     if (!Readable(parent,0xb8) || Affixes::Read<int>(parent,0x1c)>=0) return {};
     auto* child=Affixes::Read<const unsigned char*>(parent,0x90);
@@ -536,6 +717,14 @@ std::optional<std::pair<int,int>> ArmorBaseRange(const unsigned char* unit,const
     const int low=Affixes::Read<int>(row,0xd4),high=Affixes::Read<int>(row,0xd8);
     if (!intrinsic || low<0 || high<low || high==INT_MAX || !high) return {};
     const bool ethereal=(Affixes::Read<unsigned>(data,0x18)&0x00400000)!=0;
+    if (Affixes::Read<unsigned>(data,0)==1) {
+        // Crude/cracked/damaged armor is not a normal-range roll. Do not
+        // accept unsupported ethereal/custom bases merely by inverting totals.
+        const auto reducedLow=BaseRanges::LowArmor(low),reducedHigh=BaseRanges::LowArmor(high);
+        if (!ethereal && reducedLow && reducedHigh && *intrinsic>=*reducedLow && *intrinsic<=*reducedHigh)
+            return std::pair{*reducedLow,*reducedHigh};
+        return {};
+    }
     const auto baseLow=BaseRanges::Intrinsic(low,ethereal),baseHigh=BaseRanges::Intrinsic(high,ethereal);
     if (!baseLow || !baseHigh) return {};
     if (*intrinsic>=*baseLow && *intrinsic<=*baseHigh) return std::pair{*baseLow,*baseHigh};
@@ -566,7 +755,10 @@ std::optional<std::pair<int,int>> WeaponBaseRange(const unsigned char* unit,cons
     const auto* stats=Affixes::Read<const unsigned char*>(unit,0x88);
     if (!Readable(stats,0xb8) || !Readable(row,0x115) || !row[minOffset] || row[minOffset]>row[maxOffset]) return {};
     const bool ethereal=(Affixes::Read<unsigned>(data,0x18)&0x00400000)!=0;
-    const auto low=BaseRanges::Intrinsic(row[minOffset],ethereal),high=BaseRanges::Intrinsic(row[maxOffset],ethereal);
+    const bool lowQuality=Affixes::Read<unsigned>(data,0)==1;
+    if (lowQuality && ethereal) return {};
+    const auto low=lowQuality?BaseRanges::LowWeapon(row[minOffset]):BaseRanges::Intrinsic(row[minOffset],ethereal);
+    const auto high=lowQuality?BaseRanges::LowWeapon(row[maxOffset]):BaseRanges::Intrinsic(row[maxOffset],ethereal);
     const auto observedLow=RawOperand(stats,0x30,minimum),observedHigh=RawOperand(stats,0x30,maximum);
     if (!low || !high || !observedLow || !observedHigh || *low!=*observedLow || *high!=*observedHigh) return {};
     return std::pair{*low,*high};
@@ -593,6 +785,41 @@ std::string AnnotateWeaponHeader(std::string_view text,std::string_view actual,c
 bool FixedHeaderRequest(bool keyboard,std::uint64_t keys,std::uint64_t nativeButtons) noexcept {
     return keyboard?(keys&2)!=0:(nativeButtons&0xff)==1;
 }
+std::string SocketHeaderAnchorKey(const char* name) {
+    NativeText group{reinterpret_cast<const char*>(HeaderProfile::ResourceGroup),3},key{name,std::strlen(name)};
+    const auto* format=lookupHeader(&group,&key,true);if(!Readable(format,256))return {};
+    const auto size=strnlen(format,256);if(size==256)return {};
+    std::string pattern(format,size);unsigned count=0;
+    for(std::size_t at=0;(at=pattern.find('%',at))!=pattern.npos;++at){
+        if(at+1==pattern.size() || (pattern[at+1]!='d' && pattern[at+1]!='i' && pattern[at+1]!='u'))return {};
+        pattern.replace(at,2,"0");++count;
+    }
+    return count?RangeText::Analyze(pattern).key:std::string{};
+}
+std::string AnnotateSocketHeader(void* source,std::string_view text) {
+    if(!nativeSocketCapacity || !lookupHeader)return std::string(text);
+    const auto snapshot=CaptureItemContributions(source);if(!snapshot)return std::string(text);
+    const auto current=Contributions::Value(snapshot->primary,194);
+    if(current<1 || current>6)return std::string(text);
+    NativeText group{reinterpret_cast<const char*>(HeaderProfile::ResourceGroup),3},
+        name{HeaderProfile::SocketLabel,sizeof(HeaderProfile::SocketLabel)-1};
+    const auto* format=lookupHeader(&group,&name,true);if(!Readable(format,128))return std::string(text);
+    const auto size=strnlen(format,128);if(size==128)return std::string(text);
+    const std::string_view pattern(format,size);const auto at=pattern.find('%');
+    if(at==pattern.npos || at+1>=pattern.size() ||
+       (pattern[at+1]!='d' && pattern[at+1]!='i' && pattern[at+1]!='u') ||
+       pattern.find('%',at+2)!=pattern.npos)return std::string(text);
+    const auto key=RangeText::Analyze(std::string(pattern.substr(0,at))+"0"+std::string(pattern.substr(at+2))).key;
+    if(key.empty())return std::string(text);
+    for(const auto line:RangeText::Lines(text))if(RangeText::Analyze(line).key==key)return std::string(text);
+    const auto maximum=nativeSocketCapacity(source);if(maximum<current || maximum>6)return std::string(text);
+    const auto label=std::string(pattern.substr(0,at))+std::to_string(maximum)+std::string(pattern.substr(at+2));
+    std::vector<std::string> anchors;
+    for(const auto* anchorName:{"ItemStats1p","ItemStats1e","ItemStats1f","ItemStats1d","ItemStats1i",
+                         "ItemStats1h","ItemStats1l","ItemStats1m","strItemStatThrowDamageRange"})
+        anchors.push_back(SocketHeaderAnchorKey(anchorName));
+    return HeaderText::SocketCapacity(text,key,label,anchors);
+}
 extern "C" void ObserveHeaderRequest(std::uint64_t buttons,std::uintptr_t caller,const unsigned char* frame) noexcept {
     fixedHeaderRequested=false;
     if (caller!=builderReturn || !Allowed() || RangeFromOverlay(NativeOverlay()) || !Readable(frame,0x18f0)) return;
@@ -612,6 +839,11 @@ extern "C" __declspec(noinline) NativeText* __fastcall HeaderBuilderAdapter(void
     int flags,unsigned char d,unsigned char e,void* f,void* g) noexcept {
     const bool scoped=reinterpret_cast<std::uintptr_t>(_ReturnAddress())==builderReturn && (Held() || fixedHeaderRequested);
     fixedHeaderRequested=false;
+    // Properties are built later in this same qualified Core tooltip operation.
+    // Keep only request/source identity, and consume it at that caller once.
+    if(reinterpret_cast<std::uintptr_t>(_ReturnAddress())==builderReturn){
+        BeginPropertyRequest(item,scoped);
+    }
     if (scoped) pendingHeader={};
     // Frame is qualified byte-for-byte; derive its address before the native
     // call. No frame, item or definition memory is written by this adapter.
@@ -643,11 +875,13 @@ extern "C" __declspec(noinline) NativeText* __fastcall HeaderBuilderAdapter(void
         if (key.empty()) return result;
         const auto baseRange=ArmorBaseRange(unit,data,armor);
         const auto value=HeaderText::Value({result->data,result->size},key);
-        const auto changed=HeaderText::Fixed({result->data,result->size},key,baseRange.has_value(),baseRange);
+        const auto fixed=HeaderText::Fixed({result->data,result->size},key,baseRange.has_value(),baseRange);
+        const auto changed=AnnotateSocketHeader(item,fixed);
         if (frame[0x18b0]) {
             // Core will publish its range replacement next. Keep only an owned
             // text proof and receiver identity; no item/stat/table pointers.
-            if (value && changed.size()<=65536) pendingHeader={result,std::string(result->data,result->size),changed};
+            if ((value || changed!=std::string_view(result->data,result->size)) && changed.size()<=65536)
+                pendingHeader={result,std::string(result->data,result->size),changed};
             return result;
         }
         if (changed.size()<=65536 && changed!=std::string_view(result->data,result->size))
@@ -726,7 +960,7 @@ void TraceProperties(unsigned annotated,unsigned unmatched,const char* actual,co
     try { seen.emplace_back(actual); } catch (...) { return; }
     char message[14000]{};
     const int n=std::snprintf(message,sizeof(message),
-        "v1.3.1+rev.25 properties annotated=%u unmatched=%u labeled=%u captured=%u\r\nACTUAL: %.4095s\r\nRANGED: %.4095s\r\nRESULT: %.4095s\r\n",annotated,unmatched,labeled,captured,actual,ranged,result);
+        "v1.3.1+rev.34 properties annotated=%u unmatched=%u labeled=%u captured=%u\r\nACTUAL: %.4095s\r\nRANGED: %.4095s\r\nRESULT: %.4095s\r\n",annotated,unmatched,labeled,captured,actual,ranged,result);
     if (n<=0 || n>=static_cast<int>(sizeof(message))) return;
     HANDLE file=CreateFileW(diagnosticPath,FILE_APPEND_DATA,FILE_SHARE_READ|FILE_SHARE_WRITE,nullptr,OPEN_ALWAYS,FILE_ATTRIBUTE_NORMAL,nullptr);
     if (file==INVALID_HANDLE_VALUE) return;
@@ -827,8 +1061,12 @@ std::uint64_t RenderProperties(void* source,void* item,char* output,int capacity
 }
 __declspec(noinline) std::uint64_t __fastcall PropertiesAdapter(void* item,char* output,int capacity,int mode,
     int state1,int state2,int flags,int extra,const void* definitions,void* count) noexcept {
-    const bool scoped=reinterpret_cast<std::uintptr_t>(_ReturnAddress())==propertiesReturn && !rendering && Held();
-    void* source=scoped?SourceItem(item):nullptr;
+    const bool callerMatches=reinterpret_cast<std::uintptr_t>(_ReturnAddress())==propertiesReturn;
+    const auto request=TakePropertyRequest(callerMatches,rendering);
+    void* source=callerMatches && !rendering?SourceItem(item):nullptr;
+    const bool scoped=callerMatches && !rendering && Allowed() &&
+        (Held() || (scalingReady.load() && MatchingPropertyRequest(request,source)));
+    if(!scoped)source=nullptr;
     if (scoped && !source) TraceProperties(0,0,"Overlay source unavailable; native fallback.","");
     const auto* sourceBytes=static_cast<const unsigned char*>(source);
     const auto* itemData=Readable(source,0x18)?Affixes::Read<const unsigned char*>(sourceBytes,0x10):nullptr;
@@ -892,7 +1130,10 @@ bool Exchange(void** slot, void* expected, void* replacement) noexcept {
     return found == expected && restored;
 }
 void Restore() noexcept {
+    nativeSocketCapacity=nullptr;pendingPropertyRequest={};
     active.store(false, std::memory_order_release);
+    contributionsReady.store(false);
+    scalingReady.store(false);
     if (uniqueRowSlot) Exchange(uniqueRowSlot,reinterpret_cast<void*>(&UniqueVisibilityAdapter),reinterpret_cast<void*>(originalUniqueRow));
     if (visibilityTablesSlot) Exchange(visibilityTablesSlot,reinterpret_cast<void*>(&SetVisibilityAdapter),reinterpret_cast<void*>(getTables));
     if (damageSlot) Exchange(damageSlot,reinterpret_cast<void*>(&DamageAdapter),reinterpret_cast<void*>(originalDamage));
@@ -927,7 +1168,25 @@ bool Install(const D2RL::PluginContext* context) noexcept {
         !Match(base, ActualPairCallerRva, ActualPairCaller, sizeof(ActualPairCaller))) { context->LogError("Item Roll Ranges: live Core instruction witness mismatch; possible native-hook conflict."); return false; }
     if (!Readable(base+0x702ae0, 8) || !Readable(base+0x6fe3b0, 8) || !Readable(base+0x6fe470, 8) || !Readable(base+0x704490,8)) return false;
     coreBase=base;
+    nativeSocketCapacity=Match(base,HeaderProfile::SocketCapacityRva,HeaderProfile::SocketCapacity,sizeof(HeaderProfile::SocketCapacity)) &&
+        Match(base,HeaderProfile::SocketLabelCallerRva,HeaderProfile::SocketLabelCaller,sizeof(HeaderProfile::SocketLabelCaller)) &&
+        Match(base,HeaderProfile::SocketLabelRva,reinterpret_cast<const unsigned char*>(HeaderProfile::SocketLabel),sizeof(HeaderProfile::SocketLabel))?
+        reinterpret_cast<SocketCapacityFn>(base+HeaderProfile::SocketCapacityRva):nullptr;
+    if(!nativeSocketCapacity)context->LogWarn("Item Roll Ranges: optional socket capacity witness refused; native count retained.");
     const auto* game=reinterpret_cast<const unsigned char*>(context->exeBase);
+    scalingReady.store(std::all_of(std::begin(ScalingProfile::Witnesses),std::end(ScalingProfile::Witnesses),
+        [&](const auto& w){return Match(w.core?base:game,w.rva,w.bytes,w.size);}));
+    if(!scalingReady.load())context->LogWarn("Item Roll Ranges: scaling/proc witnesses refused; existing ranges and tier families retained.");
+    const bool socketSourcesReady=std::all_of(std::begin(SocketProfile::Witnesses),std::end(SocketProfile::Witnesses),
+        [&](const auto& witness) {return Match(game,witness.rva,witness.bytes,witness.size);});
+    if (!socketSourcesReady) context->LogWarn("Item Roll Ranges: socket ownership witnesses refused; existing tooltip behavior retained.");
+    contributionsReady.store(socketSourcesReady&&std::all_of(std::begin(ContributionProfile::Witnesses),std::end(ContributionProfile::Witnesses),
+        [&](const auto& w){return Match(w.core?base:game,w.rva,w.bytes,w.size);}));
+    contributionContext=context;contributionTables=nullptr;
+    if(context->QueryService(&contributionTables)!=D2RL::ServiceQueryResult::Success||
+       !D2RL::HasDataTableServiceField(contributionTables,D2RL::DataTableServiceRequiredSize))contributionTables=nullptr;
+    if(!contributionTables)context->LogWarn("Item Roll Ranges: optional active table service unavailable; rune/gem/corruption source breakdowns retained as native output.");
+    if(!contributionsReady.load())context->LogWarn("Item Roll Ranges: optional contribution witnesses refused; existing ranges retained.");
     for (const auto& witness:VisibilityProfile::Witnesses)
         if (!Match(witness.core?base:game,witness.rva,witness.bytes,witness.size)) {
             context->LogError("Item Roll Ranges: tooltip visibility witness mismatch.");return false;
@@ -1034,14 +1293,14 @@ bool Install(const D2RL::PluginContext* context) noexcept {
         return false;
     }
     active.store(true, std::memory_order_release);
-    context->LogInfo("Item Roll Ranges 1.3.1+rev.25 by PyreFly: Ctrl / RT(R2), or QOL range override; inventory, stash, Cube and vendor only. Actual values, native ranges, named P/S tiers and guarded stacked-damage details. Unsupported or ambiguous provenance is omitted.");
+    context->LogInfo("Item Roll Ranges 1.3.1+rev.34 by PyreFly: Ctrl / RT(R2), or QOL range override; inventory, stash, Cube and vendor only. Actual values, native ranges, named P/S tiers and guarded stacked-damage details. Unsupported or ambiguous provenance is omitted.");
     return true;
 }
 }
 
 D2RL_PLUGIN_EXPORT const D2RL::PluginInfo* __cdecl D2RLoaderGetPluginInfo() noexcept {
     static const D2RL::PluginInfo info{sizeof(D2RL::PluginInfo), D2RL_PLUGIN_ABI_VERSION,
-        "item-roll-ranges", "Item Roll Ranges", "1.3.1+rev.25", "PyreFly",
+        "item-roll-ranges", "Item Roll Ranges", "1.3.1+rev.34", "PyreFly",
         "Hold Ctrl or RT/R2 (R1/RB with Controller QOL) for native item stat ranges in item-management screens.",
         D2RL::PluginFlags::Client | D2RL::PluginFlags::NativeHooks, {}};
     return &info;

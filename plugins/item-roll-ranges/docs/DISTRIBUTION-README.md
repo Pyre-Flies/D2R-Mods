@@ -1,6 +1,6 @@
 # Item Roll Ranges
 
-**By PyreFly · Version 1.3.1+rev.25**
+**By PyreFly · Version 1.3.1+rev.34**
 
 Show item roll ranges beside actual values in light blue:
 `[+80 - +120] +118 Defense`.
@@ -20,6 +20,9 @@ intrinsic base range, including explicit fixed endpoints:
 Base values include ethereal scaling and native Enhanced Defense base generation
 (maximum base Defense plus one). They exclude affix percentage/flat additions.
 Individual modifier lines retain their own roll ranges and source labels.
+Fixed modifier bounds are compact, such as `[+38]`; Base headers retain both
+endpoints. Socketed items also show Max Sockets in the normal header position
+while ranges are held. Weapons use Required Level / Max Sockets / Attack Speed.
 Unrelated triggered skills do not prevent a known header base from displaying.
 Unresolved expected ranges show `(?)` and
 `(?) Range Unavailable - Please report item affixes`.
@@ -28,8 +31,15 @@ Magic/rare/crafted affixes can show `[P] [Name] [Tn]` / `[S] [Name] [Tn]` labels
 T1 is the highest distinct affix level in the applicable family for that item
 type/quality; duplicate levels share a tier. Unique properties use `[U]`
 and verified inherent contributions use `[Base]`. Ambiguous contributions are
-not assigned invented ranges or tiers. Coverage is not universal, especially
-for conditional, socket, set and crafting recipe contributions.
+not assigned invented ranges or tiers. Supported overlapping host, socket and
+completed corruption contributions show a `[Combined]` total followed by gray
+source rows; sockets use `[Socket n]` in insertion order and corruptions `[C]`.
+Unknown individual rolls remain `?` when the saved total cannot identify them.
+Active rune/gem definitions use the host item's context. Level-scaled bounds
+use the active level cap and compatible coefficient/rounding rules. Affix
+families retain distinct property/selector identities even when names repeat.
+Enchantments, unsupported layered/grouped operations, runewords, set bonuses
+and crafting-recipe contributions do not have complete source attribution.
 
 ## Install
 
@@ -57,10 +67,11 @@ Exact provider and live code guards disable unsupported/conflicting paths.
 Other plugins modifying the same tooltip functions can still conflict. Hot
 reload is unsupported. Production formatter diagnostic dumps are disabled.
 
-All five automated suites pass. The Base header display was user-confirmed in
-game on the tested belts and bows. Revision21's native input/coexistence path
-has automated context coverage; dedicated live controller validation remains
-pending. Every item family, localization and plugin combination has not been
+All seven automated suites pass. User checks confirm the reviewed socket and
+corruption breakdowns, fixed and modified Defense headers, Shadow Mantle's
+overlapping ED/flat Thorns and the corrected Max Sockets header placement.
+No-clone tooltips also receive verified source bounds. Dedicated live controller,
+every item family, localization and plugin combination remain incompletely
 validated. Ranges reflect the active item definitions, including mod changes.
 
 ## Uninstall
@@ -69,8 +80,4 @@ Close the game and loader, remove this DLL from the active plugins folder and
 relaunch. Core's native range behavior remains. `SHA256SUMS` records runtime
 archive contents; the source archive is supplied separately.
 
-Revision22 fixes Defense publication after Core restores its range context. The Iceblink header fix is user-confirmed in game; all five automated suites pass.
-
-Revision23 restores the Base label on fixed items with no rollable modifiers. A plain Sash displaying Base2-2 while Ctrl is held and returning to normal on release is user-confirmed. Controller-specific no-clone checks remain unconfirmed.
-
-Revision 24 removes the Chronicle Items dependency for hidden unique/set definitions through private tooltip-only snapshots; shared flags and discovery remain unchanged. User confirmed standalone Lustwander and Heartbane ranges and Base headers. Revision 25 uses [U] on unique property lines; user confirmed its display. Set properties retain native ranges without added set source labels. All five automated suites pass. Socket, enchantment and corruption source breakdowns remain incomplete.
+Unique source labels use `[U]` in revision25. Set modifier ranges remain native; the plugin does not currently add set source labels.

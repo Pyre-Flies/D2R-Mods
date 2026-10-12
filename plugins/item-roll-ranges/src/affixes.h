@@ -10,30 +10,46 @@ namespace Affixes {
 template<class T> inline T Read(const unsigned char* p,std::size_t offset) {
     T value{}; std::memcpy(&value,p+offset,sizeof(value)); return value;
 }
+struct Property { std::array<unsigned char,0x30> bytes{}; };
 struct Row {
     std::array<unsigned char,0x8c> bytes{};
     int Number(std::size_t offset) const { return Read<int>(bytes.data(),offset); }
     unsigned Version() const { return Read<std::uint16_t>(bytes.data(),0x22); }
-    bool SameFamily(const Row& other) const {
+    bool SameFamily(const Row& other,std::span<const Property> properties={}) const {
         if (Number(0x5c)!=other.Number(0x5c) || bytes[0x66]!=other.bytes[0x66]) return false;
         for (unsigned n=0;n<3;++n) {
             const auto at=0x24+16*n;
-            if (Number(at)!=other.Number(at) || Number(at+4)!=other.Number(at+4)) return false;
+            if (Number(at)!=other.Number(at)) return false;
+            if (Number(at+4)!=other.Number(at+4)) {
+                // Function17's nonzero parameter is a coefficient, not a skill,
+                // class or layer selector. Keep different coefficients in one
+                // family; different property IDs and mixed functions stay apart.
+                const int id=Number(at);
+                if (id<0 || static_cast<std::size_t>(id)>=properties.size() ||
+                    Number(at+4)<=0 || other.Number(at+4)<=0) return false;
+                bool coefficient=false;
+                for (unsigned slot=0;slot<7;++slot) {
+                    const auto fn=properties[static_cast<std::size_t>(id)].bytes[0x18+slot];
+                    if (fn && fn!=17) return false;
+                    coefficient |= fn==17;
+                }
+                if (!coefficient) return false;
+            }
         }
         return true;
     }
 };
-struct Property { std::array<unsigned char,0x30> bytes{}; };
 struct PropertyGroup { std::array<unsigned char,0xc8> bytes{}; };
 static_assert(sizeof(Row)==0x8c && sizeof(Property)==0x30 && sizeof(PropertyGroup)==0xc8);
 // Distinct affix levels within the applicable family; duplicate levels share
 // a tier. Current item level does not hide stronger tiers.
 template<class Eligible> unsigned Tier(const Row& rolled,std::span<const Row> family,
-                                     bool rare,unsigned itemVersion,Eligible eligible) {
+                                     bool rare,unsigned itemVersion,Eligible eligible,
+                                     std::span<const Property> properties={}) {
     std::set<int> higher;
     for (const auto& row:family) {
         if (!row.bytes[0x54] || !row.bytes[0x82] || (rare && !row.bytes[0x64]) ||
-            (itemVersion<100 && row.Version()>=100) || !rolled.SameFamily(row) ||
+            (itemVersion<100 && row.Version()>=100) || !rolled.SameFamily(row,properties) ||
             row.Number(0x58)<=rolled.Number(0x58) || !eligible(row)) continue;
         higher.insert(row.Number(0x58));
     }
@@ -132,7 +148,7 @@ inline std::string NamedLabel(const Rolled& affix) {
 // verified transformation; Contributes alone does not establish numeric bounds.
 inline bool ScalarBounds(const Rolled& affix,std::span<const Property> properties,
                          int stat,int layer,int& low,int& high) {
-    if (affix.source || layer) return false;
+    if (affix.source || (layer && stat!=83)) return false;
     bool found=false; low=high=0;
     for (unsigned n=0;n<3;++n) {
         const int id=affix.row.Number(0x24+16*n);
@@ -141,11 +157,21 @@ inline bool ScalarBounds(const Rolled& affix,std::span<const Property> propertie
         for (unsigned j=0;j<3;++j) if (j!=n) { const int absent=-1; std::memcpy(one.bytes.data()+0x24+16*j,&absent,4); }
         if (!Contributes(one,properties,stat,layer)) continue;
         const auto* p=properties[static_cast<std::size_t>(id)].bytes.data();
+        // A paired physical property (functions 5 and 6 together) uses its
+        // min/max as endpoint operands, not the scalar roll of either alone.
+        if(stat>=21&&stat<=24){
+            bool minimum=false,maximum=false;
+            for(unsigned slot=0;slot<7;++slot){minimum|=p[0x18+slot]==5;maximum|=p[0x18+slot]==6;}
+            if(minimum&&maximum)return false;
+        }
         unsigned matches=0;
         for (unsigned slot=0;slot<7;++slot) {
             const auto fn=p[0x18+slot];
-            if ((fn==7 && (stat==17 || stat==18)) ||
-                (fn==1 && Read<std::uint16_t>(p,0x20+slot*2)==stat)) ++matches;
+            if ((fn==5 && (stat==21 || stat==23)) || (fn==6 && (stat==22 || stat==24)) ||
+                (fn==7 && (stat==17 || stat==18)) ||
+                ((!layer && (fn==1 || fn==8 || (fn==2 && stat==16)) && Read<std::uint16_t>(p,0x20+slot*2)==stat) ||
+                 (fn==21 && stat==83 && Read<std::uint16_t>(p,0x20+slot*2)==83 &&
+                  layer>=0 && layer<8 && Read<std::uint16_t>(p,0x0a+slot*2)==layer))) ++matches;
         }
         const int lo=one.Number(0x2c+16*n),hi=one.Number(0x30+16*n);
         if (matches!=1 || found || lo>hi || lo< -1000000 || hi>1000000) return false;

@@ -23,13 +23,13 @@ build-specific and are not portable merely because an RVA happens to exist.
 
 | CALL RVA | Original bytes | Resolved target | Nearby source evidence |
 | --- | --- | --- | --- |
-| `0x410005` | `E8 46 19 06 00` | `0x471950` | `D2Game\\src\\Player\\PlrMsgCheats.cpp` |
-| `0x4112F5` | `E8 56 06 06 00` | `0x471950` | `D2Game\\src\\Player\\PlrMsgCheats.cpp` |
-| `0x416126` | `E8 25 B8 05 00` | `0x471950` | `D2Game\\src\\Player\\PlrMsgCheats.cpp` |
-| `0x41738D` | `E8 BE A5 05 00` | `0x471950` | `D2Game\\src\\Player\\PlrMsgCheats.cpp` |
+| `0x410005` | `E8 46 19 06 00` | `0x471950` | `D2Game/src/Player/PlrMsgCheats.cpp` |
+| `0x4112F5` | `E8 56 06 06 00` | `0x471950` | `D2Game/src/Player/PlrMsgCheats.cpp` |
+| `0x416126` | `E8 25 B8 05 00` | `0x471950` | `D2Game/src/Player/PlrMsgCheats.cpp` |
+| `0x41738D` | `E8 BE A5 05 00` | `0x471950` | `D2Game/src/Player/PlrMsgCheats.cpp` |
 | `0x4BA0EF` | `E8 5C 78 FB FF` | `0x471950` | normal player-message region; exact source string not established |
-| `0x4BBAD0` | `E8 7B 5E FB FF` | `0x471950` | `D2Game\\src\\Player\\PlrMsg.cpp` |
-| `0x55496C` | `E8 DF CF F1 FF` | `0x471950` | `D2Game\\src\\Skills\\SkillSor.cpp` |
+| `0x4BBAD0` | `E8 7B 5E FB FF` | `0x471950` | `D2Game/src/Player/PlrMsg.cpp` |
+| `0x55496C` | `E8 DF CF F1 FF` | `0x471950` | `D2Game/src/Skills/SkillSor.cpp` |
 
 All seven calls use the existing six-argument pickup ABI:
 `bool __fastcall(void* player, uint32_t guid, bool arg3, uint32_t distance,

@@ -2,9 +2,36 @@
 #include "header_text.h"
 #include <cstdio>
 #include <cstdlib>
-void check(bool v) { if (!v) { std::fputs("range text failure\n",stderr); std::exit(1); } }
+#include <source_location>
+void check(bool v,std::source_location at=std::source_location::current()) {
+    if (!v) { std::fprintf(stderr,"range text failure at line %u\n",at.line()); std::exit(1); }
+}
 std::string range(const char* s) { return std::string("\xff" "cU")+s+"\xff" "c3"; }
 int main() {
+    const auto loreKey=RangeText::Analyze("+2% to Experience Gained").key;
+    RangeText::Label lore{loreKey,"[P] [Loremaster's1] [T2]",{{2,2,"[P] [Loremaster's1] [T2]"}}};
+    auto loreResult=RangeText::Merge("+2% to Experience Gained","+2% to Experience Gained",1024,{lore});
+    check(loreResult.text.find("[+2%]")!=std::string::npos &&
+          loreResult.text.ends_with("\xee\x81\xbe" "U[P] [Loremaster's1] [T2]\xee\x81\xbe" "3"));
+    check(loreResult.text.find("Range Unavailable")==std::string::npos);
+    check(RangeText::ExpandFixedAffixes("+3% to Experience Gained",lore.parts).empty());
+    check(RangeText::ExpandFixedAffixes("Level 2: +2% to Experience Gained",lore.parts).empty());
+    check(RangeText::Merge("+2% to Experience Gained","+2% to Experience Gained",16,{lore}).text=="+2% to Experience Gained");
+    auto fixedNative=RangeText::Merge("+38 to Life","+"+range("(38-38)")+" to Life",1024);
+    check(fixedNative.text.find("[+38]")!=std::string::npos && fixedNative.text.ends_with("+38 to Life"));
+    RangeText::Label socketLabel{RangeText::Analyze("+35% Increased Attack Speed").key,"[S] [of Alacrity] [T1]",
+        {{20,20,"[S] [of Alacrity] [T1]"},{15,15,"[Socket 1]"}}};
+    socketLabel.fixedSocketParts=true;
+    auto socketResult=RangeText::Merge("+35% Increased Attack Speed","+35% Increased Attack Speed",2048,{socketLabel});
+    check(socketResult.text.ends_with("+35% Increased Attack Speed"));
+    check(socketResult.text.find("+20% Increased Attack Speed [S]")!=std::string::npos);
+    check(socketResult.text.find("+15% Increased Attack Speed [Socket 1]")!=std::string::npos);
+    check(socketResult.text.find("Range Unavailable")==std::string::npos);
+    check(RangeText::ExpandFixedSockets("+36% Increased Attack Speed",socketLabel.parts).empty());
+    check(RangeText::ExpandFixedSockets("+35% Increased Attack Speed over 3 seconds",socketLabel.parts).empty());
+    check(RangeText::Merge("+35% Increased Attack Speed","+35% Increased Attack Speed",20,{socketLabel}).text=="+35% Increased Attack Speed");
+    socketLabel.parts[0].low=10;
+    check(RangeText::ExpandFixedSockets("+35% Increased Attack Speed",socketLabel.parts).empty());
     auto result=RangeText::Merge("+118 Defense\n+38% Enhanced Weapon Damage\n+25% Faster Hit Recovery\n",
         "+"+range("(80-120)")+" Defense\n+"+range("(25-50)")+"% Enhanced Weapon Damage\n+25% Faster Hit Recovery\n",1024);
     check(result.annotated==2 && result.text.find("[+80 - +120]\xff" "c3 +118 Defense")!=std::string::npos);
@@ -138,6 +165,50 @@ int main() {
     check(HeaderText::Merge("Defense: 5\n+28% Enhanced Defense",
         "Defense: "+range("(3-5)")+"\n+28% Enhanced Defense").find("Defense: 5 \xee\x81\xbe" "U(3-5)")!=std::string::npos);
     const auto defenseKey=RangeText::Analyze("Defense: 2").key;
+    const auto capacityKey=RangeText::Analyze("Max Sockets: 4").key;
+    const std::vector<std::string> headerAnchors={RangeText::Analyze("Required Level: 0").key,
+        RangeText::Analyze("Required Strength: 0").key,RangeText::Analyze("Required Dexterity: 0").key,
+        RangeText::Analyze("Durability: 0 of 0").key,defenseKey,
+        RangeText::Analyze("One-Hand Damage: 0 to 0").key};
+    const std::string capacity="\xee\x81\xbe" "0Max Sockets: 2\n";
+    const std::string prefix="Socketed (2)\n+90 to Life [Combined]\n+94% Enhanced Defense\n";
+    const std::string nativeHeader="Required Level: 72\nRequired Strength: 43\nDurability: 17 of 24\nDefense: 246";
+    check(HeaderText::SocketCapacity(prefix+nativeHeader,capacityKey,"Max Sockets: 2",headerAnchors)==prefix+capacity+nativeHeader);
+    check(HeaderText::SocketCapacity(prefix+nativeHeader+'\n',capacityKey,"Max Sockets: 2",headerAnchors)==prefix+capacity+nativeHeader+'\n');
+    const std::string speed="Very Fast Attack Speed\n";
+    const std::string weaponHeader="Required Level: 63\nRequired Strength: 55\nOne-Hand Damage: 15 to 153";
+    check(HeaderText::SocketCapacity(prefix+speed+weaponHeader,capacityKey,"Max Sockets: 2",headerAnchors)==
+        prefix+speed+capacity+weaponHeader);
+    const std::string noLevel="Required Strength: 55\nRequired Dexterity: 39\nOne-Hand Damage: 15 to 153";
+    check(HeaderText::SocketCapacity(prefix+noLevel,capacityKey,"Max Sockets: 2",headerAnchors)==prefix+capacity+noLevel);
+    // Pick the lowest displayed recognized requirement, regardless of which
+    // requirement template occurs first in the fallback key list.
+    const std::string dexFirst="Required Dexterity: 39\nRequired Strength: 55\nOne-Hand Damage: 15 to 153";
+    check(HeaderText::SocketCapacity(prefix+dexFirst,capacityKey,"Max Sockets: 2",headerAnchors)==prefix+capacity+dexFirst);
+    const std::string noRequirements="Durability: 17 of 24\nDefense: 246";
+    check(HeaderText::SocketCapacity(prefix+noRequirements,capacityKey,"Max Sockets: 2",headerAnchors)==prefix+capacity+noRequirements);
+    const std::string annotatedDefense="Defense: 246 \xee\x81\xbe" "U(Base: 127 - 127)\xee\x81\xbe" "3";
+    check(HeaderText::SocketCapacity(prefix+annotatedDefense,capacityKey,"Max Sockets: 2",headerAnchors)==prefix+capacity+annotatedDefense);
+    const std::string existing=prefix+"Max Sockets: 2\n"+nativeHeader;
+    check(HeaderText::SocketCapacity(existing,capacityKey,"Max Sockets: 2",headerAnchors)==existing);
+    check(HeaderText::SocketCapacity(prefix,capacityKey,"Max Sockets: 2",headerAnchors)==prefix);
+    check(HeaderText::SocketCapacity(prefix+nativeHeader+"\nRequired Level: 72",capacityKey,"Max Sockets: 2",headerAnchors)==prefix+nativeHeader+"\nRequired Level: 72");
+    const std::string translated="Gesockelt (2)\n+90 Leben\nBenotigte Stufe: 72\nVerteidigung: 246";
+    const std::vector<std::string> translatedAnchors={RangeText::Analyze("Benotigte Stufe: 0").key};
+    check(HeaderText::SocketCapacity(translated,RangeText::Analyze("Maximale Sockel: 0").key,"Maximale Sockel: 2",translatedAnchors)==
+        "Gesockelt (2)\n+90 Leben\n\xee\x81\xbe" "0Maximale Sockel: 2\nBenotigte Stufe: 72\nVerteidigung: 246");
+    const auto proc="100% Chance to cast level 17 Chilling Armor when you Level-Up";
+    check(RangeText::FixedProcChance(proc,100,17)=="100%");
+    check(RangeText::FixedProcChance(proc,99,17).empty());
+    check(RangeText::FixedProcChance(proc,100,18).empty());
+    check(RangeText::FixedProcChance("100% Chance to cast level 17 Skill 2",100,17).empty());
+    RangeText::Label scale{RangeText::Analyze("Attacker Takes Damage of 99").key,"[S] [of Thorns] [T2]"};
+    scale.fallbackRange="1 - 100";scale.replaceNativeRange=true;
+    result=RangeText::Merge("Attacker Takes Damage of 99","Attacker Takes Damage of "+range("(1-99)"),1024,{scale});
+    check(result.text.find("[1 - 100]")!=std::string::npos && result.text.find("[T2]")!=std::string::npos);
+    check(result.annotated==1);
+    scale.replaceNativeRange=false;
+    check(RangeText::Merge("Attacker Takes Damage of 99","Attacker Takes Damage of "+range("(1-99)"),1024,{scale}).text.find("[+1 - +99]")!=std::string::npos);
     const auto weaponKey=RangeText::Analyze("One-Hand Damage: 12 to 25").key;
     const auto damage=HeaderText::Damage("One-Hand Damage: 12 to 25","One-Hand Damage: 12 to 25",weaponKey,
         std::pair{9,19});
