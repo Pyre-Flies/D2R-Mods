@@ -1,0 +1,49 @@
+name: always-show-sockets-beta
+on:
+  push:
+    tags:
+      - 'beta-always-show-sockets-*'
+permissions:
+  contents: write
+jobs:
+  build-package-prerelease:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Configure
+        run: cmake -S plugins/always-show-sockets -B build/sockets -A x64
+      - name: Build
+        run: cmake --build build/sockets --config Release --parallel
+      - name: Test
+        run: ctest --test-dir build/sockets -C Release --output-on-failure
+      - name: Test packaging
+        run: python -m unittest discover -s tools -p test_package_always_show_sockets.py -v
+      - name: Package
+        run: >-
+          python tools/package_always_show_sockets.py
+          --dll "build/sockets/Release/Always Show Sockets.dll"
+          --artifact-verifier "build/sockets/Release/socket-artifact-tests.exe"
+          --tag "${{ github.ref_name }}" --output dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Always-Show-Sockets-${{ github.ref_name }}
+          path: |
+            dist/*.zip
+            dist/SHA256SUMS
+          if-no-files-found: error
+      - name: Publish standalone beta
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Always Show Sockets 0.1.0-beta.1
+          prerelease: true
+          make_latest: 'false'
+          body_path: plugins/always-show-sockets/RELEASE-NOTES.md
+          fail_on_unmatched_files: true
+          files: |
+            dist/*.zip
+            dist/SHA256SUMS
