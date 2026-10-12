@@ -3,7 +3,14 @@
 #include <string_view>
 namespace QolGlyphPolicy {
 enum class Hint { None, MainLeft, MainRight, SubLeft, SubRight, SharedLeft, SharedRight };
-inline Hint Classify(const std::string_view* names, size_t count, bool primary, bool secondary, bool shared=false, bool options=false, bool chronicle=false, bool lootFilter=false) noexcept {
+inline Hint Classify(const std::string_view* names, size_t count, bool primary, bool secondary, bool shared=false, bool options=false, bool chronicle=false, bool lootFilter=false, bool modInformation=false) noexcept {
+    if(secondary && modInformation) {
+        for(size_t i=0;i+2<count;++i) {
+            if(names[i+1]!="OptionsTabs" || names[i+2]!="modinfo_aa") continue;
+            if(names[i]=="TabLeftIndicator") return Hint::SubLeft;
+            if(names[i]=="TabRightIndicator") return Hint::SubRight;
+        }
+    }
     // A generated child indicator must not shadow the owning Shared legend.
     if(shared) {
         Hint owner=Hint::None;

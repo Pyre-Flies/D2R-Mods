@@ -42,6 +42,16 @@ public:
     static bool Install(const D2RL::PluginContext* ctx, Observer callback,
         Projector packetProjector = nullptr) noexcept {
         active.store(false);
+        observer = callback;
+        projector = packetProjector;
+        if(!callback) {
+            // Loot no longer observes every participant's server packets.
+            // Preserve only the existing, locally qualified Guided Arrow site.
+            const auto& site=Native::Actions[4];
+            if(!packetProjector || !ctx->CheckExpectedBytes(site.rva,site.bytes,32) ||
+                !InstallAll(ctx,std::index_sequence<4>{}) || !originals[4])return false;
+            active.store(true,std::memory_order_release);return true;
+        }
         for (const auto& site : Native::Actions)
             if (!ctx->CheckExpectedBytes(site.rva, site.bytes, 32)) return false;
         observer = callback;

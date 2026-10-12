@@ -99,7 +99,7 @@ void __fastcall HookWidget(void* widget) {
         header=measureText && QolHeaderPolicy::Scope(views,count) && ControllerQoL::IsControllerUiActive();
         bool primary=false,secondary=false;
         QolNavigation::GetGlyphModes(primary,secondary);
-        hint=QolGlyphPolicy::Classify(views,count,primary,secondary,QolNavigation::SharedPageRemapEnabled(),QolNavigation::OptionsRemapEnabled(),QolNavigation::ChronicleRemapEnabled(),QolNavigation::LootFilterRemapEnabled());
+        hint=QolGlyphPolicy::Classify(views,count,primary,secondary,QolNavigation::SharedPageRemapEnabled(),QolNavigation::OptionsRemapEnabled(),QolNavigation::ChronicleRemapEnabled(),QolNavigation::LootFilterRemapEnabled(),QolNavigation::ModInformationRemapEnabled());
         if(hint!=Hint::None) ++hintDraws;
     }
     // No widget, text buffer, asset, or binding is modified. The two guarded

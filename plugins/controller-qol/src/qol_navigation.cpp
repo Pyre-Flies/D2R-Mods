@@ -155,7 +155,7 @@ void PublishGroundInput() noexcept {
 bool skillsHook=false;
 MenuMessageFn originalSkillsMessage=nullptr;
 uint64_t questTranslated=0,questReleased=0,skillsTranslated=0,skillsReleased=0;
-uint64_t menuTranslated=0,menuBumpersBlocked=0;
+uint64_t menuTranslated=0,menuBumpersBlocked=0,menuModInformationBlocked=0;
 struct MenuCopy {
     alignas(16) unsigned char message[0x120]{};
     alignas(16) unsigned char payload[0x20]{};
@@ -237,7 +237,7 @@ void InstallSharedPageHook() noexcept {
 
 // Copies are synchronous borrowed views, never retained or destroyed by this hook.
 // Native handler reads action +0x10 and repeat flag +0x18 from the payload.
-int PrepareMenuMessage(void* message,MenuCopy& copy,bool subMenu=false) noexcept {
+int PrepareMenuMessage(void* message,MenuCopy& copy,bool subMenu=false,bool modInformation=false) noexcept {
     if(!message) return 0;
     __try {
         auto m=static_cast<const unsigned char*>(message);
@@ -246,7 +246,7 @@ int PrepareMenuMessage(void* message,MenuCopy& copy,bool subMenu=false) noexcept
         auto p=*reinterpret_cast<const unsigned char* const*>(m+0x110);
         if(!p) return 0;
         unsigned action=*reinterpret_cast<const unsigned*>(p+0x10);
-        int mapped=subMenu?Probe::SubMenuAction(true,action):Probe::MenuAction(true,action);
+        int mapped=subMenu?Probe::SubMenuAction(true,action):Probe::MenuAction(true,action,modInformation);
         if(mapped==-1) return -1;
         if(mapped==static_cast<int>(action)) return 0;
         std::memcpy(copy.message,m,sizeof(copy.message));
@@ -256,16 +256,22 @@ int PrepareMenuMessage(void* message,MenuCopy& copy,bool subMenu=false) noexcept
         return 1;
     } __except(EXCEPTION_EXECUTE_HANDLER) {return 0;}
 }
+bool SubMenusEnabled() noexcept;
 void __fastcall HookMenuMessage(void* panel,void* message) noexcept {
     MenuCopy copy;
     int decision=0;
     {
         std::lock_guard lock(stateMutex);
         if(ctx && enabled && useL1 && menuRemap && dedicatedPanels==0) {
-            decision=PrepareMenuMessage(message,copy);
-            if(decision<0) ++menuBumpersBlocked;
+            const bool modInformation=SubMenusEnabled() && (subPanels&Probe::ModInformationPanelBit);
+            decision=PrepareMenuMessage(message,copy,false,modInformation);
+            if(decision<0) {
+                if(modInformation) ++menuModInformationBlocked;
+                else ++menuBumpersBlocked;
+            }
             if(decision>0) ++menuTranslated;
-            if(decision && trace) ctx->LogInfo(decision>0?
+            if(decision && trace) ctx->LogInfo(modInformation?
+                "[QOL/ModInfo] Underlying menu navigation blocked; active information-page input retained.":decision>0?
                 "[QOL/Menu] Trigger translated to menu navigation; shared input untouched.":
                 "[QOL/Menu] Bumper menu navigation consumed.");
         }
@@ -440,7 +446,7 @@ bool IsScopedSubTab(void* widget,unsigned kind=0) noexcept {
         while(n<64 && name[n])++n;
         while(p<64 && owner[p])++p;
         const bool visible=w[0x50] && w[0x51] && parent[0x50] && parent[0x51];
-        return n<64 && p<64 && (kind==2 ? Probe::LootFilterTab({name,n},{owner,p},visible) : kind==1 ? Probe::ChronicleTab({name,n},{owner,p},visible) :
+        return n<64 && p<64 && (kind==3 ? Probe::ModInformationTab({name,n},{owner,p},visible) : kind==2 ? Probe::LootFilterTab({name,n},{owner,p},visible) : kind==1 ? Probe::ChronicleTab({name,n},{owner,p},visible) :
             Probe::OptionsTab({name,n},{owner,p},visible));
     } __except(EXCEPTION_EXECUTE_HANDLER) {return false;}
 }
@@ -612,6 +618,7 @@ void __fastcall HookTabMessage(void* widget,void* message) noexcept {
             if(n.controllerBegin) {
                 ++nativeControllerCalls;
                 const bool options=(subPanels&4) && IsScopedSubTab(widget);
+                const bool modInformation=(subPanels&Probe::ModInformationPanelBit) && IsScopedSubTab(widget,3);
                 const bool chronicle=(subPanels&8) && IsScopedSubTab(widget,1);
                 const bool lootFilter=(subPanels&16) && IsScopedSubTab(widget,2);
                 if(lootFilter) {
@@ -621,7 +628,7 @@ void __fastcall HookTabMessage(void* widget,void* message) noexcept {
                         ctx->LogInfo(line);
                     }
                 }
-                if(SubMenusEnabled() && ((subPanels&1) || options || chronicle || lootFilter) && n.switchEnabled && n.left==7 && n.right==8) {
+                if(SubMenusEnabled() && ((subPanels&1) || options || modInformation || chronicle || lootFilter) && n.switchEnabled && n.left==7 && n.right==8) {
                     subDecision=PrepareMenuMessage(message,subCopy,true);
                     if(lootFilter && subDecision>0) {
                         repairFilter=CaptureFilterRepair(widget,FilterSelection(widget));
@@ -636,7 +643,10 @@ void __fastcall HookTabMessage(void* widget,void* message) noexcept {
                         "[QOL/Submenu] Chronicle: bumper translated to inner tab navigation.":
                         "[QOL/Submenu] Chronicle: trigger released to main menu.");
                     if(subDecision && trace && lootFilter) ctx->LogInfo("[QOL/Submenu] Loot filter Equipment/Items tabs: scoped bumper remap.");
-                    if(subDecision && trace && !options && !chronicle && !lootFilter) ctx->LogInfo(subDecision>0?
+                    if(subDecision && trace && modInformation) ctx->LogInfo(subDecision>0?
+                        "[QOL/ModInfo] Bumper translated to information tab navigation.":
+                        "[QOL/ModInfo] Trigger ignored by information tabs; underlying menu remains blocked.");
+                    if(subDecision && trace && !options && !modInformation && !chronicle && !lootFilter) ctx->LogInfo(subDecision>0?
                         "[QOL/Submenu] Quest: bumper translated to act tab navigation.":
                         "[QOL/Submenu] Quest: trigger released to main menu without marking input handled.");
                 }
@@ -784,11 +794,15 @@ auto Command(D2R::Game::Client*,const D2RL::ConsoleCommandContext* cmd,void*) no
             skillsHook,subPanels,static_cast<unsigned long long>(questTranslated),static_cast<unsigned long long>(questReleased),
             static_cast<unsigned long long>(skillsTranslated),static_cast<unsigned long long>(skillsReleased));
         ctx->WriteConsoleMessage(line);ctx->LogInfo(line);
+        std::snprintf(line,sizeof(line),"[QOL/ModInfo] open=%d remap=%d underlyingNavigationBlocked=%llu",
+            (subPanels&Probe::ModInformationPanelBit)!=0,SubMenusEnabled(),static_cast<unsigned long long>(menuModInformationBlocked));
+        ctx->WriteConsoleMessage(line);ctx->LogInfo(line);
         QolGlyphs::Status();
         return D2RL::ConsoleCommandResult::Handled;
     } catch(...) {return D2RL::ConsoleCommandResult::Failed;}
 }
 void Cleanup() noexcept {
+    dedicatedPanels=0;subPanels=0;
     groundInputActive=false;worldHudOpen=false;worldBlockingPanels=0;
     ++filterRepairGeneration;filterRepair.remaining=0;filterUiThreads=nullptr;
     QolNativeRanges::Enable(false);
@@ -805,6 +819,7 @@ void Cleanup() noexcept {
 }
 bool QolNavigation::Initialize(const D2RL::PluginContext* context,bool featureEnabled,bool traceEnabled) noexcept {
     if(!context) return false;
+    dedicatedPanels=0;subPanels=0;
     ctx=context;
     enabled=featureEnabled;
     trace=traceEnabled;
@@ -831,6 +846,9 @@ bool QolNavigation::Initialize(const D2RL::PluginContext* context,bool featureEn
     InstallLabelHooks();
     InstallMenuHook();
     InstallSkillsHook();
+    ctx->LogInfo(SubMenusEnabled()?
+        "[QOL/ModInfo] Scoped L1/R1 information tabs and underlying menu lock available while modinfo_aa is open.":
+        "[QOL/ModInfo] Required navigation hooks unavailable; native input retained.");
     InstallSharedPageHook();
     QolNativeRanges::Install(ctx);
     QolNativeRanges::Enable(enabled && useL1 && menuRemap && menuHook);
@@ -874,6 +892,10 @@ bool QolNavigation::SharedPageInputActive() noexcept { return sharedPageInputAct
 bool QolNavigation::OptionsRemapEnabled() noexcept {
     std::lock_guard lock(stateMutex);
     return SubMenusEnabled() && (subPanels&4);
+}
+bool QolNavigation::ModInformationRemapEnabled() noexcept {
+    std::lock_guard lock(stateMutex);
+    return SubMenusEnabled() && (subPanels&Probe::ModInformationPanelBit);
 }
 
 bool QolNavigation::GroundShortcutsAllowed() noexcept {

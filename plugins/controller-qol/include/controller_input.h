@@ -13,6 +13,7 @@ void PumpNativeInput() noexcept;
 void InitControllerInput() noexcept;
 
 void SetActiveModifier(const char* mode, uint8_t triggerThreshold) noexcept;
+void SetInputFilteringEnabled(bool enabled) noexcept;
 uint64_t GetHookCallCount() noexcept;
 void GetCachedControllerState(uint8_t& outLT, uint8_t& outRT, uint16_t& outButtons, uint64_t& outAgeMs) noexcept;
 

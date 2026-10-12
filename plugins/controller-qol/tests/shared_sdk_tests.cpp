@@ -8,6 +8,7 @@ using C=ItemContainer;
 unsigned calls{};
 uint32_t page{};
 bool deposit{};
+C withdrawalDestination=C::Inventory;
 Result response=Result::Success;
 uint32_t committed=1;
 void Check(bool v,const char* why){if(!v){std::fprintf(stderr,"FAIL: %s\n",why);std::exit(1);}}
@@ -18,7 +19,7 @@ Result __cdecl Execute(const PluginContext*,const ExistingItemTransaction* txn,E
     Check(op.structSize==ExistingItemOperationSize && op.structSize>=ExistingItemOperationSharedStashPageFieldEnd,"full operation includes destination page");
     Check(op.kind==ExistingItemOperationKind::Move && op.item==9,"move existing identity, no delete/recreate");
     Check(op.move.destination.structSize==ItemDestinationSize && op.move.destination.placement==Placement::Automatic,"loader owns placement");
-    Check(op.move.destination.container==(deposit?C::SharedStash:C::Inventory),"correct destination");
+    Check(op.move.destination.container==(deposit?C::SharedStash:withdrawalDestination),"correct destination");
     Check(op.move.destination.sharedStashPage==(deposit?page:UINT32_MAX),"explicit page including zero");
     out->committedOperationCount=committed;out->failureIndex=response==Result::Success?NoFailedOperation:0;return response;
 }
@@ -37,8 +38,12 @@ int main(){
         Check(QolSharedSdk::Move(&ctx,&items,5,item,page,true).committed,"normal shared deposit");
         deposit=false;item.container=C::SharedStash;item.sharedStashPage=page;
         Check(QolSharedSdk::Move(&ctx,&items,5,item,page,false).committed,"normal shared withdrawal");
+        withdrawalDestination=C::Cube;
+        Check(QolSharedSdk::Move(&ctx,&items,5,item,page,false,C::Cube).committed,"direct shared Cube move");
+        withdrawalDestination=C::Inventory;
     }
     const auto before=calls;
+    Check(!QolSharedSdk::Move(&ctx,&items,5,item,page,false,C::PersonalStash).committed && calls==before,"unsupported withdrawal destination refuses before mutation");
     item.sharedStashPage=0;
     Check(!QolSharedSdk::Move(&ctx,&items,5,item,104,false).committed && calls==before,"wrong source page never transferred");
     Check(!QolSharedSdk::Move(&ctx,&items,5,item,UINT32_MAX,false).committed && calls==before,"unknown page never becomes page zero");
@@ -55,5 +60,13 @@ int main(){
     Check(!QolSharedSdk::SameSelection(S{true,false,3},S{true,false,4}),"page changed while queued");
     Check(!QolSharedSdk::SameSelection(S{true,false,0},S{true,true,0}),"season changed");
     Check(!QolSharedSdk::SameSelection(S{},S{}),"unavailable selection never matches");
+    response=Result::Success;committed=1;item.container=C::SharedStash;item.sharedStashPage=page=0;
+    for(const auto code:{MakeItemCode("box"),uint32_t(0x00786f62)}) {
+        item.code=code;const auto beforeCube=calls;
+        const auto blocked=QolSharedSdk::Move(&ctx,&items,5,item,0,false,C::Cube);
+        Check(blocked.attempted && !blocked.committed && blocked.result==Result::InvalidArgument && calls==beforeCube,
+            "Shared Cube self insertion is handled before SDK mutation with no fallback");
+        Check(QolSharedSdk::Move(&ctx,&items,5,item,0,false).committed,"Cube item can withdraw from Shared to Inventory");
+    }
     std::puts("Shared SDK capability, identity/page, transaction and rejection checks passed.");
 }

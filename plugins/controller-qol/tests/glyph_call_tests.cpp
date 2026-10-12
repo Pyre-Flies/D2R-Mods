@@ -51,6 +51,39 @@ int main(){
  const std::string_view options[]={"TabLeftIndicator","OptionsTabs","SettingsPanel"};
  check(QolGlyphPolicy::Classify(options,3,true,true,false,true)==QolGlyphPolicy::Hint::SubLeft);
  check(QolGlyphPolicy::Classify(options,3,true,true,false,false)==QolGlyphPolicy::Hint::None);
+ // The Mod Information exception belongs to its exact tab ownership chain,
+ // never to similarly named pages, other tabs, or the menu behind the shell.
+ const std::string_view modInformationLeft[]={"TabLeftIndicator","OptionsTabs","modinfo_aa"};
+ const std::string_view modInformationRight[]={"TabRightIndicator","OptionsTabs","modinfo_aa"};
+ for(const auto* names : {modInformationLeft,modInformationRight}) {
+  const auto expected=names==modInformationLeft?QolGlyphPolicy::Hint::SubLeft:QolGlyphPolicy::Hint::SubRight;
+  check(QolGlyphPolicy::Classify(names,3,false,true,false,false,false,false,true)==expected);
+  check(QolGlyphPolicy::Classify(names,3,true,true,false,false,false,false,false)==QolGlyphPolicy::Hint::None);
+  check(QolGlyphPolicy::Classify(names,3,true,false,false,false,false,false,true)==QolGlyphPolicy::Hint::None);
+  check(QolGlyphPolicy::Classify(names,2,true,true,false,false,false,false,true)==QolGlyphPolicy::Hint::None);
+ }
+ const std::string_view modInformationText[]={"Text","TabLeftIndicator","OptionsTabs","modinfo_aa","Root"};
+ check(QolGlyphPolicy::Classify(modInformationText,5,false,true,false,false,false,false,true)==QolGlyphPolicy::Hint::SubLeft);
+ const std::string_view unrelatedModInformation[][4]={
+  {"TabLeftIndicator","OtherTabs","modinfo_aa","Root"},
+  {"TabRightIndicator","OptionsTabs","modinfo_generalinformation","Root"},
+  {"TabLeftIndicator","OptionsTabs","modinfo_aaa","Root"},
+  {"TabRightIndicator","OptionsTabs","Modinfo_aa","Root"},
+  {"TabLeftIndicator","modinfo_aa","OptionsTabs","Root"},
+  {"TabRightIndicator","OptionsTabs","OtherPanel","modinfo_aa"},
+  {"TabLeftIndicator","OtherWidget","OptionsTabs","modinfo_aa"},
+  {"CycleLeftIndicator","OptionsTabs","modinfo_aa","Root"},
+  {"CycleRightIndicator","OptionsTabs","modinfo_aa","Root"},
+  {"OtherIndicator","OptionsTabs","modinfo_aa","Root"}
+ };
+ for(const auto& names : unrelatedModInformation)
+  check(QolGlyphPolicy::Classify(names,4,true,true,false,false,false,false,true)==QolGlyphPolicy::Hint::None);
+ check(QolGlyphPolicy::Classify(nullptr,0,true,true,false,false,false,false,true)==QolGlyphPolicy::Hint::None);
+ check(QolGlyphPolicy::Classify(options,3,true,true,false,true,false,false,true)==QolGlyphPolicy::Hint::SubLeft);
+ check(QolGlyphPolicy::Classify(filterTabs,3,true,true,false,false,false,true,true)==QolGlyphPolicy::Hint::SubLeft);
+ check(QolGlyphPolicy::Classify(chronicleRight,3,true,true,false,false,true,false,true)==QolGlyphPolicy::Hint::SubRight);
+ const std::string_view shared[]={"TabLeftIndicator","StashRightArrow","BankExpansionLayout"};
+ check(QolGlyphPolicy::Classify(shared,3,true,true,true,false,false,false,true)==QolGlyphPolicy::Hint::SharedRight);
  unsigned char bytes[5]{};
  for(unsigned i=0;i<2;++i){
   check(QolGlyphCalls::Encode(0x140000000+QolGlyphCalls::Sites[i],0x140902e20,bytes));

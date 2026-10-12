@@ -78,18 +78,19 @@ inline bool Install(uint8_t* target,void* detour,void* relay,Record& record) noe
 // No executable-byte restoration on shutdown: later owners may chain into us.
 // Once published, records and RX relay pages live until process exit.
 struct Gate {
+    struct Entry {const Gate* owner;Entry* previous;};
+    inline static thread_local Entry* current=nullptr;
     SRWLOCK lock=SRWLOCK_INIT;
     bool active=false;
     void Enable() noexcept {AcquireSRWLockExclusive(&lock);active=true;ReleaseSRWLockExclusive(&lock);}
     void Disable() noexcept {AcquireSRWLockExclusive(&lock);active=false;ReleaseSRWLockExclusive(&lock);}
     template<class F> void Run(F callback) {
-        static thread_local bool processing=false;
-        if(processing) return;
+        for(auto entry=current;entry;entry=entry->previous)if(entry->owner==this)return;
         struct Guard {
-            SRWLOCK* lock; bool& processing;
-            Guard(SRWLOCK* p,bool& b):lock(p),processing(b) {processing=true;AcquireSRWLockShared(lock);}
-            ~Guard() {ReleaseSRWLockShared(lock);processing=false;}
-        } guard(&lock,processing);
+            SRWLOCK* lock;Entry entry;
+            explicit Guard(Gate* owner):lock(&owner->lock),entry{owner,current} {current=&entry;AcquireSRWLockShared(lock);}
+            ~Guard() {ReleaseSRWLockShared(lock);current=entry.previous;}
+        } guard(this);
         if(active) callback();
     }
 };

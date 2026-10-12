@@ -5,6 +5,22 @@
 #define CHECK(x) do {if(!(x)) {std::printf("Failed line %d: %s\n",__LINE__,#x);return 1;}} while(0)
 int main() {
     using namespace QolNativeInput;
+    for(unsigned button:{0x4000u,0x8000u,0x2000u,0x200u,0x80u}) {
+        ConsumedPresses press;
+        auto raw=Decode(0x100|button);
+        CHECK(!(press.Apply(raw,FilterModified(raw,true,false)).buttons&button));
+        raw=Decode(button);CHECK(!(press.Apply(raw,FilterModified(raw,false,false)).buttons&button));
+        raw=Decode(0);press.Apply(raw,raw);
+        raw=Decode(button);CHECK(press.Apply(raw,raw).buttons&button);
+    }
+    ConsumedPresses triggerPress;
+    auto triggers=Decode(0xd00);
+    CHECK(Encode(triggerPress.Apply(triggers,FilterModified(triggers,true,false)))==0x100);
+    triggers=Decode(0xc00);CHECK(Encode(triggerPress.Apply(triggers,triggers))==0);
+    triggerPress.Apply(Decode(0),Decode(0));
+    CHECK(Encode(triggerPress.Apply(triggers,triggers))==0xc00);
+    triggerPress={};triggers=Decode(0xd00);
+    CHECK(Encode(triggerPress.Apply(triggers,FilterModified(triggers,true,true)))==0xd00); // Shared paging preserved.
     AcceptedPress advancedA;unsigned requests=0;bool eligible=false;
     auto single=[&]() noexcept {++requests;return eligible;};
     CHECK(!advancedA.Update(false,true,single) && requests==0);

@@ -20,6 +20,10 @@ add_subdirectory("${PLUGIN_SDK}" "${CMAKE_CURRENT_BINARY_DIR}/d2rloader-sdk" EXC
 
 include("${PLUGIN_SDK}/cmake/D2RLPluginEmbedConfig.cmake")
 
+# Reuse the tested tab animator at build time; no Inventory Deposit DLL, button
+# resources, or artwork conversion are linked into Controller QOL.
+set(INVENTORY_DEPOSIT "${CMAKE_CURRENT_SOURCE_DIR}/../inventory-deposit")
+
 add_library(controller-qol SHARED
     src/plugin_compatibility.cpp src/portal_priority.cpp src/materials_actions.cpp
     src/custom_page_actions.cpp
@@ -27,6 +31,8 @@ add_library(controller-qol SHARED
     src/native_identify.cpp
     src/client_transfer.cpp
     src/bulk_stash.cpp
+    src/bulk_stash_feedback.cpp
+    "${INVENTORY_DEPOSIT}/src/stash_feedback.cpp"
     src/belt_compatibility.cpp
     src/vendor_buy.cpp
     src/client_loot.cpp
@@ -45,12 +51,14 @@ add_library(controller-qol SHARED
 target_include_directories(controller-qol PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${CMAKE_CURRENT_SOURCE_DIR}/src
+    "${INVENTORY_DEPOSIT}/src"
 )
 
 target_compile_definitions(controller-qol PRIVATE
     WIN32_LEAN_AND_MEAN
     NOMINMAX
     _CRT_SECURE_NO_WARNINGS
+    STASH_FEEDBACK_LOG_PREFIX="[QOL/StashFeedback]"
 )
 
 target_link_libraries(controller-qol PRIVATE
@@ -79,6 +87,16 @@ set_target_properties(controller-qol PROPERTIES
 option(CONTROLLER_QOL_BUILD_TESTS "Build belt contract tests" ON)
 if(CONTROLLER_QOL_BUILD_TESTS)
     enable_testing()
+    # Compile the actual handler glue against private SDK/native fixtures.
+    # The four included .cpp files are excluded from the remaining source list.
+    get_target_property(QOL_AUDIT_SOURCES controller-qol SOURCES)
+    list(FILTER QOL_AUDIT_SOURCES INCLUDE REGEX "\\.cpp$")
+    list(FILTER QOL_AUDIT_SOURCES EXCLUDE REGEX "src/(plugin_main|controller_input|client_loot|qol_navigation)\\.cpp$")
+    add_executable(qol-audit-regression-tests tests/audit_regression_tests.cpp ${QOL_AUDIT_SOURCES})
+    target_include_directories(qol-audit-regression-tests PRIVATE include src "${INVENTORY_DEPOSIT}/src")
+    target_compile_definitions(qol-audit-regression-tests PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX _CRT_SECURE_NO_WARNINGS)
+    target_link_libraries(qol-audit-regression-tests PRIVATE D2RLPlugin::D2RLPlugin bcrypt)
+    add_test(NAME qol-audit-regressions COMMAND qol-audit-regression-tests)
     add_executable(qol-client-identify-tests tests/client_identify_tests.cpp)
     target_include_directories(qol-client-identify-tests PRIVATE src)
     add_test(NAME qol-client-identify COMMAND qol-client-identify-tests)
@@ -191,7 +209,7 @@ add_executable(qol-artifact-tests tests/artifact_tests.cpp)
 target_include_directories(qol-artifact-tests PRIVATE src "${PLUGIN_SDK}/include")
 target_compile_definitions(qol-artifact-tests PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 add_dependencies(qol-artifact-tests controller-qol)
-add_test(NAME qol-artifact COMMAND qol-artifact-tests "$<TARGET_FILE:controller-qol>" "1.3.1+rev.75")
+add_test(NAME qol-artifact COMMAND qol-artifact-tests "$<TARGET_FILE:controller-qol>" "1.3.1+rev.76-beta.4")
 
 add_executable(qol-shared-sdk-tests tests/shared_sdk_tests.cpp)
 target_include_directories(qol-shared-sdk-tests PRIVATE src "${PLUGIN_SDK}/include")
@@ -201,6 +219,23 @@ add_test(NAME qol-shared-sdk COMMAND qol-shared-sdk-tests)
 add_executable(qol-bulk-stash-tests tests/bulk_stash_tests.cpp)
 target_include_directories(qol-bulk-stash-tests PRIVATE src "${PLUGIN_SDK}/include")
 add_test(NAME qol-bulk-stash COMMAND qol-bulk-stash-tests)
+
+# Exercise QOL's production observer bridge and the shared animator itself.
+add_executable(qol-bulk-stash-feedback-tests tests/bulk_stash_feedback_tests.cpp src/bulk_stash_feedback.cpp)
+target_include_directories(qol-bulk-stash-feedback-tests PRIVATE include "${INVENTORY_DEPOSIT}/src" "${PLUGIN_SDK}/include")
+target_compile_definitions(qol-bulk-stash-feedback-tests PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_compile_options(qol-bulk-stash-feedback-tests PRIVATE /W4 /WX)
+add_test(NAME qol-bulk-stash-feedback COMMAND qol-bulk-stash-feedback-tests)
+
+add_executable(qol-stash-feedback-tests "${INVENTORY_DEPOSIT}/tests/stash_feedback_tests.cpp" "${INVENTORY_DEPOSIT}/src/stash_feedback.cpp")
+target_include_directories(qol-stash-feedback-tests PRIVATE "${INVENTORY_DEPOSIT}/src" "${PLUGIN_SDK}/include")
+target_compile_definitions(qol-stash-feedback-tests PRIVATE INVENTORY_DEPOSIT_FEEDBACK_TESTS WIN32_LEAN_AND_MEAN NOMINMAX STASH_FEEDBACK_LOG_PREFIX="[QOL/StashFeedback]")
+target_compile_options(qol-stash-feedback-tests PRIVATE /W4 /WX)
+add_test(NAME qol-stash-feedback COMMAND qol-stash-feedback-tests)
+
+add_executable(qol-stash-feedback-policy-tests "${INVENTORY_DEPOSIT}/tests/stash_feedback_policy_tests.cpp")
+target_include_directories(qol-stash-feedback-policy-tests PRIVATE "${INVENTORY_DEPOSIT}/src")
+add_test(NAME qol-stash-feedback-policy COMMAND qol-stash-feedback-policy-tests)
 
 # Integrated aim policy and configuration isolation regression coverage.
 add_executable(qol-aim-tests tests/aim_policy_tests.cpp)

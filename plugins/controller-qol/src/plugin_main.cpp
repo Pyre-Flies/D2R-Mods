@@ -1,6 +1,7 @@
 #include "identify_bulk.h"
 #include "owned_payloads.h"
 #include "bulk_stash.h"
+#include "bulk_stash_feedback.h"
 #include "aim/controller_aim.h"
 #include "aim/config_sections.h"
 #include <D2RLPlugin/api.h>
@@ -21,6 +22,7 @@
 #include "storage_focus.h"
 #include "identify_stat.h"
 #include "move_identity.h"
+#include "cube_shortcut_policy.h"
 #include "materials_policy.h"
 #include "materials_signatures.h"
 #include "shared_owner_compatibility.h"
@@ -55,6 +57,7 @@
 #include <mutex>
 #include <unordered_map>
 
+namespace PlacardOverlay {void ForgetSession() noexcept;}
 namespace {
 
 struct PluginSettings {
@@ -79,7 +82,7 @@ struct PluginSettings {
     bool prioritizeStashBoxes = true;
     bool prioritizeWaypoints = true;
     bool prioritizeShrines = true;
-    bool prioritizeChests = false;
+    bool prioritizeChests = true;
     bool portalDiagnostics = false;
 };
 
@@ -156,7 +159,7 @@ static constexpr D2RL::PluginInfo ControllerQoLPluginInfo {
     .abiVersion  = D2RL_PLUGIN_ABI_VERSION,
     .id          = "controller-qol-updates",
     .name        = "Controller QOL Updates",
-    .version     = "1.3.1+rev.75",
+    .version     = "1.3.1+rev.76-beta.4",
     .author      = "PyreFly",
     .description = "Direct controller looting with filtered labels, inventory shortcuts, and stash navigation.",
     .flags       = D2RL::PluginFlags::Shared | D2RL::PluginFlags::NativeHooks,
@@ -282,10 +285,22 @@ static std::recursive_mutex s_IdentifyMutex;
 static IdentifyRequest s_IdentifyRequest{};
 static uint64_t s_IdentifyGeneration{};
 static bool s_IdentifySessionEvents{};
+static std::atomic<uint64_t> s_ActionGeneration{1};
+static std::atomic<uint64_t> s_ClientLootRefreshToken{0};
 static void CancelOwnedRequests() noexcept;
-static void __cdecl IdentifySessionChanged(const D2RL::PluginContext*,const D2RL::Lifecycle::GameplayEvent*,void*) noexcept {
-    std::lock_guard lock(s_IdentifyMutex);++s_IdentifyGeneration;s_IdentifyPending=false;s_IdentifyRequest={};
+static void __cdecl IdentifySessionChanged(const D2RL::PluginContext*,const D2RL::Lifecycle::GameplayEvent* event,void*) noexcept {
+    if(event && !D2RL::Lifecycle::HasGameplayEventField(event,D2RL::Lifecycle::GameplayEventRequiredSize))return;
+    {std::lock_guard lock(s_IdentifyMutex);++s_IdentifyGeneration;s_IdentifyPending=false;s_IdentifyRequest={};}
+    ++s_ActionGeneration;
+    s_ClientLootRefreshToken=0;
     CancelOwnedRequests();
+    QolClientLoot::OnLifecycle(event);
+    PlacardOverlay::ForgetSession(); // Never restore a buffer belonging to the old game.
+    {std::lock_guard lock(s_FocusIdentityMutex);s_FocusIdentity={};s_FocusIdentityTick=0;}
+    s_FocusedItem=0;s_FocusedCode=0;s_FocusedTick=0;s_LastPlayerHandle=0;
+}
+static void __cdecl GroundPlayerReady(const D2RL::PluginContext*,const D2RL::Lifecycle::GameplayEvent* event,void*) noexcept {
+    QolClientLoot::OnLifecycle(event);
 }
 static void InitializeIdentifyQueue(const D2RL::PluginContext* ctx) noexcept {
     IdentifySessionChanged(nullptr,nullptr,nullptr);s_IdentifySessionEvents=false;
@@ -298,6 +313,11 @@ static void InitializeIdentifyQueue(const D2RL::PluginContext* ctx) noexcept {
         D2RL::Lifecycle::ListenerHandle handle{};
         if(lifecycle->registerGameplayEventListener(ctx,&listener,&handle)!=D2RL::Lifecycle::Result::Success)s_IdentifySessionEvents=false;
     }
+    const D2RL::Lifecycle::GameplayEventListener readyListener{D2RL::Lifecycle::GameplayEventListenerSize,0,
+        D2RL::Lifecycle::GameplayEventKind::LocalPlayerReady,0,GroundPlayerReady,nullptr};
+    D2RL::Lifecycle::ListenerHandle readyHandle{};
+    const bool readyRegistered=lifecycle->registerGameplayEventListener(ctx,&readyListener,&readyHandle)==D2RL::Lifecycle::Result::Success;
+    QolClientLoot::SetLifecycleAvailable(s_IdentifySessionEvents && readyRegistered);
 }
 static void __cdecl ExecuteIdentifyTask(const D2RL::PluginContext* context,void* userData) noexcept {
     std::lock_guard lock(s_IdentifyMutex);
@@ -406,10 +426,12 @@ struct MoveRequest {
     bool materialsFirst{};
     D2RL::Items::ItemInfo sharedIdentity{};
     D2RL::Items::ItemInfo identity{};
+    bool cubeShortcut{};
+    uint64_t actionGeneration{}, actionRequestedAt{};
 };
 
 static QolTasks::Payloads<MoveRequest> s_MoveRequests;
-struct CubePending { D2RL::Items::ItemInfo info; bool materials; };
+struct CubePending { D2RL::Items::ItemInfo info; uint64_t generation,requestedAt; };
 static QolTasks::Payloads<CubePending> s_CubeRequests;
 
 // Capture the chosen normal page and player before scheduling across threads.
@@ -431,13 +453,14 @@ static void ReportSharedMove(const D2RL::PluginContext* ctx,const QolSharedSdk::
 static void ExecuteMove(const D2RL::PluginContext* context, MoveRequest* req) noexcept {
     if (!req) return;
 
-    if (!context || !g_Items) {
-
-        return;
-    }
+    if (!context || !g_Items || !g_Settings.enabled) return;
+    if(req->cubeShortcut && (!QolCubeShortcut::Current(req->actionGeneration,s_ActionGeneration.load(),
+        req->actionRequestedAt,GetTickCount64()) || !QolCubeShortcut::Context(req->sourceContainer,
+        TestUiMode(UI_MODE_INVENTORY),TestUiMode(UI_MODE_STASH),TestUiMode(UI_MODE_CUBE))))return;
 
     D2RL::PlayerHandle player = D2RL::InvalidPlayerHandle;
-    if (g_Inventory && g_Inventory->getLocalPlayer(context, &player) == D2RL::Inventory::Result::Success && player != D2RL::InvalidPlayerHandle) {
+    const bool localResolved=g_Inventory && g_Inventory->getLocalPlayer(context,&player)==D2RL::Inventory::Result::Success && player!=D2RL::InvalidPlayerHandle;
+    if (localResolved) {
         s_LastPlayerHandle.store(player);
     } else if (req->player != D2RL::InvalidPlayerHandle) {
         player = req->player;
@@ -445,6 +468,7 @@ static void ExecuteMove(const D2RL::PluginContext* context, MoveRequest* req) no
         player = s_LastPlayerHandle.load();
     }
 
+    if(req->cubeShortcut && (!localResolved || player!=req->player))return;
     if (req->sdkSharedRequest) {
         D2RL::PlayerHandle livePlayer{};
         if (!g_Inventory || g_Inventory->getLocalPlayer(context,&livePlayer)!=D2RL::Inventory::Result::Success ||
@@ -501,6 +525,18 @@ static void ExecuteMove(const D2RL::PluginContext* context, MoveRequest* req) no
     if (activeTarget == D2RL::InvalidItemHandle) {
         context->LogWarn("[ControllerQoL] Could not resolve live handle for move target item!");
 
+        return;
+    }
+
+    // Enforce this gameplay rule even when the SDK/native route accepts a move.
+    // Check freshly resolved state, not the request's cached targetCode, before
+    // any ordinary Cube destination can reach SDK/native mutation.
+    D2RL::Items::ItemInfo liveTarget{.structSize=D2RL::Items::ItemInfoSize};
+    if(g_Items->getItemInfo(context,activeTarget,&liveTarget)!=D2RL::Items::Result::Success ||
+        liveTarget.container!=req->sourceContainer)return;
+    if(!QolCubeShortcut::Allows(liveTarget.code,req->primaryDestination) ||
+        !QolCubeShortcut::Allows(liveTarget.code,req->secondaryDestination)) {
+        context->LogWarn("[QOL/Cube] Refused moving the Horadric Cube into Cube storage; no move submitted.");
         return;
     }
 
@@ -641,7 +677,7 @@ static void ExecuteMove(const D2RL::PluginContext* context, MoveRequest* req) no
         if (req->sdkSharedRequest) {
             D2RL::Items::ItemInfo live{.structSize=D2RL::Items::ItemInfoSize};
             if (g_Items->getItemInfo(context,activeTarget,&live)==D2RL::Items::Result::Success && QolShared::SameItem(req->sharedIdentity,live)) {
-                const auto result=QolSharedSdk::Move(context,g_Items,player,live,req->sharedSelection.page,false);
+                const auto result=QolSharedSdk::Move(context,g_Items,player,live,req->sharedSelection.page,false,req->primaryDestination);
                 ReportSharedMove(context,result,req->sharedSelection.page,false);
                 if(result.committed){s_FocusedItem.store(D2RL::InvalidItemHandle);s_FocusedCode.store(0);}
             }
@@ -649,6 +685,9 @@ static void ExecuteMove(const D2RL::PluginContext* context, MoveRequest* req) no
         }
         if (QolSharedSdk::Supported(g_Items) && !(req->sharedSelection.valid && req->sharedSelection.previousSeason)) {
             context->LogWarn("[QOL/SharedSDK] No captured normal source; native fallback refused.");return;
+        }
+        if(req->primaryDestination!=D2RL::Items::ItemContainer::Inventory) {
+            context->LogWarn("[QOL/Shared] Direct Cube withdrawal unavailable on this authoritative route; no Inventory fallback.");return;
         }
         struct Withdrawal { uintptr_t base; void* player; bool submitted{}; } withdrawal{exeBase,playerUnit};
         g_Items->editNativeItem(context,activeTarget,[](const D2RL::PluginContext*,void* item,void* user) noexcept {
@@ -745,6 +784,7 @@ static void QueueLegacyQuickMove(const D2RL::Items::ItemInfo& info,bool cubeDest
     if(!cube && !stash)return;
     using C=D2RL::Items::ItemContainer;
     const auto destination=info.container==C::Inventory ? (cube?C::Cube:C::PersonalStash) : C::Inventory;
+    if(!QolCubeShortcut::Allows(info.code,destination))return;
     auto* req=new MoveRequest{};
     req->targetItem=info.handle;req->targetCode=info.code;req->cellX=info.x;req->cellY=info.y;
     req->sourceContainer=info.container;req->primaryDestination=destination;
@@ -759,7 +799,7 @@ static void QueueLegacyQuickMove(const D2RL::Items::ItemInfo& info,bool cubeDest
     }
 }
 
-static void QueueQuickMoveToCube(bool materialsFirst) noexcept;
+static void QueueQuickMoveToCube(bool materialsFirst,const D2RL::Items::ItemInfo* captured=nullptr) noexcept;
 static void TriggerQuickMoveToCubeOnFocusedItem() noexcept;
 
 static void TriggerQuickMoveOnFocusedItem() noexcept {
@@ -857,7 +897,7 @@ static bool PlayerHasCube(const D2RL::PluginContext* context, D2RL::PlayerHandle
         .reserved      = 0,
     };
     g_Inventory->forEachInventoryItem(context, player, &filter, [](const D2RL::PluginContext*, const D2RL::Items::ItemInfo* item, void* u) noexcept -> D2RL::Inventory::IterationAction {
-        if (item->code == D2R::ITEM_CODE_BOX || item->container == D2RL::Items::ItemContainer::Cube) {
+        if (QolCubeShortcut::IsCube(item->code) || item->container == D2RL::Items::ItemContainer::Cube) {
             *static_cast<bool*>(u) = true;
             return D2RL::Inventory::IterationAction::Stop;
         }
@@ -868,91 +908,54 @@ static bool PlayerHasCube(const D2RL::PluginContext* context, D2RL::PlayerHandle
     return found;
 }
 
-static void QueueQuickMoveToCube(bool materialsFirst) noexcept {
-    if (!g_PluginContext || !g_Threads || !g_Settings.quickMove) return;
+// UI thread only: capture the source, local SDK owner and Shared page before dispatch.
+static void QueueQuickMoveToCube(bool materialsFirst,const D2RL::Items::ItemInfo* captured) noexcept {
+    if(!g_PluginContext || !g_Threads || !g_Settings.enabled || !g_Settings.quickMove || !s_IdentifySessionEvents)return;
     if(QolNativeIdentify::Busy() || QolClientTransfer::Busy())return;
-
-    static std::atomic<ULONGLONG> s_LastQuickMoveCubeTick{0};
-    const ULONGLONG now = GetTickCount64();
-    if (now - s_LastQuickMoveCubeTick.load() < 250) {
-        return;
-    }
-    s_LastQuickMoveCubeTick.store(now);
-
     D2RL::Items::ItemInfo focused{};
-    if(!ReadFocusIdentity(focused))return;
-    if(!s_IdentifySessionEvents)return;
-    const auto token=s_CubeRequests.Put(std::make_unique<CubePending>(CubePending{focused,materialsFirst}));
-    if(!token)return;
-    const auto scheduled=g_Threads->runOnGameThread(g_PluginContext, [](const D2RL::PluginContext* context, void* user) noexcept {
-        auto owned=s_CubeRequests.Take(reinterpret_cast<uintptr_t>(user));
-        if(!owned)return;
-        const auto pending=*owned;
-        const auto& identity=pending.info;
-        const bool materialsFirst=pending.materials;
-        D2RL::PlayerHandle player{};
-        if(!g_Inventory || g_Inventory->getLocalPlayer(context,&player)!=D2RL::Inventory::Result::Success || !player)return;
-        const auto focusedItem=identity.handle;
-        const auto srcContainer=identity.container;
-        const auto targetCode=identity.code;
-        const auto cellX=identity.x,cellY=identity.y;
-
-        if (targetCode == D2R::ITEM_CODE_BOX) {
-            context->LogWarn("[ControllerQoL] Quick Move to Cube: Cannot move Horadric Cube into itself.");
-            return;
-        }
-
-        D2RL::Items::ItemContainer primaryDest = D2RL::Items::ItemContainer::Unknown;
-        if (srcContainer == D2RL::Items::ItemContainer::Cube) {
-            primaryDest = D2RL::Items::ItemContainer::Inventory;
-        } else {
-            primaryDest = D2RL::Items::ItemContainer::Cube;
-        }
-
-        char logBuf[192];
-        std::snprintf(logBuf, sizeof(logBuf),
-            "[ControllerQoL] Quick Move to Cube triggered: srcContainer=%u -> destContainer=%u, itemCode=0x%08X",
-            static_cast<uint32_t>(srcContainer), static_cast<uint32_t>(primaryDest), targetCode);
-        context->LogInfo(logBuf);
-
-        auto* req = new MoveRequest{
-            .player               = player,
-            .targetItem           = focusedItem,
-            .targetCode           = targetCode,
-            .cellX                = cellX,
-            .cellY                = cellY,
-            .sourceContainer      = srcContainer,
-            .primaryDestination   = primaryDest,
-            .secondaryDestination = D2RL::Items::ItemContainer::Unknown,
-            .materialsFirst       = materialsFirst,
-            .sharedIdentity       = identity,
-            .identity             = identity,
-        };
-
-        std::unique_ptr<MoveRequest> ownedMove(req);
-        ExecuteMove(context,ownedMove.get());
-    }, reinterpret_cast<void*>(token));
-    if(scheduled!=D2RL::Threads::Result::Success) {
-        (void)s_CubeRequests.Take(token);
-        // Materials LB+X originates on the UI thread and captures its stash tab.
-        // The native eligibility check precedes any ineligible-item Cube route.
-        if(scheduled==D2RL::Threads::Result::Unavailable)
-            (void)QolClientTransfer::Request(g_PluginContext,focused,!materialsFirst);
-    }
+    if(captured)focused=*captured;else if(!ReadFocusIdentity(focused))return;
+    const auto destination=focused.container==D2RL::Items::ItemContainer::Cube?
+        D2RL::Items::ItemContainer::Inventory:D2RL::Items::ItemContainer::Cube;
+    if(!QolCubeShortcut::Allows(focused.code,destination) || !QolCubeShortcut::Context(focused.container,
+        TestUiMode(UI_MODE_INVENTORY),TestUiMode(UI_MODE_STASH),TestUiMode(UI_MODE_CUBE)) ||
+        !QolStorageFocus::Matches(g_PluginContext,focused))return;
+    static uint64_t last{}; // All callers are on the UI thread.
+    const auto now=GetTickCount64();
+    if(last && now-last<250)return;
+    last=now;
+    auto request=std::make_unique<MoveRequest>();
+    request->targetItem=focused.handle;request->targetCode=focused.code;
+    request->cellX=focused.x;request->cellY=focused.y;request->sourceContainer=focused.container;
+    request->primaryDestination=destination;
+    request->secondaryDestination=D2RL::Items::ItemContainer::Unknown;
+    request->materialsFirst=materialsFirst;request->sharedIdentity=focused;request->identity=focused;
+    request->cubeShortcut=true;request->actionGeneration=s_ActionGeneration.load();request->actionRequestedAt=now;
+    if(!g_Inventory || g_Inventory->getLocalPlayer(g_PluginContext,&request->player)!=D2RL::Inventory::Result::Success || !request->player)return;
+    if(focused.container==D2RL::Items::ItemContainer::SharedStash && !CaptureSharedRequest(g_PluginContext,*request))return;
+    const auto scheduled=QueueMoveTask(g_PluginContext,request.release());
+    if(scheduled==D2RL::Threads::Result::Unavailable)
+        (void)QolClientTransfer::Request(g_PluginContext,focused,!materialsFirst);
 }
 
 static void TriggerQuickMoveToCubeOnFocusedItem() noexcept {
-    if(!g_PluginContext || !g_Threads || !g_Settings.enabled || !g_Settings.quickMove)return;
-    (void)g_Threads->runOnUiThread(g_PluginContext,[](const D2RL::PluginContext* ctx,void*) noexcept {
+    if(!g_PluginContext || !g_Threads || !g_Settings.enabled || !g_Settings.quickMove || !s_IdentifySessionEvents)return;
+    // Copy at the physical press. A delayed UI callback must not substitute a new tooltip.
+    D2RL::Items::ItemInfo captured{};
+    if(!ReadFocusIdentity(captured))return;
+    const auto token=s_CubeRequests.Put(std::make_unique<CubePending>(CubePending{captured,s_ActionGeneration.load(),GetTickCount64()}));
+    if(!token)return;
+    const auto result=g_Threads->runOnUiThread(g_PluginContext,[](const D2RL::PluginContext* ctx,void* user) noexcept {
+        auto pending=s_CubeRequests.Take(reinterpret_cast<uintptr_t>(user));
+        if(!pending || !g_Settings.enabled || !QolCubeShortcut::Current(pending->generation,s_ActionGeneration.load(),pending->requestedAt,GetTickCount64()))return;
         if(QolNativeIdentify::Busy() || QolClientTransfer::Busy() || QolBelt::Busy() || QolMaterials::Busy() || QolBulkStash::Busy())return;
-        D2RL::Items::ItemInfo info{};
-        if(!ReadFocusIdentity(info))return;
-        if(TestUiMode(UI_MODE_STASH)) {
-            if(!QolStorageFocus::Matches(ctx,info))return;
-            if(QolMaterials::TryWithdrawToCube(ctx,info))return;
-        }
-        QueueQuickMoveToCube(false);
-    },nullptr);
+        const auto& info=pending->info;
+        D2RL::Items::ItemInfo current{};
+        if(!ReadFocusIdentity(current) || !QolIdentify::Same(info,current) || !QolCubeShortcut::Context(info.container,
+            TestUiMode(UI_MODE_INVENTORY),TestUiMode(UI_MODE_STASH),TestUiMode(UI_MODE_CUBE)) || !QolStorageFocus::Matches(ctx,info))return;
+        if(TestUiMode(UI_MODE_STASH) && QolMaterials::TryWithdrawToCube(ctx,info))return;
+        QueueQuickMoveToCube(false,&info);
+    },reinterpret_cast<void*>(token));
+    if(result!=D2RL::Threads::Result::Success)(void)s_CubeRequests.Take(token);
 }
 static bool TriggerAdvancedSingleBelt() noexcept {
     const auto advancedStamp=s_AdvancedBeltFocusTick.load();
@@ -1230,9 +1233,13 @@ static void __cdecl OnItemTooltipCallback(
                  info.container == D2RL::Items::ItemContainer::SharedStash ||
                  info.container == D2RL::Items::ItemContainer::CustomPage ||
                  info.container == D2RL::Items::ItemContainer::Cube)
-            );
+            ) && !(info.container==D2RL::Items::ItemContainer::Inventory && isCubeOpen && QolCubeShortcut::IsCube(info.code));
 
-            const bool canMoveToCube  = !vendorStock && g_Settings.quickMove && playerHasCube && (info.code != D2R::ITEM_CODE_BOX) && (!isCubeOpen) && (
+            const auto cubeSharedSelection=info.container==D2RL::Items::ItemContainer::SharedStash?
+                QolSharedSdk::Selected(context->exeBase):QolSharedSdk::Selection{};
+            const bool cubeSourceSupported=info.container!=D2RL::Items::ItemContainer::SharedStash ||
+                (QolSharedSdk::Supported(g_Items) && cubeSharedSelection.valid && !cubeSharedSelection.previousSeason);
+            const bool canMoveToCube  = cubeSourceSupported && !vendorStock && g_Settings.quickMove && playerHasCube && !QolCubeShortcut::IsCube(info.code) && (!isCubeOpen) && (
                 info.container == D2RL::Items::ItemContainer::Inventory ||
                 info.container == D2RL::Items::ItemContainer::PersonalStash ||
                 info.container == D2RL::Items::ItemContainer::SharedStash || advancedFocus
@@ -1332,21 +1339,8 @@ namespace PlacardOverlay {
 }
 
 namespace GroundLoot {
-    constexpr std::uintptr_t GetGameRva = 0x34B440;
-    constexpr std::uintptr_t EnumerateRva = 0x2EFDE0;
-    constexpr std::uintptr_t FirstUnitRva = 0x2EFD90;
-    constexpr std::uintptr_t NextUnitRva = 0x34B4A0;
-    constexpr std::uintptr_t UnitTypeRva = 0x34B9D0;
-    constexpr std::uintptr_t UnitIdRva = 0x34A330;
-    constexpr std::uintptr_t UnitModeRva = 0x34AB60;
-    constexpr std::uintptr_t UnitDistanceRva = 0x325140;
-    constexpr std::uintptr_t UnitCollisionRva = 0x350550;
     constexpr std::uintptr_t PickupRva = 0x471950;
     constexpr std::uintptr_t GetItemCodeRva = 0x36EF50;
-
-    constexpr std::uint32_t ItemType = 4;
-    constexpr std::uint32_t GroundMode = 3;
-    constexpr std::uint32_t PickupCollisionMask = 0x804;
 
     constexpr uint8_t GetItemCodeExpected[32] = {
         0x48, 0x89, 0x5C, 0x24, 0x10, 0x57, 0x48, 0x83,
@@ -1355,39 +1349,23 @@ namespace GroundLoot {
         0x4C, 0x24, 0x30, 0xE8, 0x80, 0x83, 0xFF, 0xFF,
     };
 
-    using TriggerFn = std::int64_t(__fastcall*)(void*, void*, void*, std::int32_t);
-    using GetGameFn = void*(__fastcall*)(void*);
-    using EnumerateFn = void(__fastcall*)(void*, void***, std::uint32_t*);
-    using UnitFn = void*(__fastcall*)(void*);
-    using UnitIntFn = std::uint32_t(__fastcall*)(void*);
-    using UnitPairFn = std::int32_t(__fastcall*)(void*, void*);
-    using CollisionFn = std::int32_t(__fastcall*)(void*, void*, std::uint32_t);
     using PickupFn = bool(__fastcall*)(void*, std::uint32_t, bool, std::uint32_t, bool, bool);
-    using GetItemCodeFn = std::uint32_t(__fastcall*)(void*);
     using GetSelectedSkillFn = void*(__fastcall*)(void*);
 
     static uint8_t* s_Base = nullptr;
     static bool s_FingerprintValid = false;
-    static void* s_ActivePlayer = nullptr;
-    static void* s_ActiveGame = nullptr;
 
-    static GetGameFn s_GetGame = nullptr;
-    static EnumerateFn s_Enumerate = nullptr;
-    static UnitFn s_FirstUnit = nullptr;
-    static UnitFn s_NextUnit = nullptr;
-    static UnitIntFn s_UnitType = nullptr;
-    static UnitIntFn s_UnitId = nullptr;
-    static UnitIntFn s_UnitMode = nullptr;
-    static UnitPairFn s_UnitDistance = nullptr;
-    static CollisionFn s_UnitCollision = nullptr;
     static PickupFn s_Pickup = nullptr;
     static std::atomic<bool> s_PickupCallsActive{false};
-    static GetItemCodeFn s_GetItemCode = nullptr;
     static GetSelectedSkillFn s_GetSelectedSkill = nullptr;
+
+    static bool LocalActor(void* player,uint32_t& id) noexcept;
 
     static bool ProjectGuidedArrowPacket(void* player, const void* packet,
         int32_t size, std::array<uint8_t,5>& projectedPacket) noexcept {
-        if (!player || !packet || size != static_cast<int32_t>(projectedPacket.size()) ||
+        uint32_t actorId{};
+        if (!g_Settings.enabled || !LocalActor(player,actorId) || !ControllerQoL::IsControllerUiActive() ||
+            !player || !packet || size != static_cast<int32_t>(projectedPacket.size()) ||
             !s_GetSelectedSkill)
             return false;
 
@@ -1429,11 +1407,22 @@ namespace GroundLoot {
         }
     }
 
+    static bool LocalActor(void* player,uint32_t& id) noexcept {
+        __try {
+            if(!player)return false;
+            const auto* words=static_cast<const uint32_t*>(player);
+            id=words[2];return QolClientLoot::IsLocalActor(words[0],id);
+        } __except(EXCEPTION_EXECUTE_HANDLER) {return false;}
+    }
+
     __declspec(noinline) bool __fastcall HookPickup(void* player, uint32_t guid, bool arg3, uint32_t dist, bool arg5, bool arg6) {
         if (!s_Pickup) return false;
         if (!s_PickupCallsActive.load())
             return s_Pickup(player, guid, arg3, dist, arg5, arg6);
 
+        uint32_t actorId{};
+        if(!g_Settings.enabled || !QolClientLoot::Ready() || !LocalActor(player,actorId) || QolClientLoot::TakeNativePickupPermit(actorId,guid))
+            return s_Pickup(player,guid,arg3,dist,arg5,arg6);
         const bool shortcutsEnabled = Probe::GroundShortcutsEnabled(g_Settings.enabled, g_Settings.groundPickup);
         const bool modifierHeld = shortcutsEnabled &&
             ControllerQoL::IsGroundPickupActive(g_Settings.groundPickupButton);
@@ -1489,176 +1478,7 @@ namespace GroundLoot {
         return published;
     }
 
-    static uint32_t s_HookTriggerCount = 0;
-    static std::atomic<int32_t> s_PendingPickupSlot{-1};
-    static void UpdateStickySlotsUnsafe(void* player, void* game, uint32_t maxDistance, const D2RL::PluginContext* context, bool forceRefresh = false);
-
-    static uint32_t InspectGroundItemsUnsafe(void* player, void* game, const D2RL::PluginContext* context, bool verbose) {
-        if (!game || !s_Enumerate || !s_FirstUnit || !s_NextUnit) {
-            if (context && verbose) {
-                context->LogWarn("[ControllerQoL] InspectGroundItems: missing game or unit enumeration function pointers.");
-            }
-            return 0;
-        }
-
-        void** buckets = nullptr;
-        uint32_t count = 0;
-        s_Enumerate(game, &buckets, &count);
-        if (!buckets || count == 0 || count > 4096) {
-            if (context && verbose) {
-                char warnMsg[160];
-                std::snprintf(warnMsg, sizeof(warnMsg),
-                    "[ControllerQoL] InspectGroundItems: enumeration returned buckets=%p, count=%u (game=%p, player=%p)",
-                    static_cast<void*>(buckets), count, game, player);
-                context->LogWarn(warnMsg);
-            }
-            return 0;
-        }
-
-        uint32_t totalUnits = 0;
-        uint32_t groundItems = 0;
-
-        for (uint32_t i = 0; i < count; ++i) {
-            for (void* unit = s_FirstUnit(buckets[i]); unit; unit = s_NextUnit(unit)) {
-                totalUnits++;
-                const uint32_t uType = s_UnitType ? s_UnitType(unit) : 0;
-                const uint32_t uMode = s_UnitMode ? s_UnitMode(unit) : 0;
-
-                if (uType == ItemType && uMode == GroundMode) {
-                    groundItems++;
-                    const uint32_t guid = s_UnitId ? s_UnitId(unit) : 0;
-                    const uint32_t packedCode = s_GetItemCode ? s_GetItemCode(unit) : 0;
-                    const int32_t distance = (player && s_UnitDistance) ? s_UnitDistance(player, unit) : -1;
-                    const bool collision = (player && s_UnitCollision) ? (s_UnitCollision(player, unit, PickupCollisionMask) != 0) : false;
-
-                    char codeStr[5]{};
-                    codeStr[0] = static_cast<char>(packedCode & 0xFF);
-                    codeStr[1] = static_cast<char>((packedCode >> 8) & 0xFF);
-                    codeStr[2] = static_cast<char>((packedCode >> 16) & 0xFF);
-                    codeStr[3] = static_cast<char>((packedCode >> 24) & 0xFF);
-                    codeStr[4] = '\0';
-
-                    // Query item info if D2RLoader's item service is available
-                    const char* qualStr = "Unknown";
-                    int isIdentified = -1;
-                    uint32_t rawQuality = 0;
-                    uint32_t rawFlags = 0;
-
-                    __try {
-                        auto* d2Unit = reinterpret_cast<const D2R::UnitAny*>(unit);
-                        if (d2Unit && d2Unit->pItemData) {
-                            rawQuality = d2Unit->pItemData->itemQuality;
-                            rawFlags = d2Unit->pItemData->itemFlags;
-                            switch (rawQuality) {
-                                case 1: qualStr = "LowQuality"; break;
-                                case 2: qualStr = "Normal"; break;
-                                case 3: qualStr = "Superior"; break;
-                                case 4: qualStr = "Magic"; break;
-                                case 5: qualStr = "Set"; break;
-                                case 6: qualStr = "Rare"; break;
-                                case 7: qualStr = "Unique"; break;
-                                case 8: qualStr = "Crafted"; break;
-                                default: qualStr = "Other"; break;
-                            }
-                            isIdentified = (rawFlags & D2R::ITEMFLAG_IDENTIFIED) ? 1 : 0;
-                        }
-                    } __except (EXCEPTION_EXECUTE_HANDLER) {
-                        // Safe fallback
-                    }
-
-                    if (context && g_Settings.debugLogging) {
-                        uint64_t rawQwords[8]{};
-                        __try {
-                            auto* pRaw = reinterpret_cast<const uint64_t*>(unit);
-                            for (int k = 0; k < 8; ++k) rawQwords[k] = pRaw[k];
-                        } __except (EXCEPTION_EXECUTE_HANDLER) {}
-
-                        if (groundItems <= 3) {
-                            char rawMsg[256];
-                            std::snprintf(rawMsg, sizeof(rawMsg),
-                                "[ControllerQoL] UnitAny[%p]: [0]=0x%llX [1]=0x%llX [2]=0x%llX [3]=0x%llX [4]=0x%llX [5]=0x%llX",
-                                unit, rawQwords[0], rawQwords[1], rawQwords[2], rawQwords[3], rawQwords[4], rawQwords[5]);
-                            context->LogInfo(rawMsg);
-                        }
-
-                        uint32_t ptr2Vals[4]{};
-                        uint32_t ptr5Vals[4]{};
-                        __try {
-                            if (rawQwords[2]) {
-                                auto* p = reinterpret_cast<const uint32_t*>(rawQwords[2]);
-                                for (int i = 0; i < 4; ++i) ptr2Vals[i] = p[i];
-                            }
-                        } __except (EXCEPTION_EXECUTE_HANDLER) {}
-                        __try {
-                            if (rawQwords[5]) {
-                                auto* p = reinterpret_cast<const uint32_t*>(rawQwords[5]);
-                                for (int i = 0; i < 4; ++i) ptr5Vals[i] = p[i];
-                            }
-                        } __except (EXCEPTION_EXECUTE_HANDLER) {}
-
-                        if (groundItems <= 3) {
-                            char derefMsg[256];
-                            std::snprintf(derefMsg, sizeof(derefMsg),
-                                "[ControllerQoL] Deref: Ptr[2](%p)={q=%u,f=0x%08X,%u,%u}, Ptr[5](%p)={q=%u,f=0x%08X,%u,%u}",
-                                reinterpret_cast<void*>(rawQwords[2]), ptr2Vals[0], ptr2Vals[1], ptr2Vals[2], ptr2Vals[3],
-                                reinterpret_cast<void*>(rawQwords[5]), ptr5Vals[0], ptr5Vals[1], ptr5Vals[2], ptr5Vals[3]);
-                            context->LogInfo(derefMsg);
-                        }
-
-                        char msg[256];
-                        std::snprintf(msg, sizeof(msg),
-                            "[ControllerQoL] [GROUND ITEM #%u] Code='%s' (0x%08X), GUID=%u, Dist=%d, Qual=%s(%u), Ident=%d(flags=0x%08X), Collide=%d",
-                            groundItems, codeStr, packedCode, guid, distance, qualStr, rawQuality, isIdentified, rawFlags, collision ? 1 : 0);
-                        context->LogInfo(msg);
-                    }
-                }
-            }
-        }
-
-        static uint32_t s_LastLoggedCount = UINT32_MAX;
-        if (context && g_Settings.debugLogging && (groundItems > 0 || verbose || (s_LastLoggedCount != 0 && groundItems == 0))) {
-            s_LastLoggedCount = groundItems;
-            char summary[180];
-            std::snprintf(summary, sizeof(summary),
-                "[ControllerQoL] Ground scan: found %u ground item(s) (scanned %u total units across %u buckets).",
-                groundItems, totalUnits, count);
-            context->LogInfo(summary);
-        }
-
-        return groundItems;
-    }
-
-    static uint32_t InspectGroundItems(void* player, void* game, const D2RL::PluginContext* context, bool verbose) noexcept {
-        __try {
-            return InspectGroundItemsUnsafe(player, game, context, verbose);
-        } __except (EXCEPTION_EXECUTE_HANDLER) {
-            if (context) {
-                context->LogWarn("[ControllerQoL] InspectGroundItems caught an SEH exception.");
-            }
-            return 0;
-        }
-    }
-
-    struct GroundCandidate {
-        void* unit = nullptr;
-        uint32_t guid = 0;
-        uint32_t packedCode = 0;
-        char code[5]{};
-        int32_t distance = 0;
-        uint32_t quality = 0;
-        bool isIdentified = false;
-    };
-
-    struct StickySlot {
-        uint32_t guid = 0;
-        char code[5]{};
-        uint32_t quality = 0;
-        int32_t distance = -1;
-        void* unit = nullptr;
-    };
-
     static constexpr size_t NUM_STICKY_SLOTS = 7;
-    static StickySlot s_StickySlots[NUM_STICKY_SLOTS]{};
     static const char* const s_SlotNames[NUM_STICKY_SLOTS] = { "A", "X", "Y", "B", "R1", "R2", "L2" };
 
     struct PrefixInfo {
@@ -1755,324 +1575,6 @@ namespace GroundLoot {
         return baseRank + qualBonus;
     }
 
-    static uint32_t CollectGroundCandidatesUnsafe(
-        void* player,
-        void* game,
-        uint32_t maxDistance,
-        std::vector<GroundCandidate>& candidates
-    ) {
-        candidates.clear();
-        if (!player || !game || !s_Enumerate || !s_FirstUnit || !s_NextUnit) {
-            return 0;
-        }
-
-        void** buckets = nullptr;
-        uint32_t count = 0;
-        s_Enumerate(game, &buckets, &count);
-        if (!buckets || count == 0 || count > 4096) {
-            return 0;
-        }
-
-        for (uint32_t i = 0; i < count; ++i) {
-            for (void* unit = s_FirstUnit(buckets[i]); unit; unit = s_NextUnit(unit)) {
-                if ((s_UnitType ? s_UnitType(unit) : 0) != ItemType ||
-                    (s_UnitMode ? s_UnitMode(unit) : 0) != GroundMode) {
-                    continue;
-                }
-                if (s_UnitCollision && s_UnitCollision(player, unit, PickupCollisionMask) != 0) {
-                    continue;
-                }
-                const int32_t dist = s_UnitDistance ? s_UnitDistance(player, unit) : -1;
-                if (dist < 0 || static_cast<uint32_t>(dist) > maxDistance) {
-                    continue;
-                }
-
-                GroundCandidate c{};
-                c.unit = unit;
-                c.guid = s_UnitId ? s_UnitId(unit) : 0;
-                c.packedCode = s_GetItemCode ? s_GetItemCode(unit) : 0;
-                c.code[0] = static_cast<char>(c.packedCode & 0xFF);
-                c.code[1] = static_cast<char>((c.packedCode >> 8) & 0xFF);
-                c.code[2] = static_cast<char>((c.packedCode >> 16) & 0xFF);
-                c.code[3] = static_cast<char>((c.packedCode >> 24) & 0xFF);
-                c.code[4] = '\0';
-                c.distance = dist;
-
-                // Skip items without an active visible placard on screen (e.g. hidden by loot filter)
-                if (!PlacardOverlay::IsPlacardActive(c.guid)) {
-                    continue;
-                }
-
-                __try {
-                    auto* d2Unit = reinterpret_cast<const D2R::UnitAny*>(unit);
-                    if (d2Unit && d2Unit->pItemData) {
-                        c.quality = d2Unit->pItemData->itemQuality;
-                        c.isIdentified = (d2Unit->pItemData->itemFlags & D2R::ITEMFLAG_IDENTIFIED) != 0;
-                    }
-                } __except (EXCEPTION_EXECUTE_HANDLER) {}
-
-                candidates.push_back(c);
-            }
-        }
-
-        // Sort candidates based on Item Code & Quality vs Distance:
-        // 1. Higher item priority tier first (High Runes > Charms/Jewels > Jewelry > Uniques > Sets > Rares > Bases > Potions)
-        // 2. Closer distance breaks ties among items of the same priority
-        std::sort(candidates.begin(), candidates.end(), [](const GroundCandidate& a, const GroundCandidate& b) {
-            const int rankA = GetItemCodeRank(a.code, a.quality);
-            const int rankB = GetItemCodeRank(b.code, b.quality);
-            if (rankA != rankB) {
-                return rankA > rankB;
-            }
-            return a.distance < b.distance;
-        });
-
-        return static_cast<uint32_t>(candidates.size());
-    }
-
-    static void UpdateStickySlotsUnsafe(
-        void* player,
-        void* game,
-        uint32_t maxDistance,
-        const D2RL::PluginContext* context,
-        bool forceRefresh
-    ) {
-        if (forceRefresh) {
-            for (size_t i = 0; i < NUM_STICKY_SLOTS; ++i) {
-                s_StickySlots[i] = {};
-            }
-        }
-
-        std::vector<GroundCandidate> candidates;
-        candidates.reserve(16);
-        CollectGroundCandidatesUnsafe(player, game, maxDistance, candidates);
-
-        if (candidates.empty()) {
-            bool hadItems = false;
-            for (size_t i = 0; i < NUM_STICKY_SLOTS; ++i) {
-                if (s_StickySlots[i].guid != 0) {
-                    hadItems = true;
-                    s_StickySlots[i] = {};
-                }
-            }
-            if (hadItems && context) {
-                context->LogInfo("[ControllerQoL] Sticky Slots: No items in range. Slots reset.");
-            }
-            return;
-        }
-
-        std::vector<bool> candidateAssigned(candidates.size(), false);
-        bool changed = forceRefresh;
-
-        // Step 1: Retain existing slot assignments if not force refreshing
-        if (!forceRefresh) {
-            for (size_t i = 0; i < NUM_STICKY_SLOTS; ++i) {
-                if (s_StickySlots[i].guid == 0) continue;
-
-                bool found = false;
-                for (size_t c = 0; c < candidates.size(); ++c) {
-                    if (candidates[c].guid == s_StickySlots[i].guid) {
-                        s_StickySlots[i].distance = candidates[c].distance;
-                        s_StickySlots[i].unit = candidates[c].unit;
-                        candidateAssigned[c] = true;
-                        found = true;
-                        break;
-                    }
-                }
-
-                if (!found) {
-                    // Item was picked up or left range -> free this slot!
-                    s_StickySlots[i] = {};
-                    changed = true;
-                }
-            }
-        }
-
-        // Step 2: Assign unassigned candidates (sorted by rarity vs distance) to empty slots
-        for (size_t c = 0; c < candidates.size(); ++c) {
-            if (candidateAssigned[c]) continue;
-
-            for (size_t i = 0; i < NUM_STICKY_SLOTS; ++i) {
-                if (s_StickySlots[i].guid == 0) {
-                    s_StickySlots[i].guid = candidates[c].guid;
-                    std::memcpy(s_StickySlots[i].code, candidates[c].code, 5);
-                    s_StickySlots[i].quality = candidates[c].quality;
-                    s_StickySlots[i].distance = candidates[c].distance;
-                    s_StickySlots[i].unit = candidates[c].unit;
-                    candidateAssigned[c] = true;
-                    changed = true;
-                    break;
-                }
-            }
-        }
-
-        if (g_Settings.debugLogging && changed && context) {
-            char logBuf[320];
-            int offset = std::snprintf(logBuf, sizeof(logBuf),
-                forceRefresh ? "[ControllerQoL] L1 Hit - Refreshed Mappings (Rarity vs Distance): "
-                             : "[ControllerQoL] Sticky Slots: ");
-            for (size_t i = 0; i < NUM_STICKY_SLOTS; ++i) {
-                // snprintf returns the required length on truncation. Never use
-                // that value as the next pointer/remaining capacity unchecked.
-                if(offset<0 || static_cast<size_t>(offset)>=sizeof(logBuf)-1)break;
-                if (s_StickySlots[i].guid != 0) {
-                    const char* qName = "Norm";
-                    switch (s_StickySlots[i].quality) {
-                        case 7: qName = "Uniq"; break;
-                        case 5: qName = "Set"; break;
-                        case 8: qName = "Crft"; break;
-                        case 6: qName = "Rare"; break;
-                        case 4: qName = "Magi"; break;
-                        case 3: qName = "Sup"; break;
-                        case 2: qName = "Norm"; break;
-                        case 1: qName = "Low"; break;
-                    }
-                    offset += std::snprintf(logBuf + offset, sizeof(logBuf) - offset,
-                        "[%s]='%s'(%s,#%u,d=%d) ",
-                        s_SlotNames[i], s_StickySlots[i].code, qName, s_StickySlots[i].guid, s_StickySlots[i].distance);
-                } else {
-                    offset += std::snprintf(logBuf + offset, sizeof(logBuf) - offset,
-                        "[%s]=<empty> ", s_SlotNames[i]);
-                }
-            }
-            context->LogInfo(logBuf);
-        }
-    }
-
-    static bool PickupCandidateSlotUnsafe(
-        void* player,
-        void* game,
-        uint32_t slotIndex,
-        uint32_t maxDistance,
-        const D2RL::PluginContext* context
-    ) {
-        if (!player || !game || !s_Pickup) return false;
-
-        // Ensure slots are populated if empty
-        bool hasAny = false;
-        for (size_t i = 0; i < NUM_STICKY_SLOTS; ++i) {
-            if (s_StickySlots[i].guid != 0) { hasAny = true; break; }
-        }
-        if (!hasAny) {
-            UpdateStickySlotsUnsafe(player, game, maxDistance, context, true);
-        }
-
-        uint32_t actualSlot = slotIndex;
-        const char* buttonName = "Quick";
-
-        // Quick Pickup (0xFF): find the highest priority non-empty slot
-        if (slotIndex == 0xFF) {
-            size_t bestSlot = NUM_STICKY_SLOTS;
-            for (size_t i = 0; i < NUM_STICKY_SLOTS; ++i) {
-                if (s_StickySlots[i].guid != 0) {
-                    bestSlot = i;
-                    break;
-                }
-            }
-            if (bestSlot < NUM_STICKY_SLOTS) {
-                actualSlot = static_cast<uint32_t>(bestSlot);
-                buttonName = s_SlotNames[actualSlot];
-            } else {
-                if (context) context->LogInfo("[ControllerQoL] Quick pickup: No items in range.");
-                return false;
-            }
-        } else if (actualSlot < NUM_STICKY_SLOTS) {
-            buttonName = s_SlotNames[actualSlot];
-        } else {
-            return false;
-        }
-
-        if (s_StickySlots[actualSlot].guid == 0) {
-            if (context) {
-                char msg[128];
-                std::snprintf(msg, sizeof(msg),
-                    "[ControllerQoL] Pickup slot [%s] requested, but slot is empty.",
-                    buttonName);
-                context->LogInfo(msg);
-            }
-            return false;
-        }
-
-        const uint32_t targetGuid = s_StickySlots[actualSlot].guid;
-        char targetCode[5]{};
-        std::memcpy(targetCode, s_StickySlots[actualSlot].code, 5);
-        const int32_t targetDist = s_StickySlots[actualSlot].distance;
-        const uint32_t targetQual = s_StickySlots[actualSlot].quality;
-
-        const bool picked = s_Pickup(player, targetGuid, true, maxDistance, true, false);
-
-        if (context) {
-            char msg[192];
-            std::snprintf(msg, sizeof(msg),
-                "[ControllerQoL] Pickup slot [%s] executed: Code='%s', GUID=%u, Dist=%d, Qual=%u -> %s",
-                buttonName, targetCode, targetGuid, targetDist, targetQual,
-                picked ? "SUCCESS" : "FAILED");
-            context->LogInfo(msg);
-        }
-
-        if (picked) {
-            s_StickySlots[actualSlot] = {};
-            PlacardOverlay::UnregisterPlacard(targetGuid);
-        }
-
-        return picked;
-    }
-
-    static bool PickupCandidateSlot(
-        void* player,
-        void* game,
-        uint32_t slotIndex,
-        uint32_t maxDistance,
-        const D2RL::PluginContext* context
-    ) noexcept {
-        __try {
-            return PickupCandidateSlotUnsafe(player, game, slotIndex, maxDistance, context);
-        } __except (EXCEPTION_EXECUTE_HANDLER) {
-            if (context) {
-                context->LogWarn("[ControllerQoL] PickupCandidateSlot caught an SEH exception.");
-            }
-            return false;
-        }
-    }
-
-    static void ObserveTrigger(uint8_t opcode, void* game, void* player,
-        void* packet, int32_t size) noexcept {
-        s_ActiveGame = game;
-        s_ActivePlayer = player;
-
-        void* realGame = nullptr;
-        if (player && s_GetGame) {
-            __try {
-                realGame = s_GetGame(player);
-            } __except (EXCEPTION_EXECUTE_HANDLER) {
-                realGame = nullptr;
-            }
-        }
-
-        if (g_Settings.debugLogging && (++s_HookTriggerCount % 50) == 1 && g_PluginContext) {
-            char hookMsg[160];
-            std::snprintf(hookMsg, sizeof(hookMsg),
-                "[ControllerQoL] HookTrigger: opcode=0x%02X, netArg=%p, player=%p, getGame=%p",
-                opcode, game, player, realGame);
-            g_PluginContext->LogInfo(hookMsg);
-        }
-
-        // Run ground inspection with realGame if resolved, else netArg
-        void* targetGame = realGame ? realGame : game;
-        if (targetGame) {
-            InspectGroundItems(player, targetGame, g_PluginContext, false);
-
-            const int32_t pendingSlot = s_PendingPickupSlot.exchange(-1);
-            if (pendingSlot >= 0 && player &&
-                Probe::GroundShortcutsEnabled(g_Settings.enabled,g_Settings.groundPickup) &&
-                QolNavigation::GroundInputActive()) {
-                const uint32_t dist = std::max(g_Settings.groundPickupDistance, 10U);
-                PickupCandidateSlot(player, targetGame, static_cast<uint32_t>(pendingSlot), dist, g_PluginContext);
-            }
-        }
-
-    }
-
     static bool InstallHooks(const D2RL::PluginContext* context, uint8_t*) noexcept {
         s_GetSelectedSkill = nullptr;
         QolCompat::ActionHooks::Projector projector = nullptr;
@@ -2089,7 +1591,7 @@ namespace GroundLoot {
             context->LogWarn("[ControllerQoL] Guided Arrow selected-skill guard mismatch; projection disabled, other controller features retained.");
         }
         const bool installed = QolCompat::ActionHooks::Install(
-            context, &ObserveTrigger, projector);
+            context, nullptr, projector);
         if (installed && guidedArrowGuardMatched && context)
             context->LogInfo("[ControllerQoL] Guided Arrow controller projection enabled at 20 tiles.");
         return installed;
@@ -2098,47 +1600,11 @@ namespace GroundLoot {
         s_PickupCallsActive.store(false);
         QolCompat::ActionHooks::Shutdown();
         s_GetSelectedSkill = nullptr;
-        s_ActivePlayer = nullptr;
-        s_ActiveGame = nullptr;
     }
 
 }
 
-static void __cdecl ScanGroundTask(const D2RL::PluginContext* context, void* userData) noexcept {
-    const bool verbose = (userData != nullptr);
-
-    void* player = GroundLoot::s_ActivePlayer;
-    // PlayerHandle is an opaque SDK ID, never a UnitAny pointer. Until a
-    // native action supplies context, skip rather than reinterpret a handle.
-
-    void* realGame = nullptr;
-    if (player && GroundLoot::s_GetGame) {
-        __try {
-            realGame = GroundLoot::s_GetGame(player);
-        } __except (EXCEPTION_EXECUTE_HANDLER) {
-            realGame = nullptr;
-        }
-    }
-
-    void* game = realGame ? realGame : GroundLoot::s_ActiveGame;
-
-    if (verbose && context) {
-        char diag[200];
-        std::snprintf(diag, sizeof(diag),
-            "[ControllerQoL] ScanGroundTask: player=%p, getGame=%p, activeGame=%p -> using=%p",
-            player, realGame, GroundLoot::s_ActiveGame, game);
-        context->LogInfo(diag);
-    }
-
-    if (!player || !game) {
-        if (verbose && context) {
-            context->LogInfo("[ControllerQoL] ScanGroundTask: Waiting for authoritative sync. Move 1 step in-game to sync game context.");
-        }
-        return;
-    }
-
-    GroundLoot::InspectGroundItems(player, game, context, verbose);
-}
+static bool ClientGroundHeld() noexcept;
 
 namespace PlacardOverlay {
     constexpr std::uintptr_t BuildGroundItemTooltipRva = 0xCBEB0;
@@ -2243,6 +1709,11 @@ namespace PlacardOverlay {
         } __except(EXCEPTION_EXECUTE_HANDLER) {track.lease.active=false;return false;}
     }
 
+    void ForgetSession() noexcept {
+        std::lock_guard lock(s_PlacardMutex);
+        s_TrackedPlacards.clear(); // Do not dereference expired UI buffers.
+    }
+
     inline void ClearPlacardOverlays() {
         std::lock_guard<std::recursive_mutex> lock(s_PlacardMutex);
         const ULONGLONG now = GetTickCount64();
@@ -2266,8 +1737,7 @@ namespace PlacardOverlay {
 
         std::lock_guard<std::recursive_mutex> lock(s_PlacardMutex);
         for (size_t i = 0; i < GroundLoot::NUM_STICKY_SLOTS; ++i) {
-            const uint32_t guid = QolClientLoot::Active()
-                ? QolClientLoot::Slot(static_cast<unsigned>(i)).guid : GroundLoot::s_StickySlots[i].guid;
+            const uint32_t guid = QolClientLoot::Slot(static_cast<unsigned>(i)).guid;
             if (guid == 0) continue;
 
             auto it = s_TrackedPlacards.find(guid);
@@ -2317,8 +1787,7 @@ namespace PlacardOverlay {
         if (Probe::GroundShortcutsEnabled(g_Settings.enabled,g_Settings.groundPickup) &&
             ControllerQoL::IsGroundPickupActive(g_Settings.groundPickupButton)) {
             for (size_t i = 0; i < GroundLoot::NUM_STICKY_SLOTS; ++i) {
-                if (QolClientLoot::Active() ? QolClientLoot::SlotFor(guid)==static_cast<int>(i)
-                    : GroundLoot::s_StickySlots[i].guid == guid) {
+                if (QolClientLoot::SlotFor(guid)==static_cast<int>(i)) {
                     ApplyPlacardBuffer(s_TrackedPlacards.at(guid),
                         GroundLoot::s_SlotPrefixes[i].pfxW,
                         GroundLoot::s_SlotPrefixes[i].pfxA,
@@ -2366,50 +1835,8 @@ namespace PlacardOverlay {
     }
 }
 
-static void __cdecl ClearPlacardsTask(const D2RL::PluginContext* context, void* userData) noexcept {
-    (void)context;
-    (void)userData;
-    PlacardOverlay::ClearPlacardOverlays();
-    QolNavigation::RefreshGroundLabels();
-}
-
-static void __cdecl RefreshStickySlotsTask(const D2RL::PluginContext* context, void* userData) noexcept {
-    (void)userData;
-    if (!Probe::GroundShortcutsEnabled(g_Settings.enabled,g_Settings.groundPickup) ||
-        !QolNavigation::GroundInputActive()) return;
-    void* player = GroundLoot::s_ActivePlayer;
-    // PlayerHandle is an opaque SDK ID, never a UnitAny pointer. Until a
-    // native action supplies context, skip rather than reinterpret a handle.
-
-    void* realGame = nullptr;
-    if (player && GroundLoot::s_GetGame) {
-        __try {
-            realGame = GroundLoot::s_GetGame(player);
-        } __except (EXCEPTION_EXECUTE_HANDLER) {
-            realGame = nullptr;
-        }
-    }
-    void* game = realGame ? realGame : GroundLoot::s_ActiveGame;
-
-    if (!player || !game) {
-        if (context) context->LogWarn("[QOL/Loot] Slot refresh skipped: native player/game not yet captured. Move the character, then retry L1.");
-        return;
-    }
-
-    const uint32_t dist = std::max(g_Settings.groundPickupDistance, 10U);
-    GroundLoot::UpdateStickySlotsUnsafe(player, game, dist, context, true);
-    PlacardOverlay::ApplyPlacardOverlays();
-    QolNavigation::RefreshGroundLabels();
-    if (g_Settings.debugLogging && context) {
-        char diagnostic[192];
-        std::snprintf(diagnostic, sizeof(diagnostic), "[QOL/Loot] Slot refresh: firstGuid=%u tooltipCalls=%u tracked=%zu",
-            GroundLoot::s_StickySlots[0].guid, PlacardOverlay::s_HookCallCount.load(), PlacardOverlay::s_TrackedPlacards.size());
-        context->LogInfo(diagnostic);
-    }
-}
 
 struct PickupTaskArgs {
-    uint32_t slotIndex = 0;
     QolClientLoot::Request clientRequest{};
 };
 
@@ -2425,9 +1852,8 @@ static bool ClientGroundHeld() noexcept {
         ControllerQoL::IsControllerUiActive() && QolNavigation::GroundInputActive() &&
         ControllerQoL::IsGroundPickupActive(g_Settings.groundPickupButton);
 }
-static std::atomic<bool> s_ClientLootRefreshQueued{false};
-static void __cdecl RefreshClientGroundTask(const D2RL::PluginContext*,void*) noexcept {
-    if(g_PollingRunning.load() && QolClientLoot::Active()) {
+static void __cdecl RefreshClientGroundTask(const D2RL::PluginContext*,void* user) noexcept {
+    if(QolClientLoot::Epoch()==reinterpret_cast<uintptr_t>(user) && g_PollingRunning.load() && QolClientLoot::Active()) {
         const bool held=ClientGroundHeld();
         if(QolClientLoot::Refresh(std::max(g_Settings.groundPickupDistance,10U),held)) {
             PlacardOverlay::ClearPlacardOverlays();
@@ -2435,12 +1861,16 @@ static void __cdecl RefreshClientGroundTask(const D2RL::PluginContext*,void*) no
             QolNavigation::RefreshGroundLabels();
         }
     }
-    s_ClientLootRefreshQueued=false;
+    auto token=static_cast<uint64_t>(reinterpret_cast<uintptr_t>(user));
+    (void)s_ClientLootRefreshToken.compare_exchange_strong(token,0);
 }
 static void QueueClientGroundRefresh(const D2RL::PluginContext* context) noexcept {
-    if(!g_Threads || !g_Threads->runOnUiThread || s_ClientLootRefreshQueued.exchange(true))return;
-    if(g_Threads->runOnUiThread(context,RefreshClientGroundTask,nullptr)!=D2RL::Threads::Result::Success)
-        s_ClientLootRefreshQueued=false;
+    if(!g_Threads || !g_Threads->runOnUiThread)return;
+    const auto epoch=QolClientLoot::Epoch();uint64_t empty=0;
+    if(!s_ClientLootRefreshToken.compare_exchange_strong(empty,epoch))return;
+    if(g_Threads->runOnUiThread(context,RefreshClientGroundTask,reinterpret_cast<void*>(static_cast<uintptr_t>(epoch)))!=D2RL::Threads::Result::Success) {
+        auto owned=epoch;(void)s_ClientLootRefreshToken.compare_exchange_strong(owned,0);
+    }
 }
 static void __cdecl PickupClientGroundTask(const D2RL::PluginContext*,void* userData) noexcept {
     auto args=s_PickupRequests.Take(reinterpret_cast<uintptr_t>(userData));
@@ -2449,44 +1879,13 @@ static void __cdecl PickupClientGroundTask(const D2RL::PluginContext*,void* user
     }
 }
 
-static void PickupGroundUnsafe(const D2RL::PluginContext* context,uint32_t slot) noexcept {
-    if (!Probe::GroundShortcutsEnabled(g_Settings.enabled,g_Settings.groundPickup) ||
-        !QolNavigation::GroundInputActive()) {GroundLoot::s_PendingPickupSlot.store(-1);return;}
-
-    // Check if HookTrigger already consumed and executed this pending slot
-    if (GroundLoot::s_PendingPickupSlot.load() == static_cast<int32_t>(slot)) {
-        if (GroundLoot::s_PendingPickupSlot.exchange(-1) < 0) {
-            return;
-        }
-    } else {
-        return;
-    }
-
-    void* player = GroundLoot::s_ActivePlayer;
-    // PlayerHandle is an opaque SDK ID, never a UnitAny pointer. Until a
-    // native action supplies context, skip rather than reinterpret a handle.
-
-    void* realGame = nullptr;
-    if (player && GroundLoot::s_GetGame) {
-        __try {
-            realGame = GroundLoot::s_GetGame(player);
-        } __except (EXCEPTION_EXECUTE_HANDLER) {
-            realGame = nullptr;
-        }
-    }
-    void* game = realGame ? realGame : GroundLoot::s_ActiveGame;
-
-    if (!player || !game) {
-        if (context) context->LogInfo("[ControllerQoL] PickupGroundTask: Missing player or game context.");
-        return;
-    }
-
-    const uint32_t dist = std::max(g_Settings.groundPickupDistance, 10U);
-    GroundLoot::PickupCandidateSlot(player, game, slot, dist, context);
-}
-static void __cdecl PickupGroundTask(const D2RL::PluginContext* context,void* userData) noexcept {
-    auto args=s_PickupRequests.Take(reinterpret_cast<uintptr_t>(userData));
-    if(args)PickupGroundUnsafe(context,args->slotIndex);
+static void QueueGroundPickup(const D2RL::PluginContext* context,unsigned slot) noexcept {
+    if(!g_Threads || !g_Threads->runOnUiThread || !s_IdentifySessionEvents || !ClientGroundHeld())return;
+    const auto request=QolClientLoot::Capture(slot);
+    if(!request.item.guid)return;
+    const auto token=s_PickupRequests.Put(std::make_unique<PickupTaskArgs>(PickupTaskArgs{request}));
+    if(token && g_Threads->runOnUiThread(context,PickupClientGroundTask,reinterpret_cast<void*>(token))!=D2RL::Threads::Result::Success)
+        (void)s_PickupRequests.Take(token);
 }
 
 static void ScanDecryptedMemory(const D2RL::PluginContext* context, uint8_t* base) noexcept {
@@ -2547,6 +1946,8 @@ D2RL_PLUGIN_EXPORT auto D2RLoaderLoadPlugin(const D2RL::PluginContext* context) 
 
     // Load config from TOML
     LoadConfiguration(context);
+    ControllerQoL::SetInputFilteringEnabled(g_Settings.enabled);
+    ControllerQoL::SetActiveModifier(g_Settings.modifier,g_Settings.triggerThreshold);
 
     // Initialize controller input subsystem
     ControllerQoL::InitControllerInput();
@@ -2654,7 +2055,7 @@ D2RL_PLUGIN_EXPORT auto D2RLoaderLoadPlugin(const D2RL::PluginContext* context) 
     GroundLoot::s_Base = reinterpret_cast<uint8_t*>(context->exeBase);
     // Filtered A-button blocking is independent of the optional direct-loot
     // shortcuts, but both rely on this guarded native/placard observation path.
-    if (GroundLoot::s_Base && Probe::GroundLootHooksRequired(
+    if (g_Settings.enabled && GroundLoot::s_Base && Probe::GroundLootHooksRequired(
             g_Settings.groundPickup, g_Settings.blockFilteredPickup)) {
         const bool match = context->CheckExpectedBytes(
             GroundLoot::GetItemCodeRva,
@@ -2669,24 +2070,14 @@ D2RL_PLUGIN_EXPORT auto D2RLoaderLoadPlugin(const D2RL::PluginContext* context) 
 
         if (match) {
             GroundLoot::s_FingerprintValid = true;
-            GroundLoot::s_GetGame = reinterpret_cast<GroundLoot::GetGameFn>(GroundLoot::s_Base + GroundLoot::GetGameRva);
-            GroundLoot::s_Enumerate = reinterpret_cast<GroundLoot::EnumerateFn>(GroundLoot::s_Base + GroundLoot::EnumerateRva);
-            GroundLoot::s_FirstUnit = reinterpret_cast<GroundLoot::UnitFn>(GroundLoot::s_Base + GroundLoot::FirstUnitRva);
-            GroundLoot::s_NextUnit = reinterpret_cast<GroundLoot::UnitFn>(GroundLoot::s_Base + GroundLoot::NextUnitRva);
-            GroundLoot::s_UnitType = reinterpret_cast<GroundLoot::UnitIntFn>(GroundLoot::s_Base + GroundLoot::UnitTypeRva);
-            GroundLoot::s_UnitId = reinterpret_cast<GroundLoot::UnitIntFn>(GroundLoot::s_Base + GroundLoot::UnitIdRva);
-            GroundLoot::s_UnitMode = reinterpret_cast<GroundLoot::UnitIntFn>(GroundLoot::s_Base + GroundLoot::UnitModeRva);
-            GroundLoot::s_UnitDistance = reinterpret_cast<GroundLoot::UnitPairFn>(GroundLoot::s_Base + GroundLoot::UnitDistanceRva);
-            GroundLoot::s_UnitCollision = reinterpret_cast<GroundLoot::CollisionFn>(GroundLoot::s_Base + GroundLoot::UnitCollisionRva);
             GroundLoot::s_Pickup = reinterpret_cast<GroundLoot::PickupFn>(GroundLoot::s_Base + GroundLoot::PickupRva);
-            GroundLoot::s_GetItemCode = reinterpret_cast<GroundLoot::GetItemCodeFn>(GroundLoot::s_Base + GroundLoot::GetItemCodeRva);
 
             if (g_Settings.groundPickup) {
                 const bool installed = GroundLoot::InstallHooks(context, GroundLoot::s_Base);
                 if (installed) {
-                    context->LogInfo("[ControllerQoL] Native Ground Loot handler observers installed; packet table unchanged.");
+                    context->LogInfo("[ControllerQoL] Local Guided Arrow packet hook installed; loot requests use the local UI path.");
                 } else {
-                    context->LogWarn("[ControllerQoL] Native handler observer admission/installation failed; observation disabled.");
+                    context->LogWarn("[ControllerQoL] Guided Arrow packet-hook admission failed; native projection retained.");
                 }
             } else {
                 context->LogInfo("[QOL/Loot] Direct ground shortcuts disabled; filtered A-button guard remains eligible.");
@@ -2760,6 +2151,7 @@ D2RL_PLUGIN_EXPORT auto D2RLoaderLoadPlugin(const D2RL::PluginContext* context) 
 
     QolIdentifyStat::Initialize(context);
     QolNativeIdentify::Initialize(context,g_Items,g_Threads);
+    QolClientLoot::Initialize(context,&GroundLoot::GetItemCodeRank);
     InitializeIdentifyQueue(context);
     if(!QolClientTransfer::Initialize(context))context->LogWarn("[QOL/ClientTransfer] Profile/services unavailable; remote transfers disabled.");
     (void)QolCustomPage::Initialize(context);
@@ -2780,7 +2172,7 @@ D2RL_PLUGIN_EXPORT auto D2RLoaderLoadPlugin(const D2RL::PluginContext* context) 
         if(_stricmp(mode,"[")==0 || _stricmp(mode,"bracket")==0 || _stricmp(mode,"leftbracket")==0 || _stricmp(mode,"l4")==0)return "[";
         return "LT";
     });
-    QolBulkStash::Initialize(context,+[]() noexcept {
+    QolBulkStashFeedback::Initialize(context,+[]() noexcept {
         return g_Settings.enabled && Probe::BatchFeatureEnabled(g_Settings.quickMove,g_Settings.quickDeposit) && ControllerQoL::IsControllerUiActive() &&
             TestUiMode(UI_MODE_STASH) && !QolBelt::Busy() && !QolMaterials::Busy() && !QolNativeIdentify::Busy() && !QolClientTransfer::Busy();
     });
@@ -2797,7 +2189,6 @@ D2RL_PLUGIN_EXPORT auto D2RLoaderLoadPlugin(const D2RL::PluginContext* context) 
     context->LogInfo(hookLog);
     if(!nativeInputOk) context->LogInfo(ControllerQoL::GetXInputHookReport());
 
-    QolClientLoot::Initialize(context,&GroundLoot::GetItemCodeRank);
     ControllerQoL::SetGroundPickupPredicate([]() noexcept {
         return Probe::GroundShortcutsEnabled(g_Settings.enabled,g_Settings.groundPickup) &&
             QolClientLoot::Ready() && ControllerQoL::NativeInputInstalled() && ControllerQoL::IsControllerUiActive() &&
@@ -2820,8 +2211,11 @@ D2RL_PLUGIN_EXPORT auto D2RLoaderLoadPlugin(const D2RL::PluginContext* context) 
                 std::this_thread::sleep_for(std::chrono::milliseconds(33)); // 30 FPS
                 if (!g_Settings.enabled) continue;
 
+                QolBulkStashFeedback::Refresh();
                 ControllerQoL::PumpNativeInput();
                 QolNavigation::PumpLabels(context,g_Threads);
+                if(Probe::GroundShortcutsEnabled(g_Settings.enabled,g_Settings.groundPickup) && QolClientLoot::Ready())
+                    (void)QolClientLoot::Activate();
                 if(QolClientLoot::Active()) {
                     static ULONGLONG lastClientLootRefresh=0;
                     const auto now=GetTickCount64();
@@ -2867,36 +2261,13 @@ D2RL_PLUGIN_EXPORT auto D2RLoaderLoadPlugin(const D2RL::PluginContext* context) 
                     }
                 }
 
-                // Check for Quick Move (Modifier + X for general transfer, Modifier + Y for Cube)
-                const bool modHeld = ControllerQoL::IsControllerModifierActive(g_Settings.modifier, g_Settings.triggerThreshold);
-                const bool rawX = ControllerQoL::IsButtonXPressed();
-                const bool rawY = ControllerQoL::IsButtonYPressed();
-                static bool s_PollQuickMoveTriggeredX = false;
-                static bool s_PollQuickMoveTriggeredY = false;
-                if (modHeld && rawX) {
-                    if (!s_PollQuickMoveTriggeredX) {
-                        s_PollQuickMoveTriggeredX = true;
-                        TriggerQuickMoveOnFocusedItem();
-                    }
-                } else {
-                    s_PollQuickMoveTriggeredX = false;
-                }
-
-                if (modHeld && rawY) {
-                    if (!s_PollQuickMoveTriggeredY) {
-                        s_PollQuickMoveTriggeredY = true;
-                        TriggerQuickMoveToCubeOnFocusedItem();
-                    }
-                } else {
-                    s_PollQuickMoveTriggeredY = false;
-                }
+                // The active input provider owns each physical shortcut press.
 
                 if ((GetTickCount64() - g_LastInventoryInteractionTick.load()) < 500) {
                     continue;
                 }
 
                 if (!Probe::GroundShortcutsEnabled(g_Settings.enabled,g_Settings.groundPickup)) {
-                    GroundLoot::s_PendingPickupSlot.store(-1);
                     continue;
                 }
 
@@ -2937,7 +2308,6 @@ D2RL_PLUGIN_EXPORT auto D2RLoaderLoadPlugin(const D2RL::PluginContext* context) 
                 if (!QolNavigation::GroundInputActive()) {
                     s_LastMod=false; // Refresh mappings when returning to the world with LB held.
                     s_ModUsedWithFace=false;
-                    GroundLoot::s_PendingPickupSlot.store(-1);
                     continue; // Track edges above, but menu bumpers must not queue world-loot work.
                 }
                 const ULONGLONG now = GetTickCount64();
@@ -2952,19 +2322,7 @@ D2RL_PLUGIN_EXPORT auto D2RLoaderLoadPlugin(const D2RL::PluginContext* context) 
                 if (modDown) {
                     s_ModPressTick = now;
                     s_ModUsedWithFace = false;
-                    // Modifier hit: Refresh sticky slot mappings based on rarity vs distance
-                    if (g_Threads) {
-                        auto result=g_Threads->runOnGameThread(context, RefreshStickySlotsTask, nullptr);
-                        if(result==D2RL::Threads::Result::Unavailable && QolClientLoot::Activate()) {
-                            QueueClientGroundRefresh(context);
-                            result=D2RL::Threads::Result::Success;
-                        } else if(result==D2RL::Threads::Result::Success)QolClientLoot::Deactivate();
-                        if(result!=D2RL::Threads::Result::Success && g_Settings.debugLogging) {
-                            char message[128];
-                            std::snprintf(message,sizeof(message),"[QOL/RemoteTrace] ground slot refresh scheduling failed result=%u",static_cast<unsigned>(result));
-                            context->LogWarn(message);
-                        }
-                    }
+                    QueueClientGroundRefresh(context);
                 }
 
                 // If modifier is held, it acts as the modifier for shortcuts (A, X, Y, B, R1, R2, L2)
@@ -2988,14 +2346,12 @@ D2RL_PLUGIN_EXPORT auto D2RLoaderLoadPlugin(const D2RL::PluginContext* context) 
                 if (modUp) {
                     // Immediately clear placard overlays upon releasing modifier (never auto-pickup)
                     if (g_Threads) {
-                        if(QolClientLoot::Active())QueueClientGroundRefresh(context);
-                        else g_Threads->runOnGameThread(context, ClearPlacardsTask, nullptr);
+                        QueueClientGroundRefresh(context);
                     }
                 }
 
                 if (targetSlot >= 0 && (now - s_LastPickupTick >= 150)) {
                     s_LastPickupTick = now;
-                    GroundLoot::s_PendingPickupSlot.store(targetSlot);
                     if (context) {
                         char trigMsg[128];
                         if (targetSlot == 0xFF) {
@@ -3009,30 +2365,7 @@ D2RL_PLUGIN_EXPORT auto D2RLoaderLoadPlugin(const D2RL::PluginContext* context) 
                         }
                         context->LogInfo(trigMsg);
                     }
-                    if (g_Threads && s_IdentifySessionEvents) {
-                        auto token=s_PickupRequests.Put(std::make_unique<PickupTaskArgs>(PickupTaskArgs{ .slotIndex = static_cast<uint32_t>(targetSlot) }));
-                        if(!token)continue;
-                        auto result=g_Threads->runOnGameThread(context,PickupGroundTask,reinterpret_cast<void*>(token));
-                        if(result==D2RL::Threads::Result::Unavailable && QolClientLoot::Activate()) {
-                            GroundLoot::s_PendingPickupSlot.store(-1);
-                            auto args=s_PickupRequests.Take(token);
-                            if(args) {
-                                args->clientRequest=QolClientLoot::Capture(args->slotIndex);
-                                token=s_PickupRequests.Put(std::move(args),token);
-                            } else token=0;
-                            result=token && g_Threads->runOnUiThread
-                                ? g_Threads->runOnUiThread(context,PickupClientGroundTask,reinterpret_cast<void*>(token))
-                                : D2RL::Threads::Result::Unavailable;
-                        }
-                        if(result!=D2RL::Threads::Result::Success) {
-                            (void)s_PickupRequests.Take(token);
-                            if(g_Settings.debugLogging) {
-                                char message[128];
-                                std::snprintf(message,sizeof(message),"[QOL/RemoteTrace] ground pickup scheduling failed result=%u",static_cast<unsigned>(result));
-                                context->LogWarn(message);
-                            }
-                        }
-                    }
+                    QueueGroundPickup(context,static_cast<unsigned>(targetSlot));
                 }
             }
         });
@@ -3067,7 +2400,7 @@ D2RL_PLUGIN_EXPORT auto D2RLoaderLoadPlugin(const D2RL::PluginContext* context) 
         g_Settings.groundPickupButton, g_Settings.portalPriorityDistance);
     if(!QolAim::Initialize(context,g_Settings.enabled))
         context->LogWarn("[QOL/Aim] Aim unavailable; other QOL features remain loaded.");
-    context->LogInfo("[QOL] QOL v1.3.1+rev.75 loaded: controller item features and integrated v0.6 navigation/label hooks.");
+    context->LogInfo("[QOL] QOL v1.3.1+rev.76-beta.4 loaded: controller item features and integrated v0.6 navigation/label hooks.");
     return true;
 }
 
@@ -3081,7 +2414,7 @@ D2RL_PLUGIN_EXPORT void D2RLoaderUnloadPlugin() noexcept {
     ControllerQoL::SetGroundPickupPredicate(nullptr);
     QolClientLoot::Shutdown();
     PlacardOverlay::Shutdown();
-    QolBulkStash::Shutdown();
+    QolBulkStashFeedback::Shutdown();
     ControllerQoL::SetBulkStashCallback(nullptr);
     ControllerQoL::SetAdvancedBeltCallback(nullptr);
     QolNativeIdentify::Shutdown();

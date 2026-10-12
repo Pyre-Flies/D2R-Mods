@@ -1,5 +1,9 @@
 # Controller QOL research map
 
+- [Beta.4 live-failure follow-up](AUDIT-LIVE-FOLLOWUP-BETA4.md): LB+X Cube
+  self-insertion, overlapping Shared triggers, targeted regressions and current
+  live-test status. Pickup reach/approach remain open.
+
 This directory is the canonical durable research record for Controller QOL. Start here instead of searching old build directories, release archives, or the former Reimagined working tree.
 
 Reusable native contracts and RVAs distilled from this work are indexed in
@@ -7,6 +11,11 @@ Reusable native contracts and RVAs distilled from this work are indexed in
 Keep detailed feature evidence here and cross-project summaries there.
 
 ## Current status and validation
+
+- [AUDIT-REPAIRS-REV76.md](AUDIT-REPAIRS-REV76.md) - local beta.3 audit repairs, hosted ownership, native contract reuse, automated evidence and per-issue reassessment.
+- [AUDIT-REPAIRS-IN-GAME-TESTS.md](AUDIT-REPAIRS-IN-GAME-TESTS.md) - single-client acceptance cases, optional solo-host coverage and explicit automated-only peer limits; live results pending.
+
+- [MOD-INFORMATION-NAVIGATION.md](MOD-INFORMATION-NAVIGATION.md) - local rev.76-beta.2 bumper tabs and underlying panel lock, with validation limits.
 
 - [PRODUCTION-1.3.1-rev.75.md](PRODUCTION-1.3.1-rev.75.md) - current stable release, reticle changes and validation limits.
 - [SKILL-DISCOVERY-CONFIG.md](SKILL-DISCOVERY-CONFIG.md) - current shared/per-mod configuration, R3 saves, discovery, migration, backups and rollback.

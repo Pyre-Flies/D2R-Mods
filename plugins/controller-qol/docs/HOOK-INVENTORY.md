@@ -2,6 +2,13 @@
 
 The original table/count below is a historical rev.4 baseline; revision sections supersede affected rows. For current prioritization see [narrower-hook review](HOOK-SCOPE-REVIEW-2026-09-26.md).
 
+Local rev.76-beta.3 supersedes the 18-entry ground observer/dispatch row: loot
+queues UI-owned local client requests, and only the existing Guided Arrow
+projection site (entry index 4) is installed by `GroundLoot::InstallHooks`.
+Local actor/session qualification protects guests. No new hook/RVA was added;
+other pickup CALL/placard/aim contracts remain guarded. See
+[the audit repair record](AUDIT-REPAIRS-REV76.md) for evidence and validation limits.
+
 Reviewed source: Controller QOL1.3.1+rev.4 and Item Roll Ranges1.3.1+rev.1. Static inventory of installation paths, not a fresh live-process verification. Feature gates/failures can reduce actual installed counts. No DLL changes, rebuild, or new addresses discovered in this pass.
 
 ## Address and ownership conventions

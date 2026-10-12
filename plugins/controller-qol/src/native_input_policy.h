@@ -39,6 +39,22 @@ inline ControllerQoL::PhysicalInput FilterModified(ControllerQoL::PhysicalInput 
     r.leftTrigger=Probe::FilterLootTrigger(r.leftTrigger,(r.buttons&0x100)!=0,shared);
     return r;
 }
+struct ConsumedPresses {
+    uint16_t buttons{};
+    bool leftTrigger{},rightTrigger{};
+    ControllerQoL::PhysicalInput Apply(const ControllerQoL::PhysicalInput& raw,ControllerQoL::PhysicalInput filtered) noexcept {
+        buttons&=raw.buttons;
+        buttons|=static_cast<uint16_t>(raw.buttons & ~filtered.buttons);
+        filtered.buttons&=static_cast<uint16_t>(~buttons);
+        if(raw.leftTrigger<=30)leftTrigger=false;
+        if(raw.rightTrigger<=30)rightTrigger=false;
+        leftTrigger|=raw.leftTrigger>30 && !filtered.leftTrigger;
+        rightTrigger|=raw.rightTrigger>30 && !filtered.rightTrigger;
+        if(leftTrigger)filtered.leftTrigger=0;
+        if(rightTrigger)filtered.rightTrigger=0;
+        return filtered;
+    }
+};
 template<class Emit> void Deliver(unsigned& delivered,unsigned desired,unsigned primaryKey,bool primaryPressed,Emit emit) noexcept {
     const unsigned changed=desired^delivered;
     for(unsigned key=1;key<=0x8000;key<<=1) if((changed&key) && !(desired&key)) {

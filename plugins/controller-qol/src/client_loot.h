@@ -4,11 +4,17 @@
 namespace QolClientLoot {
 using RankFn=int(*)(const char*,uint32_t) noexcept;
 void Initialize(const D2RL::PluginContext*,RankFn) noexcept;
+void SetLifecycleAvailable(bool) noexcept;
+void OnLifecycle(const D2RL::Lifecycle::GameplayEvent*) noexcept;
+// Server hooks may inspect copied identity/one-use permits, never UI pointers.
+bool IsLocalActor(uint32_t type,uint32_t id) noexcept;
+bool TakeNativePickupPermit(uint32_t actorId,uint32_t guid) noexcept;
 void Shutdown() noexcept;
 bool Activate() noexcept;
 void Deactivate() noexcept;
 bool Active() noexcept;
 bool Ready() noexcept; // Lock-free admission check for the native input gate.
+uint64_t Epoch() noexcept;
 // Called by the existing filtered tooltip callback; stores IDs, never units/buffers.
 void Track(uint32_t guid,bool visible) noexcept;
 int SlotFor(uint32_t guid) noexcept;

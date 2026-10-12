@@ -21,6 +21,8 @@ jobs:
         run: cmake --build build/controller-qol --config Release --parallel
       - name: Test
         run: ctest --test-dir build/controller-qol -C Release --output-on-failure
+      - name: Test update-safe archive layout
+        run: python tools/test_package_runtime.py
       - name: Package Controller QOL only
         run: >-
           python tools/package_runtime.py --controller-only
@@ -34,7 +36,7 @@ jobs:
       - name: Publish beta
         uses: softprops/action-gh-release@v2
         with:
-          name: Controller QOL rev.72-beta.1
+          name: Controller QOL rev.76-beta.4 (testing release)
           prerelease: true
           make_latest: "false"
           body_path: docs/CONTROLLER-QOL-BETA.md

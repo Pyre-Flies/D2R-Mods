@@ -32,7 +32,7 @@ prioritize_portals = true
 prioritize_stash_boxes = true
 prioritize_waypoints = true
 prioritize_shrines = true
-prioritize_chests = false
+prioritize_chests = true
 portal_priority_distance = 10
 # Targeted, throttled portal selection diagnostics; separate from general debug.
 portal_diagnostics = false

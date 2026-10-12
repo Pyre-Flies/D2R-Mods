@@ -1,85 +1,74 @@
-# Historical Controller QOL 1.3.1+rev.72-beta.1
+# Controller QOL 1.3.1+rev.76-beta.4 — testing release
 
-This archived prerelease has been superseded by stable rev.75. Use the
-[current release notes](RELEASE-NOTES.md) and [configuration guide](../plugins/controller-qol/docs/SKILL-DISCOVERY-CONFIG.md)
-for installation and editing. The old archive/config paths below describe that
-beta only; current ZIPs carry reference configs under `defaults/` and preserve
-live configs. All skill settings now belong in per-mod profiles.
+**Please test this release and report all bugs, including minor issues and
+inconsistent behavior. Online play has not yet been validated.**
 
-## Original prerelease notes
+This is a Controller QOL-only **prerelease**. Non-online gameplay was accepted
+after single-client Reimagined testing. Automated tests and that acceptance
+do not establish hosted/guest correctness, every storage combination or all
+game/mod/controller environments.
 
-This is a **GitHub prerelease** of Controller QOL only.
+## Changes
 
-## Rev.72 logging update
+- Block moving the Horadric Cube into itself through LB+X, LB+Y and ordinary
+  Cube transfer routes. Keep valid Cube -> Inventory withdrawals available.
+- Keep overlapping LB+LT/RT gestures inside Shared Stash, with no escape to
+  the main stash tabs. Fully release both triggers before changing direction.
+- Bind ground-loot requests to the current local player/session. Prevent old
+  requests from crossing games and keep host filtering away from guest actors.
+- Preserve consumed button/trigger ownership through modifier-first release;
+  serialize shortcut state and make master-disable input pass through.
+- Revalidate Cube focus/context before execution; capture normal Shared page,
+  season and local owner for direct Shared -> Cube transactions.
+- Remove packet-driven diagnostic ground scans. Retain existing aim behavior
+  with local-player qualification; this is not full Guided Arrow consolidation.
+- Include controller Deposit All stash-tab feedback and LB/RB Mod Information
+  tabs, with scoped blocking of underlying LT/RT navigation.
+- New/omitted `prioritize_chests` settings default to `true`. Existing explicit
+  settings and customized configuration files remain preserved.
 
-Detailed aim logging now requires `[aim] verbose = true` and a restart. The
-packaged default is `false`; existing configs that omit it also stay quiet.
-Quiet mode skips diagnostic formatting and logging-only counters/reads as well
-as file writes. It preserves aiming, NPC selection checks and cast state.
-Startup status and compatibility/save-failure warnings remain visible.
-The debug HUD, general QOL debug logs and portal diagnostics are separate flags.
+## Validation and known limits
 
-This targets unnecessary work on handhelds. Steam Deck frame-time improvement
-has not yet been measured; the update is not a claim to resolve every slowdown.
+- Release build: **33/33 CTest suites passed**, including **424 production
+  integration checks** and **61 Shared-page/glyph checks**.
+- User-confirmed: Cube self-insertion prevented, Shared Stash escape fixed,
+  Cube behavior works through rejoins, and non-online gameplay accepted.
+- Pickup retains its current reach and does not automatically approach loot.
+  A reported two-of-three pickup required slight movement for the third item;
+  no new native walking or pickup-reach fix is claimed.
+- **Online play still requires testing.** Host and every joining client must
+  use matching plugin sets, versions and DLLs. Mismatched peers cannot be used
+  as a test. Distinct-peer ownership, latency and hosted persistence remain
+  unverified. A single-client host is not a substitute for a second actor.
+- Native features admit only their documented exact builds/byte guards and
+  fail open on mismatches. This release makes no broad Ladder crash-fix claim.
 
-## Included changes since rev.64 beta
+## Report bugs
 
-- Improve first-cast Telekinesis object/item targeting and snapping for lobbed
-  skills such as Fire Blast and Ice Barrage.
-- Add bounded projectile leading from observed enemy motion, with independent
-  per-skill travel estimates and limits. Ship 42 projectile estimates and explicit
-  zero-lead baselines for the remaining 198 catalog skills.
-- Preserve the tuned Ice Bolt/Ice Blast limits and Holy Bolt, Miasma Bolt,
-  Blade Fury and Shock Web values. Add initial estimates for Inferno, Frozen Orb,
-  Shield Throw, Winter's Gambit, Chasm Break, Firestorm, Molten Boulder,
-  Echoing Strike and Miasma Chains.
-- Restore nearby chest/object priority on native A and preserve native NPC
-  scoring after snap aiming so interaction does not require a second press.
-- Set aim defaults to deadzone 0.22, initial speed 8.0, maximum speed 48,
-  acceleration 0.35 seconds, ground color `#C2B596`, lock color `#CC9C52F2`,
-  and reticle thickness 2.0.
+[Open an issue](https://github.com/Pyre-Flies/D2R-Mods/issues/new) for every bug
+you encounter. Include:
 
-Remote item actions, vendor tome filling, offline routes and Ladder hook
-coexistence from rev.64 remain included.
+- This plugin version, game/loader version, mod and offline/host/joined role.
+- Controller/device and exact buttons, panels and steps used.
+- Expected result, actual result and whether it repeats or survives a rejoin.
+- Relevant QOL log excerpts and screenshots where useful; omit account/session
+  secrets and private paths. For online issues, include matching plugin versions
+  on both sides.
 
-## Configuration and scope
+See the [single-client acceptance cases](https://github.com/Pyre-Flies/D2R-Mods/blob/beta-controller-qol-2026.10.11.1/plugins/controller-qol/docs/AUDIT-REPAIRS-IN-GAME-TESTS.md)
+and [repair evidence](https://github.com/Pyre-Flies/D2R-Mods/blob/beta-controller-qol-2026.10.11.1/plugins/controller-qol/docs/AUDIT-LIVE-FOLLOWUP-BETA4.md).
 
-Defaults are **Reimagined-oriented**. Numeric skill IDs do not detect whether a
-mod replaced the skill. Automatic vanilla/Reimagined differentiation is deferred.
-Replacement names are annotated; review those settings for other variants.
-Four replaced passive IDs become off-but-toggleable, and Winter's Gambit/Chasm
-Break receive snap overrides. The same ten skills remain enabled by default.
-Leading values do not enable skills: use R3 or the class sections to opt in.
+## Install and preserve settings
 
-Frozen Orb's baseline adjusts parent direction, not burst placement; Molten
-Boulder has no separate startup-delay model. Homing, movement, melee, stationary
-area, summon and trap placement retain zero lead. Slow Missiles compensation is
-outside scope. Leading falls back to current-position aim on unreliable motion.
+Close D2R/D2RLoader and back up the existing DLL. Extract the ZIP into the
+appropriate loader root: `d2rloader/plugins/Controller QOL Updates.dll` is
+the only installed plugin. Keep existing configs and skill profiles.
 
-## Validation and limitations
+The TOMLs under `defaults/` are references; the ZIP contains no live
+`d2rloader/config/` paths and does not overwrite customized settings.
+The loader creates missing main settings from embedded defaults. Review the
+included configuration guide before changing per-mod skill profiles.
 
-Local automated validation covers all 28 suites, DLL ABI/exports/defaults,
-category isolation, prediction bounds, R3 persistence and package integrity.
-Rev.72 also checks strict verbose parsing, quiet defaults, zero hot-path log
-writes/counters, bounded verbose output and unchanged enemy/NPC scoring.
-User testing confirmed improved Telekinesis/Fire Blast targeting, several
-projectile families, chest priority, first-A NPC interaction and Shock Web lead.
-The nine newly added estimates still need ordinary gameplay testing; these
-checks do not establish all offline scenarios or long-term session stability.
-
-Unexpected client exits in the full Ladder setup remain under investigation.
-This revision makes no crash-fix claim. Native compatibility is limited to the
-reviewed builds and guarded paths. Remote Identify All targets remain limited
-to Inventory; Cube/Shared identification supplies remain unsupported.
-
-## Installation
-
-Close the client and back up the DLL/config. Extract the ZIP into the game
-folder: DLL under `d2rloader/plugins`, config under `d2rloader/config`.
-Merge new leading maps and desired defaults into existing customized TOML files;
-do not overwrite personal skill toggles unintentionally. Restart after updating.
-Pack-managed Ladder installations must use their approved revision process.
-
-The release `SHA256SUMS` verifies the runtime ZIP; its internal manifest verifies
-individual files. GitHub also supplies source archives for this tag. Game binaries,
-local logs, crash dumps, backups and credentials are not included.
+The adjacent `SHA256SUMS` verifies the ZIP; its internal manifest verifies
+individual files. Source archives are supplied by GitHub. Other plugins and
+the current stable suite release are unchanged.

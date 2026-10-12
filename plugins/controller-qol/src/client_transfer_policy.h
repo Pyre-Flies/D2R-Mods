@@ -1,5 +1,6 @@
 #pragma once
 #include "identify_action.h"
+#include "cube_shortcut_policy.h"
 namespace QolClientTransfer {
 using Info=D2RL::Items::ItemInfo;
 using C=D2RL::Items::ItemContainer;
@@ -50,7 +51,7 @@ inline bool NeedsStash(C source,C destination) noexcept {
 inline bool NeedsShared(C source,C destination) noexcept {return source==C::SharedStash || destination==C::SharedStash;}
 inline bool Legal(C source,C destination,uint32_t code) noexcept {
     return Storage(source) && Storage(destination) && source!=destination &&
-        !(destination==C::Cube && QolIdentify::Code(code,D2RL::Items::MakeItemCode("box"))) &&
+        QolCubeShortcut::Allows(code,destination) &&
         (source==C::Inventory || destination==C::Inventory || destination==C::Cube);
 }
 }

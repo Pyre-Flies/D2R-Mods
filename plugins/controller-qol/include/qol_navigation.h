@@ -9,6 +9,7 @@ void GetGlyphModes(bool& primary, bool& secondary) noexcept;
 bool SharedPageInputActive() noexcept;
 bool SharedPageRemapEnabled() noexcept;
 bool OptionsRemapEnabled() noexcept;
+bool ModInformationRemapEnabled() noexcept;
 bool ChronicleRemapEnabled() noexcept;
 bool LootFilterRemapEnabled() noexcept;
 bool RangesRemapEnabled() noexcept;

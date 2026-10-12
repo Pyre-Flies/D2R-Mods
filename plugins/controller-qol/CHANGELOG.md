@@ -1,12 +1,97 @@
 # Controller QOL changelog
 
-## Unreleased
+## 1.3.1+rev.76-beta.4 - 2026-10-11 (testing prerelease)
+
+**Please test this release and report all bugs. Online play remains unvalidated.**
+
+- Enable ordinary-chest priority by default (`prioritize_chests = true`) in
+  shipped settings and when the key is omitted. Existing explicit choices remain
+  respected. This changes the default only; native interaction rules are unchanged.
+
+- Fix the user-confirmed LB+X Cube self-insertion bypass. Block Cube destinations
+  for the Horadric Cube before submission using live item state and recognized
+  code padding. Preserve Cube -> Inventory withdrawal.
+- Consume overlapping LT/RT Shared-page gestures in both orders until release,
+  including opposite-trigger begins marked as repeats; prevent main-tab escape.
+- All 33 automated suites pass. The user confirmed the beta.4 Cube self-insertion
+  fix, Shared Stash escape fix and Cube behavior through rejoins on 2026-10-11.
+  Non-online gameplay was subsequently accepted by the user; online validation
+  remains open. Pickup reach/no-approach behavior is unchanged and documented.
+  Beta.3 T04 was
+  user-cleared, T01/T03 partial, and T05 failed. No new configuration or native
+  hook. See `docs/AUDIT-LIVE-FOLLOWUP-BETA4.md` for evidence and limits.
+- Installed locally in Reimagined after verified beta.3 backup. All existing
+  configs and other plugins preserved. Publication subsequently authorized as
+  a Controller QOL-only testing prerelease.
+
+## 1.3.1+rev.76-beta.3 - 2026-10-11 (local audit repair candidate)
+
+- Repair all eight audited mechanisms: session-bound local loot ownership,
+  guest-safe host filtering, consumed-button lifetime, master-disable input
+  passthrough, current Cube focus/context, selected Shared-to-Cube destination,
+  serialized shortcut state and removal of packet-driven diagnostic scans.
+- Reuse the guarded client loot request on UI thread for offline, host and
+  joined-client play. Preserve native/server acceptance, guest behavior and
+  one-use local pickup allowance; do not retry rejected/submitted requests.
+- Capture Shared page/season and local owner before dispatch. The supported SDK
+  route moves directly to Cube in one existing-item transaction. Unsupported
+  authoritative routes refuse instead of substituting Inventory; unsupported
+  normal Shared Cube hints are omitted.
+- Keep pre-existing aim behavior, including its retained legacy Guided Arrow
+  correction, with local-actor qualification. This is not full aim consolidation.
+- Local Release build and 33/33 CTest suites passed, including new production
+  handler regressions. No in-game, hosted persistence or performance validation
+  at build time. Subsequent live tests found a critical LB+X Cube self-insertion
+  bypass and overlapping Shared-trigger escape; see beta.4 above. Installed
+  locally in Reimagined at the user's request with verified
+  beta.2 rollback and all existing configs preserved. Not committed or
+  published; no game launch by the agent. See
+  `docs/AUDIT-REPAIRS-REV76.md` and `docs/AUDIT-REPAIRS-IN-GAME-TESTS.md`.
+
+## 1.3.1+rev.76-beta.2 - 2026-10-11 (local test candidate)
+
+- Use L1/R1 (LB/RB) for the existing Mod Information tabs and matching prompts.
+  Block underlying main-panel navigation while its exact modinfo_aa shell is
+  open, so LT/RT cannot switch the game panels behind it. Active-page input,
+  scrolling, A/B closing, and normal navigation after closing are preserved.
+- Reuse the guarded TabBar/UISwitcher hooks and panel lifecycle events. No new
+  native hook, softmod layout edit, configuration key, or input-provider change.
+  Reset navigation panel state on cleanup/initialization as well as HUD exit.
+- Automated checks and live-test scope are recorded in
+  `docs/MOD-INFORMATION-NAVIGATION.md`: Release build and all 32 CTest suites
+  passed. Installed locally in Reimagined after the user's go-ahead, with
+  backups and existing configurations preserved. The user confirmed opening,
+  an available Close control, and L1/R1 page switching. Indicator placement and
+  controller scrolling need a softmod follow-up; the other live checks remain
+  pending. This builds on the existing
+  rev.76-beta.1 stash feedback candidate.
+
+## 1.3.1+rev.76-beta.1 - 2026-10-11 (local test candidate)
+
+- Give controller Deposit All the same independent Gems, Materials, and Runes
+  tab notifications as Inventory Deposit. Start each affected tab's existing
+  animation once per batch after a submitted item is observed leaving inventory;
+  further items for that tab do not restart or extend the supplemental animation.
+- Compile the existing guarded feedback implementation into Controller QOL and
+  connect its observer to both local and remote bulk-deposit paths. Refresh UI
+  work from the existing polling loop; preserve native notifications, transfer
+  rules, shortcuts, configuration, and default values. No separate Inventory
+  Deposit DLL, panel replacement, or image package is required.
+- Keep feedback optional: incompatible native profiles, missing UI services, or
+  scheduling failures disable only the extra notification. Document controller
+  layout compatibility and exact-build evidence in `docs/STASH-FEEDBACK-REV76.md`.
+- Local Release build: 32 Controller QOL suites, 12 Inventory Deposit regression
+  suites, and two packaging checks passed. Installed for Reimagined with existing
+  settings preserved. The live controller animation check is still pending;
+  this candidate has not been published.
+
+## Earlier unreleased observer groundwork - Inventory Deposit beta.13
 
 - Add an optional batch observer for Inventory Deposit's stash-tab feedback.
   Notify copied submitted items only after a successful source-removal scan,
-  once per item, with begin/end lifecycle callbacks. Existing Controller QOL
-  callers omit the observer and retain their transfer behavior. No new QOL
-  runtime package is published with the Inventory Deposit prerelease.
+  once per item, with begin/end lifecycle callbacks. At that point Controller QOL
+  callers omitted the observer and retained their transfer behavior. No new QOL
+  runtime package was published with the Inventory Deposit prerelease.
 
 ## 1.3.1+rev.75 - 2026-10-10
 

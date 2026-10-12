@@ -3,6 +3,9 @@
 #include <array>
 #include <mutex>
 #include <windows.h>
+#ifndef STASH_FEEDBACK_LOG_PREFIX
+#define STASH_FEEDBACK_LOG_PREFIX "[InventoryDeposit]"
+#endif
 #ifndef INVENTORY_DEPOSIT_FEEDBACK_TESTS
 #include "stash_feedback_profile.h"
 #include "gold_anchor_profile.h"
@@ -115,7 +118,7 @@ void ClearOwned(const Detail::Frame& frame) noexcept {
 void UpdateUnsafe(bool forceClear) noexcept {
     if(!Detail::Admit(context)) {
         ready=false;mailbox.Clear();timers.Clear();owned={};
-        context->LogWarn("[InventoryDeposit] Stash feedback profile changed; feedback disabled, deposit unaffected.");
+        context->LogWarn(STASH_FEEDBACK_LOG_PREFIX " Stash feedback profile changed; feedback disabled, deposit unaffected.");
         return;
     }
     Detail::Frame frame;
@@ -161,7 +164,7 @@ void Update(bool forceClear) noexcept {
     __try {UpdateUnsafe(forceClear);}
     __except(EXCEPTION_EXECUTE_HANDLER) {
         ready=false;mailbox.Clear();timers.Clear();owned={};
-        if(context)context->LogWarn("[InventoryDeposit] Stash feedback native access fault; feedback disabled, deposit unaffected.");
+        if(context)context->LogWarn(STASH_FEEDBACK_LOG_PREFIX " Stash feedback native access fault; feedback disabled, deposit unaffected.");
     }
 #endif
 }
@@ -199,13 +202,13 @@ static bool Register(const D2RL::PluginContext* ctx) noexcept {
             .userData=reinterpret_cast<void*>(ownerGeneration)};
         if(lifecycle->registerGameplayEventListener(ctx,&listener,&listeners[i])!=D2RL::Lifecycle::Result::Success)return false;
     }
-    ready=true;ctx->LogInfo("[InventoryDeposit] Confirmed-deposit stash tab feedback admitted.");return true;
+    ready=true;ctx->LogInfo(STASH_FEEDBACK_LOG_PREFIX " Confirmed-deposit stash tab feedback admitted.");return true;
 }
 bool Initialize(const D2RL::PluginContext* ctx) noexcept {
     Shutdown();
     if(Register(ctx))return true;
     Shutdown();
-    if(ctx)ctx->LogWarn("[InventoryDeposit] Stash feedback unavailable; deposit remains enabled.");
+    if(ctx)ctx->LogWarn(STASH_FEEDBACK_LOG_PREFIX " Stash feedback unavailable; deposit remains enabled.");
     return false;
 }
 void BeginBatch() noexcept {std::lock_guard lock(mutex);if(ready)mailbox.Begin();}
@@ -219,7 +222,7 @@ void Refresh() noexcept {
     queued=true;
     if(threads->runOnUiThread(context,Apply,reinterpret_cast<void*>(generation))!=D2RL::Threads::Result::Success) {
         queued=false;mailbox.Clear();timers.Clear();cleanup=AnyOwned();
-        if(!warned)context->LogWarn("[InventoryDeposit] Stash feedback UI scheduling unavailable; deposit unaffected.");
+        if(!warned)context->LogWarn(STASH_FEEDBACK_LOG_PREFIX " Stash feedback UI scheduling unavailable; deposit unaffected.");
         warned=true;
     } else warned=false;
 }

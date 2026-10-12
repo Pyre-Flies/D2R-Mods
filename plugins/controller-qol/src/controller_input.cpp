@@ -30,6 +30,10 @@ static XInputGetStateFn s_PrimaryExport = nullptr;
 static char s_ActiveModifierMode[32] = "any";
 static uint8_t s_ActiveTriggerThreshold = 30;
 static std::atomic<uint64_t> s_HookCallCount{0};
+// Gate drains active callbacks; this mutex serializes their mutable shortcut state.
+// Native callers acquire s_NativeMutex first. No state-locked path acquires it.
+static std::recursive_mutex s_InputStateMutex;
+static bool s_InputFilteringEnabled=true;
 
 using HookRecord = QolXInput::Record;
 static QolXInput::Gate s_InputGate;
@@ -51,6 +55,7 @@ static std::atomic<DWORD> s_CachedUserIndex{0};
 static std::atomic<ULONGLONG> s_LastStateTick{0};
 
 void SetActiveModifier(const char* mode, uint8_t triggerThreshold) noexcept {
+    std::lock_guard lock(s_InputStateMutex);
     if (mode && mode[0] != '\0') {
         std::strncpy(s_ActiveModifierMode, mode, sizeof(s_ActiveModifierMode) - 1);
         s_ActiveModifierMode[sizeof(s_ActiveModifierMode) - 1] = '\0';
@@ -102,6 +107,7 @@ static bool IsActiveModifierHeldForPad(DWORD dwUserIndex, const XINPUT_STATE* pS
 }
 
 void InitControllerInput() noexcept {
+    std::lock_guard lock(s_InputStateMutex);
     if (s_initialized) {
         return;
     }
@@ -272,27 +278,31 @@ bool IsAnyControllerConnected() noexcept {
 static QuickMoveCallback s_QuickMoveCallback = nullptr;
 static TriggerPassThroughPredicate s_TriggerPassThroughPredicate=nullptr;
 void SetTriggerPassThroughPredicate(TriggerPassThroughPredicate predicate) noexcept {
+    std::lock_guard lock(s_InputStateMutex);
     s_TriggerPassThroughPredicate=predicate;
 }
 static QuickMoveCubeCallback s_QuickMoveCubeCallback = nullptr;
 
 void SetQuickMoveCallback(QuickMoveCallback callback) noexcept {
+    std::lock_guard lock(s_InputStateMutex);
     s_QuickMoveCallback = callback;
 }
 
 void SetQuickMoveCubeCallback(QuickMoveCubeCallback callback) noexcept {
+    std::lock_guard lock(s_InputStateMutex);
     s_QuickMoveCubeCallback = callback;
 }
 
 static BulkStashCallback s_BulkStashCallback=nullptr;
 static QolBulkStash::Gesture s_BulkStashGesture[8]{};
-void SetBulkStashCallback(BulkStashCallback cb) noexcept {s_BulkStashCallback=cb;}
+void SetBulkStashCallback(BulkStashCallback cb) noexcept {std::lock_guard lock(s_InputStateMutex);s_BulkStashCallback=cb;}
 static BulkStashCallback s_AdvancedBeltCallback=nullptr;
 static QolNativeInput::AcceptedPress s_AdvancedBeltGesture[8]{};
-void SetAdvancedBeltCallback(BulkStashCallback cb) noexcept {s_AdvancedBeltCallback=cb;}
+void SetAdvancedBeltCallback(BulkStashCallback cb) noexcept {std::lock_guard lock(s_InputStateMutex);s_AdvancedBeltCallback=cb;}
 static AutoFillBeltCallback s_AutoFillBeltCallback = nullptr;
 
 void SetAutoFillBeltCallback(AutoFillBeltCallback callback) noexcept {
+    std::lock_guard lock(s_InputStateMutex);
     s_AutoFillBeltCallback = callback;
 }
 
@@ -307,8 +317,9 @@ static bool s_QuickMoveTriggeredX[8] = {};
 static bool s_QuickMoveTriggeredY[8] = {};
 static bool s_AutoFillBeltTriggered[8] = {};
 static QolNativeInput::GroundAPress s_GroundAPress[8]{};
+static QolNativeInput::ConsumedPresses s_ConsumedPresses[8]{};
 static TriggerPassThroughPredicate s_GroundPickupPredicate=nullptr;
-void SetGroundPickupPredicate(TriggerPassThroughPredicate predicate) noexcept {s_GroundPickupPredicate=predicate;}
+void SetGroundPickupPredicate(TriggerPassThroughPredicate predicate) noexcept {std::lock_guard lock(s_InputStateMutex);s_GroundPickupPredicate=predicate;}
 
 struct SyntheticHoldEngine {
     bool active = false;
@@ -321,8 +332,21 @@ struct SyntheticHoldEngine {
 
 static SyntheticHoldEngine s_HoldEngine;
 static VendorContextPredicate s_VendorContextPredicate = nullptr;
+static void ResetShortcutTracking() noexcept {
+    for(unsigned n=0;n<8;++n) {
+        s_PrevDpadButtons[n]=s_PrevRawButtons[n]=0;
+        s_QuickMoveTriggeredX[n]=s_QuickMoveTriggeredY[n]=s_AutoFillBeltTriggered[n]=false;
+        s_BulkStashGesture[n]={};s_GroundAPress[n]={};s_AdvancedBeltGesture[n]={};s_ConsumedPresses[n]={};
+    }
+    s_HoldEngine={};
+}
+void SetInputFilteringEnabled(bool enabled) noexcept {
+    std::lock_guard lock(s_InputStateMutex);
+    s_InputFilteringEnabled=enabled;ResetShortcutTracking();
+}
 
 void TriggerSyntheticHold(uint16_t button, uint32_t maxDurationMs) noexcept {
+    std::lock_guard lock(s_InputStateMutex);
     s_HoldEngine.button = button;
     s_HoldEngine.maxDurationMs = maxDurationMs;
     s_HoldEngine.startTick = GetTickCount64();
@@ -331,6 +355,7 @@ void TriggerSyntheticHold(uint16_t button, uint32_t maxDurationMs) noexcept {
 }
 
 void CancelSyntheticHold() noexcept {
+    std::lock_guard lock(s_InputStateMutex);
     if (s_HoldEngine.active) {
         s_HoldEngine.active = false;
         s_HoldEngine.releaseFrames = 3;
@@ -338,17 +363,21 @@ void CancelSyntheticHold() noexcept {
 }
 
 bool IsSyntheticHoldActive() noexcept {
+    std::lock_guard lock(s_InputStateMutex);
     return s_HoldEngine.active;
 }
 
 void SetVendorContextPredicate(VendorContextPredicate pred) noexcept {
+    std::lock_guard lock(s_InputStateMutex);
     s_VendorContextPredicate = pred;
 }
 
 static void ProcessGamepadShortcuts(DWORD dwUserIndex, XINPUT_STATE* pState) noexcept {
+    std::lock_guard lock(s_InputStateMutex);
     if (!pState || dwUserIndex >= 8) return;
 
     s_HookCallCount.fetch_add(1);
+    if(!s_InputFilteringEnabled)return; // Observe raw state, preserve all native input.
 
     const uint16_t rawButtons = pState->Gamepad.wButtons;
     uint16_t buttons = rawButtons;
@@ -417,11 +446,10 @@ static void ProcessGamepadShortcuts(DWORD dwUserIndex, XINPUT_STATE* pState) noe
         } else {
             s_AutoFillBeltTriggered[dwUserIndex] = false;
         }
-    } else {
-        s_QuickMoveTriggeredX[dwUserIndex] = false;
-        s_QuickMoveTriggeredY[dwUserIndex] = false;
-        s_AutoFillBeltTriggered[dwUserIndex] = false;
     }
+    if(!xPressed)s_QuickMoveTriggeredX[dwUserIndex]=false;
+    if(!yPressed)s_QuickMoveTriggeredY[dwUserIndex]=false;
+    if(!r3Pressed)s_AutoFillBeltTriggered[dwUserIndex]=false;
 
     // When modifier is held:
     // Inventory A must reach OnItemInteraction. A world-loot chord is owned by
@@ -435,7 +463,8 @@ static void ProcessGamepadShortcuts(DWORD dwUserIndex, XINPUT_STATE* pState) noe
     filterInput.leftTrigger=pState->Gamepad.bLeftTrigger;
     filterInput.rightTrigger=pState->Gamepad.bRightTrigger;
     const bool sharedTriggers=modHeld && s_TriggerPassThroughPredicate && s_TriggerPassThroughPredicate();
-    const auto filtered=QolNativeInput::FilterModified(filterInput,modHeld,sharedTriggers);
+    auto rawInput=filterInput;rawInput.buttons=rawButtons;
+    const auto filtered=s_ConsumedPresses[dwUserIndex].Apply(rawInput,QolNativeInput::FilterModified(filterInput,modHeld,sharedTriggers));
     buttons=filtered.buttons;
     pState->Gamepad.bLeftTrigger=filtered.leftTrigger;
     pState->Gamepad.bRightTrigger=filtered.rightTrigger;
@@ -469,7 +498,8 @@ static void ProcessGamepadShortcuts(DWORD dwUserIndex, XINPUT_STATE* pState) noe
         s_HoldEngine.releaseFrames--;
     }
 
-    pState->Gamepad.wButtons = buttons;
+    // Synthetic holds must not resurrect a physically consumed chord button.
+    pState->Gamepad.wButtons = buttons & ~s_ConsumedPresses[dwUserIndex].buttons;
 }
 
 
@@ -499,16 +529,10 @@ bool IsControllerUiActive() noexcept {
     return NativeActiveIndex()!=~0u;
 }
 static void ResetNativeTracking() noexcept {
+    std::lock_guard lock(s_InputStateMutex);
     s_NativeRaw=s_NativeDelivered=0;s_NativeIndex=~0u;
     s_NativeSnapshot.store(0);
-    for(unsigned n=0;n<8;++n) {
-        s_PrevDpadButtons[n]=s_PrevRawButtons[n]=0;
-        s_QuickMoveTriggeredX[n]=s_QuickMoveTriggeredY[n]=s_AutoFillBeltTriggered[n]=false;
-        s_BulkStashGesture[n]={};
-        s_GroundAPress[n]={};
-        s_AdvancedBeltGesture[n]={};
-    }
-    s_HoldEngine={};
+    ResetShortcutTracking();
 }
 static void SeedNativeTracking(unsigned index) noexcept {
     if(index==s_NativeIndex) return;

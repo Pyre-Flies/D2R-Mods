@@ -1,5 +1,6 @@
 #pragma once
 #include <D2RLPlugin/api.h>
+#include "cube_shortcut_policy.h"
 namespace QolSharedSdk {
 using C=D2RL::Items::ItemContainer;
 inline bool Supported(const D2RL::ItemService* items) noexcept {
@@ -12,19 +13,22 @@ struct Outcome {
     uint32_t failureIndex{D2RL::Items::NoFailedOperation};
 };
 inline Outcome Move(const D2RL::PluginContext* ctx,const D2RL::ItemService* items,
-    D2RL::PlayerHandle player,const D2RL::Items::ItemInfo& item,uint32_t selectedPage,bool deposit) noexcept {
+    D2RL::PlayerHandle player,const D2RL::Items::ItemInfo& item,uint32_t selectedPage,bool deposit,
+    C withdrawalDestination=C::Inventory) noexcept {
     if (!Supported(items)) return {};
     // Refuse unknown pages and wrong sources. A supported-but-rejected request
     // must never fall through to a second native transfer implementation.
     Outcome out{true,false,D2RL::Items::Result::InvalidArgument};
     if (!ctx || !player || !item.handle || selectedPage==UINT32_MAX ||
+        !QolCubeShortcut::Allows(item.code,deposit?C::SharedStash:withdrawalDestination) ||
+        (!deposit && withdrawalDestination!=C::Inventory && withdrawalDestination!=C::Cube) ||
         (deposit ? item.container!=C::Inventory : item.container!=C::SharedStash || item.sharedStashPage!=selectedPage)) return out;
     D2RL::Items::ExistingItemOperation op{};
     op.structSize=D2RL::Items::ExistingItemOperationSize;
     op.kind=D2RL::Items::ExistingItemOperationKind::Move;
     op.item=item.handle;
     op.move.destination.structSize=D2RL::Items::ItemDestinationSize;
-    op.move.destination.container=deposit?C::SharedStash:C::Inventory;
+    op.move.destination.container=deposit?C::SharedStash:withdrawalDestination;
     op.move.destination.placement=D2RL::Items::Placement::Automatic;
     op.move.destination.sharedStashPage=deposit?selectedPage:UINT32_MAX;
     const D2RL::Items::ExistingItemTransaction txn{

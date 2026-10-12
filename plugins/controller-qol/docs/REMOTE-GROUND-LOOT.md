@@ -1,5 +1,10 @@
 # Remote client ground-loot candidate - 2026-10-06
 
+Historical route qualification below. Local rev.76-beta.3 reuses this guarded
+UI request for offline/host/client loot and retires the authoritative pending
+slot/packet observers. See [the repair record](AUDIT-REPAIRS-REV76.md) for current
+ownership, lifecycle/permit fences and pending live route-expansion tests.
+
 ## Evidence and scope
 
 The private TCP/IP run captures LB and LB+X, but both slot refresh and pickup

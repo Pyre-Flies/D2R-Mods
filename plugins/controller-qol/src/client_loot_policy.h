@@ -4,6 +4,29 @@
 #include <vector>
 #include <algorithm>
 namespace QolClientLoot {
+// The SDK's UI lifecycle supplies identity, never a borrowed native player.
+struct LocalSession {
+    uint64_t generation{};
+    uint32_t playerId{UINT32_MAX};
+    bool joined{};
+    void Join(uint64_t value) noexcept {generation=value;playerId=UINT32_MAX;joined=value!=0;}
+    void Leave() noexcept {joined=false;playerId=UINT32_MAX;}
+    bool Bind(uint64_t value,uint32_t id) noexcept {
+        if(!joined || !value || value!=generation || id==UINT32_MAX)return false;
+        playerId=id;return true;
+    }
+    bool Matches(uint32_t type,uint32_t id) const noexcept {
+        return joined && generation && playerId!=UINT32_MAX && type==0 && id==playerId;
+    }
+};
+struct NativePickupPermit {
+    uint32_t guid{};
+    uint64_t generation{},issued{};
+    bool Current(const LocalSession& session,uint32_t actorId,uint32_t itemId,uint64_t now) const noexcept {
+        return guid && guid==itemId && generation==session.generation && session.Matches(0,actorId) &&
+            now>=issued && now-issued<=1000;
+    }
+};
 struct Candidate {
     uint32_t guid{}, code{}, quality{};
     int distance{}, rank{};
@@ -14,7 +37,7 @@ inline bool SameItem(const Candidate& a, const Candidate& b) {
 using Slots = std::array<Candidate,7>;
 struct Request { Candidate item{}; uint64_t epoch{}, queuedAt{}; };
 inline bool CurrentRequest(const Request& request,uint64_t epoch,uint64_t now,bool held) {
-    return held && request.item.guid && request.epoch==epoch && now-request.queuedAt<=500;
+    return held && request.item.guid && request.epoch==epoch && now>=request.queuedAt && now-request.queuedAt<=500;
 }
 // Existing assignments survive priority/distance changes. A removed item leaves
 // a hole; never redirect an already queued request to the replacement in that hole.

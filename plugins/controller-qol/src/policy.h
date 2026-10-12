@@ -1,6 +1,7 @@
 #pragma once
 #include <string_view>
 namespace Probe {
+inline constexpr unsigned ModInformationPanelBit=128;
 inline bool GroundLootHooksRequired(bool groundPickup,bool blockFilteredPickup) noexcept {
     return groundPickup || blockFilteredPickup;
 }
@@ -30,6 +31,7 @@ inline bool BatchFeatureEnabled(bool masterEnabled,bool featureEnabled) noexcept
     return masterEnabled && featureEnabled;
 }
 inline unsigned SubPanelBit(std::string_view name) noexcept {
+    if(name=="modinfo_aa") return ModInformationPanelBit;
     if(name=="QuestLogPanelExpansion" || name=="QuestLogPanelOriginal") return 1;
     if(name=="SkillsTreePanel") return 2;
     if(name=="SettingsPanel") return 4;
@@ -41,6 +43,9 @@ inline unsigned SubPanelBit(std::string_view name) noexcept {
 }
 inline bool OptionsTab(std::string_view widget,std::string_view parent,bool visible) noexcept {
     return visible && widget=="OptionsTabs" && parent=="SettingsPanel";
+}
+inline bool ModInformationTab(std::string_view widget,std::string_view parent,bool visible) noexcept {
+    return visible && widget=="OptionsTabs" && parent=="modinfo_aa";
 }
 inline bool LootFilterTab(std::string_view widget,std::string_view parent,bool visible) noexcept {
     return visible && widget=="ItemListTabs" && parent=="LootFilterRuleDetailsPanel";
@@ -72,8 +77,10 @@ inline unsigned DedicatedPanelBit(std::string_view name) noexcept {
     return 0;
 }
 // Called only for UISwitcher's ControllerActionBegin, never global dispatch.
-inline int MenuAction(bool enabled, unsigned action) noexcept {
+inline int MenuAction(bool enabled, unsigned action, bool modInformation=false) noexcept {
     if(!enabled) return static_cast<int>(action);
+    // Block only the underlying UISwitcher; active-page input remains native.
+    if(modInformation && (action==7 || action==8 || action==19 || action==20)) return -1;
     if(action==19 || action==20) return -1;
     if(action==7) return 19;
     if(action==8) return 20;

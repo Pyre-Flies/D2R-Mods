@@ -1,5 +1,6 @@
 #include "materials_actions.h"
 #include "materials_policy.h"
+#include "cube_shortcut_policy.h"
 #include "materials_native_contract.h"
 #include "materials_signatures.h"
 #include "plugin_compatibility.h"
@@ -239,6 +240,7 @@ bool Busy() noexcept { std::lock_guard lock(mutex); return active; }
 static bool TryWithdraw(const D2RL::PluginContext* ctx,const D2RL::Items::ItemInfo& info,Destination target) noexcept {
     std::lock_guard lock(mutex);
     if (!ready || !AdvancedProxyCandidate(info.container)) return false;
+    if(target==Destination::Cube && QolCubeShortcut::IsCube(info.code))return true;
     if (!Validate(ctx)) { ready=false; return false; }
     const auto slot=Resolve(ctx,info.code);
     TraceResolve(ctx,slot,info.code,"focus");

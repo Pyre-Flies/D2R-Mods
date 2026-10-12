@@ -32,6 +32,16 @@ int main() {
     Check(g.Handle(false,true,true,7,true,false)==0,"disabled passes through");
     g={};
     Check(g.Handle(true,true,true,7,true,true)==0,"initial repeat cannot fabricate a press");
+    for(const unsigned first:{7u,8u})for(const bool repeat:{false,true}) {
+        g={};const auto other=first==7?8u:7u;
+        Check(g.Handle(true,true,true,first,true,false)==static_cast<int>(first+12),"either first trigger starts Shared gesture");
+        Check(g.Handle(true,true,true,other,true,repeat)==-1,"opposite fresh or repeat press cannot escape Shared");
+        Check(g.Handle(true,false,false,other,true,true)==-1,"overlapping trigger owned after LB release or tab change");
+        Check(g.Handle(true,true,false,first,false,false)==-1,"first owned trigger releases");
+        Check(g.Handle(true,true,false,other,true,true)==-1,"second trigger not released by first release");
+        Check(g.Handle(true,true,false,other,false,false)==-1,"second owned trigger releases");
+        Check(g.Handle(true,false,false,other,true,false)==0,"fresh ordinary trigger after both releases passes through");
+    }
     using namespace QolGlyphPolicy;
     const std::string_view left[]={"Text","StashLeftArrow","StashNavigation","SharedStashTabContainer","BankExpansionLayout"};
     const std::string_view right[]={"StashRightArrow","BankExpansionLayout"};

@@ -3,6 +3,21 @@
 #include <cstdio>
 #include <cstdlib>
 void Check(bool ok,const char* text) {if(!ok){std::fprintf(stderr,"FAIL: %s\n",text);std::exit(1);}}
+void CheckModInformationRoutes(unsigned panels) {
+    for(bool registered : {false,true}) {
+        int routeCalls=0,nativeCalls=0,backgroundCycles=0;
+        for(unsigned action : {7u,8u,19u,20u}) {
+            const int mapped=Probe::MenuAction(true,action,(panels&Probe::ModInformationPanelBit)!=0);
+            if(mapped>=0) {
+                ++routeCalls;
+                if(!registered) ++nativeCalls;
+                if(mapped==19 || mapped==20) ++backgroundCycles;
+            }
+        }
+        Check(routeCalls==0 && nativeCalls==0 && backgroundCycles==0,
+              "Mod Information owns navigation before either background route");
+    }
+}
 int main() {
     Check(!Probe::GroundLootHooksRequired(false,false),"ground hooks remain off when both loot features are disabled");
     Check(Probe::GroundLootHooksRequired(true,false),"direct ground pickup enables ground hooks");
@@ -40,6 +55,55 @@ int main() {
     Check(Probe::SubMenuAction(true,19)==7 && Probe::SubMenuAction(true,20)==8,"Options bumpers route to inner tabs");
     Check(Probe::SubMenuAction(true,7)==-1 && Probe::SubMenuAction(true,8)==-1,"Options triggers released to outer menu");
     Check(Probe::SubMenuAction(true,0)==0 && Probe::SubMenuAction(false,19)==19,"other controls and disabled mode preserved");
+    Check(Probe::ModInformationPanelBit==128,"Mod Information has an independent lifecycle bit");
+    Check(Probe::SubPanelBit("modinfo_aa")==Probe::ModInformationPanelBit,"exact Mod Information shell classified");
+    for(const auto name : {"", "modinfo_", "modinfo_aaa", "modinfo_aahd", "Modinfo_aa", "other_modinfo_aa"})
+        Check(Probe::SubPanelBit(name)==0,"Mod Information shell lookalikes excluded");
+    Check(Probe::ModInformationTab("OptionsTabs","modinfo_aa",true),"exact visible Mod Information tabs admitted");
+    Check(!Probe::ModInformationTab("OptionsTabs","modinfo_aa",false),"hidden Mod Information tabs excluded");
+    for(const auto widget : {"", "OptionsTabsExtra", "OtherTabs"})
+        Check(!Probe::ModInformationTab(widget,"modinfo_aa",true),"unrelated Mod Information widgets untouched");
+    for(const auto parent : {"SettingsPanel", "modinfo_generalinformation", "modinfo_aaa", "", "OtherPanel"})
+        Check(!Probe::ModInformationTab("OptionsTabs",parent,true),"Mod Information tabs require the exact direct shell parent");
+    Check(!Probe::OptionsTab("OptionsTabs","modinfo_aa",true),"Mod Information remains separate from stock Options");
+
+    // Model shell and content notifications independently: switching pages must
+    // never release navigation to the menu behind the information window.
+    unsigned modInformationPanels=0;
+    modInformationPanels|=Probe::SubPanelBit("modinfo_aa");
+    CheckModInformationRoutes(modInformationPanels);
+    Check(!Probe::GroundShortcutsAllowed(0,modInformationPanels) &&
+          !Probe::WorldGroundInput(true,true,0,modInformationPanels,0),"Mod Information excludes world loot input");
+    for(const auto page : {"modinfo_generalinformation", "modinfo_orbs", "modinfo_itemenchantments",
+                           "modinfo_runetable", "modinfo_gemtable", "modinfo_sundercharms", "modinfo_tab7"}) {
+        Check(Probe::SubPanelBit(page)==0,"content page does not own the shell lifecycle bit");
+        modInformationPanels|=Probe::SubPanelBit(page);
+        CheckModInformationRoutes(modInformationPanels);
+        modInformationPanels&=~Probe::SubPanelBit(page);
+        Check(modInformationPanels==Probe::ModInformationPanelBit,"content close preserves shell ownership");
+        CheckModInformationRoutes(modInformationPanels);
+    }
+    modInformationPanels|=Probe::SubPanelBit("SettingsPanel");
+    modInformationPanels&=~Probe::SubPanelBit("modinfo_aa");
+    Check(modInformationPanels==Probe::SubPanelBit("SettingsPanel"),"shell close preserves another panel's ownership");
+    Check(Probe::MenuAction(true,7,(modInformationPanels&Probe::ModInformationPanelBit)!=0)==19,
+          "shell close restores ordinary trigger navigation");
+    modInformationPanels|=Probe::SubPanelBit("modinfo_aa");
+    CheckModInformationRoutes(modInformationPanels);
+    modInformationPanels=0; // Model the HUD/session lifecycle reset boundary.
+    Check(Probe::MenuAction(true,8,(modInformationPanels&Probe::ModInformationPanelBit)!=0)==20 &&
+          Probe::WorldGroundInput(true,true,0,modInformationPanels,0),"HUD reset restores menu and world input ownership");
+
+    for(unsigned action=0;action<256;++action) {
+        const bool navigation=action==7 || action==8 || action==19 || action==20;
+        Check(Probe::MenuAction(true,action,true)==(navigation?-1:static_cast<int>(action)),
+              "modal route blocks only four navigation actions; A B and other actions pass through");
+        const int ordinary=(action==19 || action==20)?-1:
+                           action==7?19:action==8?20:static_cast<int>(action);
+        Check(Probe::MenuAction(true,action,false)==ordinary,"ordinary menu mapping is unchanged for every action");
+        for(bool modal : {false,true})
+            Check(Probe::MenuAction(false,action,modal)==static_cast<int>(action),"disabled remapping passes every action through");
+    }
     Check(Probe::RecoverControllerLabels(true,true,true,1,0),"stale display recovered");
     Check(!Probe::RecoverControllerLabels(true,true,true,1,1),"healthy display not rebuilt");
     Check(!Probe::RecoverControllerLabels(true,true,false,1,0),"menu suppression retained");

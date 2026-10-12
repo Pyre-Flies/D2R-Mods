@@ -3,6 +3,17 @@
 #define CHECK(x) do {if(!(x)){std::printf("Failure line %d: %s\n",__LINE__,#x);return 1;}}while(0)
 int main() {
     using namespace QolClientLoot;
+    LocalSession session;session.Join(10);
+    CHECK(!session.Matches(0,0) && !session.Bind(9,0) && !session.Bind(10,UINT32_MAX));
+    CHECK(session.Bind(10,0) && session.Matches(0,0)); // Player ID zero is valid.
+    CHECK(!session.Matches(0,1) && !session.Matches(4,0));
+    NativePickupPermit permit{42,10,1000};
+    CHECK(permit.Current(session,0,42,2000));
+    CHECK(!permit.Current(session,1,42,1100) && !permit.Current(session,0,43,1100));
+    CHECK(!permit.Current(session,0,42,999) && !permit.Current(session,0,42,2001));
+    session.Leave();CHECK(!permit.Current(session,0,42,1100));
+    session.Join(11);CHECK(!session.Bind(10,0) && session.Bind(11,0));
+    CHECK(!permit.Current(session,0,42,1100));
     Candidate rune{42,123,2,6,2000}, sword{43,456,7,2,700}, potion{44,789,2,1,150};
     auto slots=Assign({}, {potion,sword,rune});
     CHECK(slots[0].guid==42 && slots[1].guid==43 && slots[2].guid==44);

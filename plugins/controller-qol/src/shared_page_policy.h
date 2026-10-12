@@ -16,6 +16,10 @@ struct SharedPageGesture {
             bool consumed=owned[index]; down[index]=owned[index]=false;
             return consumed?-1:0;
         }
+        // Native input may mark the newly pressed opposite trigger as a repeat
+        // while the first one is held. Own that press too; never forward it as
+        // main-tab navigation or reverse the active chord. Both must release.
+        if (owned[1-index]) { down[index]=owned[index]=true; return -1; }
         if (down[index] || repeat) { down[index]=true; return owned[index]?-1:0; }
         down[index]=true;
         if (!shared || !lb) return 0;

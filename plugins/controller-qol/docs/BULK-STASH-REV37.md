@@ -80,3 +80,27 @@ Regression tests cover full/partial removal, duplicate sightings and unsubmitted
 Live speed, counters, visual refresh and persistence remain pending.
 
 Rev.38 Release build and all 20 CTest suites passed, including whole-batch/partial verification regressions. Installed after checking game/loader closed; previous DLL/config backed up under before-rev38. Built and installed SHA256 A3708B687BF3CFB37FEFC568D9A75880C522C9B88241364228A044A32E23E7A3, ProductVersion 1.3.1+rev.38. Configuration unchanged. Live full-inventory speed and transfer verification pending.
+
+## Optional removal observer, 2026-10-11
+
+The shared queue now accepts an optional copied `Observer` at initialization:
+batch begin, submitted-item source removal, and batch end callbacks. Controller
+QOL keeps the default null observer. Inventory Deposit beta.4 opts in for
+[independent destination-tab feedback](../../inventory-deposit/docs/STASH-FEEDBACK.md).
+There is no pacing, transfer, native routing or retry change.
+
+Callbacks execute synchronously under the queue lock on its current game/UI
+thread. They may only copy values into a mailbox; they must not access native
+UI or reenter the queue. A removal callback receives the original copied item
+snapshot once, only after a successful inventory read observes a submitted
+identity absent. Failed or partial reads do not imply absence. Host verification
+and sequential remote confirmation share the same per-item notification bit.
+Callbacks end on normal finish, refusal, session cancellation, shutdown or
+replacement of an expired batch. The callback user pointer must remain valid
+until queue shutdown completes. Source removal still does not establish
+destination counter changes or save persistence.
+
+Expanded policy tests cover partial/repeated/failed scans, unsubmitted items,
+source reappearance, remote-style confirmation and out-of-range indices. A direct
+MSVC `/W4 /WX` build of the queue and policy tests passed. This is automated
+observation coverage, not a new Controller QOL live-game test.

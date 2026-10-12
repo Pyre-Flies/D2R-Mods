@@ -6,6 +6,20 @@ Reviewed source profile: installed D2R.exe file version 3.3.93787, disk SHA-256 
 
 All game locations below are D2R.exe-relative RVAs unless marked D2RCore. Current executable guards live in the plugin's signature headers.
 
+Local rev.76-beta.3 reuses `0xFA180` UI item interaction for offline/host/client
+ground requests instead of caching authoritative player/game pointers or
+observing every participant's packets. Lifecycle local ID/session generation
+qualify host interception; Shared Cube requests capture UI page/season and SDK
+local owner. No new native site was discovered. See
+[the owned repair evidence](../../plugins/controller-qol/docs/AUDIT-REPAIRS-REV76.md)
+for reused offsets/ABI, one-use permits and pending hosted validation.
+
+Local beta.4 adds semantic Cube guards before SDK/native moves and owns both
+overlapping Shared LT/RT gestures using the same guarded BankPanel contract.
+No new RVA/ABI is introduced. Reinspection of the already recorded
+`0xFA405..0xFA48C` pickup branch supports immediate request submission, not a
+complete approach/walk contract. See [the live-failure follow-up](../../plugins/controller-qol/docs/AUDIT-LIVE-FOLLOWUP-BETA4.md).
+
 ## Controller, navigation and presentation
 
 | RVA / module | Observed role | Scope and evidence owner |

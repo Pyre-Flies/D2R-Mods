@@ -38,6 +38,9 @@ int main() {
     source=live;live.sharedStashPage=3;Check(!Source(source,live),"shared source changing page cancels");
     Check(NativePage(C::Inventory)==0 && NativePage(C::Cube)==3 && NativePage(C::PersonalStash)==4 && NativePage(C::SharedStash)==4,"native page ABI is distinct from SDK containers and shared page numbers");
     Check(!Legal(C::Inventory,C::Cube,D2RL::Items::MakeItemCode("box")),"Cube cannot go into itself");
+    Check(!Legal(C::PersonalStash,C::Cube,0x00786f62) && !Legal(C::SharedStash,C::Cube,0x20786f62),"both Cube padding forms blocked on stash routes");
+    Check(Legal(C::Cube,C::Inventory,0x20786f62) && Legal(C::Cube,C::Inventory,0x00786f62),"nested Cube withdrawal remains legal");
+    Check(Legal(C::Inventory,C::Cube,0x78786f62),"fourth non-padding character does not alias box");
     Check(!Legal(C::CustomPage,C::Inventory,source.code) && !Legal(C::Ground,C::Inventory,source.code),"advanced and ground routes excluded");
     Check(Legal(C::SharedStash,C::Inventory,source.code) && Legal(C::PersonalStash,C::Cube,source.code),"ordinary withdrawal and explicit Cube destinations supported");
     RequestFence f;f.Begin(100);const auto old=f.generation;

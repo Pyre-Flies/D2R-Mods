@@ -1,12 +1,39 @@
 # Controller QOL Updates
 
 **Made by PyreFly for D2RLoader**  
-Version **1.3.1+rev.75** | Windows x64 | Diablo II: Resurrected
+Version **1.3.1+rev.76-beta.4** (testing prerelease) | Windows x64 | Diablo II: Resurrected
+
+**Please test this release and report all bugs at
+[GitHub Issues](https://github.com/Pyre-Flies/D2R-Mods/issues/new). Online play
+has not yet been validated.** See the
+[testing release notes](https://github.com/Pyre-Flies/D2R-Mods/releases/tag/beta-controller-qol-2026.10.11.1).
 
 Controller QOL Updates adds direct controller looting, contextual item actions,
 stash and Cube transfers, belt management, clearer controller prompts, and
 controller-friendly menu navigation. It preserves the game's native item,
 storage, vendor, and interaction rules.
+
+Rev.76-beta.4 adds Cube self-insertion guards and overlapping Shared-trigger
+ownership after beta.3 live failures. The local candidate passes 33 automated
+suites. The user confirmed Cube self-insertion prevention, the Shared Stash
+escape fix and Cube behavior through rejoins, and accepted non-online gameplay
+as ready. Online qualification remains open; current pickup reach/no-approach
+behavior is unchanged and documented. See the
+[follow-up evidence](docs/AUDIT-LIVE-FOLLOWUP-BETA4.md)
+and [in-game acceptance cases](docs/AUDIT-REPAIRS-IN-GAME-TESTS.md).
+
+Rev.76-beta.2 uses **LB/RB (L1/R1)** for Mod Information tabs and prevents
+LT/RT from changing the underlying game panels while Mod Information is open.
+Its prompts follow the bumper mapping; normal game-panel navigation resumes
+after closing it. Live validation is pending. See the
+[navigation record](docs/MOD-INFORMATION-NAVIGATION.md).
+
+Rev.76-beta.1 adds the Inventory Deposit button's stash-tab feedback to **LB +
+L3**: Gems, Materials, and Runes each play their existing notification animation
+once per Deposit All batch when a submitted item is observed leaving inventory.
+The implementation is included in Controller QOL; it needs no Inventory Deposit
+DLL or extra artwork. Controller rendering still needs live confirmation. See
+the [stash feedback record](docs/STASH-FEEDBACK-REV76.md).
 
 Xbox button names are used below. On a PlayStation-style controller, LB/RB are
 L1/R1, LT/RT are L2/R2, and A/X/Y/B are Cross/Square/Triangle/Circle.
@@ -88,6 +115,11 @@ waiting for each source to disappear. A changed stash tab, changed item, session
 exit or timeout stops the batch. Source removal alone does not prove the stored
 counter total; check destination totals during testing.
 
+Deposit All feedback covers both the local and remote batch paths. Several
+different materials trigger one Materials animation, and mixed destinations can
+animate together. Refused, skipped, and unconfirmed items do not trigger extra
+feedback. An unavailable feedback adapter leaves the existing transfers enabled.
+
 LB+X on the Cube grid beside Gems/Materials/Runes deposits eligible items
 directly into advanced storage. Ineligible items stay in the Cube. LB+X in the
 standalone Cube screen still moves to Inventory.
@@ -106,6 +138,7 @@ stash or Cube contents.
 | LB / RB | Quest Log | Previous / next act tab |
 | LB / RB | Chronicle | Previous / next inner Chronicle tab |
 | LB / RB | Options | Previous / next inner Options tab |
+| LB / RB | Mod Information | Previous / next information tab; LT/RT cannot change the underlying main page while it is open |
 | LB / RB | Loot-filter rule editor | Switch Equipment / Items inner tabs |
 | LB + LT / LB + RT | Shared stash | Previous / next Shared stash page |
 | RB | Item tooltip | Show native roll ranges while the remap is available |
@@ -171,7 +204,7 @@ R3 keeps only one rolling `.r3.bak` per profile; migration backups are separate.
 | `prioritize_stash_boxes` | `true` | Prefer the town stash over ground loot for neutral A |
 | `prioritize_waypoints` | `true` | Prefer eligible waypoints over ground loot for neutral A |
 | `prioritize_shrines` | `true` | Prefer shrines and supported wells/fountains over ground loot for neutral A |
-| `prioritize_chests` | `false` | Prefer supported ordinary chests over ground loot for neutral A |
+| `prioritize_chests` | `true` | Prefer supported ordinary chests over ground loot for neutral A |
 | `portal_priority_distance` | `10` | Shared priority-object range, clamped to 1â€“20 game units |
 | `debug_logging` | `false` | Enable general diagnostic logging |
 | `portal_diagnostics` | `false` | Enable targeted, throttled object-priority diagnostics independently of general debug logging |

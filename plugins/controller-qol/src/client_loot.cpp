@@ -13,6 +13,9 @@ std::atomic<bool> active{false};
 const D2RL::PluginContext* context{};
 RankFn rankItem{};
 std::atomic<bool> ready{false};
+std::atomic<bool> lifecycleAvailable{false},localPlayerReady{false};
+LocalSession localSession;
+std::array<NativePickupPermit,7> pickupPermits{};
 bool wasHeld{};
 using InGameFn=bool(__cdecl*)() noexcept;
 InGameFn inGame{};
@@ -28,7 +31,7 @@ bool Validate() noexcept {
     return true;
 }
 void* Player() noexcept {
-    if(!ready || !inGame || !inGame())return nullptr;
+    if(!Ready() || !inGame || !inGame())return nullptr;
     return D2R::Native::GetLocalPlayerUnit(context->exeBase);
 }
 bool Read(void* player,uint32_t guid,uint32_t radius,Candidate& out) noexcept {
@@ -55,17 +58,20 @@ bool Session(void*& player) noexcept {
         player=Player();
         if(!player) {
             if(playerIdentity || wasHeld)++epoch;
-            slots={};visible.clear();playerIdentity=0;playerGuid=0;wasHeld=false;
+            slots={};visible.clear();playerIdentity=0;playerGuid=0;wasHeld=false;pickupPermits={};
             return false;
         }
         const auto guid=static_cast<const uint32_t*>(player)[2];
+        if(!localSession.Matches(static_cast<const uint32_t*>(player)[0],guid)) {
+            ++epoch;slots={};visible.clear();wasHeld=false;pickupPermits={};return false;
+        }
         if(playerIdentity && (playerIdentity!=reinterpret_cast<uintptr_t>(player) || playerGuid!=guid)) {
             ++epoch;
-            slots={};visible.clear();wasHeld=false;
+            slots={};visible.clear();wasHeld=false;pickupPermits={};
         }
         playerIdentity=reinterpret_cast<uintptr_t>(player);playerGuid=guid;
         return true;
-    } __except(EXCEPTION_EXECUTE_HANDLER) {++epoch;slots={};visible.clear();wasHeld=false;return false;}
+    } __except(EXCEPTION_EXECUTE_HANDLER) {++epoch;slots={};visible.clear();wasHeld=false;pickupPermits={};return false;}
 }
 bool Invoke(uintptr_t base,uint32_t guid) noexcept {
     __try {
@@ -79,21 +85,49 @@ void Initialize(const D2RL::PluginContext* ctx,RankFn rank) noexcept {
     std::lock_guard lock(mutex);
     context=ctx;rankItem=rank;
     active=false;slots={};visible.clear();playerIdentity=0;playerGuid=0;wasHeld=false;++epoch;
+    lifecycleAvailable=false;localPlayerReady=false;localSession={};pickupPermits={};
     inGame=reinterpret_cast<InGameFn>(GetProcAddress(GetModuleHandleW(L"D2RCore.dll"),"IsInGame"));
     ready=rank && Validate();
     ctx->LogInfo(ready?"[QOL/ClientLoot] Native client pickup profile admitted.":
         "[QOL/ClientLoot] Profile unavailable; remote ground shortcuts disabled.");
 }
+void SetLifecycleAvailable(bool available) noexcept {
+    lifecycleAvailable=available;
+}
+void OnLifecycle(const D2RL::Lifecycle::GameplayEvent* event) noexcept {
+    std::lock_guard lock(mutex);
+    if(event && !D2RL::Lifecycle::HasGameplayEventField(event,D2RL::Lifecycle::GameplayEventRequiredSize))return;
+    if(event && event->kind==D2RL::Lifecycle::GameplayEventKind::LocalPlayerReady) {
+        if(!localSession.Bind(event->sessionGeneration,event->playerId))return;
+    } else if(event && event->kind==D2RL::Lifecycle::GameplayEventKind::GameJoined) {
+        localSession.Join(event->sessionGeneration);
+    } else {localSession.Leave();}
+    localPlayerReady=localSession.Matches(0,localSession.playerId);
+    ++epoch;active=false;slots={};visible.clear();wasHeld=false;playerIdentity=0;playerGuid=0;pickupPermits={};
+}
+bool IsLocalActor(uint32_t type,uint32_t id) noexcept {
+    std::lock_guard lock(mutex);
+    return lifecycleAvailable && localSession.Matches(type,id);
+}
+bool TakeNativePickupPermit(uint32_t actorId,uint32_t guid) noexcept {
+    std::lock_guard lock(mutex);
+    const auto now=GetTickCount64();
+    for(auto& permit:pickupPermits)if(permit.Current(localSession,actorId,guid,now)) {
+        permit={};return true;
+    }
+    return false;
+}
 void Shutdown() noexcept {
     std::lock_guard lock(mutex);
-    active=false;ready=false;slots={};visible.clear();context=nullptr;inGame=nullptr;
+    active=false;ready=false;lifecycleAvailable=false;localPlayerReady=false;localSession={};pickupPermits={};
+    slots={};visible.clear();context=nullptr;inGame=nullptr;
 }
 bool Activate() noexcept {
     std::lock_guard lock(mutex);
-    if(!ready)return false;
+    if(!Ready())return false;
     if(!active.exchange(true)) {
         char message[128];
-        std::snprintf(message,sizeof(message),"[QOL/ClientLoot] pid=%lu using client requests: game scheduler unavailable.",GetCurrentProcessId());
+        std::snprintf(message,sizeof(message),"[QOL/ClientLoot] pid=%lu using UI-owned local pickup requests (offline/host/client).",GetCurrentProcessId());
         context->LogInfo(message);
     }
     return true;
@@ -103,10 +137,11 @@ void Deactivate() noexcept {
     if(active.exchange(false)) {++epoch;slots={};wasHeld=false;playerIdentity=0;playerGuid=0;}
 }
 bool Active() noexcept {return active.load();}
-bool Ready() noexcept {return ready.load();}
+bool Ready() noexcept {return ready.load() && lifecycleAvailable.load() && localPlayerReady.load();}
+uint64_t Epoch() noexcept {std::lock_guard lock(mutex);return epoch;}
 void Track(uint32_t guid,bool shown) noexcept {
     std::lock_guard lock(mutex);
-    if(!ready || !guid)return;
+    if(!Ready() || !guid)return;
     if(!shown)visible.erase(guid);
     else if(visible.size()<2048 || visible.contains(guid))visible[guid]=GetTickCount64();
 }
@@ -126,7 +161,7 @@ Request Capture(unsigned index) noexcept {
 }
 bool Refresh(uint32_t radius,bool held) noexcept {
     std::lock_guard lock(mutex);
-    if(!active || !ready)return false;
+    if(!active || !Ready())return false;
     const auto old=slots;
     void* player{};
     const bool session=Session(player);
@@ -156,7 +191,7 @@ bool Refresh(uint32_t radius,bool held) noexcept {
 }
 void Submit(const Request& request,uint32_t radius,bool held) noexcept {
     std::unique_lock lock(mutex);
-    if(!active || !ready || !CurrentRequest(request,epoch,GetTickCount64(),held))return;
+    if(!active || !Ready() || !CurrentRequest(request,epoch,GetTickCount64(),held))return;
     const auto selected=request.item;
     void* player{};
     if(!Session(player) || !wasHeld || request.epoch!=epoch)return;
@@ -168,9 +203,22 @@ void Submit(const Request& request,uint32_t radius,bool held) noexcept {
     for(auto s:slots)if(SameItem(s,selected))assigned=true;
     Candidate current{};
     if(!assigned || !Read(player,selected.guid,radius,current) || !SameItem(selected,current))return;
+    const auto now=GetTickCount64();
+    NativePickupPermit* available=nullptr;
+    for(auto& permit:pickupPermits) {
+        if(permit.Current(localSession,localSession.playerId,selected.guid,now))return; // no duplicate outstanding request
+        if(!permit.guid || permit.generation!=localSession.generation || now<permit.issued || now-permit.issued>1000)available=&permit;
+    }
+    if(!available)return;
+    *available={selected.guid,localSession.generation,now};
+    const auto generation=localSession.generation;
     const auto ctx=context;
     lock.unlock(); // Native interaction may rebuild tooltip text; do not invert label/loot locks.
     const bool submitted=Invoke(ctx->exeBase,selected.guid);
+    if(!submitted) {
+        std::lock_guard failureLock(mutex);
+        for(auto& permit:pickupPermits)if(permit.guid==selected.guid && permit.generation==generation && permit.issued==now)permit={};
+    }
     char message[160];
     std::snprintf(message,sizeof(message),"[QOL/ClientLoot] pid=%lu GUID=%u distance=%d native request %s; awaiting server state.",
         GetCurrentProcessId(),selected.guid,current.distance,submitted?"submitted":"faulted");
