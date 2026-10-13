@@ -1,4 +1,4 @@
-# Always Show Sockets 0.1.0-beta.1
+# Always Show Sockets 0.1.0-beta.2
 
 Shows native empty socket circles and inserted gem, rune and jewel artwork on
 gear without hovering. Starts enabled each session.
@@ -26,8 +26,8 @@ These commands act locally. Settings do not persist across game restarts.
 User-confirmed live results: empty sockets in inventory, gem and jewel artwork
 on equipped armor, Cube, personal stash and shared stash. Automated checks cover
 DLL admission, unsupported-build refusal and slash/console command handling.
-The native chat backend has prior live validation in Floating Damage, but this
-plugin's `/sockets` registration and dispatch still need live confirmation.
+User confirms both Quality Backgrounds and sockets render together with this
+update, and `/sockets` toggles correctly. Quality Backgrounds requires no changes.
 Empty and filled sockets together on one item, controller-specific behavior,
 vendors, trade, classic graphics and resolution/scaling changes remain unverified.
 Please report issues with your loader/Core versions, affected panel and commands.

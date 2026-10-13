@@ -99,3 +99,76 @@ MSVC Release build and two suites pass: artifact admission/unsupported refusal,
 and the actual slash-to-console adapter's toggle/on/off/status, invalid/overlong
 arguments, unavailable build and malformed borrowed input. Rendering hooks are
 unchanged. Socket-specific native registration and slash dispatch await live test.
+
+## Quality Backgrounds compatibility audit — 2026-10-13
+
+Installed global plugin `d2rloader/plugins/d2rl-item-quality-backgrounds.dll`,
+SHA-256 `F3B6C2D532D22FD7BF32F1AE0EC8782B7735D1D028EEE52539E44D761B9861BA`.
+Bounded static DLL disassembly, not a combined live test:
+
+- Plugin RVA 0x130a7 supplies game RVA 0x2a72d0 to its renderer guard helper.
+- Plugin RVA 0x13389 sets the inline-hook registration's game RVA to 0x2a72d0;
+  expected size 15 at 0x1339d, hook target plugin RVA 0xa980 at 0x133a8,
+  registration helper call at 0x13414. Expected bytes at plugin RVA 0x187f0 are
+  `48 85 D2 0F 84 D7 00 00 00 56 57 48 83 EC 68`, identical to our icon guard.
+- Its icon hook at 0xa980 reads the caller return address at 0xa9c7 and compares
+  game-relative return RVAs 0x2c9a7c, 0x2c9b82 and 0x2c9c1b at
+  0xa9d6/0xa9de/0xa9e6, using the result as an equipment-path discriminator.
+  A wrapper that changes that return address may therefore alter its behavior.
+- Separate sprite-resource hook registration uses game RVA 0x858990 at plugin
+  RVA 0x130d9. Game RVA 0x858510 is bound as a drawing helper at 0x131b3.
+
+Both installed plugins request the same icon entry and pristine byte guard.
+Whichever patches it first can cause the other's guard/admission to fail;
+directory separation does not isolate patches in the shared game image. No
+current combined-run log was available to establish the exact observed failure.
+Do not weaken guards or make load order the compatibility contract. Candidate
+repair: move socket augmentation to a distinct post-icon rendering point while
+preserving the original native icon call and its caller return address. This is
+a design direction, not a validated alternative RVA/ABI. A shared loader item-
+render callback is another option if both features must use the same consumer.
+
+Existing socket log additionally confirms native `/sockets` registration result
+0 at 2026-10-12 17:14:52.876 and OFF/ON dispatch at 17:15:06.155/17:15:08.915.
+This establishes registration/state dispatch, not a separately reported visible
+toggle test or combined Quality Backgrounds coverage.
+
+## beta.2 post-icon compatibility candidate — 2026-10-13
+
+Same executable/Core hashes as the original profile. Replace only our icon-entry
+hook with an interior hook at game RVA 0x2a73a0, after the icon renderer call at
+0x2a739b. The call and function entry 0x2a72d0 remain unmodified by our plugin.
+Quality Backgrounds can therefore retain its entry hook and inspect the same
+original caller return address regardless of plugin load order.
+
+New guard: `0F 28 74 24 50 48 8B 5C 24 60 48 83 C4 68` at 0x2a73a0.
+Native instructions restore XMM6 from RSP+0x50, RBX from RSP+0x60, and add 0x68
+to RSP; remaining epilogue pops RDI/RSI and returns. Earlier frame witnesses:
+0x2a72d9/0x2a72da push RSI/RDI; 0x2a72db subtracts 0x68; 0x2a72df sets RDI
+from RCX (widget), 0x2a72eb sets RSI from RDX (item). Thus RDI/RSI retain those
+arguments and RSP is 16-byte aligned at the post-draw site.
+
+The MASM adapter enters via JMP, allocates 0xc0 with LEA to preserve flags,
+reserves Win64 shadow space, saves RAX/RCX/RDX/R8-R11, XMM0-5 and RFLAGS, calls
+the bounded socket adapter with RDI/RSI, restores state, and jumps through the
+loader trampoline to replay the displaced native epilogue. Nonvolatile registers
+and XMM6-15 are preserved by the Win64 callee ABI. Existing socket renderer entry
+hook remains at 0x2a73c0, outside Quality Backgrounds' mutation ranges.
+
+Executable assembly fixture enters with native-equivalent stack alignment,
+sentinel GPR/SIMD values and carry flag, invokes the real adapter and verifies
+preservation, widget/item forwarding, selected-path duplicate suppression and
+disabled-mode native socket passthrough. This caught and corrected flag changes
+from an initial SUB allocation. Release build and both test suites now pass.
+Static non-overlap and fixture checks do not prove combined live rendering or
+real loader admission of the interior detour. Test both features together before
+publishing beta.2. The published beta.1 remains unchanged during this candidate.
+
+### Accepted combined live result
+
+On 2026-10-13, after deploying beta.2 with the global Quality Backgrounds DLL
+unchanged, the user confirms both quality backgrounds and sockets work and
+`/sockets` toggles correctly. This upgrades the combined visual and slash-toggle
+checks from pending to user-confirmed live coverage. It does not establish all
+load orders, other Quality Backgrounds builds, or previously untested panels,
+input modes, classic graphics and scaling changes.

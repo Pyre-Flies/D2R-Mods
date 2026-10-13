@@ -23,7 +23,7 @@ int wmain(int argc,wchar_t** argv) {
     Check(info && load && unload,"three lifecycle exports");
     const auto value=info();
     Check(value && value->infoSize==D2RL::PluginInfoSize && value->abiVersion==D2RL_PLUGIN_ABI_VERSION &&
-        std::strcmp(value->id,"always-show-sockets")==0 && std::strcmp(value->version,"0.1.0-beta.1")==0 &&
+        std::strcmp(value->id,"always-show-sockets")==0 && std::strcmp(value->version,"0.1.0-beta.2")==0 &&
         D2RL::HasValidPluginRole(value->flags) && D2RL::HasFlag(value->flags,D2RL::PluginFlags::NativeHooks),"identity/layout/version/role and native-hook capability");
     const D2RL::PluginApi api{.apiSize=D2RL::PluginApiSize,.registerConsoleCommand=Register};
     const D2RL::PluginContext context{.contextSize=sizeof(D2RL::PluginContext),.abiVersion=D2RL_PLUGIN_ABI_VERSION,.api=&api};

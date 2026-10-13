@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.1.0-beta.2 — 2026-10-13
+
+- Move socket augmentation from the item-icon function entry to its post-draw
+  interior site, avoiding Quality Backgrounds' entry hook and preserving its
+  original caller return-address checks. No Quality Backgrounds changes required.
+- Preserve native volatile registers, SIMD registers, flags and stack alignment
+  around the added socket draw. Retain duplicate suppression and `/sockets`.
+- Release build, DLL admission, command and executable assembly-adapter checks
+  passed (2/2). User confirms Quality Backgrounds and sockets render together,
+  and `/sockets` toggles correctly in game.
+
 ## 0.1.0-beta.1 — 2026-10-12
 
 - First standalone prerelease of the live-tested socket renderer and local

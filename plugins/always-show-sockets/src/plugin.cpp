@@ -4,20 +4,20 @@
 #include <atomic>
 #include <string_view>
 
+extern "C" { void* SocketPostIconOriginal{}; void SocketPostIconEntry(); }
+
 namespace {
 const D2RL::PluginContext* ctx{};
 std::atomic<bool> ready{},enabled{};
 D2RLChat::NativeCommands chatCommands;
 using Draw=void(__fastcall*)(void*,void*);
-void* iconOriginal{};
 void* socketOriginal{};
-// Native caller ignores return registers; both consumers supply widget, item.
-constexpr unsigned char IconBytes[]={0x48,0x85,0xd2,0x0f,0x84,0xd7,0x00,0x00,0x00,0x56,0x57,0x48,0x83,0xec,0x68};
+// Post-icon native frame: RDI=widget, RSI=item, RSP aligned to 16.
+constexpr unsigned char PostIconBytes[]={0x0f,0x28,0x74,0x24,0x50,0x48,0x8b,0x5c,0x24,0x60,0x48,0x83,0xc4,0x68};
 constexpr unsigned char SocketBytes[]={0x40,0x55,0x53,0x41,0x54,0x48,0x8d,0xac,0x24,0x70,0xff,0xff,0xff,0x48,0x81,0xec,0x90,0x01,0x00,0x00};
 thread_local void* lastWidget{};
 thread_local void* lastItem{};
-void __fastcall IconHook(void* widget,void* item) noexcept {
-    reinterpret_cast<Draw>(iconOriginal)(widget,item);
+void AfterIcon(void* widget,void* item) noexcept {
     lastWidget=nullptr;lastItem=nullptr;
     if(ready.load() && enabled.load() && widget && item) {
         reinterpret_cast<Draw>(socketOriginal)(widget,item);
@@ -54,9 +54,10 @@ void ChatCommand(const char* args,void*) noexcept {
     Command(nullptr,&command,nullptr);
 }
 }
+extern "C" void SocketAfterIcon(void* widget,void* item) noexcept {AfterIcon(widget,item);}
 D2RL_PLUGIN_EXPORT auto D2RLoaderGetPluginInfo() noexcept -> const D2RL::PluginInfo* {
     static constexpr D2RL::PluginInfo info{.infoSize=D2RL::PluginInfoSize,.abiVersion=D2RL_PLUGIN_ABI_VERSION,
-        .id="always-show-sockets",.name="Always Show Sockets",.version="0.1.0-beta.1",.author="PyreFly",
+        .id="always-show-sockets",.name="Always Show Sockets",.version="0.1.0-beta.2",.author="PyreFly",
         .description="Experimental native empty and filled socket display.",.flags=D2RL::PluginFlags::Client|D2RL::PluginFlags::NativeHooks};
     return &info;
 }
@@ -66,18 +67,18 @@ D2RL_PLUGIN_EXPORT auto D2RLoaderLoadPlugin(const D2RL::PluginContext* context) 
     if(!ctx->RegisterConsoleCommand("sockets",Command,"Toggle sockets; on, off, status.")) return false;
     if(!Sockets::Hash(reinterpret_cast<HMODULE>(ctx->exeBase),"93021DAD48533BCFCA8A95C69A0CC00CDB9008A3CE6CEBA1D04C7ACA71985A10") ||
        !Sockets::Hash(GetModuleHandleW(L"D2RCore.dll"),"2A868D013D2E0830BD2D9E04B918B19E46A73CF726C833E70D089B948FDEB5A2") ||
-       !ctx->CheckExpectedBytes(0x2a72d0,IconBytes,sizeof(IconBytes)) ||
+       !ctx->CheckExpectedBytes(0x2a73a0,PostIconBytes,sizeof(PostIconBytes)) ||
        !ctx->CheckExpectedBytes(0x2a73c0,SocketBytes,sizeof(SocketBytes))) {
         ctx->LogWarn("Sockets: exact-build guard refused; native display preserved.");return true;
     }
     if(!ctx->InstallInlineHook(0x2a73c0,SocketBytes,sizeof(SocketBytes),reinterpret_cast<void*>(SocketHook),&socketOriginal) || !socketOriginal) return true;
-    if(!ctx->InstallInlineHook(0x2a72d0,IconBytes,sizeof(IconBytes),reinterpret_cast<void*>(IconHook),&iconOriginal) || !iconOriginal) return true;
+    if(!ctx->InstallInlineHook(0x2a73a0,PostIconBytes,sizeof(PostIconBytes),reinterpret_cast<void*>(SocketPostIconEntry),&SocketPostIconOriginal) || !SocketPostIconOriginal) return true;
     ready.store(true);enabled.store(true);
     try {
         if(!chatCommands.Start(ctx) || !chatCommands.Register("sockets",ChatCommand,nullptr,"Toggle sockets; on, off, status."))
             ctx->LogWarn("Sockets: native chat registration unavailable; debug-console command remains available.");
     } catch(...) {ctx->LogWarn("Sockets: native chat registration failed; debug-console command remains available.");}
-    ctx->LogInfo("Sockets probe: native icon/socket hooks admitted; always visible ON. /sockets toggles; /sockets off restores selection behavior.");
+    ctx->LogInfo("Sockets beta.2: native post-icon/socket hooks admitted; always visible ON. /sockets toggles; /sockets off restores selection behavior.");
     return true;
 }
 D2RL_PLUGIN_EXPORT void D2RLoaderUnloadPlugin() noexcept {chatCommands.Stop();enabled.store(false);ready.store(false);}
