@@ -7,6 +7,11 @@
 #include <cstdio>
 void check(bool b){if(!b)std::exit(1);}
 int main(){
+ char reorder[128]{};
+ check(QolGlyphPolicy::ReorderText("\xEE\x80\x8D\xEE\x80\x81" "Move Rule Up",reorder,sizeof(reorder)));
+ check(std::string_view(reorder)=="\xEE\x80\xA7\xEE\x80\x81" "Move Rule Up");
+ check(!QolGlyphPolicy::ReorderText("Move Rule Up",reorder,sizeof(reorder)));
+ check(!QolGlyphPolicy::ReorderText("\xEE\x80\x8D" "Long label",reorder,3));
  const std::string_view filterTabs[]={"TabLeftIndicator","ItemListTabs","LootFilterRuleDetailsPanel"};
  check(QolGlyphPolicy::Classify(filterTabs,3,true,true,false,false,false,true)==QolGlyphPolicy::Hint::SubLeft);
  check(QolGlyphPolicy::Classify(filterTabs,3,true,true)==QolGlyphPolicy::Hint::None);

@@ -20,6 +20,7 @@ const D2RL::PluginContext* context=nullptr;
 std::atomic<bool> active{false};
 std::atomic<unsigned long long> mainDraws{0},subDraws{0},faults{0},hintDraws{0};
 thread_local Hint currentHint=Hint::None;
+thread_local bool currentRuleReorder=false;
 struct HeaderSnapshot {char lines[7][128]{};unsigned long long tick=0;};
 HeaderSnapshot headerSnapshot{};
 std::mutex headerMutex;
@@ -77,16 +78,33 @@ bool CopyHeaderLabel(void* widget,char* output) noexcept {
         return true;
     } __except(EXCEPTION_EXECUTE_HANDLER) {return false;}
 }
+bool IsRuleReorderLegend(void* widget) noexcept {
+    __try {
+        if(!context || !widget || !QolNavigation::LootFilterReorderEnabled())return false;
+        const auto node=reinterpret_cast<uintptr_t>(widget);
+        const auto legend=*reinterpret_cast<const uintptr_t*>(node+0x30);
+        if(!legend || *reinterpret_cast<const uintptr_t*>(legend)!=context->exeBase+0x1d76550 || node<legend+0x680)return false;
+        const auto offset=node-(legend+0x680);
+        const auto count=*reinterpret_cast<const uint64_t*>(legend+0x90);
+        if(offset%0x230 || count>8 || offset/0x230>=count)return false;
+        const auto entries=*reinterpret_cast<const uintptr_t*>(legend+0x88);
+        if(!entries)return false;
+        const auto entry=reinterpret_cast<const uint32_t*>(entries+(offset/0x230)*0x40);
+        return entry[0]==0xe00d && (entry[1]==0xe001 || entry[1]==0xe002) && entry[2]==2;
+    } __except(EXCEPTION_EXECUTE_HANDLER) {return false;}
+}
 void DrawScoped(void* widget,Hint hint,bool header) {
     char previousLabel[512];std::memcpy(previousLabel,currentHeaderLabel,sizeof(previousLabel));
     currentHeaderLabel[0]=0;
     if(header && !CopyHeaderLabel(widget,currentHeaderLabel))currentHeaderLabel[0]=0;
     auto previous=currentHint;
     const bool previousHeader=currentHeader;
+    const bool previousReorder=currentRuleReorder;
+    currentRuleReorder=IsRuleReorderLegend(widget);
     currentHeader=header;
     currentHint=hint; // A nested unrelated draw never inherits a hint.
     __try {originalDrawWidget(widget);}
-    __finally {currentHint=previous;currentHeader=previousHeader;std::memcpy(currentHeaderLabel,previousLabel,sizeof(previousLabel));}
+    __finally {currentHint=previous;currentHeader=previousHeader;currentRuleReorder=previousReorder;std::memcpy(currentHeaderLabel,previousLabel,sizeof(previousLabel));}
 }
 void __fastcall HookWidget(void* widget) {
     auto hint=Hint::None;
@@ -158,7 +176,21 @@ bool IsRangeLabel(const char* text) noexcept {
         return size<64 && QolHeaderPolicy::RangeLabel({text,size});
     } __except(EXCEPTION_EXECUTE_HANDLER) {return false;}
 }
+bool CopyReorderText(const char* text,char (&output)[512]) noexcept {
+    __try {
+        if(!text)return false;
+        size_t size=0;while(size<sizeof(output) && text[size])++size;
+        return QolGlyphPolicy::ReorderText({text,size},output,sizeof(output));
+    } __except(EXCEPTION_EXECUTE_HANDLER) {return false;}
+}
 void __fastcall HookText(const char* text,void* rect,void* style,float scale) {
+
+    if(currentRuleReorder && active.load(std::memory_order_relaxed)) {
+        char replacement[512]{};
+        if(CopyReorderText(text,replacement)) {
+            originalDrawText(replacement,rect,style,scale);return;
+        }
+    }
 
     if(currentHeader && active.load(std::memory_order_relaxed)) {
         HeaderSnapshot snapshot;

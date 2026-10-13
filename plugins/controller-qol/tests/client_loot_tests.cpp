@@ -1,8 +1,17 @@
 #include "client_loot_policy.h"
+#include "loot_run_policy.h"
 #include <cstdio>
 #define CHECK(x) do {if(!(x)){std::printf("Failure line %d: %s\n",__LINE__,#x);return 1;}}while(0)
 int main() {
     using namespace QolClientLoot;
+    CHECK(QolLootRun::Action(2,4,true)==4 && QolLootRun::Action(4,4,true)==4);
+    CHECK(QolLootRun::Action(2,4,false)==2 && QolLootRun::Action(2,2,true)==2);
+    CHECK(QolLootRun::Action(22,4,true)==22);
+    CHECK(SubmissionRadius(10,true)==UINT32_MAX && SubmissionRadius(10,false)==10);
+    RepeatGate repeat{42,10,1000};
+    CHECK(repeat.Blocks(42,10,1000) && repeat.Blocks(42,10,1249));
+    CHECK(!repeat.Blocks(42,10,1250) && !repeat.Blocks(43,10,1100));
+    CHECK(!repeat.Blocks(42,11,1100) && !repeat.Blocks(42,10,999));
     LocalSession session;session.Join(10);
     CHECK(!session.Matches(0,0) && !session.Bind(9,0) && !session.Bind(10,UINT32_MAX));
     CHECK(session.Bind(10,0) && session.Matches(0,0)); // Player ID zero is valid.
@@ -12,6 +21,12 @@ int main() {
     CHECK(!permit.Current(session,1,42,1100) && !permit.Current(session,0,43,1100));
     CHECK(!permit.Current(session,0,42,999) && !permit.Current(session,0,42,2001));
     session.Leave();CHECK(!permit.Current(session,0,42,1100));
+    session.Join(10);CHECK(session.Bind(10,0));
+    NativePickupPermit approachPermit{42,10,1000,5000};
+    CHECK(approachPermit.Current(session,0,42,6000));
+    CHECK(!approachPermit.Current(session,0,42,6001));
+    CHECK(!approachPermit.Current(session,1,42,2000) && !approachPermit.Current(session,0,43,2000));
+    CHECK(!NeedsApproach(0) && !NeedsApproach(4) && NeedsApproach(5));
     session.Join(11);CHECK(!session.Bind(10,0) && session.Bind(11,0));
     CHECK(!permit.Current(session,0,42,1100));
     Candidate rune{42,123,2,6,2000}, sword{43,456,7,2,700}, potion{44,789,2,1,150};
@@ -48,5 +63,11 @@ int main() {
     for(unsigned i=10;i>0;--i)many.push_back({i,1,2,1,20});
     slots=Assign({},many);
     CHECK(slots[0].guid==1 && slots[6].guid==7);
-    std::puts("Client loot: stable slots, stale identities, eligibility, removal and bounded ordering passed.");
+    const auto snapshot=HoldSnapshot({},slots,true);
+    CHECK(HoldSnapshot(snapshot,{},false)[0].guid==1); // label disappeared
+    Slots replacement{};replacement[0]={999,1,2,1,20};
+    CHECK(HoldSnapshot(snapshot,replacement,false)[0].guid==1); // new drop cannot steal A
+    CHECK(HoldSnapshot({},replacement,true)[0].guid==999); // release then next hold
+    CHECK(!HoldSnapshot({},replacement,false)[0].guid); // empty initial snapshot remains empty
+    std::puts("Client loot: hold snapshots, stale identities, eligibility, removal and bounded ordering passed.");
 }

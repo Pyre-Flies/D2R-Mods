@@ -2,6 +2,12 @@
 #include <cstddef>
 #include <string_view>
 namespace QolGlyphPolicy {
+// Replace only the native reorder modifier token; retain direction and text.
+inline bool ReorderText(std::string_view text,char* output,size_t capacity) noexcept {
+    if(text.size()+1>capacity || text.size()<3 || text.substr(0,3)!="\xEE\x80\x8D")return false;
+    for(size_t i=0;i<text.size();++i)output[i]=text[i];
+    output[2]=static_cast<char>(0xa7);output[text.size()]=0;return true;
+}
 enum class Hint { None, MainLeft, MainRight, SubLeft, SubRight, SharedLeft, SharedRight };
 inline Hint Classify(const std::string_view* names, size_t count, bool primary, bool secondary, bool shared=false, bool options=false, bool chronicle=false, bool lootFilter=false, bool modInformation=false) noexcept {
     if(secondary && modInformation) {

@@ -4,6 +4,7 @@
 #include <vector>
 #include <algorithm>
 namespace QolClientLoot {
+inline bool IsGoldCode(uint32_t code) noexcept {return code==0x20646c67u || code==0x00646c67u;}
 // The SDK's UI lifecycle supplies identity, never a borrowed native player.
 struct LocalSession {
     uint64_t generation{};
@@ -22,9 +23,24 @@ struct LocalSession {
 struct NativePickupPermit {
     uint32_t guid{};
     uint64_t generation{},issued{};
+    uint32_t lifetime{1000};
     bool Current(const LocalSession& session,uint32_t actorId,uint32_t itemId,uint64_t now) const noexcept {
         return guid && guid==itemId && generation==session.generation && session.Matches(0,actorId) &&
-            now>=issued && now-issued<=1000;
+            now>=issued && now-issued<=lifetime;
+    }
+};
+// Native item-click branch at 0x101A0F uses the same inclusive reach of four.
+inline bool NeedsApproach(int distance) noexcept {return distance>4;}
+// Nearby radius selects the hold snapshot; admitted native travel has no QOL
+// distance ceiling when submitting an already assigned, still targetable item.
+inline uint32_t SubmissionRadius(uint32_t nearbyRadius,bool approachReady) noexcept {
+    return approachReady?UINT32_MAX:nearbyRadius;
+}
+struct RepeatGate {
+    uint32_t guid{};
+    uint64_t generation{},issued{};
+    bool Blocks(uint32_t item,uint64_t session,uint64_t now) const noexcept {
+        return guid && guid==item && generation==session && now>=issued && now-issued<250;
     }
 };
 struct Candidate {
@@ -35,6 +51,11 @@ inline bool SameItem(const Candidate& a, const Candidate& b) {
     return a.guid && a.guid==b.guid && a.code==b.code && a.quality==b.quality;
 }
 using Slots = std::array<Candidate,7>;
+// A hold owns its original identities, including temporarily hidden labels and
+// removed items. Submission separately revalidates visibility/native identity.
+inline Slots HoldSnapshot(const Slots& original,const Slots& observed,bool firstRefresh) {
+    return firstRefresh?observed:original;
+}
 struct Request { Candidate item{}; uint64_t epoch{}, queuedAt{}; };
 inline bool CurrentRequest(const Request& request,uint64_t epoch,uint64_t now,bool held) {
     return held && request.item.guid && request.epoch==epoch && now>=request.queuedAt && now-request.queuedAt<=500;

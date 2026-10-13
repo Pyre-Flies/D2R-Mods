@@ -71,7 +71,8 @@ removes the shortcut overlays and does not pick anything up automatically.
 Bare **A** remains the normal native interaction button. It is not an LB
 shortcut: when no enabled priority object wins, native item pickup and world
 interaction continue normally. With `block_filtered_pickup = true`, items whose
-labels are filtered out cannot be collected accidentally with bare A. This guard
+labels are filtered out cannot be collected accidentally with bare A. Gold is
+exempt, including automatic gold collection. This guard
 applies only while D2R's controller UI is active. Mouse and keyboard pickup
 continues normally, even when this setting is enabled.
 
@@ -198,7 +199,7 @@ R3 keeps only one rolling `.r3.bak` per profile; migration backups are separate.
 | `trigger_threshold` | `30` | Analog trigger threshold reserved by the configuration; the current build uses 30 |
 | `ground_pickup` | `true` | Enable direct ground-label assignments and pickup chords |
 | `ground_pickup_button` | `"bumper"` | Direct-loot modifier. Supports `lb`, `rb`, `lt`, `rt`, `l3`, `r3`, bracket/paddle aliases, or a single keyboard letter/number |
-| `ground_pickup_distance` | `6` | Direct-loot search distance, clamped to 1Ã¢â‚¬â€œ20 game units |
+| `ground_pickup_distance` | `6` | Nearby LB acquisition radius (effective 10–20 game units); mapped native travel has no QOL distance cap |
 | `block_filtered_pickup` | `true` | Prevent controller pickup of ground items without an active visible label; mouse and keyboard pickup is unaffected |
 | `prioritize_portals` | `true` | Prefer eligible portals over ground loot for neutral A |
 | `prioritize_stash_boxes` | `true` | Prefer the town stash over ground loot for neutral A |

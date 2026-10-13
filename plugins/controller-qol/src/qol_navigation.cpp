@@ -2,6 +2,7 @@
 #include <windows.h>
 #include <bcrypt.h>
 #include <xinput.h>
+#include <intrin.h>
 #include <cstdio>
 #include <cstring>
 #include <string>
@@ -10,6 +11,7 @@
 #include <atomic>
 #include "policy.h"
 #include "filter_focus_signatures.h"
+#include "filter_reorder_profile.h"
 #include "qol_navigation.h"
 #include "qol_glyphs.h"
 #include "physical_input.h"
@@ -160,6 +162,48 @@ struct MenuCopy {
     alignas(16) unsigned char message[0x120]{};
     alignas(16) unsigned char payload[0x20]{};
 };
+using RuleModifierFn=bool(__fastcall*)(void*,unsigned);
+RuleModifierFn originalRuleModifier=nullptr;
+bool filterReorderHook=false;
+bool RuleListFocused() noexcept {
+    __try {
+        if(!ctx || !filterReorderHook || !enabled || !useL1 || !menuRemap || !menuHook ||
+           !ControllerQoL::IsControllerUiActive())return false;
+        const auto base=ctx->exeBase;
+        auto manager=*reinterpret_cast<const uintptr_t*>(base+0x3440170);
+        if(!manager)return false;
+        auto focus=*reinterpret_cast<const uintptr_t*>(manager+0xd0);
+        if(!focus)return false;
+        auto panel=*reinterpret_cast<const unsigned char* const*>(focus+0x188);
+        if(!panel || !panel[0x50] || !panel[0x51] ||
+           *reinterpret_cast<const uintptr_t*>(panel)!=base+0x1fd47d8)return false;
+        auto name=*reinterpret_cast<const char* const*>(panel+8);
+        return name && std::strncmp(name,"LootFilterProfilePanel",23)==0;
+    } __except(EXCEPTION_EXECUTE_HANDLER) {return false;}
+}
+int RuleModifierOverride(uintptr_t caller) noexcept {
+    std::lock_guard lock(stateMutex);
+    if(RuleListFocused() && (caller==ctx->exeBase+0x149f8e3 || caller==ctx->exeBase+0x149f933)) {
+        const auto physical=ControllerQoL::ReadControllerInput();
+        if(physical.valid)return (physical.buttons&XINPUT_GAMEPAD_LEFT_SHOULDER)!=0;
+    }
+    return -1;
+}
+bool __fastcall HookRuleModifier(void* input,unsigned device) noexcept {
+    const int decision=RuleModifierOverride(reinterpret_cast<uintptr_t>(_ReturnAddress()));
+    if(decision>=0)return decision!=0;
+    return originalRuleModifier && originalRuleModifier(input,device);
+}
+void InstallFilterReorderHook() noexcept {
+    bool match=true;
+    for(const auto& s:QolFilterReorder::Sites)
+        if(!ctx->CheckExpectedBytes(s.rva,s.bytes,s.size))match=false;
+    // Complete instructions, before the first branch or RIP-relative operand.
+    if(match)filterReorderHook=ctx->InstallInlineHook<RuleModifierFn>(0x149e460,QolFilterReorder::Modifier,15,
+        &HookRuleModifier,&originalRuleModifier);
+    ctx->LogInfo(filterReorderHook?"[QOL/Filter] Scoped LB+Up/Down rule reordering enabled.":
+        "[QOL/Filter] Reorder profile unavailable; native modifier retained.");
+}
 MenuMessageFn originalBankMessage=nullptr;
 bool sharedPageHook=false;
 std::atomic<bool> sharedPageInputActive{false};
@@ -846,6 +890,7 @@ bool QolNavigation::Initialize(const D2RL::PluginContext* context,bool featureEn
     InstallLabelHooks();
     InstallMenuHook();
     InstallSkillsHook();
+    InstallFilterReorderHook();
     ctx->LogInfo(SubMenusEnabled()?
         "[QOL/ModInfo] Scoped L1/R1 information tabs and underlying menu lock available while modinfo_aa is open.":
         "[QOL/ModInfo] Required navigation hooks unavailable; native input retained.");
@@ -947,4 +992,7 @@ bool QolNavigation::RangesRemapEnabled() noexcept {return QolNativeRanges::activ
 
 bool QolNavigation::LootFilterRemapEnabled() noexcept {
     std::lock_guard lock(stateMutex);return SubMenusEnabled() && (subPanels&16);
+}
+bool QolNavigation::LootFilterReorderEnabled() noexcept {
+    std::lock_guard lock(stateMutex);return RuleListFocused();
 }

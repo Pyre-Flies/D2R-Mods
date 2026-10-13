@@ -3,7 +3,9 @@
 #include "client_loot_policy.h"
 namespace QolClientLoot {
 using RankFn=int(*)(const char*,uint32_t) noexcept;
-void Initialize(const D2RL::PluginContext*,RankFn) noexcept;
+using BlockPickupFn=bool(*)(uint32_t guid,uint32_t code) noexcept;
+using HeldFn=bool(*)() noexcept;
+void Initialize(const D2RL::PluginContext*,RankFn,BlockPickupFn=nullptr,HeldFn=nullptr) noexcept;
 void SetLifecycleAvailable(bool) noexcept;
 void OnLifecycle(const D2RL::Lifecycle::GameplayEvent*) noexcept;
 // Server hooks may inspect copied identity/one-use permits, never UI pointers.

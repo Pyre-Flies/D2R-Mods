@@ -12,6 +12,7 @@ bool OptionsRemapEnabled() noexcept;
 bool ModInformationRemapEnabled() noexcept;
 bool ChronicleRemapEnabled() noexcept;
 bool LootFilterRemapEnabled() noexcept;
+bool LootFilterReorderEnabled() noexcept;
 bool RangesRemapEnabled() noexcept;
 bool GroundShortcutsAllowed() noexcept;
 bool GroundInputActive() noexcept; // lock-free, UI-published world-only context

@@ -1,72 +1,66 @@
-# D2R Mods release 2026.10.12.2
+# D2R Mods release 2026.10.13.1
 
 | Plugin | Version |
 | --- | --- |
-| Controller QOL Updates | 1.3.1+rev.76 |
+| Controller QOL Updates | 1.3.1+rev.78 |
 | Item Roll Ranges | 1.3.1+rev.34 |
 | Map Assistance | 1.3.1+rev.1 |
 | Inventory Deposit | 0.1.0-beta.13 |
 | Floating Damage | 0.1.0-beta.12 |
 
-## Item Roll Ranges
+## Controller QOL
 
-Expand proven overlapping host affixes, socketed jewels/runes/gems and completed
-corruption bonuses into a combined total followed by gray source rows. Socket
-sources use insertion order; corruption bonuses use [C]. Individual rolls stay
-unknown when a saved combined value cannot uniquely identify them. Enchantments
-remain deferred; unsupported or ambiguous source operations retain native text.
+- Start distant LB loot travel during the native client update. This corrects
+  dispatch timing associated with intermittent slow approaches and reported
+  invisible blocked ground. The user could no longer reproduce those symptoms
+  with rev.78-beta.4; rev.78 preserves that implementation.
+- Use native running for explicit loot travel without changing the player's
+  walk/run preference. Already-mapped, still-targetable items can initiate travel
+  beyond the mapping radius; repeat suppression is reduced to 250 ms.
+- Keep each LB loot assignment fixed until release/repress. Missing labels and
+  newly dropped items cannot replace existing assignments mid-hold. Execution
+  still rechecks visibility, item identity, session, held input and request age.
+- Restore hosted identify, transfers and bulk-deposit admission for the reviewed
+  Global Chat and Maps versions. Existing offline routing and older supported
+  profiles are retained; unsupported native profiles fail open.
+- Respect filtered-pickup blocking for neutral controller A before submission.
+  Gold is exempt, including automatic pickup; native capacity and pickup settings
+  still apply. Mouse/keyboard behavior is preserved.
+- Reorder loot-filter rules with LB+Up/Down, with matching bumper hints.
 
-Show compact fixed modifier bounds such as [+38], including Loremaster and
-fixed speed/proc prefixes. Preserve explicit Base endpoints on Defense and
-physical-damage headers, with normal, generated-ED, ethereal and supported
-low-quality handling. Use the active level cap for verified scaling affixes,
-and distinguish property/coefficient families even when affix names repeat.
+### Configuration
 
-Restore ranges on identified items without a native range clone. Correct the
-observed extended stat-list flags, Enhanced Defense handler and flat Thorns
-fallback. Godly/Silver-Wrought and compatible Eagleeye/Trump overlaps receive
-source breakdowns with full bounds. Chronicle-hidden unique/set definition
-support and the compact [U] marker remain included; set labels are unchanged.
+Existing settings are preserved. `ground_pickup_distance` controls the LB mapping
+radius, not maximum travel to an already-mapped item. Set it to `20` in the client
+configuration for the wider tested radius; the shipped default is unchanged.
+No server configuration change is needed for that mapping preference.
 
-Socketed items show Max Sockets in the normal header position while ranges are
-held. Weapons retain Required Level / Max Sockets / Attack Speed order. Native
-Ctrl and controller range queries remain untouched; release restores ordinary
-tooltips. No Item SDK, gameplay writes or new input interception is added.
+### Validation and limits
 
-Seven automated suites pass. User checks confirm the reviewed socket/corruption
-breakdowns, Defense headers, Shadow Mantle's ED/Thorns and corrected socket
-header placement. Every item family, localization, controller combination and
-unsupported operation has not been validated. Please report missing or incorrect
-ranges with the item tooltip, affixes and active mod version.
+All 33 Controller QOL automated suites pass, including 483 production audit checks
+and DLL ABI/resource/export/version checks. The user confirmed hosted item actions,
+advanced-stash totals with rejuvenation potions, vendor purchases/sales, wider LB
+mapping and the final travel behavior in a self-hosted Reimagined session.
 
-## Controller QOL rev.76
-
-Publish the reviewed rev.76 beta.4 implementation as rev.76, without a beta
-version suffix. Retain ordinary-chest priority defaults, guarded Cube
-self-insertion prevention, overlapping LT/RT Shared-page ownership, serialized
-shortcut routing and audited local/guest loot handling. Existing explicit
-settings are preserved. Includes native Mod Information bumper navigation and
-stash-tab feedback for bulk deposits.
-
-All 33 automated suites pass. The user confirmed Cube self-insertion prevention,
-Shared Stash escape prevention and Cube behavior through rejoins, and accepted
-non-online gameplay. Online qualification and some navigation/feedback coverage
-remain open; review the included audit evidence. Please report bugs with the
-input sequence, active storage page, mod and local/hosted/remote context.
+A fresh offline gameplay retest, all filter/reorder combinations, broader hosted
+configurations and save/rejoin persistence are not fully qualified. A prior beta.3
+shutdown produced a leaked-stats assertion followed by a graphics-driver access
+violation; its cause is undetermined and this release does not claim to fix it.
+A clean shutdown on the final candidate is unconfirmed. Report regressions with
+the input sequence, active mod, client/server context and plugin versions.
 
 ## Other included packages
 
-Floating Damage beta.12 retains viewport scaling and critical-style choices
-from the previous release. Inventory Deposit beta.13 and Map Assistance rev.1
-are included at their existing versions. Floating Damage remains a local-player
-HP-loss overlay; resolution/critical-style visual coverage is limited. Inventory
-Deposit's broader remote/resolution/persistence coverage remains incomplete.
+Item Roll Ranges rev.34, Map Assistance rev.1, Inventory Deposit beta.13 and
+Floating Damage beta.12 retain the exact source from release-2026.10.12.2.
+Their existing compatibility requirements and validation limits still apply.
 
 ## Install
 
-Close the game and loader, back up installed DLLs and extract only the wanted
-plugin ZIPs into the game directory or active mod directory. Keep one active
-copy per plugin. DLLs install under d2rloader/plugins/. Reference TOMLs are under
-defaults/, never live configuration paths; preserve customized settings. Item
-Roll Ranges requires Core item stat ranges enabled. A cold restart is required.
-Each ZIP has internal SHA256SUMS; the release's SHA256SUMS covers all five ZIPs.
+Close the game and loader, back up installed DLLs, and extract only the wanted
+plugin ZIPs into the game or active mod directory. Keep one active copy per plugin.
+DLLs install under `d2rloader/plugins/`. Reference TOMLs are under `defaults/`,
+never live configuration paths; preserve customized settings. Pack-managed
+installations should use their launcher/server package update route.
+A cold restart is required. Each ZIP has internal SHA256SUMS; the adjacent release
+SHA256SUMS covers all five ZIPs. Source archives are supplied separately by GitHub.

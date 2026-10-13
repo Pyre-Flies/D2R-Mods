@@ -40,6 +40,7 @@
 #include "placard_call.h"
 #include "pickup_calls.h"
 #include "client_loot.h"
+#include "gold_pickup.h"
 #include "placard_text.h"
 #include "plugin_compatibility.h"
 #include <xinput.h>
@@ -159,7 +160,7 @@ static constexpr D2RL::PluginInfo ControllerQoLPluginInfo {
     .abiVersion  = D2RL_PLUGIN_ABI_VERSION,
     .id          = "controller-qol-updates",
     .name        = "Controller QOL Updates",
-    .version     = "1.3.1+rev.76",
+    .version     = "1.3.1+rev.78",
     .author      = "PyreFly",
     .description = "Direct controller looting with filtered labels, inventory shortcuts, and stash navigation.",
     .flags       = D2RL::PluginFlags::Shared | D2RL::PluginFlags::NativeHooks,
@@ -1360,6 +1361,16 @@ namespace GroundLoot {
     static GetSelectedSkillFn s_GetSelectedSkill = nullptr;
 
     static bool LocalActor(void* player,uint32_t& id) noexcept;
+    static bool BlockClientPickup(uint32_t guid,uint32_t code) noexcept {
+        if(!g_Settings.enabled || !g_Settings.blockFilteredPickup ||
+           !ControllerQoL::IsControllerUiActive() || QolClientLoot::IsGoldCode(code))return false;
+        const bool blocked=!PlacardOverlay::IsPlacardActive(guid);
+        if(blocked && g_PluginContext && g_Settings.debugLogging) {
+            char message[128];std::snprintf(message,sizeof(message),"[QOL/ClientLoot] Suppressed filtered pickup GUID=%u before submission.",guid);
+            g_PluginContext->LogInfo(message);
+        }
+        return blocked;
+    }
 
     static bool ProjectGuidedArrowPacket(void* player, const void* packet,
         int32_t size, std::array<uint8_t,5>& projectedPacket) noexcept {
@@ -1430,6 +1441,10 @@ namespace GroundLoot {
         const bool placardActive = !blockFilteredPickup || PlacardOverlay::IsPlacardActive(guid);
         if (Probe::BlockNativePickup(shortcutsEnabled, modifierHeld,
                 blockFilteredPickup, placardActive)) {
+            // Gold is exempt even when its label is hidden or LB is held.
+            // Native capacity/automatic-pickup settings still decide acceptance.
+            if(QolGoldPickup::IsGold(g_PluginContext,player,guid))
+                return s_Pickup(player,guid,arg3,dist,arg5,arg6);
             if (g_PluginContext && g_Settings.debugLogging) {
                 char supMsg[128];
                 std::snprintf(supMsg, sizeof(supMsg),
@@ -2151,7 +2166,7 @@ D2RL_PLUGIN_EXPORT auto D2RLoaderLoadPlugin(const D2RL::PluginContext* context) 
 
     QolIdentifyStat::Initialize(context);
     QolNativeIdentify::Initialize(context,g_Items,g_Threads);
-    QolClientLoot::Initialize(context,&GroundLoot::GetItemCodeRank);
+    QolClientLoot::Initialize(context,&GroundLoot::GetItemCodeRank,&GroundLoot::BlockClientPickup,&ClientGroundHeld);
     InitializeIdentifyQueue(context);
     if(!QolClientTransfer::Initialize(context))context->LogWarn("[QOL/ClientTransfer] Profile/services unavailable; remote transfers disabled.");
     (void)QolCustomPage::Initialize(context);
@@ -2400,7 +2415,7 @@ D2RL_PLUGIN_EXPORT auto D2RLoaderLoadPlugin(const D2RL::PluginContext* context) 
         g_Settings.groundPickupButton, g_Settings.portalPriorityDistance);
     if(!QolAim::Initialize(context,g_Settings.enabled))
         context->LogWarn("[QOL/Aim] Aim unavailable; other QOL features remain loaded.");
-    context->LogInfo("[QOL] QOL v1.3.1+rev.76 loaded: controller item features and integrated v0.6 navigation/label hooks.");
+    context->LogInfo("[QOL] QOL v1.3.1+rev.78 loaded: controller item features and integrated v0.6 navigation/label hooks.");
     return true;
 }
 

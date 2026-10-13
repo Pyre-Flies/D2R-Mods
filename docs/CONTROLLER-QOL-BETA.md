@@ -1,74 +1,43 @@
-# Controller QOL 1.3.1+rev.76-beta.4 — testing release
+# Controller QOL rev.78 validation
 
-**Please test this release and report all bugs, including minor issues and
-inconsistent behavior. Online play has not yet been validated.**
+The tested rev.78-beta.4 implementation is published as rev.78 in
+release-2026.10.13.1.
 
-This is a Controller QOL-only **prerelease**. Non-online gameplay was accepted
-after single-client Reimagined testing. Automated tests and that acceptance
-do not establish hosted/guest correctness, every storage combination or all
-game/mod/controller environments.
+- Start distant LB loot travel during the native client update. This corrects
+  dispatch timing associated with intermittent slow approaches and reported
+  invisible blocked ground. The user could no longer reproduce those symptoms
+  with rev.78-beta.4; rev.78 preserves that implementation.
+- Use native running for explicit loot travel without changing the player's
+  walk/run preference. Already-mapped, still-targetable items can initiate travel
+  beyond the mapping radius; repeat suppression is reduced to 250 ms.
+- Keep each LB loot assignment fixed until release/repress. Missing labels and
+  newly dropped items cannot replace existing assignments mid-hold. Execution
+  still rechecks visibility, item identity, session, held input and request age.
+- Restore hosted identify, transfers and bulk-deposit admission for the reviewed
+  Global Chat and Maps versions. Existing offline routing and older supported
+  profiles are retained; unsupported native profiles fail open.
+- Respect filtered-pickup blocking for neutral controller A before submission.
+  Gold is exempt, including automatic pickup; native capacity and pickup settings
+  still apply. Mouse/keyboard behavior is preserved.
+- Reorder loot-filter rules with LB+Up/Down, with matching bumper hints.
 
-## Changes
+### Configuration
 
-- Block moving the Horadric Cube into itself through LB+X, LB+Y and ordinary
-  Cube transfer routes. Keep valid Cube -> Inventory withdrawals available.
-- Keep overlapping LB+LT/RT gestures inside Shared Stash, with no escape to
-  the main stash tabs. Fully release both triggers before changing direction.
-- Bind ground-loot requests to the current local player/session. Prevent old
-  requests from crossing games and keep host filtering away from guest actors.
-- Preserve consumed button/trigger ownership through modifier-first release;
-  serialize shortcut state and make master-disable input pass through.
-- Revalidate Cube focus/context before execution; capture normal Shared page,
-  season and local owner for direct Shared -> Cube transactions.
-- Remove packet-driven diagnostic ground scans. Retain existing aim behavior
-  with local-player qualification; this is not full Guided Arrow consolidation.
-- Include controller Deposit All stash-tab feedback and LB/RB Mod Information
-  tabs, with scoped blocking of underlying LT/RT navigation.
-- New/omitted `prioritize_chests` settings default to `true`. Existing explicit
-  settings and customized configuration files remain preserved.
+Existing settings are preserved. `ground_pickup_distance` controls the LB mapping
+radius, not maximum travel to an already-mapped item. Set it to `20` in the client
+configuration for the wider tested radius; the shipped default is unchanged.
+No server configuration change is needed for that mapping preference.
 
-## Validation and known limits
+### Validation and limits
 
-- Release build: **33/33 CTest suites passed**, including **424 production
-  integration checks** and **61 Shared-page/glyph checks**.
-- User-confirmed: Cube self-insertion prevented, Shared Stash escape fixed,
-  Cube behavior works through rejoins, and non-online gameplay accepted.
-- Pickup retains its current reach and does not automatically approach loot.
-  A reported two-of-three pickup required slight movement for the third item;
-  no new native walking or pickup-reach fix is claimed.
-- **Online play still requires testing.** Host and every joining client must
-  use matching plugin sets, versions and DLLs. Mismatched peers cannot be used
-  as a test. Distinct-peer ownership, latency and hosted persistence remain
-  unverified. A single-client host is not a substitute for a second actor.
-- Native features admit only their documented exact builds/byte guards and
-  fail open on mismatches. This release makes no broad Ladder crash-fix claim.
+All 33 Controller QOL automated suites pass, including 483 production audit checks
+and DLL ABI/resource/export/version checks. The user confirmed hosted item actions,
+advanced-stash totals with rejuvenation potions, vendor purchases/sales, wider LB
+mapping and the final travel behavior in a self-hosted Reimagined session.
 
-## Report bugs
-
-[Open an issue](https://github.com/Pyre-Flies/D2R-Mods/issues/new) for every bug
-you encounter. Include:
-
-- This plugin version, game/loader version, mod and offline/host/joined role.
-- Controller/device and exact buttons, panels and steps used.
-- Expected result, actual result and whether it repeats or survives a rejoin.
-- Relevant QOL log excerpts and screenshots where useful; omit account/session
-  secrets and private paths. For online issues, include matching plugin versions
-  on both sides.
-
-See the [single-client acceptance cases](https://github.com/Pyre-Flies/D2R-Mods/blob/beta-controller-qol-2026.10.11.1/plugins/controller-qol/docs/AUDIT-REPAIRS-IN-GAME-TESTS.md)
-and [repair evidence](https://github.com/Pyre-Flies/D2R-Mods/blob/beta-controller-qol-2026.10.11.1/plugins/controller-qol/docs/AUDIT-LIVE-FOLLOWUP-BETA4.md).
-
-## Install and preserve settings
-
-Close D2R/D2RLoader and back up the existing DLL. Extract the ZIP into the
-appropriate loader root: `d2rloader/plugins/Controller QOL Updates.dll` is
-the only installed plugin. Keep existing configs and skill profiles.
-
-The TOMLs under `defaults/` are references; the ZIP contains no live
-`d2rloader/config/` paths and does not overwrite customized settings.
-The loader creates missing main settings from embedded defaults. Review the
-included configuration guide before changing per-mod skill profiles.
-
-The adjacent `SHA256SUMS` verifies the ZIP; its internal manifest verifies
-individual files. Source archives are supplied by GitHub. Other plugins and
-the current stable suite release are unchanged.
+A fresh offline gameplay retest, all filter/reorder combinations, broader hosted
+configurations and save/rejoin persistence are not fully qualified. A prior beta.3
+shutdown produced a leaked-stats assertion followed by a graphics-driver access
+violation; its cause is undetermined and this release does not claim to fix it.
+A clean shutdown on the final candidate is unconfirmed. Report regressions with
+the input sequence, active mod, client/server context and plugin versions.

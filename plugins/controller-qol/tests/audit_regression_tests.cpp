@@ -9,6 +9,10 @@
 namespace Audit {
 std::atomic<unsigned> checks{};
 unsigned uiCalls{},gameCalls{},moves{},nativePickups{},sends{},installed{},enumerations{};
+unsigned approaches{},clientUpdates{};
+bool phaseHeld=true;
+unsigned movementAction{};
+int lootDistance=1;
 bool guard=true,serverAvailable=true,season=false;
 bool localAvailable=true;
 D2RL::PlayerHandle localHandle=7;
@@ -44,9 +48,19 @@ void* __fastcall Lookup(uint32_t id,uint32_t type) {return type==4 && id==unit[2
 void* __fastcall Focused(void*,const void*) {return unit;}
 uint32_t __fastcall Code(const void*) {return item.code;}
 uint8_t __fastcall Page(const void*) {return QolClientTransfer::NativePage(item.container);}
-int __fastcall Distance(void*,void*) {return 1;}
+int __fastcall Distance(void*,void*) {return lootDistance;}
 int __fastcall Collision(void*,void*,uint32_t) {return 0;}
 void __fastcall Send(uint16_t type,uint32_t guid) {Check(type==4 && guid==item.runtimeId,"native request uses captured GUID");++sends;}
+void __fastcall Movement(uint32_t action,void*,uint32_t,uint32_t) {movementAction=action;}
+void __fastcall Approach(void* player,uint32_t action,uint32_t type,uint32_t guid) {
+    Check(player==local && action==0x16 && type==4 && guid==item.runtimeId,"approach uses native deferred item action and local actor");++approaches;
+}
+void* __fastcall ActorRoom(void* player) {Check(player==local,"gold inspection uses native local server actor");return local;}
+void __fastcall AdjacentRooms(void* room,void*** output,unsigned* count) {
+    static void* rooms[]={unit};Check(room==local,"gold inspection uses actor room");*output=rooms;*count=1;
+}
+void* __fastcall FirstUnit(void* room) {return room;}
+void* __fastcall NextUnit(void*) {return nullptr;}
 bool __cdecl InGame() noexcept {return true;}
 bool __fastcall Pickup(void*,uint32_t,bool,uint32_t,bool,bool) {++nativePickups;return true;}
 int64_t __fastcall Action(void*,void*,void*,int32_t) {return 123;}
@@ -204,13 +218,121 @@ int main() {
     staleRefresh.fn(&context,staleRefresh.user);Check(s_ClientLootRefreshToken==currentRefresh,"old refresh cannot clear new session's queued ownership");
     FlushUi(&context);
     QolClientLoot::Submit(request,10,true);Check(sends==beforeLeave,"old queued callback and same-ID request cannot cross games");
-    QolClientLoot::Track(42,true);QolClientLoot::Refresh(10,true);guard=false;
+    QolClientLoot::Track(42,true);
+    QolClientLoot::Refresh(10,false); // Release the empty hold captured before Track.
+    QolClientLoot::Refresh(10,true);guard=false;
     QolClientLoot::Submit(QolClientLoot::Capture(0),10,true);Check(sends==beforeLeave,"changed native guard cancels request");guard=true;
     Held();Check(GroundLoot::HookPickup(local,42,false,10,false,false),"unavailable loot profile fails open for local native pickup");
     std::array<uint8_t,5> packet{5,1,0,2,0},projected{};
     GroundLoot::s_GetSelectedSkill=+[](void*) -> void* {Check(false,"guest selected skill must not be inspected");return nullptr;};
     Check(!GroundLoot::ProjectGuidedArrowPacket(peer,packet.data(),5,projected),"host correction leaves guest Guided Arrow packets untouched");
     GroundLoot::s_GetSelectedSkill=nullptr;
+
+    // Client filtering operates before networking, independent of server task availability.
+    QolClientLoot::ready=true;QolClientLoot::blockPickup=&GroundLoot::BlockClientPickup;
+    QolClientLoot::originalInteraction=&Send;
+    g_Settings.blockFilteredPickup=true;
+    ControllerQoL::ResetNativeTracking();
+    PlacardOverlay::s_TrackedPlacards.clear();
+    auto initialSends=sends;
+    QolClientLoot::HookInteraction(4,42);Check(sends==initialSends,"neutral controller A cannot submit a hidden item");
+    item.code=0x20646c67;QolClientLoot::HookInteraction(4,42);
+    Check(sends==initialSends+1,"hidden gold client request passes");
+    item.code=0x00646c67;QolClientLoot::HookInteraction(4,42);
+    Check(sends==initialSends+2,"null-padded gold client request passes");
+    item.code=123;*reinterpret_cast<unsigned*>(manager+0xdc)=0;
+    QolClientLoot::HookInteraction(4,42);Check(sends==initialSends+3,"keyboard mouse hidden pickup preserved");
+    *reinterpret_cast<unsigned*>(manager+0xdc)=1;
+    g_Settings.blockFilteredPickup=false;QolClientLoot::HookInteraction(4,42);
+    Check(sends==initialSends+4,"disabled filter preserves controller pickup");
+    g_Settings.blockFilteredPickup=true;
+    PlacardOverlay::s_TrackedPlacards[42].lastSeenTick=GetTickCount64();
+    QolClientLoot::HookInteraction(4,42);Check(sends==initialSends+5,"visible controller item passes");
+    QolClientLoot::blockPickup=nullptr;
+    // Server automatic gold collection uses authoritative adjacent-room units.
+    Jump(0x34b440,reinterpret_cast<void*>(&ActorRoom));Jump(0x2efde0,reinterpret_cast<void*>(&AdjacentRooms));
+    Jump(0x2efd90,reinterpret_cast<void*>(&FirstUnit));Jump(0x34b4a0,reinterpret_cast<void*>(&NextUnit));
+    PlacardOverlay::s_TrackedPlacards.clear();QolClientLoot::pickupPermits={};Held();
+    item.code=0x20646c67;Check(GroundLoot::HookPickup(local,42,false,10,false,false),"hidden automatic gold allowed while LB held");
+    item.code=123;Check(!GroundLoot::HookPickup(local,42,false,10,false,false),"non-gold hidden pickup remains blocked");
+    guard=false;Check(!QolGoldPickup::IsGold(&context,local,42),"gold helper refuses changed native contract");guard=true;
+    // Production approach routing retains nearby pickup and declines duplicate requests.
+    Jump(0xfbef0,reinterpret_cast<void*>(&Approach));QolClientLoot::approachReady=true;
+    QolClientLoot::updateHook=true;
+    QolClientLoot::heldNow=+[]() noexcept {return phaseHeld;};
+    QolClientLoot::originalUpdate=+[](void*) {++clientUpdates;};
+    QolClientLoot::Refresh(10,false);QolClientLoot::Track(42,true);lootDistance=6;QolClientLoot::Refresh(10,true);
+    QolClientLoot::repeatGate={};lootDistance=60; // Walk away after capturing nearby loot.
+    const auto approachRequest=QolClientLoot::Capture(0);QolClientLoot::Submit(approachRequest,10,true);
+    Check(approaches==0,"UI callback queues travel without mutating native movement");
+    QolClientLoot::HookClientUpdate(peer);
+    Check(approaches==0 && clientUpdates==1,"unrelated actor preserves original update without draining request");
+    phaseHeld=false;QolClientLoot::HookClientUpdate(local);phaseHeld=true;
+    Check(approaches==0 && !QolClientLoot::queuedApproach.request.item.guid,"released chord cancels queued travel");
+    QolClientLoot::Submit(approachRequest,10,true);QolClientLoot::queuedApproach.request.queuedAt-=501;
+    QolClientLoot::HookClientUpdate(local);Check(approaches==0,"expired queued travel cannot start");
+    QolClientLoot::Submit(approachRequest,10,true);QolClientLoot::Track(42,false);
+    QolClientLoot::HookClientUpdate(local);Check(approaches==0,"visibility revalidated at native update");
+    QolClientLoot::Track(42,true);QolClientLoot::Submit(approachRequest,10,true);
+    ++QolClientLoot::epoch;QolClientLoot::HookClientUpdate(local);--QolClientLoot::epoch;
+    Check(approaches==0,"old hold or session queue cannot cross epoch");
+    QolClientLoot::Submit(approachRequest,10,true);QolClientLoot::HookClientUpdate(local);
+    Check(approaches==1,"native client update submits frozen item beyond acquisition radius");
+    QolClientLoot::HookClientUpdate(local);Check(approaches==1,"consumed client update request is not resent");
+    QolClientLoot::originalMovement=&Movement;QolClientLoot::runHook=true;
+    QolClientLoot::HookMovement(2,local,4,42);Check(movementAction==4,"owned LB approach upgrades native walk to run");
+    QolClientLoot::HookMovement(4,local,4,42);Check(movementAction==4,"already-running native approach stays run");
+    QolClientLoot::HookMovement(2,peer,4,42);Check(movementAction==2,"peer movement remains native");
+    QolClientLoot::HookMovement(2,local,4,43);Check(movementAction==2,"unrelated item movement remains native");
+    QolClientLoot::HookMovement(2,local,2,42);Check(movementAction==2,"object movement remains native");
+    QolClientLoot::HookMovement(22,local,4,42);Check(movementAction==22,"unrelated action remains native");
+    *reinterpret_cast<unsigned*>(manager+0xdc)=0;
+    QolClientLoot::HookMovement(2,local,4,42);Check(movementAction==2,"keyboard mouse approach remains native");
+    *reinterpret_cast<unsigned*>(manager+0xdc)=1;
+    const auto savedPermits=QolClientLoot::pickupPermits;
+    for(auto& permit:QolClientLoot::pickupPermits)if(permit.guid)permit.issued-=6000;
+    QolClientLoot::HookMovement(2,local,4,42);Check(movementAction==2,"expired request cannot force movement");
+    QolClientLoot::pickupPermits=savedPermits;
+    ++QolClientLoot::localSession.generation;
+    QolClientLoot::HookMovement(2,local,4,42);Check(movementAction==2,"stale session cannot force movement");
+    --QolClientLoot::localSession.generation;
+    guard=false;QolClientLoot::HookMovement(2,local,4,42);Check(movementAction==2,"run override fails open on changed contract");guard=true;
+    QolClientLoot::runHook=false;QolClientLoot::HookMovement(2,local,4,42);Check(movementAction==2,"unavailable run hook preserves native choice");
+    QolClientLoot::runHook=true;
+    QolClientLoot::Submit(approachRequest,10,true);Check(approaches==1,"pending approach is not duplicated");
+    QolClientLoot::repeatGate.issued-=250;
+    QolClientLoot::Submit(approachRequest,10,true);QolClientLoot::HookClientUpdate(local);Check(approaches==2,"explicit retry after 250ms renews still-live completion permit");
+    Check(QolClientLoot::TakeNativePickupPermit(10,42),"retry retains completion permission");
+    QolClientLoot::HookMovement(2,local,4,42);Check(movementAction==2,"consumed request cannot force later movement");
+    QolClientLoot::runHook=false;
+    QolClientLoot::Submit(approachRequest,10,true);Check(approaches==2,"consuming permission does not bypass repeat debounce");
+    QolClientLoot::repeatGate={};
+    QolClientLoot::Track(42,false);QolClientLoot::Submit(approachRequest,10,true);
+    Check(approaches==2,"distant frozen slot cannot submit an invisible item");
+    QolClientLoot::Track(42,true);unit[3]=0;QolClientLoot::Submit(approachRequest,10,true);
+    Check(approaches==2,"distant frozen slot cannot submit an item already removed from ground");unit[3]=3;
+    ++item.code;QolClientLoot::Submit(approachRequest,10,true);
+    Check(approaches==2,"distant frozen slot rejects changed item identity");--item.code;
+    QolClientLoot::repeatGate={};QolClientLoot::approachReady=false;
+    QolClientLoot::Submit(approachRequest,10,true);Check(approaches==2 && sends==initialSends+5,"unsupported approach preserves old radius fallback");
+    QolClientLoot::approachReady=true;
+    QolClientLoot::pickupPermits={};lootDistance=4;QolClientLoot::Submit(approachRequest,10,true);
+    Check(approaches==2 && sends==initialSends+6,"within-reach selection keeps immediate route");
+    QolClientLoot::approachReady=false;lootDistance=1;QolClientLoot::pickupPermits={};
+
+    // Rule reordering only changes the two native Up/Down modifier queries.
+    ctx=&context;enabled=true;useL1=true;menuRemap=true;menuHook=true;filterReorderHook=true;
+    *reinterpret_cast<void**>(focus+0x188)=widget;
+    *reinterpret_cast<uintptr_t*>(widget)=context.exeBase+0x1fd47d8;
+    *reinterpret_cast<const char**>(widget+8)="LootFilterProfilePanel";
+    Held(0x100);Check(RuleModifierOverride(context.exeBase+0x149f8e3)==1,"LB enables native rule-up modifier");
+    Check(RuleModifierOverride(context.exeBase+0x149f933)==1,"LB enables native rule-down modifier");
+    Held(0);Check(RuleModifierOverride(context.exeBase+0x149f8e3)==0,"neutral directions do not reorder");
+    Held(0x100);Check(RuleModifierOverride(context.exeBase+0x1234)==-1,"unrelated modifier query preserved");
+    *reinterpret_cast<const char**>(widget+8)="OtherPanel";
+    Check(RuleModifierOverride(context.exeBase+0x149f8e3)==-1,"other panel preserved");
+    filterReorderHook=false;ctx=nullptr;
+    *reinterpret_cast<void**>(focus+0x188)=nullptr;*reinterpret_cast<uintptr_t**>(widget)=table;
 
     // #5/#6: current source panel/identity, local owner/page, atomic Cube destination.
     serverAvailable=true;moves=0;SetSource(C::Inventory);std::memset(modes,0,128);

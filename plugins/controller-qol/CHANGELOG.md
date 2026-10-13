@@ -1,5 +1,46 @@
 # Controller QOL changelog
 
+## 1.3.1+rev.78 - 2026-10-13
+
+- Queue distant LB pickup at the native client update instead of starting
+  movement inside a UI callback. Revalidate the held shortcut, item, session and
+  request age at execution. This addresses a timing mismatch found while
+  investigating intermittent slow travel and user-reported blocked ground;
+  the user could no longer reproduce those symptoms in the beta.4 hosted retest.
+  Nearby pickup keeps its existing route; a fresh offline retest remains pending.
+
+- Request native running for explicit LB loot approach, scoped to the selected
+  local item/session. Preserve global walk/run settings and native pathfinding;
+  log the original movement choice. Validation is recorded in the loot-approach
+  compatibility document.
+
+- Keep nearby LB acquisition, but allow an already mapped, still targetable item
+  to start native travel beyond that radius. Reduce explicit repeat suppression
+  to 250 ms, independently of the one-use arrival permission. Automated/live
+  validation is recorded in `docs/LOOT-APPROACH-FILTER-2026-10-13.md`.
+
+- Add guarded native movement and deferred pickup beyond normal pickup reach;
+  retain nearby pickup and unsupported-build fallback.
+- Move loot-filter rules with LB+Up/Down and show matching bumper hints.
+- Apply `block_filtered_pickup` before client interaction submission, covering
+  neutral controller A in hosted games while preserving mouse/keyboard.
+- Exempt gold from filtered-pickup blocking, including automatic collection and
+  modifier holds. Native capacity/settings still apply. Dedicated gold/filter coverage is
+  automated; exhaustive live coverage remains open. See
+  `docs/LOOT-APPROACH-FILTER-2026-10-13.md`.
+
+- Freeze ground-loot shortcut identities for each modifier hold; new drops and
+  disappearing labels no longer replace assigned items until release/repress.
+- Admit the exact 2026-10-12 Ladder Global Chat and Maps forwarding profiles for
+  remote identify/transfer requests, retaining original guards for older builds.
+  Runtime byte checks passed. The user subsequently accepted hosted item
+  actions, advanced-stash rejuvenation totals and vendor purchase/sale. See `docs/HOSTED-QOL-2026-10-12.md`.
+
+- Promote the user-tested rev.78-beta.4 behavior with stable version metadata.
+  All 33 automated suites pass, including 483 production audit checks. The
+  hosted retest no longer reproduced slow travel or blocked ground; a fresh
+  offline retest and clean shutdown remain unconfirmed.
+
 ## 1.3.1+rev.76 - 2026-10-12
 
 - Publish the reviewed rev.76 beta.4 implementation as rev.76 at the user's request, with stable version metadata. Native behavior and settings are unchanged.

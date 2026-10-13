@@ -1,5 +1,10 @@
 #include "client_loot.h"
 #include "client_loot_profile.h"
+#include "loot_approach_profile.h"
+#include "loot_run_policy.h"
+#include "loot_update_profile.h"
+#include "glyph_calls.h"
+#include "controller_input.h"
 #include "native_d2r.h"
 #include <atomic>
 #include <mutex>
@@ -12,10 +17,37 @@ std::recursive_mutex mutex;
 std::atomic<bool> active{false};
 const D2RL::PluginContext* context{};
 RankFn rankItem{};
+BlockPickupFn blockPickup{};
+using InteractionFn=void(__fastcall*)(uint16_t,uint32_t);
+InteractionFn originalInteraction{};
+bool interactionHook{};
+unsigned char installedInteraction[15]{};
 std::atomic<bool> ready{false};
+bool approachReady{};
 std::atomic<bool> lifecycleAvailable{false},localPlayerReady{false};
 LocalSession localSession;
 std::array<NativePickupPermit,7> pickupPermits{};
+RepeatGate repeatGate{};
+using MovementFn=void(__fastcall*)(uint32_t,void*,uint32_t,uint32_t);
+MovementFn originalMovement{};
+bool runHook{};
+unsigned char installedMovement[5]{};
+uint32_t runGuid{};
+using UpdateFn=void(__fastcall*)(void*);
+UpdateFn originalUpdate{};
+bool updateHook{};
+unsigned char installedUpdate[5]{};
+HeldFn heldNow{};
+struct QueuedApproach {Request request{};uint32_t radius{};};
+QueuedApproach queuedApproach{};
+thread_local bool inClientUpdate{};
+bool ValidateUpdate() noexcept {
+    return updateHook && context &&
+        context->CheckExpectedBytes(QolLootUpdate::RestoreSite,QolLootUpdate::Restore,5) &&
+        context->CheckExpectedBytes(QolLootUpdate::WindowSite,QolLootUpdate::Window,14) &&
+        context->CheckExpectedBytes(QolLootUpdate::CallSite,installedUpdate,5) &&
+        context->CheckExpectedBytes(QolLootUpdate::CallSite+5,QolLootUpdate::Window+19,5);
+}
 bool wasHeld{};
 using InGameFn=bool(__cdecl*)() noexcept;
 InGameFn inGame{};
@@ -24,10 +56,29 @@ std::unordered_map<uint32_t,uint64_t> visible;
 uintptr_t playerIdentity{}; // comparison only; never dereferenced between callbacks
 uint32_t playerGuid{};
 uint64_t epoch{1};
+void __fastcall HookClientUpdate(void* player) noexcept {
+    // Preserve the game's pending action before starting one new explicit request.
+    if(originalUpdate)originalUpdate(player);
+    QueuedApproach queued{};HeldFn held{};
+    {
+        std::lock_guard lock(mutex);
+        if(!active || !Ready() || !ValidateUpdate() ||
+           reinterpret_cast<uintptr_t>(player)!=playerIdentity)return;
+        queued=queuedApproach;queuedApproach={};held=heldNow;
+    }
+    if(!queued.request.item.guid || !held || !held())return;
+    inClientUpdate=true;
+    Submit(queued.request,queued.radius,true);
+    inClientUpdate=false;
+}
 bool Validate() noexcept {
     if(!context || !inGame)return false;
-    for(auto& s:Profile::Sites)
-        if(!context->CheckExpectedBytes(s.rva,s.bytes,s.size))return false;
+    for(auto& s:Profile::Sites) {
+        if(s.rva==0xfa180 && interactionHook) {
+            if(!context->CheckExpectedBytes(s.rva,installedInteraction,sizeof(installedInteraction)) ||
+               !context->CheckExpectedBytes(s.rva+15,s.bytes+15,s.size-15))return false;
+        } else if(!context->CheckExpectedBytes(s.rva,s.bytes,s.size))return false;
+    }
     return true;
 }
 void* Player() noexcept {
@@ -58,36 +109,142 @@ bool Session(void*& player) noexcept {
         player=Player();
         if(!player) {
             if(playerIdentity || wasHeld)++epoch;
-            slots={};visible.clear();playerIdentity=0;playerGuid=0;wasHeld=false;pickupPermits={};
+            slots={};visible.clear();playerIdentity=0;playerGuid=0;wasHeld=false;pickupPermits={};repeatGate={};runGuid=0;
             return false;
         }
         const auto guid=static_cast<const uint32_t*>(player)[2];
         if(!localSession.Matches(static_cast<const uint32_t*>(player)[0],guid)) {
-            ++epoch;slots={};visible.clear();wasHeld=false;pickupPermits={};return false;
+            ++epoch;slots={};visible.clear();wasHeld=false;pickupPermits={};repeatGate={};runGuid=0;return false;
         }
         if(playerIdentity && (playerIdentity!=reinterpret_cast<uintptr_t>(player) || playerGuid!=guid)) {
             ++epoch;
-            slots={};visible.clear();wasHeld=false;pickupPermits={};
+            slots={};visible.clear();wasHeld=false;pickupPermits={};repeatGate={};runGuid=0;
         }
         playerIdentity=reinterpret_cast<uintptr_t>(player);playerGuid=guid;
         return true;
-    } __except(EXCEPTION_EXECUTE_HANDLER) {++epoch;slots={};visible.clear();wasHeld=false;pickupPermits={};return false;}
+    } __except(EXCEPTION_EXECUTE_HANDLER) {++epoch;slots={};visible.clear();wasHeld=false;pickupPermits={};repeatGate={};runGuid=0;return false;}
 }
-bool Invoke(uintptr_t base,uint32_t guid) noexcept {
+bool ValidateApproach() noexcept {
+    for(const auto& s:ApproachProfile::Sites) {
+        if(runHook && s.rva==0xfbef0) {
+            constexpr auto offset=QolLootRun::CallSite-0xfbef0;
+            if(!context->CheckExpectedBytes(s.rva,s.bytes,offset) ||
+               !context->CheckExpectedBytes(QolLootRun::CallSite,installedMovement,5) ||
+               !context->CheckExpectedBytes(QolLootRun::CallSite+5,s.bytes+offset+5,s.size-offset-5))return false;
+        } else if(!context->CheckExpectedBytes(s.rva,s.bytes,s.size))return false;
+    }
+    return true;
+}
+void __fastcall HookMovement(uint32_t action,void* player,uint32_t type,uint32_t guid) noexcept {
+    const D2RL::PluginContext* ctx{};
+    const auto previous=action;
+    {
+        std::lock_guard lock(mutex);
+        bool owned=false;
+        if(runHook && active && Ready() && approachReady && context && ControllerQoL::IsControllerUiActive() &&
+           reinterpret_cast<uintptr_t>(player)==playerIdentity && runGuid==guid && ValidateApproach()) {
+            const auto now=GetTickCount64();
+            for(const auto& permit:pickupPermits)
+                if(permit.Current(localSession,playerGuid,guid,now)) {owned=true;break;}
+        }
+        action=QolLootRun::Action(action,type,owned);
+        if(owned && type==4 && (previous==2 || previous==4))ctx=context;
+    }
+    if(ctx) {
+        char message[160];
+        std::snprintf(message,sizeof(message),"[QOL/ClientLoot] GUID=%u movement requested=run native=%s.",guid,previous==2?"walk":"run");
+        ctx->LogInfo(message);
+    }
+    if(originalMovement)originalMovement(action,player,type,guid);
+}
+bool InstallCall(const D2RL::PluginContext* ctx,uintptr_t site,const unsigned char* expected,
+                 const void* destination,unsigned char (&installedBytes)[5]) noexcept {
+    if(!ctx->CheckExpectedBytes(site,expected,5))return false;
+    HMODULE pinned{};
+    if(!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS|GET_MODULE_HANDLE_EX_FLAG_PIN,
+        reinterpret_cast<LPCWSTR>(&HookMovement),&pinned))return false;
+    SYSTEM_INFO info{};GetSystemInfo(&info);
+    const uintptr_t step=info.dwAllocationGranularity;
+    const uintptr_t aligned=(ctx->exeBase+site)&~(step-1);
+    unsigned char* relay=nullptr;
+    for(uintptr_t offset=step;offset<0x40000000 && !relay;offset+=step)
+        relay=static_cast<unsigned char*>(VirtualAlloc(reinterpret_cast<void*>(aligned+offset),64,MEM_COMMIT|MEM_RESERVE,PAGE_READWRITE));
+    if(!relay)return false;
+    relay[0]=0xff;relay[1]=0x25;std::memset(relay+2,0,4);
+    std::memcpy(relay+6,&destination,sizeof(destination));
+    unsigned char replacement[5]{};DWORD old{};
+    if(!QolGlyphCalls::Encode(ctx->exeBase+site,reinterpret_cast<uintptr_t>(relay),replacement) ||
+       !VirtualProtect(relay,64,PAGE_EXECUTE_READ,&old) || !FlushInstructionCache(GetCurrentProcess(),relay,64)) {
+        VirtualFree(relay,0,MEM_RELEASE);return false;
+    }
+    // Loader owns restoration; retain the pinned relay after publication starts.
+    if(!ctx->PatchBytes(site,expected,5,replacement,5))return false;
+    std::memcpy(installedBytes,replacement,5);
+    return true;
+}
+bool Invoke(uintptr_t base,void* player,uint32_t guid,bool approach) noexcept {
     __try {
+        if(approach) {
+            // Native target movement + deferred item action (0x16). The game
+            // owns pathfinding, run/walk selection, cancellation and arrival.
+            reinterpret_cast<void(__fastcall*)(void*,uint32_t,uint32_t,uint32_t)>(base+0xfbef0)(player,0x16,4,guid);
+            return true;
+        }
         // Native interaction owns packet assembly, network dispatch and destination.
         reinterpret_cast<void(__fastcall*)(uint16_t,uint32_t)>(base+0xfa180)(4,guid);
         return true;
     } __except(EXCEPTION_EXECUTE_HANDLER) {return false;}
 }
+bool ReadPickupCode(uint32_t guid,uint32_t& code) noexcept {
+    __try {
+        auto unit=reinterpret_cast<const uint32_t*(__fastcall*)(uint32_t,uint32_t)>(context->exeBase+0x9a5d0)(guid,4);
+        if(!unit || unit[0]!=4 || unit[2]!=guid || unit[3]!=3)return false;
+        code=reinterpret_cast<uint32_t(__fastcall*)(const void*)>(context->exeBase+0x36ef50)(unit);
+        return true;
+    } __except(EXCEPTION_EXECUTE_HANDLER) {return false;}
 }
-void Initialize(const D2RL::PluginContext* ctx,RankFn rank) noexcept {
+void __fastcall HookInteraction(uint16_t type,uint32_t guid) noexcept {
+    BlockPickupFn filter{};
+    uint32_t code{};
+    {
+        std::lock_guard lock(mutex);
+        if(type==4 && guid==runGuid)runGuid=0;
+        if(type==4 && Ready() && context && blockPickup && Validate() && ReadPickupCode(guid,code))filter=blockPickup;
+    }
+    // The visibility callback owns the placard lock; never call it under loot's
+    // lock because the tooltip callback acquires those locks in the reverse order.
+    if(filter && filter(guid,code))return;
+    if(originalInteraction)originalInteraction(type,guid);
+}
+}
+void Initialize(const D2RL::PluginContext* ctx,RankFn rank,BlockPickupFn filter,HeldFn held) noexcept {
     std::lock_guard lock(mutex);
-    context=ctx;rankItem=rank;
+    context=ctx;rankItem=rank;blockPickup=filter;heldNow=held;queuedApproach={};
     active=false;slots={};visible.clear();playerIdentity=0;playerGuid=0;wasHeld=false;++epoch;
-    lifecycleAvailable=false;localPlayerReady=false;localSession={};pickupPermits={};
+    lifecycleAvailable=false;localPlayerReady=false;localSession={};pickupPermits={};repeatGate={};runGuid=0;
     inGame=reinterpret_cast<InGameFn>(GetProcAddress(GetModuleHandleW(L"D2RCore.dll"),"IsInGame"));
     ready=rank && Validate();
+    if(ready && filter && ctx->InstallInlineHook<InteractionFn>(0xfa180,Profile::Interaction,15,&HookInteraction,&originalInteraction)) {
+        std::memcpy(installedInteraction,reinterpret_cast<const void*>(ctx->exeBase+0xfa180),sizeof(installedInteraction));
+        interactionHook=true;
+    }
+    ctx->LogInfo(interactionHook?"[QOL/ClientLoot] Client filtered-pickup gate installed.":
+        "[QOL/ClientLoot] Client filtered-pickup gate unavailable; native interaction preserved.");
+    originalUpdate=reinterpret_cast<UpdateFn>(ctx->exeBase+0xf9bc0);
+    updateHook=ready && held && ctx->CheckExpectedBytes(QolLootUpdate::RestoreSite,QolLootUpdate::Restore,5) &&
+        ctx->CheckExpectedBytes(QolLootUpdate::WindowSite,QolLootUpdate::Window,sizeof(QolLootUpdate::Window)) &&
+        InstallCall(ctx,QolLootUpdate::CallSite,QolLootUpdate::Window+14,
+                    reinterpret_cast<const void*>(&HookClientUpdate),installedUpdate);
+    approachReady=ready && updateHook && ValidateApproach();
+    originalMovement=reinterpret_cast<MovementFn>(ctx->exeBase+0xfabe0);
+    runHook=approachReady && InstallCall(ctx,QolLootRun::CallSite,QolLootRun::Expected,
+                                       reinterpret_cast<const void*>(&HookMovement),installedMovement);
+    ctx->LogInfo(updateHook?"[QOL/ClientLoot] Approach requests queued at native client update.":
+        "[QOL/ClientLoot] Native client update unavailable; approach disabled.");
+    ctx->LogInfo(runHook?"[QOL/ClientLoot] Scoped native run requests enabled for shortcut loot.":
+        "[QOL/ClientLoot] Run override unavailable; native walk/run choice preserved.");
+    ctx->LogInfo(approachReady?"[QOL/ClientLoot] Native loot approach profile admitted.":
+        "[QOL/ClientLoot] Approach unavailable; existing immediate pickup route retained.");
     ctx->LogInfo(ready?"[QOL/ClientLoot] Native client pickup profile admitted.":
         "[QOL/ClientLoot] Profile unavailable; remote ground shortcuts disabled.");
 }
@@ -102,8 +259,9 @@ void OnLifecycle(const D2RL::Lifecycle::GameplayEvent* event) noexcept {
     } else if(event && event->kind==D2RL::Lifecycle::GameplayEventKind::GameJoined) {
         localSession.Join(event->sessionGeneration);
     } else {localSession.Leave();}
+    queuedApproach={};
     localPlayerReady=localSession.Matches(0,localSession.playerId);
-    ++epoch;active=false;slots={};visible.clear();wasHeld=false;playerIdentity=0;playerGuid=0;pickupPermits={};
+    ++epoch;active=false;slots={};visible.clear();wasHeld=false;playerIdentity=0;playerGuid=0;pickupPermits={};repeatGate={};runGuid=0;
 }
 bool IsLocalActor(uint32_t type,uint32_t id) noexcept {
     std::lock_guard lock(mutex);
@@ -119,8 +277,8 @@ bool TakeNativePickupPermit(uint32_t actorId,uint32_t guid) noexcept {
 }
 void Shutdown() noexcept {
     std::lock_guard lock(mutex);
-    active=false;ready=false;lifecycleAvailable=false;localPlayerReady=false;localSession={};pickupPermits={};
-    slots={};visible.clear();context=nullptr;inGame=nullptr;
+    active=false;ready=false;lifecycleAvailable=false;localPlayerReady=false;localSession={};pickupPermits={};repeatGate={};runGuid=0;
+    slots={};visible.clear();queuedApproach={};heldNow=nullptr;blockPickup=nullptr;context=nullptr;inGame=nullptr;
 }
 bool Activate() noexcept {
     std::lock_guard lock(mutex);
@@ -134,7 +292,7 @@ bool Activate() noexcept {
 }
 void Deactivate() noexcept {
     std::lock_guard lock(mutex);
-    if(active.exchange(false)) {++epoch;slots={};wasHeld=false;playerIdentity=0;playerGuid=0;}
+    if(active.exchange(false)) {queuedApproach={};++epoch;slots={};wasHeld=false;playerIdentity=0;playerGuid=0;}
 }
 bool Active() noexcept {return active.load();}
 bool Ready() noexcept {return ready.load() && lifecycleAvailable.load() && localPlayerReady.load();}
@@ -165,9 +323,9 @@ bool Refresh(uint32_t radius,bool held) noexcept {
     const auto old=slots;
     void* player{};
     const bool session=Session(player);
-    if(!held || !session) {if(wasHeld)++epoch;slots={};wasHeld=false;}
+    if(!held || !session) {queuedApproach={};if(wasHeld)++epoch;slots={};wasHeld=false;}
     else {
-        if(!wasHeld)slots={};
+        const bool firstRefresh=!wasHeld;
         wasHeld=true;
         std::vector<Candidate> candidates;
         const auto now=GetTickCount64();
@@ -177,7 +335,7 @@ bool Refresh(uint32_t radius,bool held) noexcept {
             if(Read(player,it->first,radius,c))candidates.push_back(c);
             ++it;
         }
-        slots=Assign(slots,std::move(candidates));
+        slots=HoldSnapshot(slots,Assign({},std::move(candidates)),firstRefresh);
     }
     for(unsigned i=0;i<slots.size();++i)
         if(old[i].guid!=slots[i].guid) {
@@ -201,27 +359,42 @@ void Submit(const Request& request,uint32_t radius,bool held) noexcept {
     if(it==visible.end() || GetTickCount64()-it->second>=1500)return;
     bool assigned=false;
     for(auto s:slots)if(SameItem(s,selected))assigned=true;
+    if(approachReady && (!ValidateApproach() || !ValidateUpdate())) {
+        approachReady=false;
+        context->LogWarn("[QOL/ClientLoot] Approach contract changed; immediate pickup route retained.");
+    }
     Candidate current{};
-    if(!assigned || !Read(player,selected.guid,radius,current) || !SameItem(selected,current))return;
+    if(!assigned || !Read(player,selected.guid,SubmissionRadius(radius,approachReady),current) || !SameItem(selected,current))return;
+    const bool approach=approachReady && NeedsApproach(current.distance);
     const auto now=GetTickCount64();
+    if(repeatGate.Blocks(selected.guid,localSession.generation,now))return;
+    if(approach && !inClientUpdate) {
+        queuedApproach={request,radius};
+        return; // Never mutate the native movement path from a UI callback.
+    }
     NativePickupPermit* available=nullptr;
     for(auto& permit:pickupPermits) {
-        if(permit.Current(localSession,localSession.playerId,selected.guid,now))return; // no duplicate outstanding request
-        if(!permit.guid || permit.generation!=localSession.generation || now<permit.issued || now-permit.issued>1000)available=&permit;
+        // Renew the same item's completion permission on an explicit retry;
+        // its lifetime must not also delay subsequent button presses.
+        if(permit.Current(localSession,localSession.playerId,selected.guid,now)) {available=&permit;break;}
+        if(!permit.guid || permit.generation!=localSession.generation || now<permit.issued || now-permit.issued>permit.lifetime)available=&permit;
     }
     if(!available)return;
-    *available={selected.guid,localSession.generation,now};
+    *available={selected.guid,localSession.generation,now,approach?5000u:1000u};
+    runGuid=approach?selected.guid:0;
+    repeatGate={selected.guid,localSession.generation,now};
     const auto generation=localSession.generation;
     const auto ctx=context;
     lock.unlock(); // Native interaction may rebuild tooltip text; do not invert label/loot locks.
-    const bool submitted=Invoke(ctx->exeBase,selected.guid);
+    const bool submitted=Invoke(ctx->exeBase,player,selected.guid,approach);
     if(!submitted) {
         std::lock_guard failureLock(mutex);
+        if(runGuid==selected.guid)runGuid=0;
         for(auto& permit:pickupPermits)if(permit.guid==selected.guid && permit.generation==generation && permit.issued==now)permit={};
     }
     char message[160];
-    std::snprintf(message,sizeof(message),"[QOL/ClientLoot] pid=%lu GUID=%u distance=%d native request %s; awaiting server state.",
-        GetCurrentProcessId(),selected.guid,current.distance,submitted?"submitted":"faulted");
+    std::snprintf(message,sizeof(message),"[QOL/ClientLoot] pid=%lu GUID=%u distance=%d native %s request %s; awaiting server state.",
+        GetCurrentProcessId(),selected.guid,current.distance,approach?"approach":"pickup",submitted?"submitted":"faulted");
     ctx->LogInfo(message);
     // Keep assignment/placard until the client observes removal. No optimistic
     // success and no automatic resend on rejection/full inventory/latency.
