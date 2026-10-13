@@ -1,5 +1,11 @@
 # Controller QOL changelog
 
+## 1.3.1+rev.77-beta.1 - 2026-10-12
+
+- Freeze ground-loot identities per modifier hold; release/repress to refresh.
+- Admit the inspected Ladder Chat/Maps forwarding profiles for remote item actions, retaining older guards and offline routes.
+- Automated candidate checks pass; live candidate acceptance and pickup approach remain open. See docs/HOSTED-QOL-2026-10-12.md.
+
 ## 1.3.1+rev.76 - 2026-10-12
 
 - Publish the reviewed rev.76 beta.4 implementation as rev.76 at the user's request, with stable version metadata. Native behavior and settings are unchanged.

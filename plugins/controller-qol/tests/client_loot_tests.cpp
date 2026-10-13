@@ -48,5 +48,11 @@ int main() {
     for(unsigned i=10;i>0;--i)many.push_back({i,1,2,1,20});
     slots=Assign({},many);
     CHECK(slots[0].guid==1 && slots[6].guid==7);
-    std::puts("Client loot: stable slots, stale identities, eligibility, removal and bounded ordering passed.");
+    const auto snapshot=HoldSnapshot({},slots,true);
+    CHECK(HoldSnapshot(snapshot,{},false)[0].guid==1); // label disappeared
+    Slots replacement{};replacement[0]={999,1,2,1,20};
+    CHECK(HoldSnapshot(snapshot,replacement,false)[0].guid==1); // new drop cannot steal A
+    CHECK(HoldSnapshot({},replacement,true)[0].guid==999); // release then next hold
+    CHECK(!HoldSnapshot({},replacement,false)[0].guid); // empty initial snapshot remains empty
+    std::puts("Client loot: hold snapshots, stale identities, eligibility, removal and bounded ordering passed.");
 }

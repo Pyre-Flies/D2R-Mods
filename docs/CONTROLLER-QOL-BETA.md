@@ -1,74 +1,47 @@
-# Controller QOL 1.3.1+rev.76-beta.4 — testing release
+# Controller QOL 1.3.1+rev.77-beta.1 - hosted compatibility fix
 
-**Please test this release and report all bugs, including minor issues and
-inconsistent behavior. Online play has not yet been validated.**
-
-This is a Controller QOL-only **prerelease**. Non-online gameplay was accepted
-after single-client Reimagined testing. Automated tests and that acceptance
-do not establish hosted/guest correctness, every storage combination or all
-game/mod/controller environments.
+Please test this release and report all bugs. This Controller QOL-only prerelease
+builds on stable rev.76; it does not replace the latest stable suite.
 
 ## Changes
 
-- Block moving the Horadric Cube into itself through LB+X, LB+Y and ordinary
-  Cube transfer routes. Keep valid Cube -> Inventory withdrawals available.
-- Keep overlapping LB+LT/RT gestures inside Shared Stash, with no escape to
-  the main stash tabs. Fully release both triggers before changing direction.
-- Bind ground-loot requests to the current local player/session. Prevent old
-  requests from crossing games and keep host filtering away from guest actors.
-- Preserve consumed button/trigger ownership through modifier-first release;
-  serialize shortcut state and make master-disable input pass through.
-- Revalidate Cube focus/context before execution; capture normal Shared page,
-  season and local owner for direct Shared -> Cube transactions.
-- Remove packet-driven diagnostic ground scans. Retain existing aim behavior
-  with local-player qualification; this is not full Guided Arrow consolidation.
-- Include controller Deposit All stash-tab feedback and LB/RB Mod Information
-  tabs, with scoped blocking of underlying LT/RT navigation.
-- New/omitted `prioritize_chests` settings default to `true`. Existing explicit
-  settings and customized configuration files remain preserved.
+- Freeze ground-loot shortcut assignments for each LB/modifier hold. Disappearing
+  labels and new drops cannot replace original slots. Release and press again to
+  refresh, including when the initial snapshot was empty.
+- Recognize the inspected Ladder Global Chat and Maps forwarding hooks. The old
+  guards blocked remote single/batch identify, ordinary transfers and stash-all
+  after those plugins loaded. Preserve hooks, server validation, older supported
+  builds and fail-open handling of unknown profiles.
 
-## Validation and known limits
+## Offline compatibility and validation
 
-- Release build: **33/33 CTest suites passed**, including **424 production
-  integration checks** and **61 Shared-page/glyph checks**.
-- User-confirmed: Cube self-insertion prevented, Shared Stash escape fixed,
-  Cube behavior works through rejoins, and non-online gameplay accepted.
-- Pickup retains its current reach and does not automatically approach loot.
-  A reported two-of-three pickup required slight movement for the third item;
-  no new native walking or pickup-reach fix is claimed.
-- **Online play still requires testing.** Host and every joining client must
-  use matching plugin sets, versions and DLLs. Mismatched peers cannot be used
-  as a test. Distinct-peer ownership, latency and hosted persistence remain
-  unverified. A single-client host is not a substitute for a second actor.
-- Native features admit only their documented exact builds/byte guards and
-  fail open on mismatches. This release makes no broad Ladder crash-fix claim.
+Offline identify/transfer implementations, routing, configuration defaults,
+Cube safeguards and Shared-page handling are unchanged from stable rev.76.
+The intentional snapshot behavior applies to offline and hosted sessions.
+All 33 local automated suites passed for the repair candidate, covering unhooked
+routes, forwarding guards, local/guest isolation, input/session handling and DLL
+ABI/exports. Release-source checks also run before publication. These tests do not
+establish fresh live offline or hosted acceptance of this build.
 
-## Report bugs
+Read-only live inspection confirmed compatibility mismatches and forwarding
+contracts. Personal-stash LB+L3 captured 23 items and stopped before submission
+on the existing build. Candidate success and persistence require testing through
+an approved Ladder package. Walking to loot remains unresolved; this release
+does not add an approach step or claim to fix pickup reach.
 
-[Open an issue](https://github.com/Pyre-Flies/D2R-Mods/issues/new) for every bug
-you encounter. Include:
+## Installation and reports
 
-- This plugin version, game/loader version, mod and offline/host/joined role.
-- Controller/device and exact buttons, panels and steps used.
-- Expected result, actual result and whether it repeats or survives a rejoin.
-- Relevant QOL log excerpts and screenshots where useful; omit account/session
-  secrets and private paths. For online issues, include matching plugin versions
-  on both sides.
+Pack-managed Ladder users must wait for the approved launcher/server package.
+This GitHub prerelease alone does not authorize a local override or server use.
+For independently managed installations, close the client, back up the current
+DLL, and extract into the applicable loader root. The DLL is under
+`d2rloader/plugins/`; reference settings are under `defaults/`, preserving live
+configuration. Restore the prior DLL with the client closed to roll back.
 
-See the [single-client acceptance cases](https://github.com/Pyre-Flies/D2R-Mods/blob/beta-controller-qol-2026.10.11.1/plugins/controller-qol/docs/AUDIT-REPAIRS-IN-GAME-TESTS.md)
-and [repair evidence](https://github.com/Pyre-Flies/D2R-Mods/blob/beta-controller-qol-2026.10.11.1/plugins/controller-qol/docs/AUDIT-LIVE-FOLLOWUP-BETA4.md).
+Report game/mod/loader versions, offline versus hosted, controller type, action,
+source/destination tab and relevant QOL log lines. Test single actions before
+batches and check item state after rejoining. Do not include credentials or saves.
 
-## Install and preserve settings
-
-Close D2R/D2RLoader and back up the existing DLL. Extract the ZIP into the
-appropriate loader root: `d2rloader/plugins/Controller QOL Updates.dll` is
-the only installed plugin. Keep existing configs and skill profiles.
-
-The TOMLs under `defaults/` are references; the ZIP contains no live
-`d2rloader/config/` paths and does not overwrite customized settings.
-The loader creates missing main settings from embedded defaults. Review the
-included configuration guide before changing per-mod skill profiles.
-
-The adjacent `SHA256SUMS` verifies the ZIP; its internal manifest verifies
-individual files. Source archives are supplied by GitHub. Other plugins and
-the current stable suite release are unchanged.
+`SHA256SUMS` verifies the ZIP; its internal manifest verifies each packaged file.
+GitHub supplies source archives for the tag. No game binaries, local logs, backups
+or extracted assets are included. See `docs/HOSTED-QOL-2026-10-12.md` for evidence.

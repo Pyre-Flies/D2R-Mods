@@ -23,7 +23,7 @@ inline bool Send(uintptr_t core,const unsigned char* original,size_t size) noexc
         const auto module=GetModuleHandleW(L"d2rl-global-chat.dll");
         const auto chat=reinterpret_cast<uintptr_t>(module);
         using namespace QolCoexistenceProfile;
-        if(!chat || !QolCore::VerifyFileHash(module,ChatHash) ||
+        if(!chat || !(QolCore::VerifyFileHash(module,ChatHash) || QolCore::VerifyFileHash(module,ChatCurrentHash)) ||
             !Match(chat+0x538b0,ChatHook,sizeof(ChatHook)) ||
             !Match(chat+0x53730,ChatDispatch,sizeof(ChatDispatch)) ||
             !Match(chat+0x17cc0,ChatOriginalGetter,sizeof(ChatOriginalGetter)))return false;
@@ -42,10 +42,15 @@ inline bool StatSlot(uintptr_t game,uintptr_t core) noexcept {
         const auto module=GetModuleHandleW(L"d2rl-maps.dll");
         const auto maps=reinterpret_cast<uintptr_t>(module);
         using namespace QolCoexistenceProfile;
-        if(!maps || !QolCore::VerifyFileHash(module,MapsHash) ||
-            !Match(maps+0x106d0,MapsHook,sizeof(MapsHook)))return false;
+        if(!maps)return false;
+        uintptr_t continuation{};
+        if(QolCore::VerifyFileHash(module,MapsHash) && Match(maps+0x106d0,MapsHook,sizeof(MapsHook)))
+            continuation=maps+0xbcd30;
+        else if(QolCore::VerifyFileHash(module,MapsCurrentHash) && Match(maps+0x106d0,MapsCurrentHook,sizeof(MapsCurrentHook)))
+            continuation=maps+0xbdd30;
+        else return false;
         return Executable(actual) && StatRoute(actual,original,maps+0x106d0,
-            *reinterpret_cast<const uintptr_t*>(maps+0xbcd30),true);
+            *reinterpret_cast<const uintptr_t*>(continuation),true);
     } __except(EXCEPTION_EXECUTE_HANDLER) {return false;}
 }
 }

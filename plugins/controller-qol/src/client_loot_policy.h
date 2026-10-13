@@ -35,6 +35,11 @@ inline bool SameItem(const Candidate& a, const Candidate& b) {
     return a.guid && a.guid==b.guid && a.code==b.code && a.quality==b.quality;
 }
 using Slots = std::array<Candidate,7>;
+// A hold owns its original identities, including temporarily hidden labels and
+// removed items. Submission separately revalidates visibility/native identity.
+inline Slots HoldSnapshot(const Slots& original,const Slots& observed,bool firstRefresh) {
+    return firstRefresh?observed:original;
+}
 struct Request { Candidate item{}; uint64_t epoch{}, queuedAt{}; };
 inline bool CurrentRequest(const Request& request,uint64_t epoch,uint64_t now,bool held) {
     return held && request.item.guid && request.epoch==epoch && now>=request.queuedAt && now-request.queuedAt<=500;

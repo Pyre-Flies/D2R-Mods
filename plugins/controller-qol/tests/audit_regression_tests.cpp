@@ -204,7 +204,9 @@ int main() {
     staleRefresh.fn(&context,staleRefresh.user);Check(s_ClientLootRefreshToken==currentRefresh,"old refresh cannot clear new session's queued ownership");
     FlushUi(&context);
     QolClientLoot::Submit(request,10,true);Check(sends==beforeLeave,"old queued callback and same-ID request cannot cross games");
-    QolClientLoot::Track(42,true);QolClientLoot::Refresh(10,true);guard=false;
+    QolClientLoot::Track(42,true);
+    QolClientLoot::Refresh(10,false); // Release the empty hold captured before Track.
+    QolClientLoot::Refresh(10,true);guard=false;
     QolClientLoot::Submit(QolClientLoot::Capture(0),10,true);Check(sends==beforeLeave,"changed native guard cancels request");guard=true;
     Held();Check(GroundLoot::HookPickup(local,42,false,10,false,false),"unavailable loot profile fails open for local native pickup");
     std::array<uint8_t,5> packet{5,1,0,2,0},projected{};

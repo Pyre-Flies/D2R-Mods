@@ -167,7 +167,7 @@ bool Refresh(uint32_t radius,bool held) noexcept {
     const bool session=Session(player);
     if(!held || !session) {if(wasHeld)++epoch;slots={};wasHeld=false;}
     else {
-        if(!wasHeld)slots={};
+        const bool firstRefresh=!wasHeld;
         wasHeld=true;
         std::vector<Candidate> candidates;
         const auto now=GetTickCount64();
@@ -177,7 +177,7 @@ bool Refresh(uint32_t radius,bool held) noexcept {
             if(Read(player,it->first,radius,c))candidates.push_back(c);
             ++it;
         }
-        slots=Assign(slots,std::move(candidates));
+        slots=HoldSnapshot(slots,Assign({},std::move(candidates)),firstRefresh);
     }
     for(unsigned i=0;i<slots.size();++i)
         if(old[i].guid!=slots[i].guid) {
