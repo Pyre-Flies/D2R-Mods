@@ -1,4 +1,4 @@
 interface:
   display_name: "D2R Gameplay Context"
-  short_description: "Vanilla and Reimagined gameplay context"
+  short_description: "Vanilla, Reimagined and other mod-pack gameplay"
   default_prompt: "Use $d2r-gameplay-context to analyze this Diablo II: Resurrected gameplay or mod-design question."

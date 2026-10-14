@@ -28,6 +28,12 @@ Do not collapse these layers into “works.” State skipped layers and why.
 
 Never automate irreversible or high-risk live mutations merely to complete a checklist. Leave clearly scoped user validation instructions when the user must perform the in-game action.
 
+## Plugin coexistence coverage
+
+When changing hooks, patches or shared-state overrides, test supported predecessor admission, unknown-patch refusal, partial setup, later-owner restoration refusal and teardown lifetime as applicable. Exercise combined effects and both relevant load orders when the loader permits them, including session transitions and inactive-feature behavior. Check that predecessors run with preserved ABI state and that actions or rendering are not duplicated.
+
+Static composition tests do not prove live compatibility. Report exact companion versions, load orders and live combinations checked; do not claim arbitrary third-party compatibility from a single successful pair.
+
 ## Completion report
 
 Report:

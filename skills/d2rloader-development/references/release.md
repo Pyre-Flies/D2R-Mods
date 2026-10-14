@@ -2,6 +2,10 @@
 
 Use this reference when the user asks to package or share a D2RLoader plugin.
 
+## D2R-Mods release routing
+
+For this project, resolve the D2R-Mods checkout and read `docs/RELEASING.md` plus the selected plugin's release instructions and current workflows. Those records define suite versus standalone/beta packaging, config preservation, CI and downloaded-asset verification. Use the user-authorized release scope. This reference is the maintained skill entry for packaging/release work formerly referred to as `d2r-mods-runtime-release`; do not require a separate skill with that name.
+
 ## Release contents
 
 Unless the project already defines a different convention, prepare:

@@ -29,6 +29,16 @@ One level does not imply the next. Function boundaries, calling conventions, unw
 - Copy transient message/payload data only after proving size and lifetime; validate pointers and ranges before dereferencing.
 - Perform UI-affecting inspection or mutation on the required game/UI thread.
 
+## Shared hooks and mutable state
+
+- Inventory overlapping entry points, call sites, byte ranges, vtable/provider slots and state writes across our plugins and relevant companions before choosing a patch. Prefer supported listeners or a proven non-overlapping caller; moving a hook still requires evidence for equivalent semantics.
+- Separate immutable artifact/code witnesses from legitimately mutable runtime values. Validate mutable state by its established type, bounds, identity and lifecycle; do not demand a historical value another plugin may validly change. For temporary overrides, use the proven ownership protocol and restore only while the value remains ours.
+- An already-modified entry is a compatibility investigation, not automatic permission to overwrite it. Recognize predecessor patches only through bounded contracts: admitted artifact/code shape, executable destination ownership, established ABI, relocated instruction behavior and callable lifetime. An executable address alone is insufficient.
+- Where composition is proven, preserve arguments, return value, required registers/flags/SIMD and stack state; call the appropriate predecessor once unless a deliberately scoped consumed action requires otherwise. Prevent recursion and duplicate effects. Do not bypass another plugin by jumping to a remembered pristine entry.
+- Publish against the expected current bytes or slot and verify ownership before restoration, using an atomic exchange where the proven protocol requires it. Avoid overwriting intervening changes. Partial setup rolls back only owned changes.
+- A later hook may retain our adapter or trampoline. Do not free callable storage or unload its code without a proven detach/lifetime contract; use the supported ownership mechanism or remain safely inert when required.
+- Without a valid chaining contract, prefer a different proven integration point, a narrowly documented known companion contract, or feature-local refusal. Log the conflict clearly and preserve the game and other plugin behavior.
+
 ## Design the proof
 
 Choose one discriminating outcome and log enough context to explain both success and refusal. A useful probe should:

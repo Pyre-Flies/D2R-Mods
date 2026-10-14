@@ -39,6 +39,8 @@ Choose a test that a player can understand and reverse:
 - compare authoritative state with visible UI state;
 - check persistence after save/reload when the feature changes lasting state;
 - verify unrelated native actions still work;
+- cover standalone vanilla and Reimagined for shared features, plus another relevant pack when available; record untested variants and modes explicitly;
+- check that absent mod-added pages, tables, or UI controls leave the shared feature functional;
 - record mod-specific exceptions separately from vanilla behavior.
 
 If implementation reaches native code, providers, transactions, DLL deployment, or build-specific layouts, switch to `$d2rloader-development` for those portions of the task.

@@ -20,6 +20,8 @@ Capture the fields that apply:
 - discovery source and supporting artifact paths;
 - confidence/evidence level;
 - live and automated validation status;
+- hook/patch range and ownership, recognized predecessor contracts, publication/restoration protocol, callback lifetime and known overlap with companion plugins;
+- companion versions/artifacts, tested load orders and combined behavior, plus unresolved composition limits;
 - known limits, rejected interpretations, and follow-up questions;
 - first/last verified date when useful.
 

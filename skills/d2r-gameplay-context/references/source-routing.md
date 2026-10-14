@@ -39,11 +39,15 @@ When a local checkout is available, search it directly before downloading anothe
 
 For stable narrative and conceptual background, use the baseline reference in this Skill. For current patch balance, ladder rules, platform behavior, or exact numeric mechanics, verify against current Blizzard patch notes or another authoritative primary source. Distinguish original Diablo II, Lord of Destruction, and Resurrected when their behavior differs.
 
+## Other mod packs and standalone plugins
+
+For another pack, identify its name and installed version, then use its matching source tables, layouts, documentation and release notes. Reimagined catalogs describe Reimagined; they are not a fallback database for an unknown pack. For standalone plugins on vanilla, use vanilla mechanics and the active loader/plugin capabilities. Distinguish plugin-provided behavior from changes supplied by a pack.
+
 ## Conflict resolution
 
 1. Establish the user's variant and version.
 2. Prefer the installed files for local observed behavior.
 3. Prefer the matching repository revision for implementation details.
-4. Prefer the live game-data site for current player-facing catalogs.
-5. Use the wiki for explanations and patch context.
+4. Prefer the selected variant's current game-data site, where available, for player-facing catalogs.
+5. Use the selected variant's documentation or wiki for explanations and patch context.
 6. Report unresolved conflicts instead of combining incompatible values.

@@ -1,22 +1,29 @@
 # Reusable D2R skills
 
-These are the versioned source copies of the personal Codex skills used while
-working on this repository. Each `SKILL.md` describes when to apply the skill;
-its `references/` files contain the procedure and source-routing detail. The
-`agents/openai.yaml` files provide optional Codex display metadata.
+These are versioned sources for the Codex skills used on this project. The public
+checkout carries the three shared skills below. The specialist skills listed below are maintained in a separate private research
+checkout, which is required for their linked evidence.
 
-| Skill | Use |
-|---|---|
-| [d2rloader-development](d2rloader-development/SKILL.md) | Native plugin investigation, build guards, ABI checks, validation, deployment and packaging |
-| [d2r-gameplay-context](d2r-gameplay-context/SKILL.md) | Gameplay and player-facing feature reasoning across vanilla D2R and Reimagined |
-| [d2r-native-widget-buttons](d2r-native-widget-buttons/SKILL.md) | DLL-embedded native panel buttons, sibling-relative placement, input and visual states, and callback lifecycle |
+| Skill | Purpose | Source checkout |
+| --- | --- | --- |
+| [D2RLoader development](d2rloader-development/SKILL.md) | Native investigation, build admission, plugin coexistence, validation, deployment and release | D2R-Mods |
+| [Gameplay context](d2r-gameplay-context/SKILL.md) | Vanilla, Reimagined and other packs; standalone and universal QOL design | D2R-Mods |
+| [Native widget buttons](d2r-native-widget-buttons/SKILL.md) | Embedded artwork, sibling alignment, input/visual states and callback lifetime | D2R-Mods; research mirror |
+| Controller softmod panels | JSON controller focus, scrolling, Back and layout-only delivery | Private research checkout |
+| Native observation overlays | Owned native observations, combat correlation and overlay lifetime | Private research checkout |
+| Softmod test fixtures | Temporary definitions, byte-preserving installation and safe retirement | Private research checkout |
 
-An AI system without Codex skill support can read the Markdown directly. These
-files give process and source priorities; the current native contracts and
-validation results live in [the research handoff](../docs/AI-HANDOFF.md) and its
-linked feature records. Verify volatile game and mod facts against the target
-version before using them.
+Runtime release work uses [the development skill's release reference](d2rloader-development/references/release.md)
+and [the project release procedure](../docs/RELEASING.md). Older notes naming
+`d2r-mods-runtime-release` refer to this workflow; no separate installed skill is required.
 
-To install a skill locally in Codex, copy its directory to the local Codex
-skills directory. The repository copy does not auto-install or change an
-existing personal skill.
+An AI without Codex skill support can read these Markdown files directly. Exact
+native contracts and validation results remain in [the research handoff](../docs/AI-HANDOFF.md)
+and linked feature records, rather than becoming timeless skill constants.
+
+To install, copy the complete source skill folder into the machine's Codex skills
+directory. Repository edits do not auto-install. After an update, synchronize the
+installed folder and any maintained research mirror, including references and UI
+metadata, and compare file inventories and hashes. Resolve divergent edits before
+copying. The research checkout's public submodule remains pinned; update it through its normal
+submodule workflow rather than editing its nested skill copies independently.

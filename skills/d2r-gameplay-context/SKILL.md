@@ -1,6 +1,6 @@
 ---
 name: d2r-gameplay-context
-description: Analyze Diablo II: Resurrected gameplay, classes, skills, items, quests, act and difficulty progression, player interaction semantics, and mod-design implications across vanilla D2R and D2R Reimagined. Use when gameplay knowledge affects advice, testing, UI behavior, or feature design; do not use for native hooks, RVAs, ABI reconstruction, or ordinary installation troubleshooting.
+description: "Analyze Diablo II: Resurrected gameplay, classes, skills, items, quests, act and difficulty progression, player interaction semantics, and mod-design implications across vanilla D2R, D2R Reimagined, and other mod packs, including standalone quality-of-life plugins. Use when gameplay knowledge affects advice, testing, UI behavior, or feature design; do not use for native hooks, RVAs, ABI reconstruction, or ordinary installation troubleshooting."
 ---
 
 # D2R Gameplay Context
@@ -9,8 +9,9 @@ Use gameplay context to explain D2R clearly and to judge whether a mod or plugin
 
 ## Keep variants separate
 
-- Never silently apply vanilla class, skill, item, recipe, drop, difficulty, or progression assumptions to Reimagined.
-- Label claims as **vanilla D2R**, **D2R Reimagined**, or **shared behavior** when the distinction matters.
+- Never silently apply vanilla mechanics to Reimagined or another mod pack, or mod-specific mechanics to vanilla.
+- Treat standalone vanilla quality-of-life use and mod-pack use as equal design targets when the plugin is intended to be universal. Reimagined is a supported variant, not an implicit prerequisite.
+- Label claims as **vanilla D2R**, **D2R Reimagined**, or **another named mod pack**, or **shared behavior** when the distinction matters.
 - Treat balance values, skill formulas, item properties, recipes, drop locations, patch behavior, and online/ladder rules as version-sensitive. Verify current data rather than relying on memory.
 - If the user's installed files or named version differ from current public documentation, identify the mismatch and answer for the requested version when evidence permits.
 
@@ -29,6 +30,14 @@ Read [references/vanilla-context.md](references/vanilla-context.md) for the stab
 Translate gameplay into observable player behavior. Consider which surface is active, what the native action normally does, what state is authoritative, and what the player sees. Preserve native semantics unless the requested mod intentionally changes them.
 
 Read [references/player-surfaces.md](references/player-surfaces.md) for inventory, controller, UI, and progression-aware testing. Use `$d2rloader-development` separately when implementation requires native hooks, RVAs, provider ABIs, byte guards, deployment, or release engineering.
+
+## Design for universal plugins
+
+For plugins intended to work across variants, separate shared native interaction from mod-specific data and optional extensions. Do not require Reimagined-only tables, recipes, skill meanings, storage pages, or UI elements for the shared feature. Resolve variant-dependent facts from the active data rather than assuming a vanilla or Reimagined numeric ID has identical meaning in every pack.
+
+Use capability checks for optional mod features and preserve the core vanilla path when those features are absent. Scope unsupported cases to the affected capability rather than disabling an otherwise supported plugin. Native build admission remains a separate requirement.
+
+Choose validation coverage for the affected behavior: standalone vanilla, Reimagined, and another relevant pack when available; include mouse/controller and offline/hosted modes where supported. Report results per variant and mode. A pass in one pack does not prove universal compatibility, and unavailable coverage should remain explicitly unverified.
 
 ## Verify through the right source
 

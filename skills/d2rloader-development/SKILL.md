@@ -29,6 +29,12 @@ Develop against the installed D2R and D2RLoader build with evidence-led, fail-op
 
 For native investigation, read [references/reverse-engineering.md](references/reverse-engineering.md). For recording build-specific facts, read [references/compatibility-ledger.md](references/compatibility-ledger.md).
 
+## Coexist with other plugins
+
+Treat shared functions, call sites, provider slots and mutable game state as potentially used by other plugins. During hook work, read the coexistence guidance in [references/reverse-engineering.md](references/reverse-engineering.md) and record ownership and tested combinations. Prefer SDK listeners or non-overlapping integration points. The current project cannot rely on a general D2RLoader hook-chain contract; recheck the target SDK before assuming one.
+
+Accommodate proven predecessor detours and legitimate shared-state changes where the exact ABI, ownership and lifetime are established. Do not equate every changed byte or value with corruption, but do not admit arbitrary executable jumps or weaken build guards to simulate compatibility. Preserve predecessor behavior and refuse only the affected extension when composition is unproven. Publish and restore patches conditionally while still owned; never overwrite a later plugin's replacement during teardown.
+
 ## Validate claims proportionally
 
 - Separate static evidence, unit/simulated tests, artifact checks, loader admission, authoritative game state, visible UI behavior, persistence, and user-confirmed live results.
