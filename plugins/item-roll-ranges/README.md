@@ -1,6 +1,6 @@
 # Item Roll Ranges
 
-Version 1.3.1+rev.34, PyreFly. Separate client plugin for the installed D2RLoader.
+Experimental 1.3.1+rev.40, PyreFly. Separate client plugin for the installed D2RLoader.
 
 Light-blue `[P] [Name] [Tn]` / `[S] [Name] [Tn]` labels identify verified rolled
 magic/rare/crafted affix contributions, including fixed-value affixes. Repeated
@@ -26,6 +26,21 @@ prefix; no bounds are invented. If prefixes exceed the buffer capacity, the
 whole original property block is retained. Ranges reflect current definitions.
 
 ## Status
+
+Revision35 adds optional always-show mode in `item-roll-ranges.toml`:
+
+```toml
+[display]
+always_show_ranges = true
+```
+
+Restart after editing. Default false keeps native Ctrl/controller holds.
+Enabled mode uses guarded tooltip-only native query results, retaining physical
+input and ordinary actions. It also removes the uniquely matched localized
+range hint when the optional footer handoff is admitted. Unknown/conflicting
+sites retain hold mode or the native footer. Eight plugin suites and eleven
+packaging checks pass; loaded guards match, but restart validation is pending.
+See [the contract and limitations](docs/ALWAYS-SHOW-REV35.md).
 
 Revision34 fixes socket capacity's placement using the actual localized header
 line rather than the start of the whole tooltip. The intended weapon order is
@@ -302,3 +317,13 @@ Revision27 supersedes the unshipped revision26 IAS prototype with shared
 socket/corruption attribution. Seven suites pass; Stone Fang and preserved
 Cruel corruption rendering and Ctrl release are user-confirmed. Enchantments
 are deferred while Reimagined restructures them. Revision27 is not published.
+
+### Session chat toggle
+
+`/AlwaysShowRolls` toggles always-show for this session. Optional arguments are
+`on`, `off`, `toggle` and `status`. The native registration name is lowercase
+`alwaysshowrolls`; use `/alwaysshowrolls` if your parser requires lowercase.
+Restart restores `display.always_show_ranges` from the TOML. Status feedback
+is written to the loader console. Other chat commands retain their own handlers;
+this plugin does not intercept chat input or replace duplicate command names.
+Native commands reserve their names until process exit, so restart to reload.

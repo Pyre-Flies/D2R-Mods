@@ -4,6 +4,14 @@
 void check(bool value) { if (!value) { std::fputs("Policy failure\n", stderr); std::exit(1); } }
 int main() {
     using namespace RollRanges;
+    for(unsigned flags=0;flags<8;++flags){
+        const bool caller=(flags&1)!=0,allowed=(flags&2)!=0,enabled=(flags&4)!=0;
+        check(AlwaysKeyboard(0x12340005,caller,allowed,enabled)==(flags==7?0x12340007:0x12340005));
+        check(AlwaysController(0x10000000,caller,allowed,enabled,true,3,0x800)==(flags==7?0x10000001:0x10000000));
+    }
+    check(AlwaysController(0,true,true,true,false,0,0x800)==0);
+    check(AlwaysController(0,true,true,true,true,8,0x800)==0);
+    check(AlwaysController(0,true,true,true,true,0,0x200)==0);
     for (unsigned mask=0; mask<16; ++mask) {
         Panels p{(mask&1)!=0,(mask&2)!=0,(mask&4)!=0,(mask&8)!=0};
         check(Allowed(true,p)==(mask!=0)); check(!Allowed(false,p));

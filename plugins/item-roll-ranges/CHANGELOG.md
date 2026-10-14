@@ -1,7 +1,17 @@
-# Changelog
+# Item Roll Ranges changelog
 
-All notable changes to Item Roll Ranges are recorded here. Versions before the
-GitHub migration are reconstructed from release and validation records.
+## 1.3.1+rev.40
+
+- Add optional always-show ranges, disabled by default in embedded and reference
+  config. `/AlwaysShowRolls` toggles for the session; on/off/status supported.
+- Preserve native Ctrl/controller hold behavior, fixed Base headers and Max
+  Sockets placement. Hide only the range hint while always-show is active.
+- Require the qualified property formatter target and entry bytes; refuse unknown
+  predecessors. Reuse completed actual text after post-render merge failure.
+- Fix plain Sash hold-mode keyboard local width to match native byte reads.
+- Eight suites pass. User confirmed always-show, chat toggles and the final plain
+  Sash repair; runtime registration and dispatch logs show no IRR backend errors.
+  Arbitrary formatter composition and exhaustive platform coverage are excluded.
 
 ## [1.3.1+rev.34] - 2026-10-12
 
@@ -110,7 +120,7 @@ GitHub migration are reconstructed from release and validation records.
   custom low-quality bases. Normal and superior behavior stays intact:
   durability-only superior armor varies; generated ED uses a fixed max+1 base.
 - Read-only inventory controls confirm normal121, crude87 and durability-only
-  superior118 with active Serpentskin bounds111â€“126. Regression tests cover
+  superior118 with active Serpentskin bounds111–126. Regression tests cover
   these shapes, refusals and fixed modifier formatting; all seven suites pass.
   Visual confirmation for revision29 remains pending; no release is published.
 - Extend the same quality check to weapon Base headers. Live Long Sword
@@ -131,7 +141,7 @@ GitHub migration are reconstructed from release and validation records.
   owners, native header colors, ethereal generation, excluding socket-only ED,
   guard mismatch, bad parent/state and cyclic insertion refusal. Live read-only
   capture confirms the failure mechanism and values; the user confirms
-  Defense246 with Base127â€“127 and the preserved Life/socket breakdown.
+  Defense246 with Base127–127 and the preserved Life/socket breakdown.
 
 ## [1.3.1+rev.27] - 2026-10-12 (local candidate)
 

@@ -211,6 +211,7 @@ before installing or replacing the DLL.
 """.encode("utf-8")
     ranges_files = {
         "d2rloader/plugins/Item Roll Ranges.dll": require_file(args.ranges_dll),
+        "defaults/item-roll-ranges.toml": require_file(ranges / "item-roll-ranges.toml"),
         "README.md": require_file(ranges / "docs" / "DISTRIBUTION-README.md"),
         "CHANGELOG.md": require_file(ranges / "CHANGELOG.md"),
         "COMPATIBILITY.txt": ranges_compatibility,

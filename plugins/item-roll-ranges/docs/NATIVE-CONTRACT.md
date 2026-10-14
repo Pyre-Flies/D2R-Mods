@@ -1,3 +1,22 @@
+## Rev.37 property formatter contract
+
+Core slot 0x704490 must target game+0x2DC4B0, with entry bytes
+48 89 5C 24 20 55 56 57 41 54 41 55 41 56 41 57.
+Evidence: reverse-engineering/property-entry-live.txt, first eight instructions.
+Existing exact Core fingerprint and caller/layout witnesses remain required.
+Unknown targets and entry detours refuse admission before publication.
+This bounded entry guard does not prove every downstream instruction unchanged.
+
+Only the qualified native formatter is supported. Clone rendering calls it
+once for actual source text (independent count/output, no range definitions)
+and once for clone ranges (original definitions/count). No-clone rendering
+calls it once. Arbitrary companion ABI, ownership, lifetime and repeat-call
+safety are not established and are not admitted. Post-render merge failure
+reuses completed actual text and the last completed return value, rather than
+executing an extra formatting pass. Target/changed-entry refusal and existing
+one-/two-pass argument/count checks pass in all eight suites. Rev.37 live
+admission remains pending until restart.
+
 Current follow-up: [0.4.3 Enhanced Damage and no-clone uniques](FOLLOWUP-0.4.3.md).
 
 See [0.4.2 source audit](SOURCE-AUDIT-0.4.2.md) for source-label additions, current limitations and new layout witnesses.

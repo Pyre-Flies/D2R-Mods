@@ -1,6 +1,6 @@
 # Item Roll Ranges
 
-**By PyreFly · Version 1.3.1+rev.34**
+**By PyreFly · Version 1.3.1+rev.40**
 
 Show item roll ranges beside actual values in light blue:
 `[+80 - +120] +118 Defense`.
@@ -81,3 +81,20 @@ relaunch. Core's native range behavior remains. `SHA256SUMS` records runtime
 archive contents; the source archive is supplied separately.
 
 Unique source labels use `[U]` in revision25. Set modifier ranges remain native; the plugin does not currently add set source labels.
+
+## Optional always-show ranges
+
+The default is `display.always_show_ranges = false`: hold Ctrl or RT/R2
+(or the Controller QOL override) to view ranges. Set this option to true in
+`d2rloader/config/item-roll-ranges.toml` and restart to enable at startup.
+`defaults/item-roll-ranges.toml` is a reference; existing settings are preserved.
+In game, `/AlwaysShowRolls` toggles for the current session. Arguments `on`,
+`off` and `status` are supported. Use lowercase `/alwaysshowrolls` if needed.
+Feedback is written to the loader console. Restart restores the saved setting.
+The range hint is hidden while always-show is active; normal input stays native.
+
+Rev.40 fixes the plain Sash fixed Base header with always-show off and Ctrl held.
+Eight suites pass; user checks confirm the session toggle and fixed Sash repair.
+Unknown property formatter replacements/entry detours refuse admission rather
+than attempting undocumented composition. Broader localization/controller and
+arbitrary-plugin combinations have not been exhaustively validated.

@@ -15,9 +15,46 @@ void TestSpecial();
 void TestUniqueRange();
 void TestHeaderDelegation();
 void TestCalculatedHeaders();
+void TestAlwaysAdapters();
 
 }
 namespace {
+unsigned modifierCalls{},buttonCalls{},widgetCalls{};
+void* observedDevice{};unsigned observedUser{},observedMask{};
+std::uint64_t __fastcall FakeAlwaysModifiers(){++modifierCalls;return 0x12340005;}
+std::uint64_t __fastcall FakeAlwaysButtons(void* device,unsigned user,unsigned mask){
+    ++buttonCalls;observedDevice=device;observedUser=user;observedMask=mask;return 0xfedcba9876543210ull;
+}
+std::uint64_t __fastcall FakeAlwaysWidget(const char* text,void* position,void* layout,const char* footer){
+    ++widgetCalls;check(std::strcmp(text,"actual tooltip")==0 && position==reinterpret_cast<void*>(2) &&
+        layout==reinterpret_cast<void*>(3) && std::strcmp(footer,"native footer")==0);return 0x87654321;
+}
+void TestAlwaysAdapters(){
+    active.store(false);alwaysReady.store(true);
+    originalModifiers=FakeAlwaysModifiers;originalButtons=FakeAlwaysButtons;originalWidget=FakeAlwaysWidget;
+    modifierReturn=buttonReturn=widgetReturn=0;
+    check(AlwaysModifierAdapter()==0x12340005 && modifierCalls==1);
+    check(AlwaysButtonAdapter(reinterpret_cast<void*>(1),3,0x800)==0xfedcba9876543210ull);
+    check(buttonCalls==1 && observedDevice==reinterpret_cast<void*>(1) && observedUser==3 && observedMask==0x800);
+    check(AlwaysWidgetAdapter("actual tooltip",reinterpret_cast<void*>(2),reinterpret_cast<void*>(3),"native footer")==0x87654321 && widgetCalls==1);
+    void* keys=reinterpret_cast<void*>(&AlwaysModifierAdapter);
+    void* buttons=reinterpret_cast<void*>(&FakeKey); // Later owner must survive.
+    void* widget=reinterpret_cast<void*>(&AlwaysWidgetAdapter);
+    modifierSlot=&keys;buttonSlot=&buttons;widgetSlot=&widget;
+    RestoreAlways();check(!alwaysReady.load());
+    check(keys==reinterpret_cast<void*>(&FakeAlwaysModifiers) && buttons==reinterpret_cast<void*>(&FakeKey));
+    check(widget==reinterpret_cast<void*>(&FakeAlwaysWidget));
+    modifierSlot=buttonSlot=widgetSlot=nullptr;
+    // A short string ending at a readable page boundary must not require a
+    // whole 16KiB contiguous region; a missing terminator must refuse safely.
+    SYSTEM_INFO info{};GetSystemInfo(&info);const auto page=static_cast<std::size_t>(info.dwPageSize);
+    auto* memory=static_cast<char*>(VirtualAlloc(nullptr,page*2,MEM_COMMIT|MEM_RESERVE,PAGE_READWRITE));check(memory!=nullptr);
+    DWORD old{};check(VirtualProtect(memory+page,page,PAGE_NOACCESS,&old)!=FALSE);
+    std::memcpy(memory+page-6,"hello",6);
+    check(CopyNativeString(memory+page-6,16384)==std::optional<std::string>{"hello"});
+    memory[page-1]='x';check(!CopyNativeString(memory+page-6,16384));
+    check(!CopyNativeString(nullptr,16384));VirtualFree(memory,0,MEM_RELEASE);
+}
 std::string publishedHeader;
 void* __fastcall RecordHeader(NativeText* receiver,const char* data,std::size_t size) {
     publishedHeader.assign(data,size);return receiver;
@@ -68,6 +105,36 @@ void TestTooltipVisibilitySnapshots() {
 }
 }
 int main() {
+    active.store(true);alwaysReady.store(true);alwaysEnabled.store(false);
+    check(ApplyRollCommand("") && alwaysEnabled.load());
+    check(ApplyRollCommand("off") && !alwaysEnabled.load());
+    check(ApplyRollCommand("status") && !alwaysEnabled.load());
+    check(!ApplyRollCommand("invalid") && !alwaysEnabled.load());
+    alwaysReady.store(false);check(!ApplyRollCommand("on"));active.store(false);
+    {
+        std::vector<unsigned char> game(0x2dc4c0);
+        const unsigned char entry[]={0x48,0x89,0x5c,0x24,0x20,0x55,0x56,0x57,0x41,0x54,0x41,0x55,0x41,0x56,0x41,0x57};
+        std::memcpy(game.data()+0x2dc4b0,entry,sizeof(entry));
+        check(AdmitPropertyFormatter(game.data(),game.data()+0x2dc4b0));
+        check(!AdmitPropertyFormatter(game.data(),reinterpret_cast<void*>(&AdmitPropertyFormatter)));
+        game[0x2dc4b0]=0xe9;
+        check(!AdmitPropertyFormatter(game.data(),game.data()+0x2dc4b0));
+    }
+    {
+        unsigned char nativeFrame[0x18f0]{};
+        const unsigned contaminatedKeyboard=0xa1b2c301;
+        std::memcpy(nativeFrame+0x18ec,&contaminatedKeyboard,4);
+        const auto keyboard=Affixes::Read<unsigned char>(nativeFrame,0x18ec);
+        check(keyboard==1 && FixedHeaderRequest(keyboard!=0,2,0));
+        check(!FixedHeaderRequest(keyboard!=0,0,0));
+    }
+    tooltipModifiers=2;
+    const auto heldKeys=std::exchange(tooltipModifiers,std::nullopt);
+    check(heldKeys && FixedHeaderRequest(true,*heldKeys,0) && !tooltipModifiers);
+    tooltipModifiers=0;
+    const auto releasedKeys=std::exchange(tooltipModifiers,std::nullopt);
+    check(releasedKeys && !FixedHeaderRequest(true,*releasedKeys,0) && !tooltipModifiers);
+    TestAlwaysAdapters();
     TestTooltipVisibilitySnapshots();
     check(FixedHeaderRequest(true,2,0));check(!FixedHeaderRequest(true,0,1));
     check(FixedHeaderRequest(false,0,1));check(!FixedHeaderRequest(false,2,0));
@@ -180,7 +247,7 @@ int main() {
     check(!D2RLoaderLoadPlugin(nullptr));
     auto info=D2RLoaderGetPluginInfo();
     check(std::strcmp(info->id,"item-roll-ranges")==0);
-    check(std::strcmp(info->version,"1.3.1+rev.34")==0);
+    check(std::strcmp(info->version,"1.3.1+rev.40")==0);
     std::puts("Passed real adapter passthrough/ABI, inactive late calls, atomic slot conflict/restore, exported identity.");
 }
 

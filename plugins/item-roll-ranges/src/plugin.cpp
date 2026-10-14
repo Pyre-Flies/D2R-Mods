@@ -2,12 +2,17 @@
 #include <intrin.h>
 #include <bcrypt.h>
 #include <D2RLPlugin/context.h>
+#include <D2RLPlugin/api.h>
+#include <D2RLChat/native_commands.h>
 #include <D2RLPlugin/data_tables.h>
 #include <algorithm>
 #include <atomic>
 #include <cstdint>
 #include <cstring>
 #include "policy.h"
+#include "display_config.h"
+#include "always_profile.h"
+#include "hint_text.h"
 #include "provider_profile.h"
 #include "range_text.h"
 #include "affixes.h"
@@ -28,6 +33,7 @@
 #include "scaling_profile.h"
 #include <deque>
 #include <vector>
+#include <utility>
 
 extern "C" void HeaderBuilderEntry();
 
@@ -38,6 +44,19 @@ std::atomic<bool> active{false};
 std::atomic<bool> loaded{false};
 std::atomic<bool> contributionsReady{false};
 std::atomic<bool> scalingReady{false};
+std::atomic<bool> alwaysReady{false};
+bool alwaysConfigured{};
+std::atomic<bool> alwaysEnabled{false};
+D2RLChat::NativeCommands rollCommands;
+thread_local std::optional<std::uint64_t> tooltipModifiers;
+using ModifierQueryFn=std::uint64_t(__fastcall*)();
+using ButtonQueryFn=std::uint64_t(__fastcall*)(void*,unsigned,unsigned);
+using WidgetTooltipFn=std::uint64_t(__fastcall*)(const char*,void*,void*,const char*);
+ModifierQueryFn originalModifiers{};
+ButtonQueryFn originalButtons{};
+WidgetTooltipFn originalWidget{};
+void** modifierSlot{};void** buttonSlot{};void** widgetSlot{};
+std::uintptr_t modifierReturn{},buttonReturn{},widgetReturn{};
 const D2RL::PluginContext* contributionContext{};
 const D2RL::DataTableService* contributionTables{};
 using PropertiesFn=std::uint64_t(__fastcall*)(void*,char*,int,int,int,int,int,int,const void*,void*);
@@ -72,6 +91,19 @@ UniqueRowFn originalUniqueRow{};
 void** uniqueRowSlot{};
 void** visibilityTablesSlot{};
 bool Allowed() noexcept;
+bool AlwaysRequested() noexcept {return alwaysReady.load(std::memory_order_acquire) && alwaysEnabled.load() && Allowed();}
+__declspec(noinline) std::uint64_t __fastcall AlwaysModifierAdapter() noexcept {
+    const auto value=originalModifiers();
+    const bool tooltipCaller=reinterpret_cast<std::uintptr_t>(_ReturnAddress())==modifierReturn;
+    if(tooltipCaller)tooltipModifiers=value;
+    return RollRanges::AlwaysKeyboard(value,tooltipCaller,
+        Allowed(),alwaysReady.load(std::memory_order_acquire) && alwaysEnabled.load());
+}
+__declspec(noinline) std::uint64_t __fastcall AlwaysButtonAdapter(void* device,unsigned user,unsigned mask) noexcept {
+    const auto value=originalButtons(device,user,mask);
+    return RollRanges::AlwaysController(value,reinterpret_cast<std::uintptr_t>(_ReturnAddress())==buttonReturn,
+        Allowed(),alwaysReady.load(std::memory_order_acquire) && alwaysEnabled.load(),device!=nullptr,user,mask);
+}
 bool TooltipSelectorScope(const void* stack,std::uintptr_t caller,bool unique) noexcept {
     if (!coreBase || !Readable(stack,0x138)) return false;
     const auto* bytes=static_cast<const unsigned char*>(stack);
@@ -822,11 +854,14 @@ std::string AnnotateSocketHeader(void* source,std::string_view text) {
 }
 extern "C" void ObserveHeaderRequest(std::uint64_t buttons,std::uintptr_t caller,const unsigned char* frame) noexcept {
     fixedHeaderRequested=false;
+    const auto observedKeys=std::exchange(tooltipModifiers,std::nullopt);
     if (caller!=builderReturn || !Allowed() || RangeFromOverlay(NativeOverlay()) || !Readable(frame,0x18f0)) return;
-    const auto keyboard=Affixes::Read<unsigned>(frame,0x18ec);
+    // Core consumes this as a byte: mov cl,1 leaves upper ECX unspecified.
+    const auto keyboard=Affixes::Read<unsigned char>(frame,0x18ec);
     if (keyboard>1) return;
     std::uint64_t keys{};
-    if (keyboard) {
+    if (keyboard && observedKeys)keys=*observedKeys;
+    else if (keyboard) {
         using KeyQuery=std::uint64_t(__fastcall*)();
         if (!coreBase || !Readable(coreBase+0x6fe3b0,8)) return;
         const auto query=Affixes::Read<KeyQuery>(coreBase,0x6fe3b0);
@@ -834,10 +869,11 @@ extern "C" void ObserveHeaderRequest(std::uint64_t buttons,std::uintptr_t caller
         keys=query(); // Native modifier query, read only; no physical polling.
     }
     fixedHeaderRequested=FixedHeaderRequest(keyboard!=0,keys,buttons);
+
 }
 extern "C" __declspec(noinline) NativeText* __fastcall HeaderBuilderAdapter(void* a,void* b,void* c,void* item,
     int flags,unsigned char d,unsigned char e,void* f,void* g) noexcept {
-    const bool scoped=reinterpret_cast<std::uintptr_t>(_ReturnAddress())==builderReturn && (Held() || fixedHeaderRequested);
+    const bool scoped=reinterpret_cast<std::uintptr_t>(_ReturnAddress())==builderReturn && (Held() || fixedHeaderRequested || AlwaysRequested());
     fixedHeaderRequested=false;
     // Properties are built later in this same qualified Core tooltip operation.
     // Keep only request/source identity, and consume it at that caller once.
@@ -896,7 +932,7 @@ void* PublishHeader(bool permitted,NativeText* text,const char* data,std::size_t
             auto proof=std::move(pendingHeader); pendingHeader={};
             if (proof.receiver==text && proof.actual==std::string_view(text->data,text->size))
                 return originalAssign(text,proof.annotated.data(),proof.annotated.size());
-            if (!Held()) return originalAssign(text,data,size);
+            if (!Held() && !AlwaysRequested()) return originalAssign(text,data,size);
             const auto changed=HeaderText::Merge({text->data,text->size},{data,size});
             if (changed.size()<=65536) return originalAssign(text,changed.data(),changed.size());
         } catch (...) { }
@@ -960,7 +996,7 @@ void TraceProperties(unsigned annotated,unsigned unmatched,const char* actual,co
     try { seen.emplace_back(actual); } catch (...) { return; }
     char message[14000]{};
     const int n=std::snprintf(message,sizeof(message),
-        "v1.3.1+rev.34 properties annotated=%u unmatched=%u labeled=%u captured=%u\r\nACTUAL: %.4095s\r\nRANGED: %.4095s\r\nRESULT: %.4095s\r\n",annotated,unmatched,labeled,captured,actual,ranged,result);
+        "v1.3.1+rev.40 properties annotated=%u unmatched=%u labeled=%u captured=%u\r\nACTUAL: %.4095s\r\nRANGED: %.4095s\r\nRESULT: %.4095s\r\n",annotated,unmatched,labeled,captured,actual,ranged,result);
     if (n<=0 || n>=static_cast<int>(sizeof(message))) return;
     HANDLE file=CreateFileW(diagnosticPath,FILE_APPEND_DATA,FILE_SHARE_READ|FILE_SHARE_WRITE,nullptr,OPEN_ALWAYS,FILE_ATTRIBUTE_NORMAL,nullptr);
     if (file==INVALID_HANDLE_VALUE) return;
@@ -1005,16 +1041,55 @@ bool Held() noexcept {
     // Leave Ctrl/RT queries untouched so Controller QOL can remap them normally.
     return Allowed() && RangeFromOverlay(NativeOverlay());
 }
+std::optional<std::string> CopyNativeString(const char* text,std::size_t limit) {
+    if(!text)return {};
+    std::string copy;
+    while(copy.size()<limit){
+        const auto* next=text+copy.size();MEMORY_BASIC_INFORMATION memory{};
+        if(!Readable(next,1) || !VirtualQuery(next,&memory,sizeof(memory)))return {};
+        const auto end=reinterpret_cast<std::uintptr_t>(memory.BaseAddress)+memory.RegionSize;
+        const auto available=std::min(limit-copy.size(),end-reinterpret_cast<std::uintptr_t>(next));
+        if(!available)return {};
+        const auto length=strnlen(next,available);copy.append(next,length);
+        if(length<available)return copy;
+    }
+    return {};
+}
+__declspec(noinline) std::uint64_t __fastcall AlwaysWidgetAdapter(const char* text,void* position,void* layout,const char* footer) noexcept {
+    if(reinterpret_cast<std::uintptr_t>(_ReturnAddress())==widgetReturn && AlwaysRequested() &&
+       lookupHeader){
+        try {
+            const auto actual=CopyNativeString(footer,16384);
+            NativeText group{reinterpret_cast<const char*>(HeaderProfile::ResourceGroup),3},
+                key{AlwaysProfile::HintKey,sizeof(AlwaysProfile::HintKey)-1};
+            const auto hint=CopyNativeString(lookupHeader(&group,&key,true),1024);
+            if(actual && hint){
+                const auto changed=RollRanges::RemoveRangeHint(*actual,*hint);
+                if(changed!=*actual)return originalWidget(text,position,layout,changed.c_str());
+            }
+        }catch(...){ /* Preserve the complete native footer on any refusal. */ }
+    }
+    return originalWidget(text,position,layout,footer);
+}
+bool AdmitPropertyFormatter(const unsigned char* game,const void* target) noexcept {
+    // Qualified native entry only: executable memory is not a composition contract.
+    constexpr unsigned char entry[]={0x48,0x89,0x5c,0x24,0x20,0x55,0x56,0x57,
+        0x41,0x54,0x41,0x55,0x41,0x56,0x41,0x57};
+    return game && target==game+0x2dc4b0 && Readable(target,sizeof(entry)) && std::memcmp(target,entry,sizeof(entry))==0;
+}
 std::uint64_t RenderProperties(void* source,void* item,char* output,int capacity,int mode,
     int state1,int state2,int flags,int extra,const void* definitions,void* count) noexcept {
-    // Render the actual item through the same native formatter, with no range
-    // definitions. The second pass keeps Core's range calculations untouched.
+    // Admission permits only the qualified native formatter, never an arbitrary
+    // companion callback. Actual/source and ranged/clone passes use separate
+    // buffers/count arguments. No-clone paths call it once; clone paths twice.
     struct RenderingGuard { RenderingGuard(){rendering=true;} ~RenderingGuard(){rendering=false;} } guard;
+    std::vector<char> actual, ranged;
+    std::uint64_t completedResult{};bool completed{};
     try {
         const auto cap=static_cast<std::size_t>(capacity);
         const auto initial=strnlen(output,cap);
         if (initial==cap) return originalProperties(item,output,capacity,mode,state1,state2,flags,extra,definitions,count);
-        std::vector<char> actual(cap,0), ranged(cap,0);
+        actual.assign(cap,0);ranged.assign(cap,0);
         std::memcpy(actual.data(),output,initial+1);
         std::memcpy(ranged.data(),output,initial+1);
         struct OptionalCount { std::uint64_t value{}; bool present{}; unsigned char pad[7]{}; } none;
@@ -1029,6 +1104,7 @@ std::uint64_t RenderProperties(void* source,void* item,char* output,int capacity
             actualResult=originalProperties(source,actual.data(),capacity,mode,state1,state2,flags,extra,
                 source==item?definitions:nullptr,source==item?count:&none);
         }
+        completedResult=actualResult;completed=true;
         // No clone means the native actual text is already the complete result.
         // Preserve its arguments/return and avoid a duplicate formatter pass.
         if (source==item) ranged=actual;
@@ -1043,6 +1119,7 @@ std::uint64_t RenderProperties(void* source,void* item,char* output,int capacity
                 ~RangeCaptureGuard() { captureLines=previous; }
             } capture(captured);
             result=originalProperties(item,ranged.data(),capacity,mode,state1,state2,flags,extra,definitions,count);
+            completedResult=result;
         }
         const auto actualLength=strnlen(actual.data(),cap), rangedLength=strnlen(ranged.data(),cap);
         if (actualLength==cap || rangedLength==cap) {
@@ -1056,6 +1133,11 @@ std::uint64_t RenderProperties(void* source,void* item,char* output,int capacity
             static_cast<unsigned>(captured.size()),&captured,&sourceLabels);
         return result;
     } catch (...) {
+        // Post-render allocation/merge failure must not execute another pass.
+        if(completed){
+            std::memcpy(output,actual.data(),actual.size());output[capacity-1]=0;
+            return completedResult;
+        }
         return originalProperties(item,output,capacity,mode,state1,state2,flags,extra,definitions,count);
     }
 }
@@ -1129,7 +1211,79 @@ bool Exchange(void** slot, void* expected, void* replacement) noexcept {
     // caller performs ownership-checked rollback; the module is already pinned.
     return found == expected && restored;
 }
+void RestoreAlways() noexcept {
+    alwaysReady.store(false,std::memory_order_release);
+    tooltipModifiers.reset();
+    if(modifierSlot)Exchange(modifierSlot,reinterpret_cast<void*>(&AlwaysModifierAdapter),reinterpret_cast<void*>(originalModifiers));
+    if(buttonSlot)Exchange(buttonSlot,reinterpret_cast<void*>(&AlwaysButtonAdapter),reinterpret_cast<void*>(originalButtons));
+    if(widgetSlot)Exchange(widgetSlot,reinterpret_cast<void*>(&AlwaysWidgetAdapter),reinterpret_cast<void*>(originalWidget));
+}
+bool InstallAlways(const unsigned char* base,const unsigned char* game,const D2RL::PluginContext* context) noexcept {
+    if(!Match(base,0x8195da,AlwaysProfile::KeyboardCall,sizeof(AlwaysProfile::KeyboardCall)) ||
+       !Readable(base+AlwaysProfile::KeyboardSlot,8) || !Readable(base+AlwaysProfile::ControllerSlot,8))return false;
+    modifierSlot=reinterpret_cast<void**>(const_cast<unsigned char*>(base)+AlwaysProfile::KeyboardSlot);
+    buttonSlot=reinterpret_cast<void**>(const_cast<unsigned char*>(base)+AlwaysProfile::ControllerSlot);
+    originalModifiers=reinterpret_cast<ModifierQueryFn>(*modifierSlot);
+    originalButtons=reinterpret_cast<ButtonQueryFn>(*buttonSlot);
+    // The observed entries can retain QOL's existing native detours. Refuse
+    // unknown slot targets instead of assuming another callback's ABI/lifetime.
+    if(reinterpret_cast<const void*>(originalModifiers)!=game+0x1209fa0 ||
+       reinterpret_cast<const void*>(originalButtons)!=game+0x13ca70 ||
+       !Executable(reinterpret_cast<void*>(originalModifiers)) || !Executable(reinterpret_cast<void*>(originalButtons)))return false;
+    modifierReturn=reinterpret_cast<std::uintptr_t>(base)+AlwaysProfile::KeyboardReturn;
+    buttonReturn=reinterpret_cast<std::uintptr_t>(base)+AlwaysProfile::ControllerReturn;
+    if(!Exchange(modifierSlot,reinterpret_cast<void*>(originalModifiers),reinterpret_cast<void*>(&AlwaysModifierAdapter)) ||
+       !Exchange(buttonSlot,reinterpret_cast<void*>(originalButtons),reinterpret_cast<void*>(&AlwaysButtonAdapter))){
+        RestoreAlways();return false;
+    }
+    // Hint suppression is independent: a conflicting UI owner keeps its own
+    // footer rather than disabling proven native range requests.
+    if(Match(base,0x8191fb,AlwaysProfile::WidgetCall,sizeof(AlwaysProfile::WidgetCall)) &&
+       Match(base,AlwaysProfile::HintKeyRva,reinterpret_cast<const unsigned char*>(AlwaysProfile::HintKey),sizeof(AlwaysProfile::HintKey)) &&
+       Match(game,0x843ca0,AlwaysProfile::WidgetEntry,sizeof(AlwaysProfile::WidgetEntry)) &&
+       Readable(base+AlwaysProfile::WidgetSlot,8)){
+        widgetSlot=reinterpret_cast<void**>(const_cast<unsigned char*>(base)+AlwaysProfile::WidgetSlot);
+        originalWidget=reinterpret_cast<WidgetTooltipFn>(*widgetSlot);
+        widgetReturn=reinterpret_cast<std::uintptr_t>(base)+AlwaysProfile::WidgetReturn;
+        if(reinterpret_cast<const void*>(originalWidget)!=game+0x843ca0 ||
+           !Exchange(widgetSlot,reinterpret_cast<void*>(originalWidget),reinterpret_cast<void*>(&AlwaysWidgetAdapter))){
+            Exchange(widgetSlot,reinterpret_cast<void*>(&AlwaysWidgetAdapter),reinterpret_cast<void*>(originalWidget));
+            context->LogWarn("Item Roll Ranges: optional always-show hint filter refused; native footer retained.");
+        }
+    }else context->LogWarn("Item Roll Ranges: optional always-show hint witnesses refused; native footer retained.");
+    alwaysReady.store(true,std::memory_order_release);return true;
+}
+bool ApplyRollCommand(std::string_view args) noexcept {
+    if(args!="on" && args!="off" && args!="status" && args!="toggle" && !args.empty())return false;
+    if(!active.load() || !alwaysReady.load())return false;
+    if(args=="on")alwaysEnabled.store(true);
+    else if(args=="off")alwaysEnabled.store(false);
+    else if(args.empty() || args=="toggle")alwaysEnabled.store(!alwaysEnabled.load());
+    return true;
+}
+void RollChatCommand(const char* args,void*) noexcept {
+    if(!contributionContext)return;
+    const auto length=args?strnlen_s(args,17):0;
+    if(length>16 || !ApplyRollCommand(std::string_view(args?args:"",length))){
+        contributionContext->WriteConsoleMessage("AlwaysShowRolls: use on, off, toggle or status; requires admitted range adapters.",D2RL::ConsoleMessageKind::Warning);return;
+    }
+    contributionContext->WriteConsoleMessage(alwaysEnabled.load()?"AlwaysShowRolls: ON (this session).":"AlwaysShowRolls: OFF (hold Ctrl/RT for ranges).");
+    contributionContext->LogInfo(alwaysEnabled.load()?"AlwaysShowRolls: ON.":"AlwaysShowRolls: OFF.");
+}
+void LoadDisplaySettings(const D2RL::PluginContext* context) noexcept {
+    alwaysConfigured=false;
+    try {
+        std::vector<char> text(65537,0);std::uint32_t required{};
+        if(!context->ReadConfig(text.data(),65536,&required) || strnlen(text.data(),text.size())==text.size()){
+            context->LogWarn("Item Roll Ranges: display config unavailable/oversized; ordinary hold mode retained.");return;
+        }
+        const auto settings=RollRanges::ParseDisplayConfig(text.data());
+        if(!settings.valid){context->LogWarn("Item Roll Ranges: invalid/duplicate always_show_ranges; ordinary hold mode retained.");return;}
+        alwaysConfigured=settings.alwaysShowRanges;
+    }catch(...){context->LogWarn("Item Roll Ranges: display config read failed; ordinary hold mode retained.");}
+}
 void Restore() noexcept {
+    RestoreAlways();
     nativeSocketCapacity=nullptr;pendingPropertyRequest={};
     active.store(false, std::memory_order_release);
     contributionsReady.store(false);
@@ -1262,7 +1416,10 @@ bool Install(const D2RL::PluginContext* context) noexcept {
     originalProperties=reinterpret_cast<PropertiesFn>(*propertiesSlot);
     propertiesReturn=reinterpret_cast<std::uintptr_t>(base)+0x81d53b;
     testPanel = *reinterpret_cast<PanelFn*>(base+0x702ae0);
-    if (!Executable(reinterpret_cast<void*>(originalProperties)) ||
+    if (!AdmitPropertyFormatter(game,reinterpret_cast<void*>(originalProperties))) {
+        context->LogError("Item Roll Ranges: property formatter target/entry conflict; unknown predecessors are unsupported.");return false;
+    }
+    if (
         !Executable(reinterpret_cast<void*>(testPanel))) return false;
     // A delayed caller can have fetched our pointer before Restore. Pinning
     // keeps code/original targets available until process exit after unload.
@@ -1292,24 +1449,35 @@ bool Install(const D2RL::PluginContext* context) noexcept {
         Restore();
         return false;
     }
+    alwaysEnabled.store(alwaysConfigured);
+    if(!InstallAlways(base,game,context))
+        context->LogWarn("Item Roll Ranges: always-show query admission failed; ordinary hold mode retained.");
     active.store(true, std::memory_order_release);
-    context->LogInfo("Item Roll Ranges 1.3.1+rev.34 by PyreFly: Ctrl / RT(R2), or QOL range override; inventory, stash, Cube and vendor only. Actual values, native ranges, named P/S tiers and guarded stacked-damage details. Unsupported or ambiguous provenance is omitted.");
+    context->LogInfo(alwaysReady.load() && alwaysEnabled.load()?"Item Roll Ranges display mode: always show ranges.":"Item Roll Ranges display mode: native Ctrl/controller hold.");
+    context->LogInfo("Item Roll Ranges 1.3.1+rev.40 by PyreFly: Ctrl / RT(R2), or QOL range override; inventory, stash, Cube and vendor only. Actual values, native ranges, named P/S tiers and guarded stacked-damage details. Unsupported or ambiguous provenance is omitted.");
     return true;
 }
 }
 
 D2RL_PLUGIN_EXPORT const D2RL::PluginInfo* __cdecl D2RLoaderGetPluginInfo() noexcept {
     static const D2RL::PluginInfo info{sizeof(D2RL::PluginInfo), D2RL_PLUGIN_ABI_VERSION,
-        "item-roll-ranges", "Item Roll Ranges", "1.3.1+rev.34", "PyreFly",
+        "item-roll-ranges", "Item Roll Ranges", "1.3.1+rev.40", "PyreFly",
         "Hold Ctrl or RT/R2 (R1/RB with Controller QOL) for native item stat ranges in item-management screens.",
         D2RL::PluginFlags::Client | D2RL::PluginFlags::NativeHooks, {}};
     return &info;
 }
 D2RL_PLUGIN_EXPORT bool __cdecl D2RLoaderLoadPlugin(const D2RL::PluginContext* context) noexcept {
     if (!context || !context->GetApi() || loaded.exchange(true)) return false;
-    if (Install(context)) return true;
+    LoadDisplaySettings(context);
+    if (Install(context)) {
+        try {
+            if(!rollCommands.Start(context) || !rollCommands.Register("alwaysshowrolls",RollChatCommand,nullptr,"Toggle always-show rolls; on, off, status."))
+                context->LogWarn("Item Roll Ranges: /AlwaysShowRolls registration unavailable; config still applies.");
+        }catch(...){context->LogWarn("Item Roll Ranges: chat registration failed; config still applies.");}
+        return true;
+    }
     context->LogError("Item Roll Ranges: unsupported/unavailable provider or slot conflict; adapters not activated. See NATIVE-CONTRACT.md.");
     return false;
 }
-D2RL_PLUGIN_EXPORT void __cdecl D2RLoaderUnloadPlugin() noexcept { Restore(); }
+D2RL_PLUGIN_EXPORT void __cdecl D2RLoaderUnloadPlugin() noexcept { rollCommands.Stop(); alwaysEnabled.store(false); Restore(); }
 

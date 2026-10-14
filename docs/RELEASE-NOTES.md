@@ -1,66 +1,26 @@
-# D2R Mods release 2026.10.13.1
+# D2R Mods release 2026.10.14.1
+
+Item Roll Ranges rev.40 adds optional always-show ranges and `/AlwaysShowRolls`
+for a session toggle. **Always-show is disabled by default.** Enable it through
+chat, or set `display.always_show_ranges = true` in the saved config and restart.
+Existing user settings are preserved; packaged TOMLs are references only.
+
+Fix the plain Sash `Defense: 2 (Base: 2-2)` header with Ctrl held and always-show
+off. Tighten native formatter admission and prevent an extra render pass after
+merge failure. Preserve source breakdowns, Base headers and Max Sockets order.
+
+Eight Item Roll Ranges suites pass. The user confirmed always-show, chat toggles
+and the final plain Sash correction. Runtime logs show successful command
+registration alongside other plugins, with no Item Roll Ranges backend errors.
+Broader controller/localization combinations and arbitrary formatter plugins
+are not exhaustively validated; unknown formatter replacements are refused.
 
 | Plugin | Version |
 | --- | --- |
+| Item Roll Ranges | 1.3.1+rev.40 |
 | Controller QOL Updates | 1.3.1+rev.78 |
-| Item Roll Ranges | 1.3.1+rev.34 |
 | Map Assistance | 1.3.1+rev.1 |
 | Inventory Deposit | 0.1.0-beta.13 |
 | Floating Damage | 0.1.0-beta.12 |
 
-## Controller QOL
-
-- Start distant LB loot travel during the native client update. This corrects
-  dispatch timing associated with intermittent slow approaches and reported
-  invisible blocked ground. The user could no longer reproduce those symptoms
-  with rev.78-beta.4; rev.78 preserves that implementation.
-- Use native running for explicit loot travel without changing the player's
-  walk/run preference. Already-mapped, still-targetable items can initiate travel
-  beyond the mapping radius; repeat suppression is reduced to 250 ms.
-- Keep each LB loot assignment fixed until release/repress. Missing labels and
-  newly dropped items cannot replace existing assignments mid-hold. Execution
-  still rechecks visibility, item identity, session, held input and request age.
-- Restore hosted identify, transfers and bulk-deposit admission for the reviewed
-  Global Chat and Maps versions. Existing offline routing and older supported
-  profiles are retained; unsupported native profiles fail open.
-- Respect filtered-pickup blocking for neutral controller A before submission.
-  Gold is exempt, including automatic pickup; native capacity and pickup settings
-  still apply. Mouse/keyboard behavior is preserved.
-- Reorder loot-filter rules with LB+Up/Down, with matching bumper hints.
-
-### Configuration
-
-Existing settings are preserved. `ground_pickup_distance` controls the LB mapping
-radius, not maximum travel to an already-mapped item. Set it to `20` in the client
-configuration for the wider tested radius; the shipped default is unchanged.
-No server configuration change is needed for that mapping preference.
-
-### Validation and limits
-
-All 33 Controller QOL automated suites pass, including 483 production audit checks
-and DLL ABI/resource/export/version checks. The user confirmed hosted item actions,
-advanced-stash totals with rejuvenation potions, vendor purchases/sales, wider LB
-mapping and the final travel behavior in a self-hosted Reimagined session.
-
-A fresh offline gameplay retest, all filter/reorder combinations, broader hosted
-configurations and save/rejoin persistence are not fully qualified. A prior beta.3
-shutdown produced a leaked-stats assertion followed by a graphics-driver access
-violation; its cause is undetermined and this release does not claim to fix it.
-A clean shutdown on the final candidate is unconfirmed. Report regressions with
-the input sequence, active mod, client/server context and plugin versions.
-
-## Other included packages
-
-Item Roll Ranges rev.34, Map Assistance rev.1, Inventory Deposit beta.13 and
-Floating Damage beta.12 retain the exact source from release-2026.10.12.2.
-Their existing compatibility requirements and validation limits still apply.
-
-## Install
-
-Close the game and loader, back up installed DLLs, and extract only the wanted
-plugin ZIPs into the game or active mod directory. Keep one active copy per plugin.
-DLLs install under `d2rloader/plugins/`. Reference TOMLs are under `defaults/`,
-never live configuration paths; preserve customized settings. Pack-managed
-installations should use their launcher/server package update route.
-A cold restart is required. Each ZIP has internal SHA256SUMS; the adjacent release
-SHA256SUMS covers all five ZIPs. Source archives are supplied separately by GitHub.
+Other plugin source and versions are unchanged from current main.

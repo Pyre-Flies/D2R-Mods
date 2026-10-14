@@ -157,6 +157,7 @@ class FivePluginSuiteTests(FloatingDamagePackageFixture, unittest.TestCase):
         fixtures = {
             "plugins/controller-qol/src/plugin_main.cpp": b'.version="1.3.1-rev.75",',
             "plugins/item-roll-ranges/src/plugin.cpp": b'"item-roll-ranges", "Item Roll Ranges", "0.4.0-rev.23",',
+            "plugins/item-roll-ranges/item-roll-ranges.toml": b"[display]\nalways_show_ranges = false\n",
             "plugins/map-assistance/src/plugin.cpp": b'.version="0.1.0-rev.1",',
             "plugins/inventory-deposit/src/plugin_main.cpp": b'.version="0.1.0-beta.13",',
             "plugins/inventory-deposit/inventory-deposit.toml": b"[inventory_deposit]\nenabled = true\n",
@@ -213,7 +214,7 @@ class FivePluginSuiteTests(FloatingDamagePackageFixture, unittest.TestCase):
         install = self.root / "install"
         customized = {}
         for config in ("controller-qol-updates.toml", "controller-qol-skills.toml",
-                       "map-assistance.toml", "inventory-deposit.toml", "floating-damage.toml"):
+                       "item-roll-ranges.toml", "map-assistance.toml", "inventory-deposit.toml", "floating-damage.toml"):
             path = install / "d2rloader/config" / config
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(b"# customized setting kept\r\nvalue = 99\r\n")

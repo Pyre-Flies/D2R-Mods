@@ -1,0 +1,4 @@
+# Restart the game after editing. Existing saved settings are preserved.
+[display]
+# Show eligible item tooltips with ranges without holding Ctrl or RT/R2.
+always_show_ranges = false

@@ -3,6 +3,7 @@
 #include <D2RLPlugin/resource.h>
 #include <cstdio>
 #include <cstring>
+#include <string>
 int wmain(int argc, wchar_t** argv) {
     if (argc != 2) return 1;
     HMODULE module = LoadLibraryExW(argv[1], nullptr, LOAD_LIBRARY_AS_DATAFILE | LOAD_LIBRARY_AS_IMAGE_RESOURCE);
@@ -16,6 +17,16 @@ int wmain(int argc, wchar_t** argv) {
     std::memcpy(&abi, data, sizeof(abi));
     FreeLibrary(module);
     if (abi != D2RL_PLUGIN_ABI_VERSION) return 5;
+    module = LoadLibraryExW(argv[1], nullptr, LOAD_LIBRARY_AS_DATAFILE | LOAD_LIBRARY_AS_IMAGE_RESOURCE);
+    resource = module?FindResourceW(module,MAKEINTRESOURCEW(D2RL_PLUGIN_CONFIG_RESOURCE_ID),RT_RCDATA):nullptr;
+    if(!resource)return 9;
+    const auto configSize=SizeofResource(module,resource);
+    const auto configMemory=LoadResource(module,resource);
+    const auto* config=configMemory?static_cast<const char*>(LockResource(configMemory)):nullptr;
+    if(!config || !configSize || configSize>65536)return 10;
+    const std::string defaults(config,configSize);
+    FreeLibrary(module);
+    if(defaults.find("always_show_ranges = false")==defaults.npos)return 11;
     module = LoadLibraryExW(argv[1], nullptr, LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
     if (!module) return 6;
     using InfoFn = const D2RL::PluginInfo*(__cdecl*)();
@@ -23,7 +34,8 @@ int wmain(int argc, wchar_t** argv) {
     if (!getInfo || !GetProcAddress(module, "D2RLoaderLoadPlugin") || !GetProcAddress(module, "D2RLoaderUnloadPlugin")) return 7;
     auto info = getInfo();
     const bool valid = info && info->infoSize == sizeof(*info) && info->abiVersion == abi &&
-        std::strcmp(info->id, "item-roll-ranges") == 0 && D2RL::HasValidPluginRole(info->flags);
+        std::strcmp(info->id, "item-roll-ranges") == 0 && std::strcmp(info->version,"1.3.1+rev.40")==0 &&
+        D2RL::HasValidPluginRole(info->flags);
     FreeLibrary(module);
     if (!valid) return 8;
     std::puts("Built DLL: loader ABI manifest, exports, metadata and role agree.");
