@@ -109,7 +109,7 @@ jobs:
         with:
           prerelease: false
           make_latest: "true"
-          generate_release_notes: true
+          generate_release_notes: false
           body_path: docs/RELEASE-NOTES.md
           fail_on_unmatched_files: true
           files: |
