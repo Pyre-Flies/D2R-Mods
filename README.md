@@ -60,6 +60,12 @@ backup per profile. New installs default to 60 ms display smoothing; explicit
 older values are kept. Read the [configuration, migration and recovery guide](plugins/controller-qol/docs/SKILL-DISCOVERY-CONFIG.md)
 for profile scope, editing, default changes and rollback.
 
+## Support
+
+If you enjoy these plugins and would like to support their development, you can buy me a coffee. Thanks for playing!
+
+[![Support on Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/D3J128U0X2)
+
 ## Repository layout
 
 ```text
