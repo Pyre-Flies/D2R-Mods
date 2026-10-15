@@ -1,3 +1,4 @@
+#include "relay_allocation.h"
 #include "identify_bulk.h"
 #include "owned_payloads.h"
 #include "bulk_stash.h"
@@ -160,7 +161,7 @@ static constexpr D2RL::PluginInfo ControllerQoLPluginInfo {
     .abiVersion  = D2RL_PLUGIN_ABI_VERSION,
     .id          = "controller-qol-updates",
     .name        = "Controller QOL Updates",
-    .version     = "1.3.1+rev.79-beta.2",
+    .version     = "1.3.1+rev.79-beta.4",
     .author      = "PyreFly",
     .description = "Direct controller looting with filtered labels, inventory shortcuts, and stash navigation.",
     .flags       = D2RL::PluginFlags::Shared | D2RL::PluginFlags::NativeHooks,
@@ -808,6 +809,8 @@ static void TriggerQuickMoveOnFocusedItem() noexcept {
     static std::atomic<ULONGLONG> last{0};
     const auto now=GetTickCount64();
     if (now-last.exchange(now)<250) return;
+    if(QolBelt::Busy() || QolBulkStash::Busy() || QolNativeIdentify::Busy() || QolClientTransfer::Busy())return;
+    if(QolMaterials::RequestFocusedCounter(false))return;
     // Advanced slots are UI-owned proxies: route them before entering the
     // authoritative legacy resolver, which cannot resolve that proxy handle.
     (void)g_Threads->runOnUiThread(g_PluginContext, [](const D2RL::PluginContext* ctx,void*) noexcept {
@@ -940,6 +943,8 @@ static void QueueQuickMoveToCube(bool materialsFirst,const D2RL::Items::ItemInfo
 
 static void TriggerQuickMoveToCubeOnFocusedItem() noexcept {
     if(!g_PluginContext || !g_Threads || !g_Settings.enabled || !g_Settings.quickMove || !s_IdentifySessionEvents)return;
+    if(QolBelt::Busy() || QolBulkStash::Busy() || QolNativeIdentify::Busy() || QolClientTransfer::Busy())return;
+    if(QolMaterials::RequestFocusedCounter(true))return;
     // Copy at the physical press. A delayed UI callback must not substitute a new tooltip.
     D2RL::Items::ItemInfo captured{};
     if(!ReadFocusIdentity(captured))return;
@@ -1187,6 +1192,8 @@ static void __cdecl OnItemTooltipCallback(
     s_AdvancedBeltFocusTick.store(0);
     s_SharedBeltFocusTick.store(0);
     if (!g_Settings.enabled || !event) return;
+
+    QolMaterials::ObserveControllerFocus(context,ControllerQoL::IsControllerUiActive());
 
     if (g_Items && event->item != D2RL::InvalidItemHandle) {
         D2RL::Items::ItemInfo info{ .structSize = D2RL::Items::ItemInfoSize };
@@ -1462,14 +1469,7 @@ namespace GroundLoot {
         HMODULE pinned{};
         if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_PIN,
                 reinterpret_cast<LPCWSTR>(&HookPickup), &pinned)) return false;
-        SYSTEM_INFO info{};
-        GetSystemInfo(&info);
-        const uintptr_t step = info.dwAllocationGranularity;
-        const uintptr_t aligned = (context->exeBase + QolPickupCalls::Calls[0].rva) & ~(step - 1);
-        unsigned char* relay = nullptr;
-        for (uintptr_t offset = step; offset < 0x40000000 && !relay; offset += step)
-            relay = static_cast<unsigned char*>(VirtualAlloc(reinterpret_cast<void*>(aligned + offset),
-                64, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE));
+        auto* relay=QolRelay::Allocate(context->exeBase+QolPickupCalls::Calls[0].rva,64);
         if (!relay) return false;
         relay[0] = 0xff;
         relay[1] = 0x25;
@@ -1821,13 +1821,7 @@ namespace PlacardOverlay {
         HMODULE pinned{};
         if(!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS|GET_MODULE_HANDLE_EX_FLAG_PIN,
             reinterpret_cast<LPCWSTR>(&HookBuildGroundItemTooltip),&pinned)) return false;
-        SYSTEM_INFO info{};GetSystemInfo(&info);
-        const uintptr_t step=info.dwAllocationGranularity;
-        const uintptr_t aligned=(context->exeBase+Site)&~(step-1);
-        unsigned char* relay=nullptr;
-        for(uintptr_t offset=step;offset<0x40000000 && !relay;offset+=step)
-            relay=static_cast<unsigned char*>(VirtualAlloc(reinterpret_cast<void*>(aligned+offset),64,
-                MEM_COMMIT|MEM_RESERVE,PAGE_READWRITE));
+        auto* relay=QolRelay::Allocate(context->exeBase+Site,64);
         if(!relay) return false;
         relay[0]=0xff;relay[1]=0x25;std::memset(relay+2,0,4);
         const auto destination=&HookBuildGroundItemTooltip;std::memcpy(relay+6,&destination,8);
@@ -2255,7 +2249,7 @@ D2RL_PLUGIN_EXPORT auto D2RLoaderLoadPlugin(const D2RL::PluginContext* context) 
                     }
                 }
                 QolBelt::Pump(context);
-                QolMaterials::Pump(context);
+                QolMaterials::Pump(context,ControllerQoL::IsControllerUiActive() && TestUiMode(UI_MODE_STASH));
 
                 // Live Native Bridge validation monitor: logs whenever Native L2 state transitions
                 const bool currentNativeAlt = ControllerQoL::IsNativeAltModifierActive();
@@ -2415,7 +2409,7 @@ D2RL_PLUGIN_EXPORT auto D2RLoaderLoadPlugin(const D2RL::PluginContext* context) 
         g_Settings.groundPickupButton, g_Settings.portalPriorityDistance);
     if(!QolAim::Initialize(context,g_Settings.enabled))
         context->LogWarn("[QOL/Aim] Aim unavailable; other QOL features remain loaded.");
-    context->LogInfo("[QOL] QOL v1.3.1+rev.79-beta.2 loaded: controller item features and integrated v0.6 navigation/label hooks.");
+    context->LogInfo("[QOL] QOL v1.3.1+rev.79-beta.4 loaded: controller item features and integrated v0.6 navigation/label hooks.");
     return true;
 }
 

@@ -2,6 +2,7 @@
 #include "plugin_coexistence_profile.h"
 #include "plugin_coexistence_policy.h"
 #include "chat_forwarding_memory.h"
+#include "maps_quantity_contract.h"
 #include "core_compatibility.h"
 #include <windows.h>
 namespace QolCoexistence {
@@ -42,7 +43,9 @@ inline bool Send(uintptr_t core,const unsigned char* original,size_t size,const 
         return false;
     } __except(EXCEPTION_EXECUTE_HANDLER) {if(refusal)*refusal="sender-read-fault";return false;}
 }
-inline bool StatSlot(uintptr_t game,uintptr_t core) noexcept {
+// Restricted to the stat-70/layer-0 calls made by identification/vendor quantity
+// readers. Do not reuse this proof for other stats or bypass the installed slot.
+inline bool ItemQuantitySlot(uintptr_t game,uintptr_t core) noexcept {
     __try {
         if(!game || !core)return false;
         const auto actual=*reinterpret_cast<const uintptr_t*>(game+0x3e2a218);
@@ -50,16 +53,8 @@ inline bool StatSlot(uintptr_t game,uintptr_t core) noexcept {
         if(actual==original)return true;
         const auto module=GetModuleHandleW(L"d2rl-maps.dll");
         const auto maps=reinterpret_cast<uintptr_t>(module);
-        using namespace QolCoexistenceProfile;
-        if(!maps)return false;
-        uintptr_t continuation{};
-        if(QolCore::VerifyFileHash(module,MapsHash) && Match(maps+0x106d0,MapsHook,sizeof(MapsHook)))
-            continuation=maps+0xbcd30;
-        else if(QolCore::VerifyFileHash(module,MapsCurrentHash) && Match(maps+0x106d0,MapsCurrentHook,sizeof(MapsCurrentHook)))
-            continuation=maps+0xbdd30;
-        else return false;
-        return Executable(actual) && StatRoute(actual,original,maps+0x106d0,
-            *reinterpret_cast<const uintptr_t*>(continuation),true);
+        QolChatForwarding::ImageMemory image{};
+        return maps && image.Open(module) && QolMapsQuantity::Validate(image.Reader(),maps,actual,original);
     } __except(EXCEPTION_EXECUTE_HANDLER) {return false;}
 }
 }

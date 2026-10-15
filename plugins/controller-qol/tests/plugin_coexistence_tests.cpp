@@ -311,11 +311,11 @@ int main(int argc,char** argv) {
     std::memcpy(reinterpret_cast<void*>(coreImage+0x822dd0),QolClientRequest::CoreEntry,sizeof(QolClientRequest::CoreEntry));
     *reinterpret_cast<uintptr_t*>(gameImage+0x3e2a218)=coreImage+0x831de0;
     Check(QolClientRequest::Guard(gameImage,coreImage),"production unhooked request guard needs no Ladder plugin");
-    Check(StatSlot(gameImage,coreImage),"production unhooked stat slot needs no Ladder plugin");
+    Check(ItemQuantitySlot(gameImage,coreImage),"production unhooked stat slot needs no Ladder plugin");
     *reinterpret_cast<unsigned char*>(coreImage+0x822dd0)=0xff;
     Check(!QolClientRequest::Guard(gameImage,coreImage),"unknown sender replacement still refused");
     *reinterpret_cast<uintptr_t*>(gameImage+0x3e2a218)=hook;
-    Check(!StatSlot(gameImage,coreImage),"unknown stat replacement still refused");
+    Check(!ItemQuantitySlot(gameImage,coreImage),"unknown stat replacement still refused");
     VirtualFree(reinterpret_cast<void*>(gameImage),0,MEM_RELEASE);
     VirtualFree(reinterpret_cast<void*>(coreImage),0,MEM_RELEASE);
     if(argc==3)RealChatImage(argv[1],argv[2]);

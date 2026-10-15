@@ -49,6 +49,7 @@ SelectedFn originalSelected{};
 std::atomic<unsigned> selectedSuppressionCount{};
 std::atomic<unsigned> nativeUnitSelectionReports{}, nativeUnitCandidateReports{};
 std::atomic<bool> ready{}, installed{}, enabled{false}, inSession{}, queued{}, reverseY{};
+std::atomic<bool> installAttempted{};
 std::atomic<float> requestedDistance{Aim::DefaultDistance};
 std::atomic<unsigned> lookupCount{}, scoringCount{}, castCount{};
 std::atomic<int> previewSkill{-1};
@@ -1025,6 +1026,10 @@ bool AdmitEnumeration() noexcept {
 }
 
 bool Install() noexcept {
+    // SDK-owned hooks have no per-hook removal API. A failed set remains inert
+    // until loader teardown; never mistake our partial prefix for a new owner,
+    // overwrite it, or allocate another set on subsequent lifecycle events.
+    if(installAttempted.exchange(true))return installed.load();
     for(const auto& site:Native::Sites) {
         if(site.rva==Native::UnitTestRva || site.rva==Native::CastRva) continue; // enumeration special admission; Cast optional below
         if(!ctx->CheckExpectedBytes(site.rva,site.bytes,site.size)) {
@@ -1076,7 +1081,6 @@ void __cdecl Lifecycle(const D2RL::PluginContext*,const D2RL::Lifecycle::Gamepla
     projectionReports.store(0); previewCandidateReports.store(0); lastProjectionStatus.store(99);
     nativeUnitSelectionReports.store(0); nativeUnitCandidateReports.store(0);
     AcquireSRWLockExclusive(&stateLock); published={};treePublished={}; pending={}; observedDisplacement=-1; retainedOffsetValid=false; cursorMotion={}; snapBook={}; whirlLockActive=false; lastLookup={}; lastCastMarker={}; ReleaseSRWLockExclusive(&stateLock);
-    if(inSession.load() && !installed.load()) Install();
 }
 }
 
@@ -1162,9 +1166,15 @@ bool QolAim::Initialize(const D2RL::PluginContext* context,bool qolEnabled) noex
         D2RL::Input::ActionHandle handle{};
         if(input->registerAction(ctx,&action,&handle)!=D2RL::Input::Result::Success || !handle) return false;
     }
+    // Reserve the SDK's near trampolines during plugin startup, before gameplay
+    // allocations fragment its bounded address range. Wrappers remain native
+    // pass-through until installed, enabled, and in an active game session.
+    if(!Install()) {
+        ctx->LogWarn("[QOL/Aim] Startup hook installation failed; aim/reticle/skill toggles unavailable until restart. Other QOL features remain available.");
+        return false;
+    }
     enabled.store(true); ready.store(true);
     inSession.store(inGame());
-    if(inSession.load()) Install();
     ctx->LogInfo(motionSettings.verbose?"[QOL/Aim] Ready; verbose diagnostics enabled.":"[QOL/Aim] Ready; verbose diagnostics disabled (aim.verbose=false).");
     return true;
 }
@@ -1182,6 +1192,27 @@ bool QolAim::OwnsGuidedArrow() noexcept {
     return installed.load() && enabled.load() && inSession.load() && manualAim.load() && skillSettings.Enabled(Aim::GuidedArrow);
 }
 #ifdef QOL_AIM_TEST_INSTALL
+bool QolAim::TestInactiveWrappers() noexcept {
+    const auto lookup=originalLookup;const auto unit=originalUnitTest;
+    const auto point=originalPointScore;const auto selected=originalSelected;
+    const bool wasInstalled=installed.load(),wasEnabled=enabled.load(),wasSession=inSession.load();
+    static unsigned nativeCalls{};nativeCalls=0;
+    originalLookup=+[](void*,void*,bool,float* x,float* y) noexcept {++nativeCalls;*x=12;*y=34;};
+    originalUnitTest=+[](void*,void* player,void* candidate) noexcept {++nativeCalls;return player==candidate;};
+    originalPointScore=+[](void*,void*,const float*,int,int) noexcept {++nativeCalls;return 0.75f;};
+    originalSelected=+[](void* controller,int) noexcept {++nativeCalls;return controller;};
+    bool ok=true;
+    for(unsigned inactive=0;inactive<3;++inactive) {
+        installed.store(inactive!=0);enabled.store(inactive!=1);inSession.store(inactive!=2);
+        float x{},y{};void* token=&x;
+        Lookup(token,token,true,&x,&y);
+        ok=ok && x==12 && y==34 && UnitTest(token,token,token) &&
+            PointScore(token,token,nullptr,1,5)==0.75f && Selected(token,47)==token;
+    }
+    originalLookup=lookup;originalUnitTest=unit;originalPointScore=point;originalSelected=selected;
+    installed.store(wasInstalled);enabled.store(wasEnabled);inSession.store(wasSession);
+    return ok && nativeCalls==12;
+}
 bool QolAim::TestScoreLogging(const D2RL::PluginContext* context,bool verbose) noexcept {
     ctx=context; motionSettings={}; motionSettings.verbose=verbose;
     installed.store(true); enabled.store(true); inSession.store(true); manualAim.store(true);
@@ -1202,9 +1233,15 @@ bool QolAim::TestScoreLogging(const D2RL::PluginContext* context,bool verbose) n
     Shutdown();
     return ok;
 }
-bool QolAim::TestInstall(const D2RL::PluginContext* context,bool observer) noexcept {
-    ctx=context; installed.store(false); castObserverInstalled.store(false);
+bool QolAim::TestInstall(const D2RL::PluginContext* context,bool observer,bool fresh) noexcept {
+    ctx=context;
+    if(fresh){installAttempted.store(false);installed.store(false);castObserverInstalled.store(false);}
     motionSettings={}; motionSettings.castObserver=observer;
     return Install();
+}
+void QolAim::TestLifecycle(unsigned kind) noexcept {
+    ready.store(true);
+    D2RL::Lifecycle::GameplayEvent event{};event.kind=static_cast<D2RL::Lifecycle::GameplayEventKind>(kind);
+    Lifecycle(ctx,&event,nullptr);
 }
 #endif

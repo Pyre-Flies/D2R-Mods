@@ -227,7 +227,7 @@ The caller ignores its return. No replacement implementation or setter call
 was introduced.
 
 A beta.3 read-only byte check attempted after the build began could no longer
-read PID 62240 (partial-copy failure; no D2R/D2RLoader/d2rds process appeared
+read PID 62240 (partial-copy failure; no game process appeared
 in the subsequent full process listing). This supplies no new live admission
 evidence. Static capture guards and runtime startup checks remain required.
 

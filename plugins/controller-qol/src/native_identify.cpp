@@ -57,7 +57,7 @@ bool Guard() noexcept {
             if(!Bytes(context->exeBase,s.rva,s.bytes,s.size,"game"))return false;
         using namespace QolIdentifyStatProfile;
         return Bytes(context->exeBase,0x2f5020,Entry,sizeof(Entry),"game") &&
-            QolCoexistence::StatSlot(context->exeBase,core) &&
+            QolCoexistence::ItemQuantitySlot(context->exeBase,core) &&
             Bytes(core,0x831de0,Wrapper,sizeof(Wrapper),"core") &&
             Bytes(core,0x3d8bd0,Body,sizeof(Body),"core") &&
             Slot(core,0x70e9c8,context->exeBase+0x2c7540,"core") &&

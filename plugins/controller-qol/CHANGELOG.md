@@ -1,5 +1,16 @@
 # Controller QOL changelog
 
+## 1.3.1+rev.79-beta.4 - 2026-10-15
+
+- Fixed gem withdrawals with LB+X and LB+Y.
+- Restored the aiming reticle and R3 skill toggles.
+- Improved item transfer and identification compatibility with other plugins.
+
+All 36 automated QOL suites and 16 packaging checks passed. Live checks confirmed
+gem withdrawals, the reticle and R3 toggles. Single identification passed in the
+preceding candidate. Broader item and persistence testing remains open; see the
+[validation record](docs/COUNTER-FOCUS-AND-AIM-STARTUP.md).
+
 ## 1.3.1+rev.79-beta.2 - 2026-10-15
 
 - Repair remote LB+X/LB+L3 sender admission after unrelated Global Chat updates

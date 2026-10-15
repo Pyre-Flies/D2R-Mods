@@ -46,7 +46,7 @@ bool TomeGuard(const D2RL::PluginContext* ctx) noexcept {
         return core && QolCore::VerifyFileHash(reinterpret_cast<HMODULE>(core),QolNativeProfile::CoreHash) &&
             ctx->CheckExpectedBytes(0x3719e0,QolVendorTomeProfile::Maximum,sizeof(QolVendorTomeProfile::Maximum)) &&
             ctx->CheckExpectedBytes(0x2f5020,Entry,sizeof(Entry)) &&
-            QolCoexistence::StatSlot(ctx->exeBase,core) &&
+            QolCoexistence::ItemQuantitySlot(ctx->exeBase,core) &&
             QolBeltCompat::Match(core+0x831de0,Wrapper,sizeof(Wrapper)) &&
             QolBeltCompat::Match(core+0x3d8bd0,Body,sizeof(Body));
     } __except(EXCEPTION_EXECUTE_HANDLER) {return false;}

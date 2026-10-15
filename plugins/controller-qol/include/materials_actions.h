@@ -4,6 +4,10 @@ namespace QolMaterials {
 bool Initialize(const D2RL::PluginContext*) noexcept;
 void Shutdown() noexcept;
 bool Busy() noexcept;
+// UI-thread observation copies the selected counter identity, never pointers or
+// a fabricated SDK handle. The physical press captures that fresh observation.
+void ObserveControllerFocus(const D2RL::PluginContext*,bool controllerActive) noexcept;
+bool RequestFocusedCounter(bool toCube) noexcept;
 // UI-thread only. Returns true if the focused item is an advanced-stash proxy,
 // including empty/refused requests, so it cannot fall through to normal moves.
 bool TryWithdrawFocused(const D2RL::PluginContext*, const D2RL::Items::ItemInfo&) noexcept;
@@ -15,5 +19,5 @@ bool RequestSingleBelt(const D2RL::Items::ItemInfo&) noexcept;
 uint32_t SelectedStashTab(const D2RL::PluginContext*) noexcept;
 bool RequestFocusedRefill(const D2RL::PluginContext*, const D2RL::Items::ItemInfo&) noexcept;
 void RequestRefill() noexcept;
-void Pump(const D2RL::PluginContext*) noexcept;
+void Pump(const D2RL::PluginContext*,bool observeController=false) noexcept;
 }

@@ -1,3 +1,4 @@
+#include "relay_allocation.h"
 #include "client_loot.h"
 #include "client_loot_profile.h"
 #include "loot_approach_profile.h"
@@ -163,12 +164,7 @@ bool InstallCall(const D2RL::PluginContext* ctx,uintptr_t site,const unsigned ch
     HMODULE pinned{};
     if(!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS|GET_MODULE_HANDLE_EX_FLAG_PIN,
         reinterpret_cast<LPCWSTR>(&HookMovement),&pinned))return false;
-    SYSTEM_INFO info{};GetSystemInfo(&info);
-    const uintptr_t step=info.dwAllocationGranularity;
-    const uintptr_t aligned=(ctx->exeBase+site)&~(step-1);
-    unsigned char* relay=nullptr;
-    for(uintptr_t offset=step;offset<0x40000000 && !relay;offset+=step)
-        relay=static_cast<unsigned char*>(VirtualAlloc(reinterpret_cast<void*>(aligned+offset),64,MEM_COMMIT|MEM_RESERVE,PAGE_READWRITE));
+    auto* relay=QolRelay::Allocate(ctx->exeBase+site,64);
     if(!relay)return false;
     relay[0]=0xff;relay[1]=0x25;std::memset(relay+2,0,4);
     std::memcpy(relay+6,&destination,sizeof(destination));

@@ -7,6 +7,24 @@
 #include "vendor_signatures.h"
 #include <windows.h>
 namespace QolStorageFocus {
+// UI thread only. Advanced counters can have an SDK-ineligible display item
+// (runtime ID zero); identify their actual controller widget independently.
+inline unsigned char* AdvancedWidget(const D2RL::PluginContext* ctx) noexcept {
+    if(!ctx)return nullptr;
+    __try {
+        using namespace QolMaterials::Signatures;
+        if(!ctx->CheckExpectedBytes(0x846020,QolFilterFocus::FocusGetter,sizeof(QolFilterFocus::FocusGetter)) ||
+           !ctx->CheckExpectedBytes(0x876160,QolStorageProfile::ControllerFocus,sizeof(QolStorageProfile::ControllerFocus)) ||
+           !ctx->CheckExpectedBytes(0x2ce900,GetBoundItem,sizeof(GetBoundItem)) ||
+           !ctx->CheckExpectedBytes(0x2cf4a0,DisplayItemWitness,sizeof(DisplayItemWitness)))return nullptr;
+        auto manager=*reinterpret_cast<const unsigned char**>(ctx->exeBase+0x3440170);
+        auto focus=manager?*reinterpret_cast<const unsigned char* const*>(manager+0xd0):nullptr;
+        auto widget=focus?*reinterpret_cast<unsigned char* const*>(focus+0x190):nullptr;
+        if(!widget || !widget[0x50] || !widget[0x51])return nullptr;
+        auto table=*reinterpret_cast<const uintptr_t* const*>(widget);
+        return table && table[0xc8/8]==ctx->exeBase+0x2ce900?widget:nullptr;
+    } __except(EXCEPTION_EXECUTE_HANDLER) {return nullptr;}
+}
 // UI thread only. Never substitute a tooltip, remembered grid or mouse hover
 // for the controller's actual widget and selected cell.
 inline bool Matches(const D2RL::PluginContext* ctx,const QolClientTransfer::Info& info) noexcept {

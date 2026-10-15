@@ -136,8 +136,11 @@ new release**, select or create the suite tag, and drag the six ZIPs plus
 ## Controller QOL beta prereleases
 
 Use an annotated `beta-controller-qol-*` tag for a QOL-only beta. The separate
-`controller-qol-beta` workflow builds/tests QOL and publishes one runtime ZIP
+`controller-qol-beta` workflow builds/tests QOL and stages a draft with one runtime ZIP
 plus `SHA256SUMS`, with GitHub `prerelease: true` and `make_latest: false`.
+Before publishing the draft, verify CI and download checksums. When releasing
+locally tested DLL bytes, replace the draft assets with the verified package
+and its matching checksums, then confirm exact DLL identity before publication.
 It does not invoke the stable `release-*` workflow or publish other plugins.
 Update the QOL version/resources, changelog and `docs/CONTROLLER-QOL-BETA.md`
 before tagging. For local packaging use `tools/package_runtime.py

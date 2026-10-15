@@ -1,3 +1,4 @@
+#include "relay_allocation.h"
 #include "qol_glyphs.h"
 #include "qol_navigation.h"
 #include "glyph_policy.h"
@@ -232,13 +233,7 @@ bool InstallTextCalls(const D2RL::PluginContext* ctx) noexcept {
     if(!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS|GET_MODULE_HANDLE_EX_FLAG_PIN,
         reinterpret_cast<LPCWSTR>(&HookText),&pinned)) return false;
     const auto site=ctx->exeBase+QolGlyphCalls::Sites[0];
-    SYSTEM_INFO info{};GetSystemInfo(&info);
-    const uintptr_t step=info.dwAllocationGranularity;
-    const uintptr_t aligned=site & ~(step-1);
-    unsigned char* relay=nullptr;
-    for(uintptr_t offset=step;offset<0x40000000 && !relay;offset+=step)
-        relay=static_cast<unsigned char*>(VirtualAlloc(reinterpret_cast<void*>(aligned+offset),64,
-            MEM_COMMIT|MEM_RESERVE,PAGE_READWRITE));
+    auto* relay=QolRelay::Allocate(site,64);
     if(!relay) return false;
     relay[0]=0xff;relay[1]=0x25;std::memset(relay+2,0,4);
     const auto destination=&HookText;std::memcpy(relay+6,&destination,8);

@@ -26,12 +26,14 @@ static void Check(bool ok,const char* message) { if(!ok) {std::fprintf(stderr,"F
 static std::array<uint64_t,8> installedRvas{};
 static unsigned installCount{};
 static bool rejectCast{};
+static uint64_t rejectEssential{};
 static bool __cdecl Match(const D2RL::PluginContext* context,uint64_t rva,const void* expected,uint32_t size) noexcept {
     return std::memcmp(reinterpret_cast<const void*>(context->exeBase+rva),expected,size)==0;
 }
 static bool __cdecl RecordHook(const D2RL::PluginContext*,const D2RL::InlineHookRegistration* registration) noexcept {
     if(installCount>=installedRvas.size()) return false;
     installedRvas[installCount++]=registration->rva;
+    if(rejectEssential==registration->rva)return false;
     if(rejectCast && registration->rva==Native::CastRva) return false;
     if(registration->original) *registration->original=registration->target;
     return true;
@@ -61,6 +63,25 @@ static void TestInstallation() {
     Check(QolAim::TestInstall(&context,true) && installCount==5,"SDK cast ownership rejection retains essential aim");
     rejectCast=false; image[Native::LookupRva]^=1; installCount=0;
     Check(!QolAim::TestInstall(&context,true) && installCount==0,"essential lookup guard mismatch still disables aim before hooks");
+    image[Native::LookupRva]^=1;
+    for(const auto failed:{Native::LookupRva,Native::UnitTestRva,Native::PointScoreRva,Native::SelectedRva}) {
+        rejectEssential=failed;installCount=0;
+        Check(!QolAim::TestInstall(&context,true),"essential allocation failure leaves complete aim inactive");
+        Check(QolAim::TestInactiveWrappers(),"partial/disabled/menu wrappers preserve native calls and results");
+        const auto partialCount=installCount;
+        // The real first hook changes its prefix before the second allocation
+        // fails. Even with pristine fixture bytes, retry must remain barred.
+        Check(!QolAim::TestInstall(&context,true,false) && installCount==partialCount,"partial installation cannot allocate or register twice");
+        for(const auto kind:{D2RL::Lifecycle::GameplayEventKind::GameJoined,D2RL::Lifecycle::GameplayEventKind::LocalPlayerReady,D2RL::Lifecycle::GameplayEventKind::GameLeft})
+            QolAim::TestLifecycle(static_cast<unsigned>(kind));
+        Check(installCount==partialCount && !QolAim::OwnsGuidedArrow(),"failed joins/rejoins cannot revive or retry incomplete aim");
+    }
+    rejectEssential=0;installCount=0;
+    Check(QolAim::TestInstall(&context,true),"fresh startup can install after prior-process failure");
+    const auto startupCount=installCount;
+    for(const auto kind:{D2RL::Lifecycle::GameplayEventKind::GameJoined,D2RL::Lifecycle::GameplayEventKind::LocalPlayerReady,D2RL::Lifecycle::GameplayEventKind::GameLeft})
+        QolAim::TestLifecycle(static_cast<unsigned>(kind));
+    Check(QolAim::TestInstall(&context,true,false) && installCount==startupCount,"successful startup and later joins retain one hook set");
     Check(warningLogs>0,"quiet mode retains compatibility warnings");
     QolAim::Shutdown();
     VirtualFree(image,0,MEM_RELEASE);

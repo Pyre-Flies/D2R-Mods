@@ -11,7 +11,7 @@ bool Guard(uintptr_t game) noexcept {
     using namespace QolIdentifyStatProfile;
     __try {
         return game && core && !std::memcmp(reinterpret_cast<void*>(game+0x2f5020),Entry,sizeof(Entry)) &&
-            QolCoexistence::StatSlot(game,core) &&
+            QolCoexistence::ItemQuantitySlot(game,core) &&
             !std::memcmp(reinterpret_cast<void*>(core+0x831de0),Wrapper,sizeof(Wrapper)) &&
             !std::memcmp(reinterpret_cast<void*>(core+0x3d8bd0),Body,sizeof(Body));
     } __except(EXCEPTION_EXECUTE_HANDLER) {return false;}

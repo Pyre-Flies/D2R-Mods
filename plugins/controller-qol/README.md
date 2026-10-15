@@ -1,17 +1,16 @@
 # Controller QOL Updates
 
-**1.3.1+rev.79-beta.2 · by PyreFly · Windows x64 / D2RLoader 1.3.1 / plugin ABI 4**
+**1.3.1+rev.79-beta.4 · by PyreFly · Windows x64 / D2RLoader 1.3.1 / plugin ABI 4**
 
 Controller item shortcuts, direct ground looting, menu navigation and optional
 right-stick skill aiming. This README covers the default button combinations,
 all shared settings and skill-profile editing. There are no chat commands.
 
-This beta repairs remote item actions blocked after Global Chat updates. The
-shared compatibility check covers stash/Cube transfers, bulk advanced-storage
-deposits, Quick Identify and Identify All. Automated checks passed; live remote
-transfers, identification and persistence still need testing. See the
-[beta test checklist](../../docs/CONTROLLER-QOL-BETA.md), and report all bugs.
-Existing settings and controller mappings are preserved.
+This beta fixes gem withdrawals, restores the aiming reticle and R3 skill
+toggles, and improves item transfer and identification compatibility with other
+plugins. Existing settings and controller mappings are preserved. Please test
+and report any issues. Broader item and save-persistence testing remains open.
+See the [beta release notes](https://github.com/Pyre-Flies/D2R-Mods/releases/tag/beta-controller-qol-2026.10.15.2).
 
 - [Install and update](#installation-and-updates)
 - [All default controller shortcuts](#default-controller-shortcuts)
