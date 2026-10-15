@@ -109,13 +109,43 @@ void TestTooltipVisibilitySnapshots() {
     check(!TooltipSelectorScope(stack,0x10000000+0x377cfc,true));coreBase=oldBase;
 }
 }
+namespace {
+std::string rangeConfig="# keep\r\n[display]\r\nalways_show_ranges = false # startup\r\n[other]\r\nkeep = 8\r\n";
+unsigned rangeReads{},rangeWrites{};bool rangeReadFail{},rangeWriteFail{};
+bool __cdecl ReadRangeConfig(const D2RL::PluginContext*,char* output,unsigned size,unsigned* required) noexcept {
+    ++rangeReads;*required=static_cast<unsigned>(rangeConfig.size()+1);
+    if(rangeReadFail || size<*required)return false;
+    std::memcpy(output,rangeConfig.c_str(),*required);return true;
+}
+bool __cdecl WriteRangeConfig(const D2RL::PluginContext*,const char* text) noexcept {
+    ++rangeWrites;if(rangeWriteFail)return false;rangeConfig=text;return true;
+}
+}
 int main(int argc,char** argv) {
+    const D2RL::PluginApi rangeApi{.apiSize=D2RL::PluginApiSize,.readConfig=ReadRangeConfig,.writeConfig=WriteRangeConfig};
+    const D2RL::PluginContext rangeContext{.contextSize=sizeof(D2RL::PluginContext),.api=&rangeApi};
+    contributionContext=&rangeContext;
     active.store(true);alwaysReady.store(true);alwaysEnabled.store(false);
     check(ApplyRollCommand("") && alwaysEnabled.load());
     check(ApplyRollCommand("off") && !alwaysEnabled.load());
     check(ApplyRollCommand("status") && !alwaysEnabled.load());
     check(!ApplyRollCommand("invalid") && !alwaysEnabled.load());
-    alwaysReady.store(false);check(!ApplyRollCommand("on"));active.store(false);
+    auto reads=rangeReads,writes=rangeWrites;
+    RollChatCommand("status",nullptr);RollChatCommand("invalid",nullptr);
+    check(rangeReads==reads && rangeWrites==writes);
+    RollChatCommand("on",nullptr);check(alwaysEnabled.load());
+    LoadDisplaySettings(&rangeContext);check(alwaysConfigured);
+    check(rangeConfig.starts_with("# keep\r\n") && rangeConfig.find("# startup")!=rangeConfig.npos && rangeConfig.ends_with("[other]\r\nkeep = 8\r\n"));
+    const auto retained=rangeConfig;rangeWriteFail=true;
+    RollChatCommand("off",nullptr);check(alwaysEnabled.load() && rangeConfig==retained);
+    rangeWriteFail=false;rangeReadFail=true;writes=rangeWrites;
+    check(!ApplyRollCommand("off") && alwaysEnabled.load() && rangeWrites==writes);
+    rangeReadFail=false;rangeConfig=std::string(65537,'#');
+    check(!ApplyRollCommand("off") && rangeWrites==writes);rangeConfig=retained;
+    RollChatCommand("off",nullptr);LoadDisplaySettings(&rangeContext);check(!alwaysConfigured && !alwaysEnabled.load());
+    RollChatCommand("toggle",nullptr);check(alwaysEnabled.load());
+    alwaysReady.store(false);writes=rangeWrites;check(!ApplyRollCommand("on") && rangeWrites==writes);
+    active.store(false);contributionContext=nullptr;
     {
         std::vector<unsigned char> game(0x2dc4c0);
         const unsigned char entry[]={0x48,0x89,0x5c,0x24,0x20,0x55,0x56,0x57,0x41,0x54,0x41,0x55,0x41,0x56,0x41,0x57};
@@ -256,7 +286,7 @@ int main(int argc,char** argv) {
     check(!D2RLoaderLoadPlugin(nullptr));
     auto info=D2RLoaderGetPluginInfo();
     check(std::strcmp(info->id,"item-roll-ranges")==0);
-    check(std::strcmp(info->version,"1.3.1+rev.45")==0);
+    check(std::strcmp(info->version,"1.3.1+rev.46")==0);
     std::puts("Passed real adapter passthrough/ABI, inactive late calls, atomic slot conflict/restore, exported identity.");
 }
 

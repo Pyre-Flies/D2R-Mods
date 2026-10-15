@@ -1,4 +1,4 @@
-# Floating Damage 1.3.1+rev.12
+# Floating Damage 1.3.1+rev.13
 
 By PyreFly. Windows x64 and D2RLoader 1.3.1 / plugin ABI 4. Native features require the supported game/Core build; unsupported paths retain native behavior.
 
@@ -23,14 +23,15 @@ clients are unsupported.
 
 | Chat command | Effect |
 | --- | --- |
-| `/damagenumbers on` | Enable numbers for this session. |
+| `/damagenumbers on` | Enable numbers and save the setting. |
 | `/damagenumbers off` | Hide numbers and clear tracking. |
 | `/damagenumbers status` | Report enabled state. |
 | `/damagenumbers motion on` | Use rise, fall and sideways drift. |
 | `/damagenumbers motion off` | Use straight-rise animation. |
 
-Chat changes are session-only. For startup behavior and styling, edit existing
-keys in `floating-damage.toml`:
+Enable/motion commands save automatically to the active `floating-damage.toml`
+and survive restart. Status commands do not save. If saving fails, the setting
+stays unchanged and a warning is shown. For styling, edit existing keys:
 
 ```toml
 [floating-damage]

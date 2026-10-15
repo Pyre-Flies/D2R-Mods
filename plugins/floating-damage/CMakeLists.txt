@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.29)
-project(floating-damage VERSION 1.3.1.12 LANGUAGES CXX RC)
+project(floating-damage VERSION 1.3.1.13 LANGUAGES CXX RC)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(PLUGIN_SDK "${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/D2RLoader-PluginSDK" CACHE PATH "D2RLoader PluginSDK")
@@ -53,3 +53,7 @@ target_include_directories(floating-damage-chat-tests PRIVATE "${PLUGIN_SDK}/inc
 target_compile_options(floating-damage-chat-tests PRIVATE /W4 /WX)
 add_dependencies(floating-damage-chat-tests native-chat-fixture-a native-chat-fixture-b)
 add_test(NAME floating-damage-chat COMMAND floating-damage-chat-tests "$<TARGET_FILE:native-chat-fixture-a>" "$<TARGET_FILE:native-chat-fixture-b>")
+
+add_executable(chat-config-tests ../shared/tests/chat_config_tests.cpp)
+target_compile_options(chat-config-tests PRIVATE /W4 /WX)
+add_test(NAME chat-config-persistence COMMAND chat-config-tests)

@@ -11,6 +11,8 @@
 #include <cstring>
 #include "policy.h"
 #include "display_config.h"
+#include "../../shared/chat_config.h"
+#include <mutex>
 #include "always_profile.h"
 #include "hint_text.h"
 #include "provider_profile.h"
@@ -1052,7 +1054,7 @@ void TraceProperties(unsigned annotated,unsigned unmatched,const char* actual,co
     try { seen.emplace_back(actual); } catch (...) { return; }
     char message[14000]{};
     const int n=std::snprintf(message,sizeof(message),
-        "v1.3.1+rev.45 properties annotated=%u unmatched=%u labeled=%u captured=%u\r\nACTUAL: %.4095s\r\nRANGED: %.4095s\r\nRESULT: %.4095s\r\n",annotated,unmatched,labeled,captured,actual,ranged,result);
+        "v1.3.1+rev.46 properties annotated=%u unmatched=%u labeled=%u captured=%u\r\nACTUAL: %.4095s\r\nRANGED: %.4095s\r\nRESULT: %.4095s\r\n",annotated,unmatched,labeled,captured,actual,ranged,result);
     if (n<=0 || n>=static_cast<int>(sizeof(message))) return;
     HANDLE file=CreateFileW(diagnosticPath,FILE_APPEND_DATA,FILE_SHARE_READ|FILE_SHARE_WRITE,nullptr,OPEN_ALWAYS,FILE_ATTRIBUTE_NORMAL,nullptr);
     if (file==INVALID_HANDLE_VALUE) return;
@@ -1309,23 +1311,35 @@ bool InstallAlways(const unsigned char* base,const unsigned char* game,const D2R
     }else context->LogWarn("Item Roll Ranges: optional always-show hint witnesses refused; native footer retained.");
     alwaysReady.store(true,std::memory_order_release);return true;
 }
+bool ValidRollCommand(std::string_view args) noexcept {
+    return args=="on" || args=="off" || args=="status" || args=="toggle" || args.empty();
+}
 bool ApplyRollCommand(std::string_view args) noexcept {
-    if(args!="on" && args!="off" && args!="status" && args!="toggle" && !args.empty())return false;
-    if(!active.load() || !alwaysReady.load())return false;
-    if(args=="on")alwaysEnabled.store(true);
-    else if(args=="off")alwaysEnabled.store(false);
-    else if(args.empty() || args=="toggle")alwaysEnabled.store(!alwaysEnabled.load());
-    return true;
+    static std::mutex mutex;
+    const std::lock_guard guard(mutex);
+    if(!ValidRollCommand(args) || !active.load() || !alwaysReady.load())return false;
+    if(args=="status")return true;
+    const bool next=args=="on"?true:args=="off"?false:!alwaysEnabled.load();
+    if(!ChatConfig::Save(contributionContext,"display",{{"always_show_ranges",next}},65537))return false;
+    alwaysEnabled.store(next);return true;
 }
 void RollChatCommand(const char* args,void*) noexcept {
     if(!contributionContext)return;
     const auto length=args?strnlen_s(args,17):0;
-    if(length>16 || !ApplyRollCommand(std::string_view(args?args:"",length))){
-        contributionContext->WriteConsoleMessage("AlwaysShowRolls: use on, off, toggle or status; requires admitted range adapters.",D2RL::ConsoleMessageKind::Warning);return;
+    const std::string_view argument(args?args:"",length);
+    if(length>16 || !ValidRollCommand(argument)){
+        contributionContext->WriteConsoleMessage("AlwaysShowRolls: use on, off, toggle or status.",D2RL::ConsoleMessageKind::Warning);return;
     }
-    contributionContext->WriteConsoleMessage(alwaysEnabled.load()?"AlwaysShowRolls: ON (this session).":"AlwaysShowRolls: OFF (hold Ctrl/RT for ranges).");
-    contributionContext->LogInfo(alwaysEnabled.load()?"AlwaysShowRolls: ON.":"AlwaysShowRolls: OFF.");
+    if(!active.load() || !alwaysReady.load()){
+        contributionContext->WriteConsoleMessage("AlwaysShowRolls: range adapters unavailable.",D2RL::ConsoleMessageKind::Warning);return;
+    }
+    if(!ApplyRollCommand(argument)){
+        contributionContext->WriteConsoleMessage("AlwaysShowRolls: config save failed; setting unchanged.",D2RL::ConsoleMessageKind::Warning);return;
+    }
+    contributionContext->WriteConsoleMessage(alwaysEnabled.load()?"AlwaysShowRolls: ON (saved).":"AlwaysShowRolls: OFF (hold Ctrl/RT for ranges).");
+    if(argument!="status")contributionContext->LogInfo(alwaysEnabled.load()?"AlwaysShowRolls: ON (saved).":"AlwaysShowRolls: OFF (saved).");
 }
+
 void LoadDisplaySettings(const D2RL::PluginContext* context) noexcept {
     alwaysConfigured=false;
     try {
@@ -1530,14 +1544,14 @@ bool Install(const D2RL::PluginContext* context) noexcept {
     active.store(true, std::memory_order_release);
     context->LogInfo(propertySourcesReady.load()?"Item Roll Ranges: active linked-property/runeword source model admitted.":"Item Roll Ranges: active linked-property/runeword source model unavailable.");
     context->LogInfo(alwaysReady.load() && alwaysEnabled.load()?"Item Roll Ranges display mode: always show ranges.":"Item Roll Ranges display mode: native Ctrl/controller hold.");
-    context->LogInfo("Item Roll Ranges 1.3.1+rev.45 by PyreFly: Ctrl / RT(R2), or QOL range override; inventory, stash, Cube and vendor only. Actual values, native ranges, named P/S tiers and guarded stacked-damage details. Unsupported or ambiguous provenance is omitted.");
+    context->LogInfo("Item Roll Ranges 1.3.1+rev.46 by PyreFly: Ctrl / RT(R2), or QOL range override; inventory, stash, Cube and vendor only. Actual values, native ranges, named P/S tiers and guarded stacked-damage details. Unsupported or ambiguous provenance is omitted.");
     return true;
 }
 }
 
 D2RL_PLUGIN_EXPORT const D2RL::PluginInfo* __cdecl D2RLoaderGetPluginInfo() noexcept {
     static const D2RL::PluginInfo info{sizeof(D2RL::PluginInfo), D2RL_PLUGIN_ABI_VERSION,
-        "item-roll-ranges", "Item Roll Ranges", "1.3.1+rev.45", "PyreFly",
+        "item-roll-ranges", "Item Roll Ranges", "1.3.1+rev.46", "PyreFly",
         "Hold Ctrl or RT/R2 (R1/RB with Controller QOL) for native item stat ranges in item-management screens.",
         D2RL::PluginFlags::Client | D2RL::PluginFlags::NativeHooks, {}};
     return &info;

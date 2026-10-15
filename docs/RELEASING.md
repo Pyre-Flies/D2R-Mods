@@ -14,9 +14,9 @@ material. Documentation changes must preserve the tested DLL bytes.
 
 ## Current stable suite
 
-The staged suite contains Controller QOL rev.78, Item Roll Ranges rev.45,
-Map Assistance rev.1, Inventory Deposit rev.13, Floating Damage rev.12 and
-Always Show Sockets rev.1. Every plugin uses `1.3.1+rev.N`; the revision is
+The staged suite contains Controller QOL rev.78, Item Roll Ranges rev.46,
+Map Assistance rev.1, Inventory Deposit rev.13, Floating Damage rev.13 and
+Always Show Sockets rev.2. Every plugin uses `1.3.1+rev.N`; the revision is
 independent per plugin. Windows file/product versions use `1.3.1.N` and no
 prerelease flag. Full suite manifests cover six runtime ZIPs, plus one adjacent
 SHA256SUMS file. Historical beta tags remain channel-validated for reproduction.

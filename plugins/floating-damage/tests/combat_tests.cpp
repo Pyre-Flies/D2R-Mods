@@ -2,6 +2,22 @@
 #include <cstdlib>
 namespace {
 unsigned calls{}; bool argsMatch{},die{},marked{},markedElement{};
+std::string commandConfig="# keep\r\n[floating-damage]\r\nenabled = true # enabled\r\nfalling_motion = true\r\ntext_size = 31\r\n[other]\r\nkeep = 8\r\n";
+unsigned configReads{},configWrites{};bool configReadFail{},configWriteFail{};
+bool __cdecl ReadConfig(const D2RL::PluginContext*,char* output,unsigned size,unsigned* required) noexcept {
+    ++configReads;*required=static_cast<unsigned>(commandConfig.size()+1);
+    if(configReadFail || size<*required)return false;
+    std::memcpy(output,commandConfig.c_str(),*required);return true;
+}
+bool __cdecl WriteConfig(const D2RL::PluginContext*,const char* text) noexcept {
+    ++configWrites;if(configWriteFail)return false;commandConfig=text;return true;
+}
+D2RL::ConsoleCommandResult Invoke(const char* args) noexcept {
+    const D2RL::ConsoleCommandContext command{.contextSize=D2RL::ConsoleCommandContextSize,
+        .argsLength=static_cast<unsigned>(std::strlen(args)),.args=args,.plugin=ctx};
+    return Command(nullptr,&command,nullptr);
+}
+
 unsigned logged{}; char lastLog[640]{};
 unsigned rectangles{};D2RL::Overlay::FilledRectangleRequest lastRectangle{};
 D2RL::Overlay::Result rectangleResult=D2RL::Overlay::Result::Success;
@@ -112,7 +128,7 @@ int main() {
     Damage::CombatPacket packet{};
     expectedGame=reinterpret_cast<void*>(game); expectedAttacker=reinterpret_cast<void*>(std::uintptr_t{0x87654321});
     expectedDefender=unit.data();expectedDamage=packet.bytes.data();expectedMissile=1;hpValue=&stats[0].value;
-    const D2RL::PluginApi api{.apiSize=D2RL::PluginApiSize,.logInfo=Log};
+    const D2RL::PluginApi api{.apiSize=D2RL::PluginApiSize,.logInfo=Log,.readConfig=ReadConfig,.writeConfig=WriteConfig};
     const D2RL::PluginContext context{.contextSize=sizeof(D2RL::PluginContext),.api=&api,
         .exeBase=reinterpret_cast<std::uintptr_t>(&game)-Damage::Native::GameGlobalRva};
     ctx=&context;combatOriginal=reinterpret_cast<void*>(Original);combatReady.store(true);active.store(true);enabled.store(false);generation.store(7);
@@ -161,6 +177,34 @@ int main() {
     Check(std::strstr(lastLog,"result4=2000") && std::strstr(lastLog,"crit_guard=0 critical_candidate=0"),"guard refusal keeps raw flags but disables interpretation");
     captureRecords.store(127);Trace("last record");Check(!capture.load() && captureRecords.load()==128,"capture auto-stops at bounded log limit");
     ChatCommand("capture on",nullptr);ChatCommand("capture off",nullptr);Check(!capture.load(),"capture has an explicit stop control");
+    unsigned commandRejected{};auto restored=Damage::Parse(commandConfig,commandRejected);
+    Check(!commandRejected && !restored.enabled && !restored.fallingMotion && restored.textSize==31,
+        "actual chat commands save startup values and preserve unrelated styling");
+    Check(commandConfig.starts_with("# keep\r\n") && commandConfig.ends_with("[other]\r\nkeep = 8\r\n") &&
+        commandConfig.find("# enabled")!=commandConfig.npos,"commands preserve comments, CRLF and other sections");
+    auto readCount=configReads,writeCount=configWrites;
+    for(const char* arg:{"status","motion status","capture status","invalid","on off"}) Invoke(arg);
+    Check(configReads==readCount && configWrites==writeCount,"status and rejected commands do no configuration IO");
+    Check(Invoke("on")==D2RL::ConsoleCommandResult::Handled && enabled.load(),"explicit on saves and enables");
+    Check(Invoke("toggle")==D2RL::ConsoleCommandResult::Handled && !enabled.load(),"toggle saves off");
+    ChatCommand("",nullptr);Check(enabled.load(),"bare chat command saves the toggled state");
+    Check(Invoke("on")==D2RL::ConsoleCommandResult::Handled && configWrites==writeCount+4,"repeated explicit on still confirms the saved preference");
+    Invoke("motion on");Check(Damage::Parse(commandConfig,commandRejected).fallingMotion,"motion on restores from saved text");
+    Invoke("motion toggle");Check(!Damage::Parse(commandConfig,commandRejected).fallingMotion,"motion toggle restores from saved text");
+    Invoke("off");const auto retained=commandConfig;configWriteFail=true;
+    Check(Invoke("on")==D2RL::ConsoleCommandResult::Failed && !enabled.load() && commandConfig==retained,
+        "write failure leaves runtime and saved enable state unchanged");
+    Check(Invoke("motion on")==D2RL::ConsoleCommandResult::Failed && !fallingMotion.load(),"failed motion save leaves runtime unchanged");
+    configWriteFail=false;configReadFail=true;writeCount=configWrites;
+    Check(Invoke("on")==D2RL::ConsoleCommandResult::Failed && !enabled.load() && configWrites==writeCount,
+        "read failure never overwrites configuration");
+    configReadFail=false;commandConfig=std::string(16384,'#');
+    Check(Invoke("on")==D2RL::ConsoleCommandResult::Failed && configWrites==writeCount,"oversize config is not truncated");
+    commandConfig=retained;ready.store(false);Invoke("on");
+    Check(!enabled.load() && configWrites==writeCount,"unsupported state cannot save commands");ready.store(true);
+    readCount=configReads;writeCount=configWrites;
+    Invoke("capture on");Invoke("capture off");
+    Check(configReads==readCount && configWrites==writeCount,"bounded diagnostic capture is an action, not a startup preference");
     std::array<unsigned char,0xa8> effect{};std::array<Stat,1> rate{{{0,74,-60}}};
     Put(unit,0x88,reinterpret_cast<std::uintptr_t>(list.data()));Put(list,0x1c,std::int32_t{-1});
     Put(list,0x90,reinterpret_cast<std::uintptr_t>(effect.data()));Put(list,0x98,std::uintptr_t{0});

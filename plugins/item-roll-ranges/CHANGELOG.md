@@ -1,5 +1,15 @@
 # Item Roll Ranges changelog
 
+## 1.3.1+rev.46 - 2026-10-15
+
+- Save `/AlwaysShowRolls` on/off/toggle to the active TOML and restore it on
+  startup. Keep the fresh-install default false and status read-only.
+- Preserve unrelated settings/comments. Save failures report a warning and keep
+  the previous runtime state.
+- Nine suites pass, including production chat/config callbacks, restart parsing,
+  read/write/size failures and existing fixed-Sash/tooltip regressions. Live
+  save/restart confirmation remains pending; native hook contracts are unchanged.
+
 ## Distribution documentation
 
 - Keep runtime ZIPs minimal: one DLL, reference defaults and a usage README

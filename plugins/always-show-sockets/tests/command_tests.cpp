@@ -314,7 +314,16 @@ int main() {
     const auto beforeModes=configWrites,beforeModeReads=configReads;
     for(const char* arg:{"default","always","off","status","on","toggle","toggle"}) Check(Invoke(arg)==D2RL::ConsoleCommandResult::Handled,"session mode/status command succeeds");
     for(const char* arg:{"size 101","opacity 9","ring -1","center 101","lift 9","rim 80"}) Check(Invoke(arg)==D2RL::ConsoleCommandResult::InvalidArguments,"invalid appearance and removed alias are refused");
-    Check(configWrites==beforeModes && configReads==beforeModeReads && savedConfig.find("mode =")==std::string::npos,"modes/status/invalid commands perform no config IO and do not persist startup mode");
+    Check(configWrites==beforeModes+6 && configReads==beforeModeReads+6,"mode selections and toggles save; status and invalid commands do no config IO");
+    enabled.store(false);alwaysVisible.store(false);LoadSettings();
+    Check(enabled.load() && alwaysVisible.load(),"real startup settings loader restores saved always mode");
+    nativeChatEntry->execute("off");enabled.store(true);alwaysVisible.store(false);LoadSettings();
+    Check(!enabled.load() && alwaysVisible.load(),"off survives reload and retains the previous styled mode");
+    nativeChatEntry->execute("toggle");enabled.store(false);alwaysVisible.store(false);LoadSettings();
+    Check(enabled.load() && alwaysVisible.load(),"toggle resumes and saves the retained always mode");
+    nativeChatEntry->execute("default");alwaysVisible.store(true);LoadSettings();
+    Check(enabled.load() && !alwaysVisible.load(),"default mode saves and restores native hover visibility");
+    nativeChatEntry->execute("always");
     const auto beforeFailedWrite=savedConfig;failConfigWrite=true;
     Check(Invoke("center 44")==D2RL::ConsoleCommandResult::Failed && centerOpacityPercent.load()==44 && savedConfig==beforeFailedWrite && saveWarnings==1,"write failure is reported while session appearance remains usable");
     failConfigWrite=false;Check(Invoke("center 44")==D2RL::ConsoleCommandResult::Handled,"retry saves after write failure");
@@ -324,6 +333,10 @@ int main() {
     const auto beforeOversize=savedConfig;savedConfig=std::string(Sockets::ConfigCapacity,'#');const auto beforeOversizeWrites=configWrites;
     Check(Invoke("lift 4")==D2RL::ConsoleCommandResult::Failed && configWrites==beforeOversizeWrites && saveWarnings==3,"oversized config is not truncated or replaced");
     savedConfig=beforeOversize;
+    failConfigWrite=true;const auto beforeModeFailure=savedConfig;
+    Check(Invoke("off")==D2RL::ConsoleCommandResult::Failed && !enabled.load() && savedConfig==beforeModeFailure,
+        "mode save failure is reported without claiming persistence");
+    failConfigWrite=false;LoadSettings();Check(enabled.load(),"failed mode save does not replace prior startup state");
     ChatCommand("invalid",nullptr);Check(enabled.load(),"invalid arguments preserve state");
     ChatCommand("off followed by overlong arguments",nullptr);Check(enabled.load(),"overlong arguments rejected");
     const auto beforeUnsupported=configWrites;

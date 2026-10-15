@@ -7,7 +7,7 @@ jewels from game chat. Loose items keep their normal size and opacity.
 
 | Command | Behavior |
 | --- | --- |
-| `/sockets default` | Normal hover/selection visibility, with your appearance settings. **Startup mode.** |
+| `/sockets default` | Normal hover/selection visibility, with your appearance settings. **Fresh-install default.** |
 | `/sockets always` | Show styled sockets continuously. |
 | `/sockets off` | Restore native visibility and appearance. |
 
@@ -40,18 +40,21 @@ To apply the recommended settings in an existing session:
 
 ## Automatic saving
 
-`size`, `opacity`, `ring`, `center`, and `lift` apply immediately and save
+Visibility modes, `size`, `opacity`, `ring`, `center`, and `lift` apply immediately and save
 automatically to the active loader's `d2rloader/config/always-show-sockets.toml`.
 They update only the changed setting and retain the other values and comments.
 Saved appearance values load on the next start.
 
-Visibility modes are session-only. Every launch starts in `/sockets default`,
-regardless of the mode used in the previous session.
+Visibility modes persist too. Each launch restores your saved choice. Fresh
+installs use `/sockets default`. Off/on toggles retain the last styled mode
+(default or always). Status commands do not write configuration.
 
 For manual editing, close the game, edit these keys, then restart:
 
 ```toml
 [always-show-sockets]
+enabled = true          # false restores native visibility/appearance
+always_visible = false  # true keeps styled sockets visible when enabled
 inserted_item_scale_percent = 65
 inserted_item_opacity_percent = 65
 inserted_item_lift_pixels = 1

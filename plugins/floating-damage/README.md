@@ -1,6 +1,6 @@
 # Floating Damage
 
-**1.3.1+rev.12 · by PyreFly**
+**1.3.1+rev.13 · by PyreFly**
 
 See the [user guide](DISTRIBUTION-README.md) for installation, controls, command examples,
 configuration and compatibility limits.

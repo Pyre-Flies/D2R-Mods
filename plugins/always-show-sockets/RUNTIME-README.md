@@ -1,4 +1,4 @@
-# Always Show Sockets 1.3.1+rev.1
+# Always Show Sockets 1.3.1+rev.2
 
 By PyreFly. Windows x64 and D2RLoader 1.3.1 / plugin ABI 4. Native features require the supported game/Core build; unsupported paths retain native behavior.
 
@@ -22,8 +22,8 @@ apply to HD graphics.
 
 | Chat command | Effect |
 | --- | --- |
-| `/sockets default` | Styled sockets on normal hover/selection; startup mode. |
-| `/sockets always` | Keep styled sockets visible for this session. |
+| `/sockets default` | Styled sockets on normal hover/selection; save this mode. |
+| `/sockets always` | Keep styled sockets visible and save this mode. |
 | `/sockets off` | Restore native visibility and appearance. |
 | `/sockets size 65` | Artwork size, 10-100%; circles follow at +15 points. |
 | `/sockets opacity 65` | Artwork opacity relative to native fade, 10-100%. |
@@ -32,9 +32,10 @@ apply to HD graphics.
 | `/sockets lift 1` | Move artwork upward 0-8 rendered pixels. |
 | `/sockets status` | Report mode and appearance values. |
 
-Appearance changes save to `always-show-sockets.toml`. Modes are session-only;
-each launch starts in default mode. A save warning means the appearance change
-applies only to the session until the config problem is corrected.
+Visibility modes and appearance save to the active `always-show-sockets.toml`
+and survive restart. New installs use default hover/selection mode. Bare
+`/sockets` toggles off/on and remembers the last styled mode. Status is read-only.
+A save warning means the change applies only to this session until saving succeeds.
 
 Slash commands are entered in game chat; feedback appears in the loader console.
 

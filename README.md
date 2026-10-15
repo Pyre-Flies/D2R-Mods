@@ -7,11 +7,11 @@ Download individual runtime ZIPs from the
 | Plugin | Stable version | What it adds |
 | --- | --- | --- |
 | [Controller QOL Updates](plugins/controller-qol/DISTRIBUTION-README.md) | 1.3.1+rev.78 | Controller item shortcuts, menu navigation and right-stick aiming. |
-| [Item Roll Ranges](plugins/item-roll-ranges/docs/DISTRIBUTION-README.md) | 1.3.1+rev.45 | Roll/source breakdowns, Base damage/Defense, item and base quality levels. |
+| [Item Roll Ranges](plugins/item-roll-ranges/docs/DISTRIBUTION-README.md) | 1.3.1+rev.46 | Roll/source breakdowns, Base damage/Defense, item and base quality levels. |
 | [Map Assistance](plugins/map-assistance/DISTRIBUTION-README.md) | 1.3.1+rev.1 | Editable map-reading advice on Keys tooltips. |
 | [Inventory Deposit](plugins/inventory-deposit/DISTRIBUTION-README.md) | 1.3.1+rev.13 | Mouse Deposit All button for eligible advanced-storage items. |
-| [Floating Damage](plugins/floating-damage/DISTRIBUTION-README.md) | 1.3.1+rev.12 | Local enemy HP-loss numbers with element colors and critical emphasis. |
-| [Always Show Sockets](plugins/always-show-sockets/DISTRIBUTION-README.md) | 1.3.1+rev.1 | Configurable socket visibility, size and opacity. |
+| [Floating Damage](plugins/floating-damage/DISTRIBUTION-README.md) | 1.3.1+rev.13 | Local enemy HP-loss numbers with element colors and critical emphasis. |
+| [Always Show Sockets](plugins/always-show-sockets/DISTRIBUTION-README.md) | 1.3.1+rev.2 | Configurable socket visibility, size and opacity. |
 
 ## Install and update
 
@@ -32,11 +32,11 @@ Enter slash commands in game chat; feedback appears in the loader console.
 | Example | What it does |
 | --- | --- |
 | Hold Ctrl or RT/R2 | Show item ranges. Controller QOL's menu remap uses RB/R1. |
-| `/AlwaysShowRolls on` | Show ranges continuously for this session. Defaults off. |
+| `/AlwaysShowRolls on` | Show ranges continuously and save the setting. Defaults off. |
 | `/AlwaysShowRolls off` | Return to the hold-to-show control. |
-| `/damagenumbers off` | Hide floating numbers for this session. |
-| `/damagenumbers motion off` | Use straight-rise animation for this session. |
-| `/sockets always` | Show styled sockets continuously for this session. |
+| `/damagenumbers off` | Hide floating numbers and save the setting. |
+| `/damagenumbers motion off` | Use straight-rise animation and save the setting. |
+| `/sockets always` | Show styled sockets continuously and save the mode. |
 | `/sockets default` | Return to styled sockets on normal hover/selection. |
 | `/sockets size 65` | Set inserted artwork size to 65% and save the appearance setting. |
 | Hold LB/L1 | Show Controller QOL's ground-loot shortcut assignments. |

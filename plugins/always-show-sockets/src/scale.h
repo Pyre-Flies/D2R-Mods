@@ -22,6 +22,7 @@ struct Settings {
     unsigned scalePercent=DefaultScalePercent,opacityPercent=DefaultOpacityPercent;
     unsigned rimOpacityPercent=DefaultRimOpacityPercent,centerOpacityPercent=DefaultCenterOpacityPercent;
     unsigned insertedLiftPixels=DefaultInsertedLiftPixels;
+    bool enabled=true,alwaysVisible=false;
 };
 struct Point {std::int32_t x{},y{};};
 struct SpriteBounds {std::int32_t width{},height{},pivotX{},pivotY{};};
@@ -76,6 +77,12 @@ inline Settings ParseConfig(std::string_view text,unsigned& rejected) noexcept {
         const auto equal=line.find('=');
         if(equal==line.npos) {++rejected;continue;}
         const auto key=Trim(line.substr(0,equal));
+        if(key=="enabled" || key=="always_visible") {
+            const auto value=Trim(line.substr(equal+1));
+            if(value!="true" && value!="false") ++rejected;
+            else (key=="enabled"?settings.enabled:settings.alwaysVisible)=value=="true";
+            continue;
+        }
         if(key=="inserted_item_scale_percent" && !ParsePercent(line.substr(equal+1),settings.scalePercent)) ++rejected;
         if(key=="inserted_item_opacity_percent" && !ParsePercent(line.substr(equal+1),settings.opacityPercent)) ++rejected;
         if(key=="inserted_item_lift_pixels" && !ParseLift(line.substr(equal+1),settings.insertedLiftPixels)) ++rejected;

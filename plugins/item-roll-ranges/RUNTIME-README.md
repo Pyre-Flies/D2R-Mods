@@ -1,4 +1,4 @@
-# Item Roll Ranges 1.3.1+rev.45
+# Item Roll Ranges 1.3.1+rev.46
 
 By PyreFly. Windows x64 and D2RLoader 1.3.1 / plugin ABI 4. Native features require the supported game/Core build; unsupported paths retain native behavior.
 
@@ -24,12 +24,13 @@ restore the normal tooltip. Example: `Defense: 246 (Base: 127 - 127)`.
 
 | Chat command | Effect |
 | --- | --- |
-| `/AlwaysShowRolls on` | Show ranges continuously for this session. |
+| `/AlwaysShowRolls on` | Show ranges continuously and save the setting. |
 | `/AlwaysShowRolls off` | Return to hold-to-show. |
 | `/AlwaysShowRolls status` | Report the current setting. |
 
-Lowercase `/alwaysshowrolls` also works. Always-show defaults off. For startup
-behavior, set `[display] always_show_ranges = true` or `false` in the active
+Lowercase `/alwaysshowrolls` also works. Always-show defaults off. Setting
+commands save automatically and survive restart; status is read-only. A save
+failure leaves the previous state active and reports a warning. You can also set `[display] always_show_ranges = true` or `false` in the active
 `item-roll-ranges.toml`. Enable `[d2rcore.items] item_stat_ranges = true` in
 the effective D2RLoader configuration. `(?)` means a bound is unresolved;
 enchantment and set-bonus attribution is incomplete.

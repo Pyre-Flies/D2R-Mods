@@ -1,5 +1,6 @@
 #include <D2RLPlugin/api.h>
 #include "controls.h"
+#include "../../shared/chat_config.h"
 #include "style.h"
 #include "native_reader.h"
 #include "combat.h"
@@ -286,11 +287,21 @@ D2RL::ConsoleCommandResult __cdecl Command(D2R::Game::Client*,const D2RL::Consol
             } else if(available && request.motion) {
                 auto value=fallingMotion.load();
                 changed=Damage::UpdateFlag(action,value);
-                fallingMotion.store(value);
+                if(action!=Damage::Control::Status && !ChatConfig::Save(ctx,"floating-damage",{{"falling_motion",value}},16384)) {
+                    ctx->WriteConsoleMessage("Floating Damage: config save failed; motion setting unchanged.",D2RL::ConsoleMessageKind::Warning);
+                    return D2RL::ConsoleCommandResult::Failed;
+                }
+                settings.fallingMotion=value;fallingMotion.store(value);
                 message=value?"Floating Damage motion: rise, fall and drift.":"Floating Damage motion: straight rise.";
             } else if(available) {
                 auto value=enabled.load();
-                changed=Damage::ApplyControl(action,value,model);
+                Damage::UpdateFlag(action,value);
+                if(action!=Damage::Control::Status && !ChatConfig::Save(ctx,"floating-damage",{{"enabled",value}},16384)) {
+                    ctx->WriteConsoleMessage("Floating Damage: config save failed; enabled setting unchanged.",D2RL::ConsoleMessageKind::Warning);
+                    return D2RL::ConsoleCommandResult::Failed;
+                }
+                auto previous=enabled.load();changed=Damage::ApplyControl(action,previous,model);
+                settings.enabled=value;
                 if(changed) {
                     generation.fetch_add(1); queued.store(0);
                     playerValid=false; enemyCount=0; reports.store(0); failures.store(0);
@@ -389,7 +400,7 @@ void Stop() noexcept {
 }
 D2RL_PLUGIN_EXPORT auto D2RLoaderGetPluginInfo() noexcept -> const D2RL::PluginInfo* {
     static constexpr D2RL::PluginInfo info{.infoSize=D2RL::PluginInfoSize,.abiVersion=D2RL_PLUGIN_ABI_VERSION,
-        .id="floating-damage",.name="Floating Damage",.version="1.3.1+rev.12",.author="PyreFly",
+        .id="floating-damage",.name="Floating Damage",.version="1.3.1+rev.13",.author="PyreFly",
         .description="Floating numbers for observed enemy HP loss.",.flags=D2RL::PluginFlags::Client|D2RL::PluginFlags::NativeHooks};
     return &info;
 }
@@ -435,8 +446,8 @@ D2RL_PLUGIN_EXPORT auto D2RLoaderLoadPlugin(const D2RL::PluginContext* context) 
         else if(combatReady.load()) ctx->LogWarn("Floating Damage: critical writer guards refused; raw result flags remain diagnostic only.");
         if(!chatCommands.Start(ctx) || !chatCommands.Register("damagenumbers",ChatCommand,nullptr,"Toggle floating damage: on/off/status; motion on/off/status."))
             ctx->LogWarn("Floating Damage: native chat registration unavailable; debug-console command remains available.");
-        ctx->LogInfo(settings.enabled?"Floating Damage 1.3.1+rev.12: admitted; waiting for local gameplay lifecycle.":
-            "Floating Damage 1.3.1+rev.12: admitted; disabled in configuration; /damagenumbers on enables it.");return true;
+        ctx->LogInfo(settings.enabled?"Floating Damage 1.3.1+rev.13: admitted; waiting for local gameplay lifecycle.":
+            "Floating Damage 1.3.1+rev.13: admitted; disabled in configuration; /damagenumbers on enables it.");return true;
     } catch(...) {Stop();return false;}
 }
 D2RL_PLUGIN_EXPORT void D2RLoaderUnloadPlugin() noexcept {Stop();}

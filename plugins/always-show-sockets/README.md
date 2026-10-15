@@ -1,6 +1,6 @@
 # Always Show Sockets
 
-**1.3.1+rev.1 · by PyreFly**
+**1.3.1+rev.2 · by PyreFly**
 
 See the [user guide](DISTRIBUTION-README.md) for installation, controls, command examples,
 configuration and compatibility limits.

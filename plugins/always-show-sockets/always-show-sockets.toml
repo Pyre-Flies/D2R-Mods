@@ -1,4 +1,8 @@
 [always-show-sockets]
+# Saved display mode: enabled=false is native appearance; always_visible=true
+# keeps styled sockets visible. Both setting commands and appearance are saved.
+enabled = true
+always_visible = false
 # Size of inserted gems, runes and jewels. Loose items stay native.
 # Socket circles use this size +15 percentage points, up to 115.
 # Artwork range: 10 to 100 percent. 100 gives native-size art with a 115% ring.

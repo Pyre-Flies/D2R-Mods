@@ -1,6 +1,6 @@
 # Floating Damage
 
-**1.3.1+rev.12 · by PyreFly**
+**1.3.1+rev.13 · by PyreFly**
 
 Displays numbers when nearby hostile enemies lose HP in local single player,
 including confirmed killing blows. Numbers reflect observed HP loss from any
@@ -14,7 +14,7 @@ work there without the leading `/`.
 
 | Command | What it does |
 | --- | --- |
-| `/damagenumbers` | Toggle numbers for this session. |
+| `/damagenumbers` | Toggle numbers and save the setting. |
 | `/damagenumbers on` | Enable numbers. |
 | `/damagenumbers off` | Disable numbers and clear current tracking. |
 | `/damagenumbers status` | Report enabled state. |
@@ -22,8 +22,10 @@ work there without the leading `/`.
 | `/damagenumbers motion off` | Use a straight upward animation. |
 | `/damagenumbers motion status` | Report the current animation mode. |
 
-Chat toggles are session-only. Choose startup behavior in
-`d2rloader/config/floating-damage.toml`, then restart.
+Enable and motion commands save automatically to the active
+`d2rloader/config/floating-damage.toml` and survive restart. Status commands
+do not write configuration. A failed save leaves the previous setting active
+and reports a warning. Manual edits require a restart.
 
 ## Configuration examples
 
@@ -72,7 +74,7 @@ the repository [compatibility record](COMPATIBILITY.txt). Remote multiplayer cli
 is optional. Unsupported builds leave the feature unavailable.
 
 Live checks cover ordinary/killing numbers, movement, commands, element/poison
-colors and critical-marker controls. Seven automated suites passed. The latest
+colors and critical-marker controls. Eight automated suites passed, including file-backed TOML persistence. The latest
 4K scaling and three critical-style modes still need live visual checks;
 dense-combat performance and every camera/resolution combination are not fully
 validated. Closely spaced damage and healing can combine between observations.

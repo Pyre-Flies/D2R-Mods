@@ -3,6 +3,7 @@
 #include "hash.h"
 #include "scale.h"
 #include "config.h"
+#include "../../shared/chat_config.h"
 #include "ring_resources.h"
 #include <atomic>
 #include <cstddef>
@@ -207,6 +208,8 @@ D2RL::ConsoleCommandResult __cdecl Command(D2R::Game::Client*,const D2RL::Consol
     } else if(liftCommand) {
         if(!Sockets::ParseLift(arg.substr(5),requested)) return D2RL::ConsoleCommandResult::InvalidArguments;
     } else if(arg!="always" && arg!="default" && arg!="on" && arg!="off" && arg!="status" && arg!="toggle" && !arg.empty()) return D2RL::ConsoleCommandResult::InvalidArguments;
+    static std::mutex commandMutex;
+    const std::lock_guard commandGuard(commandMutex);
     if(!ready.load()) {ctx->WriteConsoleMessage("Sockets: unsupported build or hook unavailable.",D2RL::ConsoleMessageKind::Warning);return D2RL::ConsoleCommandResult::Failed;}
     if(sizeCommand) {scalePercent.store(requested);scaleObserved.store(false);circleObserved.store(false);}
     if(opacityCommand) {opacityPercent.store(requested);opacityObserved.store(false);}
@@ -219,7 +222,9 @@ D2RL::ConsoleCommandResult __cdecl Command(D2R::Game::Client*,const D2RL::Consol
     if(arg.empty() || arg=="toggle") enabled.store(!enabled.load());
     const char* changedKey=sizeCommand?"inserted_item_scale_percent":opacityCommand?"inserted_item_opacity_percent":
         ringCommand?"ring_opacity_percent":centerCommand?"ring_center_opacity_percent":liftCommand?"inserted_item_lift_pixels":nullptr;
-    const bool saved=!changedKey || SaveAppearance(changedKey,requested);
+    const bool modeCommand=!changedKey && arg!="status";
+    const bool saved=changedKey?SaveAppearance(changedKey,requested):!modeCommand ||
+        ChatConfig::Save(ctx,"always-show-sockets",{{"enabled",enabled.load()},{"always_visible",alwaysVisible.load()}},Sockets::ConfigCapacity);
     char message[256]{};
     const auto size=scalePercent.load();
     const auto mode=enabled.load()?(alwaysVisible.load()?"always (styled)":"default (styled hover)"):"off (native appearance)";
@@ -227,7 +232,7 @@ D2RL::ConsoleCommandResult __cdecl Command(D2R::Game::Client*,const D2RL::Consol
     ctx->WriteConsoleMessage(message);
     if(arg!="status") ctx->LogInfo(message);
     if(!saved) {
-        constexpr auto warning="Sockets: appearance applied for this session, but config save failed. Check config access/size and retry the command.";
+        constexpr auto warning="Sockets: setting applied for this session, but config save failed. Check config access/size and retry the command.";
         ctx->WriteConsoleMessage(warning,D2RL::ConsoleMessageKind::Warning);ctx->LogWarn(warning);
         return D2RL::ConsoleCommandResult::Failed;
     }
@@ -242,6 +247,16 @@ void ChatCommand(const char* args,void*) noexcept {
         .argsLength=static_cast<std::uint32_t>(length),.args=args,.plugin=ctx};
     Command(nullptr,&command,nullptr);
 }
+void LoadSettings() noexcept {
+    Sockets::Settings settings;unsigned rejected{},required{};char config[Sockets::ConfigCapacity]{};
+    if(ctx && ctx->ReadConfig(config,sizeof(config),&required) && required<=sizeof(config) && strnlen_s(config,sizeof(config))<sizeof(config))
+        settings=Sockets::ParseConfig(config,rejected);
+    scalePercent.store(settings.scalePercent);opacityPercent.store(settings.opacityPercent);
+    rimOpacityPercent.store(settings.rimOpacityPercent);centerOpacityPercent.store(settings.centerOpacityPercent);
+    insertedLiftPixels.store(settings.insertedLiftPixels);
+    alwaysVisible.store(settings.alwaysVisible);enabled.store(settings.enabled);
+    if(rejected && ctx) ctx->LogWarn("Sockets: invalid setting ignored; valid values or per-setting defaults retained.");
+}
 bool RegisterChatCommand() {
     return chatCommands.Start(ctx) && chatCommands.Register("sockets",ChatCommand,nullptr,CommandHelp);
 }
@@ -251,20 +266,14 @@ extern "C" void SocketScaleSprite(void* sprite,Sockets::Point* position,float* s
 extern "C" void* SocketCircleSprite(void* sprite,Sockets::Point* position,float* scale,const CircleState* state) noexcept {return CircleSprite(sprite,position,scale,state);}
 D2RL_PLUGIN_EXPORT auto D2RLoaderGetPluginInfo() noexcept -> const D2RL::PluginInfo* {
     static constexpr D2RL::PluginInfo info{.infoSize=D2RL::PluginInfoSize,.abiVersion=D2RL_PLUGIN_ABI_VERSION,
-        .id="always-show-sockets",.name="Always Show Sockets",.version="1.3.1+rev.1",.author="PyreFly",
+        .id="always-show-sockets",.name="Always Show Sockets",.version="1.3.1+rev.2",.author="PyreFly",
         .description="Native socket visibility and appearance controls.",.flags=D2RL::PluginFlags::Client|D2RL::PluginFlags::NativeHooks};
     return &info;
 }
 D2RL_PLUGIN_EXPORT auto D2RLoaderLoadPlugin(const D2RL::PluginContext* context) noexcept -> bool {
     if(!context || !context->GetApi()) return false;
     ctx=context;
-    unsigned rejected{},required{};char config[Sockets::ConfigCapacity]{};
-    if(ctx->ReadConfig(config,sizeof(config),&required) && required<=sizeof(config) && strnlen_s(config,sizeof(config))<sizeof(config)) {
-        const auto settings=Sockets::ParseConfig(config,rejected);scalePercent.store(settings.scalePercent);opacityPercent.store(settings.opacityPercent);
-        rimOpacityPercent.store(settings.rimOpacityPercent);centerOpacityPercent.store(settings.centerOpacityPercent);
-        insertedLiftPixels.store(settings.insertedLiftPixels);
-    }
-    if(rejected) ctx->LogWarn("Sockets: invalid setting ignored; valid values or per-setting defaults retained.");
+    LoadSettings();
     if(!ctx->RegisterConsoleCommand("sockets",Command,CommandHelp)) return false;
     if(!Sockets::Hash(reinterpret_cast<HMODULE>(ctx->exeBase),"93021DAD48533BCFCA8A95C69A0CC00CDB9008A3CE6CEBA1D04C7ACA71985A10") ||
        !Sockets::Hash(GetModuleHandleW(L"D2RCore.dll"),"2A868D013D2E0830BD2D9E04B918B19E46A73CF726C833E70D089B948FDEB5A2") ||
@@ -294,12 +303,12 @@ D2RL_PLUGIN_EXPORT auto D2RLoaderLoadPlugin(const D2RL::PluginContext* context) 
         ringRegistered=ringResources.Start(ctx);
         if(!ringRegistered) ctx->LogWarn("Sockets: ring resources unavailable; native circles retained.");
     }
-    ready.store(true);alwaysVisible.store(false);enabled.store(true);
+    ready.store(true);
     try {
         if(!RegisterChatCommand())
             D2RL::LogWarnF(ctx,"Sockets: native chat registration unavailable (%s); debug-console command remains available.",chatCommands.Reason().c_str());
     } catch(...) {ctx->LogWarn("Sockets: native chat registration failed; debug-console command remains available.");}
-    ctx->LogInfo("Sockets 1.3.1+rev.1: admitted; startup default (styled native hover); appearance commands save automatically.");
+    ctx->LogInfo("Sockets 1.3.1+rev.2: admitted; saved display mode and appearance loaded; setting commands save automatically.");
     return true;
 }
 D2RL_PLUGIN_EXPORT void D2RLoaderUnloadPlugin() noexcept {chatCommands.Stop();enabled.store(false);ready.store(false);scaleReady.store(false);opacityReady.store(false);circleReady.store(false);ringRegistered=false;ringResources.Stop(ctx);}

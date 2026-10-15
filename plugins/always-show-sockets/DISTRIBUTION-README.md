@@ -1,6 +1,6 @@
 # Always Show Sockets
 
-**1.3.1+rev.1 · by PyreFly**
+**1.3.1+rev.2 · by PyreFly**
 
 Style empty and filled sockets on hover/selection, or keep them visible
 continuously. Loose gems, runes and jewels retain their normal appearance.
@@ -11,7 +11,7 @@ Enter these in game chat. Feedback appears in the loader console.
 
 | Command | What it does |
 | --- | --- |
-| `/sockets default` | Show styled sockets only on normal hover/selection. This is the startup mode. |
+| `/sockets default` | Show styled sockets only on normal hover/selection. This is the fresh-install default. |
 | `/sockets always` | Keep styled sockets visible. |
 | `/sockets off` | Restore native visibility and appearance. |
 | `/sockets size 65` | Set inserted artwork to 65% size; circles follow at 80%. |
@@ -21,8 +21,8 @@ Enter these in game chat. Feedback appears in the loader console.
 | `/sockets lift 1` | Move inserted artwork upward one rendered pixel. |
 | `/sockets status` | Report the current mode and appearance values. |
 
-Appearance settings save automatically. Visibility modes last for the session;
-each launch starts in `default`. See [Configuration](CONFIGURATION-GUIDE.md)
+Visibility modes and appearance settings save automatically and survive
+restart. Fresh installs use `default`; subsequent launches restore the saved mode. See [Configuration](CONFIGURATION-GUIDE.md)
 for accepted ranges, examples and manual settings.
 
 ## Install, update or remove

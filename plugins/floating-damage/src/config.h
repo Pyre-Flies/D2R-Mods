@@ -45,6 +45,7 @@ inline bool Color(std::string_view value,std::array<float,3>& out) noexcept {
 }
 inline Settings Parse(std::string_view text,unsigned& rejected) noexcept {
     Settings config; bool section=false; rejected=0;
+    if(text.starts_with("\xef\xbb\xbf")) text.remove_prefix(3);
     while(!text.empty()) {
         const auto end=text.find('\n'); auto line=Trim(text.substr(0,end));
         text=end==text.npos ? std::string_view{}:text.substr(end+1);

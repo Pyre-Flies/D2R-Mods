@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.29)
-project(always-show-sockets VERSION 1.3.1.1 LANGUAGES CXX RC ASM_MASM)
+project(always-show-sockets VERSION 1.3.1.2 LANGUAGES CXX RC ASM_MASM)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(PLUGIN_SDK "${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/D2RLoader-PluginSDK")

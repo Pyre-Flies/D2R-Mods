@@ -34,7 +34,7 @@ int wmain(int argc, wchar_t** argv) {
     if (!getInfo || !GetProcAddress(module, "D2RLoaderLoadPlugin") || !GetProcAddress(module, "D2RLoaderUnloadPlugin")) return 7;
     auto info = getInfo();
     const bool valid = info && info->infoSize == sizeof(*info) && info->abiVersion == abi &&
-        std::strcmp(info->id, "item-roll-ranges") == 0 && std::strcmp(info->version,"1.3.1+rev.45")==0 &&
+        std::strcmp(info->id, "item-roll-ranges") == 0 && std::strcmp(info->version,"1.3.1+rev.46")==0 &&
         D2RL::HasValidPluginRole(info->flags);
     FreeLibrary(module);
     if (!valid) return 8;
