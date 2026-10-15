@@ -63,7 +63,20 @@ bool Guard() noexcept {
         context->LogWarn("[QOL/ClientTransfer] Shared owner resolver contract mismatch; remote transfers disabled.");
         return false;
     }
-    return QolClientRequest::Guard(context->exeBase,reinterpret_cast<uintptr_t>(GetModuleHandleW(L"D2RCore.dll")));
+    const char* refusal{};
+    const bool accepted=QolClientRequest::Guard(context->exeBase,reinterpret_cast<uintptr_t>(GetModuleHandleW(L"D2RCore.dll")), &refusal);
+    if(!accepted) {
+        static std::atomic<ULONGLONG> lastWarning{0};
+        const auto now=GetTickCount64();
+        auto previous=lastWarning.load();
+        if((!previous || now-previous>=5000) && lastWarning.compare_exchange_strong(previous,now)) {
+            // This guard also runs while observing an already-sent request.
+            // Finish logs submitted=1 in that case; do not imply it was unsent.
+            char line[192];std::snprintf(line,sizeof(line),"[QOL/ClientTransfer] Remote sender refused: %s; further request submission blocked.",refusal?refusal:"unknown-contract");
+            context->LogWarn(line);
+        }
+    }
+    return accepted;
 }
 bool Mode(int mode) noexcept {return At<bool(__fastcall*)(int)>(0xce500)(mode);}
 bool DepositGuard() noexcept {

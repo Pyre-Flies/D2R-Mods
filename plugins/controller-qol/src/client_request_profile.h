@@ -13,12 +13,13 @@ inline constexpr unsigned char CoreEntry[]={
     0x00,0x89,0xd6,0x89,0xd3,0x81,0xfa,0x01,0x02,0x00,0x00,0x73,0x7d,0xff,0x15,0x75,
     0x0c,0xee,0xff,
 };
-inline bool Guard(uintptr_t game,uintptr_t core) noexcept {
+inline bool Guard(uintptr_t game,uintptr_t core,const char** refusal=nullptr) noexcept {
+    if(refusal)*refusal="request-thunk-or-slot";
     if(!game || !core)return false;
     __try {
         return !std::memcmp(reinterpret_cast<const void*>(game+0x3e2b73c),Thunk,sizeof(Thunk)) &&
             *reinterpret_cast<const uintptr_t*>(game+0x3e2ae20)==core+0x822dd0 &&
-            QolCoexistence::Send(core,CoreEntry,sizeof(CoreEntry));
+            QolCoexistence::Send(core,CoreEntry,sizeof(CoreEntry),refusal);
     } __except(EXCEPTION_EXECUTE_HANDLER) {return false;}
 }
 }

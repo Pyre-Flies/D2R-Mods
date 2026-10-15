@@ -1,6 +1,7 @@
 #pragma once
 #include "plugin_coexistence_profile.h"
 #include "plugin_coexistence_policy.h"
+#include "chat_forwarding_memory.h"
 #include "core_compatibility.h"
 #include <windows.h>
 namespace QolCoexistence {
@@ -15,23 +16,31 @@ inline bool Match(uintptr_t address,const unsigned char* bytes,size_t size) noex
 }
 // These checks admit known forwarding hooks only. Callers still invoke the
 // engine entry/slot, retaining all installed plugin behavior and SDK ownership.
-inline bool Send(uintptr_t core,const unsigned char* original,size_t size) noexcept {
+inline bool Send(uintptr_t core,const unsigned char* original,size_t size,const char** refusal=nullptr) noexcept {
+    if(refusal)*refusal="sender-contract";
     __try {
-        if(!core)return false;
+        if(!core || !original || size<14)return false;
         const auto entry=core+0x822dd0;
-        if(Match(entry,original,size))return true;
+        if(Match(entry,original,size)){if(refusal)*refusal=nullptr;return true;}
         const auto module=GetModuleHandleW(L"d2rl-global-chat.dll");
         const auto chat=reinterpret_cast<uintptr_t>(module);
-        using namespace QolCoexistenceProfile;
-        if(!chat || !(QolCore::VerifyFileHash(module,ChatHash) || QolCore::VerifyFileHash(module,ChatCurrentHash)) ||
-            !Match(chat+0x538b0,ChatHook,sizeof(ChatHook)) ||
-            !Match(chat+0x53730,ChatDispatch,sizeof(ChatDispatch)) ||
-            !Match(chat+0x17cc0,ChatOriginalGetter,sizeof(ChatOriginalGetter)))return false;
-        const auto trampoline=*reinterpret_cast<const uintptr_t*>(chat+0xa75c8);
-        return Executable(chat+0x538b0) && Executable(trampoline) &&
-            SendChain(reinterpret_cast<const unsigned char*>(entry),original,size,chat+0x538b0,
-                reinterpret_cast<const unsigned char*>(trampoline),entry+14,true);
-    } __except(EXCEPTION_EXECUTE_HANDLER) {return false;}
+        // Follow only the exact absolute-jump form already used by this Core.
+        // The graph verifies every reachable non-chat helper, data owner and
+        // original continuation; unrelated companion layout/content may move.
+        uintptr_t hook{};
+        std::memcpy(&hook,reinterpret_cast<const void*>(entry+6),sizeof(hook));
+        QolChatForwarding::ImageMemory image{};
+        if(chat && AbsoluteJump(reinterpret_cast<const unsigned char*>(entry),hook) && image.Open(module)) {
+            const auto result=QolChatForwarding::Validate(image.Reader(),hook,
+                reinterpret_cast<const unsigned char*>(entry),original,size,entry+14);
+            if(result){if(refusal)*refusal=nullptr;return true;}
+            if(refusal)*refusal=result.reason;
+        } else if(refusal)*refusal="sender-detour-owner-or-image";
+        // Both historical Chat artifacts satisfy this same complete graph.
+        // An on-disk hash cannot excuse changed helpers or memory ownership in
+        // the loaded image. A failed forwarding proof is always final.
+        return false;
+    } __except(EXCEPTION_EXECUTE_HANDLER) {if(refusal)*refusal="sender-read-fault";return false;}
 }
 inline bool StatSlot(uintptr_t game,uintptr_t core) noexcept {
     __try {

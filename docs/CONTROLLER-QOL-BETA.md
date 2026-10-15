@@ -1,43 +1,66 @@
-# Controller QOL rev.78 validation
+# Controller QOL 1.3.1+rev.79-beta.2
 
-The tested rev.78-beta.4 implementation is published as rev.78 in
-release-2026.10.13.1.
+Testing prerelease for item transfers and identification on a separate remote
+host. Please test and report all bugs; live remote behavior and save persistence
+have not yet been validated for this beta.
 
-- Start distant LB loot travel during the native client update. This corrects
-  dispatch timing associated with intermittent slow approaches and reported
-  invisible blocked ground. The user could no longer reproduce those symptoms
-  with rev.78-beta.4; rev.78 preserves that implementation.
-- Use native running for explicit loot travel without changing the player's
-  walk/run preference. Already-mapped, still-targetable items can initiate travel
-  beyond the mapping radius; repeat suppression is reduced to 250 ms.
-- Keep each LB loot assignment fixed until release/repress. Missing labels and
-  newly dropped items cannot replace existing assignments mid-hold. Execution
-  still rechecks visibility, item identity, session, held input and request age.
-- Restore hosted identify, transfers and bulk-deposit admission for the reviewed
-  Global Chat and Maps versions. Existing offline routing and older supported
-  profiles are retained; unsupported native profiles fail open.
-- Respect filtered-pickup blocking for neutral controller A before submission.
-  Gold is exempt, including automatic pickup; native capacity and pickup settings
-  still apply. Mouse/keyboard behavior is preserved.
-- Reorder loot-filter rules with LB+Up/Down, with matching bumper hints.
+## Changes
 
-### Configuration
+- Repair QOL actions blocked after unrelated Global Chat updates. Validate the
+  actual non-chat forwarding path and its helpers, ownership and original Core
+  continuation, allowing relative references to relocate safely.
+- Cover remote LB+X stash transfers, LB+L3 advanced-storage deposits, ordinary
+  LB+Y Cube transfers, Quick Identify and Identify All through their shared guard.
+- Reject unknown forwarding behavior or invalid runtime memory even when the
+  companion's disk file has a previously recognized hash.
+- Log why the sender was refused without implying an already-sent request was
+  never submitted. Existing item identity, session, destination, capacity and
+  duplicate-submission safeguards remain in place.
 
-Existing settings are preserved. `ground_pickup_distance` controls the LB mapping
-radius, not maximum travel to an already-mapped item. Set it to `20` in the client
-configuration for the wider tested radius; the shipped default is unchanged.
-No server configuration change is needed for that mapping preference.
+The runtime repair is based on stable rev.78. Settings, embedded defaults,
+controller mappings, offline/local routes, belt refill and ground pickup retain
+their existing implementations. This beta publishes Controller QOL only.
 
-### Validation and limits
+## Remote-host test checklist
 
-All 33 Controller QOL automated suites pass, including 483 production audit checks
-and DLL ABI/resource/export/version checks. The user confirmed hosted item actions,
-advanced-stash totals with rejuvenation potions, vendor purchases/sales, wider LB
-mapping and the final travel behavior in a self-hosted Reimagined session.
+Use the normal launcher/server package update route for a managed pack. Restart
+the client and confirm Controller QOL reports `1.3.1+rev.79-beta.2`. Keep existing
+configuration; files under `defaults/` are references only. Coordinate any
+matching host/client plugin version requirement through the pack maintainer.
 
-A fresh offline gameplay retest, all filter/reorder combinations, broader hosted
-configurations and save/rejoin persistence are not fully qualified. A prior beta.3
-shutdown produced a leaked-stats assertion followed by a graphics-driver access
-violation; its cause is undetermined and this release does not claim to fix it.
-A clean shutdown on the final candidate is unconfirmed. Report regressions with
-the input sequence, active mod, client/server context and plugin versions.
+1. **LB+X:** Start with a low-value item. Deposit and withdraw through Personal
+   and the selected Shared page, then check supported advanced-storage and Cube
+   contexts. Confirm the exact destination and unchanged item properties.
+2. **LB+L3:** Deposit a small inventory batch of eligible materials, gems, runes
+   or rejuvenations. Check both source removal and the actual destination totals.
+3. **LB+Y:** Transfer an ordinary item into the carried Cube and back through the
+   supported storage controls. The Cube itself must remain protected from insertion.
+4. **LB+A identification:** Identify one eligible item, then use an eligible
+   highlighted Identify Tome for Identify All. Confirm one charge is consumed per
+   identified item and the batch covers main inventory only on a remote host.
+   Supported remote targets/supplies are Inventory and open Personal Stash;
+   Cube/Shared supplies and modded scroll stacks remain excluded.
+5. **Refusals and regression:** Check a full destination and insufficient identify
+   charges. Check that changing the stash tab or leaving the game stops queued
+   work. Confirm existing LB+R3 belt refill still works.
+6. **Persistence:** Leave and rejoin, then verify item locations, stored totals,
+   identified state and remaining tome/scroll charges. Check the outcome before
+   repeating an operation that stopped or timed out.
+
+For reports, include the shortcut, source/destination and selected page, expected
+and actual result, companion versions, whether it survives rejoining, and the
+relevant QOL log excerpt. Redact account, connection and credential information.
+
+## Validation and limits
+
+All 33 local QOL suites passed, including 483 integration checks, 160,395 byte
+mutation refusals, 1,275 executable forwarding cases, and real Windows image/page
+ownership checks. The production guard accepts all three inspected Global Chat
+images and rejects altered forwarding helpers. All 16 current runtime-packaging
+checks passed. Automated tests do not establish
+remote destination visibility, server persistence or live identification success.
+
+New forwarding instructions, compiler output or additional detours can still
+require a reviewed compatibility update. Unknown paths remain refused.
+See the [compatibility record](https://github.com/Pyre-Flies/D2R-Mods/blob/beta-controller-qol-2026.10.15.1/plugins/controller-qol/docs/REMOTE-SENDER-COMPATIBILITY.md)
+and [complete controls/configuration guide](https://github.com/Pyre-Flies/D2R-Mods/blob/beta-controller-qol-2026.10.15.1/plugins/controller-qol/README.md).

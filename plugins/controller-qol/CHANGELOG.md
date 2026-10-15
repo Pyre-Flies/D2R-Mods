@@ -1,5 +1,24 @@
 # Controller QOL changelog
 
+## 1.3.1+rev.79-beta.2 - 2026-10-15
+
+- Repair remote LB+X/LB+L3 sender admission after unrelated Global Chat updates
+  by validating the complete ordinary non-chat forwarding path, helper ownership
+  and exact Core continuation. The same guard covers remote Cube transfers,
+  Quick Identify and Identify All. Relative references may relocate; unknown
+  operative code still refuses. Native routing and all item/session guards remain.
+- Remove the legacy file-hash fallback: a known disk file cannot override changed
+  runtime helpers or invalid memory protections. Both historical Chat artifacts
+  pass the same complete checks as the current artifact.
+- Add throttled refusal diagnostics that preserve uncertainty when a request was
+  already submitted. Controller mappings, saved settings and defaults are unchanged.
+- All 33 local suites passed, including 483 integration checks, 160,395 byte
+  mutation refusals, 1,275 executable forwarding cases and production memory
+  ownership/protection checks. All three inspected Chat images pass the guard;
+  altered forwarding helpers refuse. Live remote transfers, identification and
+  persistence remain unverified. See [compatibility evidence](docs/REMOTE-SENDER-COMPATIBILITY.md)
+  and the [beta test checklist](../../docs/CONTROLLER-QOL-BETA.md).
+
 ## Documentation
 
 - Make the plugin README the complete user reference for commands, settings
