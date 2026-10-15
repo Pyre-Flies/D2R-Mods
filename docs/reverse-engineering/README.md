@@ -79,3 +79,6 @@ Feature documents contain the authoritative signatures and surrounding context.
 This table is an index, not sufficient justification for an unguarded hook.
 
 - [Floating Damage viewport scaling and native font-size bounds](floating-damage-resolution-scaling.md).
+
+- [Always Show Sockets](always-show-sockets.md): exact icon/scale/ring contracts,
+  source guards, appearance controls and stable-suite validation limits.

@@ -1,58 +1,54 @@
-# D2R Mods release 2026.10.14.2
+# D2R Mods stable suite - 2026.10.15.1
 
-Item Roll Ranges **1.3.1+rev.44** improves range and source attribution across
-vanilla and modded items. Actual tooltip values and native localization stay
-intact; definitions come from the current game tables.
-
-- Resolve shared resistance rolls and overlapping single resistances, plus
-  grouped unique Attributes and supported weighted property choices.
-- Read all active runeword recipes from ordered sockets, eligible bases and
-  word-owned stats. `[RW]` identifies word properties; runes keep socket sources.
-  No vanilla/Reimagined runeword stats database is shipped.
-- Show independently rolled elemental-damage endpoints and guarded recurring
-  replenishment intervals from their active parameters.
-- Label random skill/class/tab properties using their actual bonus strength.
-  For example, Gnostics' selected Wake of Fire shows `[+5]`, with the source and
-  tier. Whole-family constraints prevent attributing a bonus selected elsewhere.
-- Retain native output for ambiguous, unsupported or budget-limited sources.
-  No new hook or arbitrary formatter composition is introduced.
-
-**Always-show remains false by default.** Hold Ctrl or RT/R2 (R1/RB with the
-active Controller QOL range remap), or opt in with `/AlwaysShowRolls` for the
-session. Saved settings are preserved. Reference TOMLs are under `defaults/`;
-the archives contain no live `d2rloader/config/` paths.
+Six independently installable plugins now use the shared `1.3.1+rev.N` format.
+Revision numbers remain independent per plugin; all six are stable releases.
 
 | Plugin | Version |
 | --- | --- |
-| Item Roll Ranges | 1.3.1+rev.44 |
 | Controller QOL Updates | 1.3.1+rev.78 |
+| Item Roll Ranges | 1.3.1+rev.45 |
 | Map Assistance | 1.3.1+rev.1 |
-| Inventory Deposit | 0.1.0-beta.13 |
-| Floating Damage | 0.1.0-beta.12 |
+| Inventory Deposit | 1.3.1+rev.13 |
+| Floating Damage | 1.3.1+rev.12 |
+| Always Show Sockets | 1.3.1+rev.1 |
 
-The other four plugins retain their released source and versions. Each ZIP is
-independently installable; Inventory Deposit and Floating Damage keep beta status.
+- Item Roll Ranges adds `(Ilvl: XX, Qlvl: YY)` below Required Level, before
+  Max Sockets and weapon Attack Speed. Items without Required Level have
+  placement fallbacks. Values come directly from the item and active base
+  definition; the existing range hotkey and opt-in always-show mode apply.
+- Always Show Sockets joins the suite with default/always/off display modes,
+  scaled/faded inserted artwork, independent ring/center opacity and artwork
+  lift. Appearance commands save to the active config; startup display mode
+  remains default. Includes the command/configuration guide.
+- Inventory Deposit and Floating Damage move from beta names to stable
+  loader-plus-revision versions. Their previously released behavior, native
+  guards and configuration defaults are unchanged. Controller QOL and Map
+  Assistance retain their released source and versions.
+
+Each ZIP contains only its own runtime DLL and reference TOMLs under defaults/.
+No live d2rloader/config/ files are shipped. Existing saved settings are
+preserved; Item Roll Ranges always-show remains false by default. Close the
+game before replacing DLLs, retain a backup and use one active copy per plugin.
+Pack-managed Ladder installs distribute through the approved package route.
 
 ## Validation and limits
 
-Nine Item Roll Ranges suites pass, including artifact/ABI, cloned and clone-less
-formatting, shared/ambiguous source proofs, selector families and refusal paths.
-Private captured-data replays inspect2,026 affix rows, resolve219/219 enabled
-Reimagined recipes and verify56 random-selector specifications. Exact captured
-charm and amulet metadata replays pass. Raw captures are not included.
+All67 plugin suites pass: Controller QOL33, Item Roll Ranges9, Map Assistance2,
+Inventory Deposit12, Floating Damage7 and Always Show Sockets4. All30 packaging
+checks pass. The six-package checks
+cover stable/beta channel validation, exact runtime layout, checksum integrity,
+config preservation, privacy and actual DLL ABI/resource/version admission.
+Unchanged Controller QOL/Map source retains its prior released coverage.
 
-User checks confirm Prismatic overlaps, grouped Attributes, Bone, Lightning and
-Honor in the Reimagined setup, Raven Song fire endpoints, replenishment display,
-Ctrl/always-show behavior and Gnostics' Wake of Fire. Subsequent vanilla smoke
-checks were also reported working. These sampled visible results are separate
-from catalog lookup/model coverage; every item/localization/third-party plugin
-combination and replenishment stopwatch timing are not exhaustively validated.
-Changing enchantment recipes, conditional set bonuses, ambiguous conditional
-groups and unsupported transforms retain their documented attribution limits.
+The user confirmed revision45's level placement and Ctrl release in Reimagined.
+Socket rendering, controls and modes have accepted live coverage on preceding
+artifacts; autosave/restart is verified by SDK fixtures and still needs an
+actual loader-backed persistence check. Promoting a version does not imply
+new live coverage for all items, resolutions, vendors, trade or companion mods.
+Existing UI/object-pool assertions on exit remain unattributed; this suite
+does not claim a whole-game shutdown fix. Floating Damage targets local
+authoritative gameplay, with the documented multiplayer limitations.
 
-Requires the qualified D2R3.3.93787 / D2RCore1.3.1-beta family described in the
-included compatibility records. Exact artifact/code guards fail open on a
-mismatch. Close the game before replacing DLLs; install one active copy and
-back up the prior DLL. Managed mod packs distribute through their package route.
-The release workflow rebuilds/tests all five packages and verifies archive
-layout/checksums. Publication is blocked if a required check fails.
+Exact executable/Core byte/hash guards and ABI4 requirements remain in the
+included compatibility records. Packages are staged locally; GitHub CI and
+published-download verification must pass before publication is reported.

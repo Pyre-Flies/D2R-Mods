@@ -37,6 +37,30 @@ inline std::string SocketCapacity(std::string_view text,std::string_view capacit
     if(!text.ends_with('\n') && !result.empty())result.pop_back();
     return result;
 }
+// Use the same localized requirement/header anchors as capacity, after capacity
+// has been inserted. This displays Required Level / levels / Max Sockets / speed.
+// Jewelry and other items can have no native numeric header at all; use the
+// upper body boundary in that case. Full-tooltip live validation is still needed.
+inline std::string LevelInfo(std::string_view text,std::string_view label,
+    const std::vector<std::string>& anchors) {
+    const auto key=RangeText::Analyze(label).key;
+    if(key.empty() || anchors.empty() || anchors[0].empty())return std::string(text);
+    const auto lines=RangeText::Lines(text);
+    for(const auto line:lines)if(RangeText::Analyze(line).key==key)return std::string(text);
+    auto result=SocketCapacity(text,key,label,anchors);
+    if(result!=text)return result;
+    // A recognized or ambiguous header that could not be safely placed must
+    // not fall through to the no-header case.
+    for(const auto line:lines){
+        const auto shape=RangeText::Analyze(line).key;
+        for(const auto& anchor:anchors)if(!anchor.empty() &&
+            (shape==anchor || shape==anchor+"#" || shape==anchor+"(?)"))return std::string(text);
+    }
+    if(!result.empty() && !result.ends_with('\n'))result+='\n';
+    result+="\xee\x81\xbe" "0"+std::string(label);
+    if(text.ends_with('\n'))result+='\n';
+    return result;
+}
 inline std::vector<long long> Numbers(std::string_view line) {
     std::string plain;
     for (std::size_t n=0;n<line.size();) {

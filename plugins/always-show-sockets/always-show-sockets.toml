@@ -1,0 +1,15 @@
+[always-show-sockets]
+# Size of inserted gems, runes and jewels. Loose items stay native.
+# Socket circles use this size +15 percentage points, up to 115.
+# Artwork range: 10 to 100 percent. 100 gives native-size art with a 115% ring.
+inserted_item_scale_percent = 65
+# Relative to native opacity, using the same sprite input as ethereal rendering.
+# Range: 10 to 100. 65 gives 65% opacity; 100 keeps native opacity.
+inserted_item_opacity_percent = 65
+
+# Upward optical correction for paired inserted artwork, in rendered pixels (0-8).
+# Zero keeps the artwork exactly at the circle's geometric center.
+inserted_item_lift_pixels = 1
+# Independent ring layers, 0 (invisible) to 100 (fully opaque).
+ring_opacity_percent = 80
+ring_center_opacity_percent = 40

@@ -106,11 +106,22 @@ class InventoryDepositPackageTests(unittest.TestCase):
             self.package()
         self.assertFalse(self.output.exists())
 
+    def test_stable_loader_revision_and_channel(self):
+        (self.plugin / "src/plugin_main.cpp").write_text('.version="1.3.1+rev.13",')
+        archive = self.package(tag="inventory-deposit-1.3.1+rev.13")
+        self.assertEqual(archive.name, "Inventory-Deposit-1.3.1+rev.13-PyreFly.zip")
+
+    def test_stable_version_under_beta_tag_is_rejected(self):
+        (self.plugin / "src/plugin_main.cpp").write_text('.version="1.3.1+rev.13",')
+        with self.assertRaisesRegex(SystemExit, "tag does not match"):
+            self.package(tag="beta-inventory-deposit-1.3.1+rev.13")
+        self.run.assert_not_called()
+
     def test_tag_and_version_mismatch_rejected_before_verification(self):
         with self.assertRaisesRegex(SystemExit, "tag does not match"):
             self.package(tag="beta-inventory-deposit-0.1.0-beta.12")
         (self.plugin / "src/plugin_main.cpp").write_text('.version="../../unsafe",')
-        with self.assertRaisesRegex(SystemExit, "numeric Inventory Deposit beta version"):
+        with self.assertRaisesRegex(SystemExit, "numeric Inventory Deposit"):
             self.package()
         self.run.assert_not_called()
         self.assertFalse(self.output.exists())

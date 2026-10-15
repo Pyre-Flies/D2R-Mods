@@ -69,6 +69,15 @@ jobs:
       - name: Test Floating Damage
         run: ctest --test-dir build/floating-damage -C Release --output-on-failure
 
+      - name: Configure Always Show Sockets
+        run: cmake -S plugins/always-show-sockets -B build/always-show-sockets -A x64
+
+      - name: Build Always Show Sockets
+        run: cmake --build build/always-show-sockets --config Release --parallel
+
+      - name: Test Always Show Sockets
+        run: ctest --test-dir build/always-show-sockets -C Release --output-on-failure
+
       - name: Test update-safe archive layout
         run: python -m unittest discover -s tools -p "test_package*.py" -v
 
@@ -82,6 +91,8 @@ jobs:
           --inventory-deposit-artifact-verifier "build/inventory-deposit/Release/inventory-deposit-artifact-tests.exe"
           --floating-damage-dll "build/floating-damage/Release/Floating Damage.dll"
           --floating-damage-artifact-verifier "build/floating-damage/Release/floating-damage-artifact-tests.exe"
+          --always-show-sockets-dll "build/always-show-sockets/Release/Always Show Sockets.dll"
+          --always-show-sockets-artifact-verifier "build/always-show-sockets/Release/socket-artifact-tests.exe"
           --output dist
 
       - name: Upload workflow artifacts

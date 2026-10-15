@@ -1,6 +1,6 @@
 # Floating Damage
 
-Version **0.1.0-beta.12** by PyreFly. A standalone D2RLoader client plugin
+Version **1.3.1+rev.12** by PyreFly. A standalone D2RLoader client plugin
 that displays floating numbers when nearby hostile enemies lose HP, regardless
 of who dealt the damage. It includes killing blows, damage-type colors,
 Critical/Deadly Strike emphasis, and configurable movement and visibility.

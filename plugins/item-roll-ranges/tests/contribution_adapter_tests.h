@@ -232,9 +232,56 @@ void TestScalingAffixAdapter(){
     scalingReady.store(false);originalSingle=nullptr;
     std::puts("Production fixed FHR/proc operands, active level100 bounds, coefficient tiers and refusal cases pass.");
 }
+void TestLevelHeaderAdapter(){
+    ContributionFixture f;std::array<unsigned char,448> row{};
+    put(f.Data(),LevelProfile::ItemLevelOffset,99);row[LevelProfile::QualityLevelOffset]=20;
+    levelsReady.store(true);lookupHeader=FixtureSocketLookup;
+    const auto allocation=f.allocation;const auto originalRow=row;
+    const std::string label="\xee\x81\xbe" "0(Ilvl: 99, Qlvl: 20)";
+    const std::string prefix="Socketed (2)\n+90 to Life [Combined]\nVery Fast Attack Speed\nMax Sockets: 4\n";
+    const std::string headers="Required Level: 63\nRequired Strength: 55\nOne-Hand Damage: 15 to 153 (Base: 4 - 28)";
+    const auto actual=prefix+headers;
+    const auto annotated=AnnotateLevelHeader(actual,f.Data(),row.data());
+    check(annotated==prefix+label+'\n'+headers);
+    check(f.allocation==allocation && row==originalRow);
+    check(AnnotateLevelHeader(annotated,f.Data(),row.data())==annotated);
+    const std::string noLevel="Required Strength: 55\nOne-Hand Damage: 3 to 19";
+    check(AnnotateLevelHeader(prefix+noLevel,f.Data(),row.data())==prefix+label+'\n'+noLevel);
+    const std::string belt="Defense: 2 \xee\x81\xbe" "U(Base: 2 - 2)\xee\x81\xbe" "3";
+    check(AnnotateLevelHeader(belt,f.Data(),row.data())==label+'\n'+belt);
+    check(AnnotateLevelHeader("+5 to Life",f.Data(),row.data())=="+5 to Life\n"+label);
+    check(AnnotateLevelHeader("+5 to Life\n",f.Data(),row.data())=="+5 to Life\n"+label+'\n');
+    check(AnnotateLevelHeader("",f.Data(),row.data())==label);
+    const auto ambiguous=actual+"\nRequired Level: 63";
+    check(AnnotateLevelHeader(ambiguous,f.Data(),row.data())==ambiguous);
+    originalAssign=RecordHeader;NativeText receiver{actual.data(),actual.size()};
+    pendingHeader={&receiver,actual,annotated};
+    PublishHeader(true,&receiver,actual.data(),actual.size());check(publishedHeader==annotated);
+    PublishHeader(true,&receiver,actual.data(),actual.size());check(publishedHeader==actual);
+    NativeText empty{};pendingHeader={&empty,"",label};
+    PublishHeader(true,&empty,nullptr,0);check(publishedHeader==label);
+    pendingHeader={};originalAssign=nullptr;
+    put(f.Data(),LevelProfile::ItemLevelOffset,0);
+    check(AnnotateLevelHeader(actual,f.Data(),row.data())==actual);
+    check(Affixes::Read<int>(f.Data(),LevelProfile::ItemLevelOffset)==0); // Never call the repairing getter.
+    put(f.Data(),LevelProfile::ItemLevelOffset,-1);
+    check(AnnotateLevelHeader(actual,f.Data(),row.data())==actual);
+    put(f.Data(),LevelProfile::ItemLevelOffset,300);row[LevelProfile::QualityLevelOffset]=255;
+    check(AnnotateLevelHeader(actual,f.Data(),row.data()).find("(Ilvl: 300, Qlvl: 255)")!=std::string::npos);
+    row[LevelProfile::QualityLevelOffset]=0;
+    check(AnnotateLevelHeader(actual,f.Data(),row.data()).find("Qlvl: 0)")!=std::string::npos);
+    check(AnnotateLevelHeader(actual,nullptr,row.data())==actual);
+    check(AnnotateLevelHeader(actual,f.Data(),nullptr)==actual);
+    lookupHeader=nullptr;check(AnnotateLevelHeader(actual,f.Data(),row.data())==actual);
+    lookupHeader=FixtureSocketLookup;levelsReady.store(false);
+    check(AnnotateLevelHeader(actual,f.Data(),row.data())==actual);
+    lookupHeader=nullptr;
+    std::puts("Level header fields, complete weapon/armor order, no-requirement/empty bodies, publication and refusal pass.");
+}
 void TestOwnedContributionAdapter(){
     TestScalingAffixAdapter();
     TestSocketCapacityAdapter();
+    TestLevelHeaderAdapter();
     {
         ContributionFixture armor;
         std::array<unsigned char,0x1c0> armorRow{};put(armorRow.data(),0xd4,111);put(armorRow.data(),0xd8,126);

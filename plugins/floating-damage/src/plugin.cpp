@@ -337,7 +337,7 @@ void __cdecl Frame(const D2RL::PluginContext*,const D2RL::Overlay::Frame* frame,
         if(!clip.list) return;
         if(settings.debug) {
             char message[160]{};
-            std::snprintf(message,sizeof(message),"Floating Damage beta | %zu enemies | projection %s",count,projected?"ready":"unavailable");
+            std::snprintf(message,sizeof(message),"Floating Damage | %zu enemies | projection %s",count,projected?"ready":"unavailable");
             Text(frame->canvas,{20*scale,80*scale},message,16*scale,{1,0.85f,0.5f,1});
         }
         if(!projected) return;
@@ -389,7 +389,7 @@ void Stop() noexcept {
 }
 D2RL_PLUGIN_EXPORT auto D2RLoaderGetPluginInfo() noexcept -> const D2RL::PluginInfo* {
     static constexpr D2RL::PluginInfo info{.infoSize=D2RL::PluginInfoSize,.abiVersion=D2RL_PLUGIN_ABI_VERSION,
-        .id="floating-damage",.name="Floating Damage",.version="0.1.0-beta.12",.author="PyreFly",
+        .id="floating-damage",.name="Floating Damage",.version="1.3.1+rev.12",.author="PyreFly",
         .description="Floating numbers for observed enemy HP loss.",.flags=D2RL::PluginFlags::Client|D2RL::PluginFlags::NativeHooks};
     return &info;
 }
@@ -435,8 +435,8 @@ D2RL_PLUGIN_EXPORT auto D2RLoaderLoadPlugin(const D2RL::PluginContext* context) 
         else if(combatReady.load()) ctx->LogWarn("Floating Damage: critical writer guards refused; raw result flags remain diagnostic only.");
         if(!chatCommands.Start(ctx) || !chatCommands.Register("damagenumbers",ChatCommand,nullptr,"Toggle floating damage: on/off/status; motion on/off/status."))
             ctx->LogWarn("Floating Damage: native chat registration unavailable; debug-console command remains available.");
-        ctx->LogInfo(settings.enabled?"Floating Damage 0.1.0-beta.12: admitted; waiting for local gameplay lifecycle.":
-            "Floating Damage 0.1.0-beta.12: admitted; disabled in configuration; /damagenumbers on enables it.");return true;
+        ctx->LogInfo(settings.enabled?"Floating Damage 1.3.1+rev.12: admitted; waiting for local gameplay lifecycle.":
+            "Floating Damage 1.3.1+rev.12: admitted; disabled in configuration; /damagenumbers on enables it.");return true;
     } catch(...) {Stop();return false;}
 }
 D2RL_PLUGIN_EXPORT void D2RLoaderUnloadPlugin() noexcept {Stop();}

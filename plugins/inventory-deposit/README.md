@@ -1,5 +1,9 @@
 # Inventory Deposit
 
+Stable version **1.3.1+rev.13**. This promotes the accepted beta.13 behavior
+without changing native operations, artwork or existing configuration. The
+older beta sections below record historical validation.
+
 Standalone D2RLoader plugin adding a mouse-clickable **Deposit All** button in
 the HD inventory footer while the stash is open. The button follows the current
 gold amount's right edge and vertical center, including changes to its layout.
@@ -19,7 +23,7 @@ is replaced. No additional MPQ or loose sprite files are needed.
 
 ## Prerelease status
 
-`0.1.0-beta.13` shortens the tooltip to **Deposit All Gems, Materials and Runes**.
+`1.3.1+rev.13` shortens the tooltip to **Deposit All Gems, Materials and Runes**.
 This wording-only update preserves native eligibility and deposit behavior,
 disabled/hover states, artwork, placement, configuration and tab feedback.
 All twelve existing suites and DLL/resource/package checks passed. The exact

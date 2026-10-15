@@ -191,10 +191,24 @@ int main() {
     check(HeaderText::SocketCapacity(prefix+annotatedDefense,capacityKey,"Max Sockets: 2",headerAnchors)==prefix+capacity+annotatedDefense);
     const std::string existing=prefix+"Max Sockets: 2\n"+nativeHeader;
     check(HeaderText::SocketCapacity(existing,capacityKey,"Max Sockets: 2",headerAnchors)==existing);
+    const std::string levels="(Ilvl: 99, Qlvl: 24)",levelLine="\xee\x81\xbe" "0"+levels+'\n';
+    check(HeaderText::LevelInfo(existing,levels,headerAnchors)==prefix+"Max Sockets: 2\n"+levelLine+nativeHeader);
+    check(HeaderText::LevelInfo(prefix+speed+capacity+weaponHeader,levels,headerAnchors)==
+        prefix+speed+capacity+levelLine+weaponHeader);
+    check(HeaderText::LevelInfo(prefix+capacity+noLevel,levels,headerAnchors)==prefix+capacity+levelLine+noLevel);
+    check(HeaderText::LevelInfo(prefix+noRequirements,levels,headerAnchors)==prefix+levelLine+noRequirements);
+    check(HeaderText::LevelInfo(prefix,levels,headerAnchors)==prefix+levelLine);
+    check(HeaderText::LevelInfo("",levels,headerAnchors)==levelLine.substr(0,levelLine.size()-1));
+    check(HeaderText::LevelInfo(existing+"\nRequired Level: 72",levels,headerAnchors)==existing+"\nRequired Level: 72");
+    check(HeaderText::LevelInfo(existing,levels,{})==existing);
+    const auto withLevels=HeaderText::LevelInfo(existing,levels,headerAnchors);
+    check(HeaderText::LevelInfo(withLevels,levels,headerAnchors)==withLevels);
     check(HeaderText::SocketCapacity(prefix,capacityKey,"Max Sockets: 2",headerAnchors)==prefix);
     check(HeaderText::SocketCapacity(prefix+nativeHeader+"\nRequired Level: 72",capacityKey,"Max Sockets: 2",headerAnchors)==prefix+nativeHeader+"\nRequired Level: 72");
     const std::string translated="Gesockelt (2)\n+90 Leben\nBenotigte Stufe: 72\nVerteidigung: 246";
     const std::vector<std::string> translatedAnchors={RangeText::Analyze("Benotigte Stufe: 0").key};
+    check(HeaderText::LevelInfo(translated,levels,translatedAnchors)==
+        "Gesockelt (2)\n+90 Leben\n"+levelLine+"Benotigte Stufe: 72\nVerteidigung: 246");
     check(HeaderText::SocketCapacity(translated,RangeText::Analyze("Maximale Sockel: 0").key,"Maximale Sockel: 2",translatedAnchors)==
         "Gesockelt (2)\n+90 Leben\n\xee\x81\xbe" "0Maximale Sockel: 2\nBenotigte Stufe: 72\nVerteidigung: 246");
     const auto proc="100% Chance to cast level 17 Chilling Armor when you Level-Up";

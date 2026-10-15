@@ -1,5 +1,14 @@
 # Inventory Deposit changelog
 
+## 1.3.1+rev.13 - 2026-10-15 stable release staging
+
+- Promote 0.1.0-beta.13 to the shared loader-version plus independent revision format.
+  Plugin metadata, Windows resources, package names and documentation agree.
+- Keep the previously released behavior, native guards and saved settings.
+  This promotion adds no native hook or gameplay behavior. Existing live
+  coverage and documented limitations are unchanged; rebuild/artifact and
+  package checks qualify the new stable artifact separately.
+
 ## 0.1.0-beta.13 - 2026-10-11
 
 - Shorten the button tooltip to exactly "Deposit All Gems, Materials and Runes".

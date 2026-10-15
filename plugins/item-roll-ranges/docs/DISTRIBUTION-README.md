@@ -1,6 +1,6 @@
 # Item Roll Ranges
 
-**By PyreFly · Version 1.3.1+rev.44**
+**By PyreFly · Version 1.3.1+rev.45**
 
 Show item roll ranges beside actual values in light blue:
 `[+80 - +120] +118 Defense`.
@@ -22,7 +22,9 @@ Base values include ethereal scaling and native Enhanced Defense base generation
 Individual modifier lines retain their own roll ranges and source labels.
 Fixed modifier bounds are compact, such as `[+38]`; Base headers retain both
 endpoints. Socketed items also show Max Sockets in the normal header position
-while ranges are held. Weapons use Required Level / Max Sockets / Attack Speed.
+while ranges are held. Weapons use Required Level / item-level details / Max Sockets / Attack Speed.
+The new `(Ilvl: XX, Qlvl: YY)` line shows generated item level and active base
+quality level. Items without Required Level use the remaining header position.
 Unrelated triggered skills do not prevent a known header base from displaying.
 Unresolved expected ranges show `(?)` and
 `(?) Range Unavailable - Please report item affixes`.

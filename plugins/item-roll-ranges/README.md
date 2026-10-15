@@ -1,6 +1,11 @@
 # Item Roll Ranges
 
-Version 1.3.1+rev.44, PyreFly. Separate client plugin for the installed D2RLoader.
+Version 1.3.1+rev.45, PyreFly. Separate client plugin for the installed D2RLoader.
+
+Revision45 adds `(Ilvl: XX, Qlvl: YY)` below Required Level while ranges are
+shown, with fallbacks for items without Required Level. Item level belongs to
+the generated item; quality level comes from the active base definition.
+See [the level header contract and validation](docs/ITEM-LEVELS-REV45.md).
 
 Light-blue `[P] [Name] [Tn]` / `[S] [Name] [Tn]` labels identify verified rolled
 magic/rare/crafted affix contributions, including fixed-value affixes. Repeated

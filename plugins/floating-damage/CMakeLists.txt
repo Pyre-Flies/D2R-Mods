@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.29)
-project(floating-damage VERSION 0.1.0 LANGUAGES CXX RC)
+project(floating-damage VERSION 1.3.1.12 LANGUAGES CXX RC)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(PLUGIN_SDK "${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/D2RLoader-PluginSDK" CACHE PATH "D2RLoader PluginSDK")

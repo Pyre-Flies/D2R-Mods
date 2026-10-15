@@ -15,7 +15,7 @@
 namespace {
 constexpr D2RL::PluginInfo Info{
     .infoSize=D2RL::PluginInfoSize,.abiVersion=D2RL_PLUGIN_ABI_VERSION,
-    .id="inventory-deposit",.name="Inventory Deposit",.version="0.1.0-beta.13",
+    .id="inventory-deposit",.name="Inventory Deposit",.version="1.3.1+rev.13",
     .author="PyreFly",.description="Deposit eligible inventory items into advanced stash storage from a mouse button.",
     .flags=D2RL::PluginFlags::Shared | D2RL::PluginFlags::NativeHooks,
 };
@@ -95,8 +95,8 @@ D2RL_PLUGIN_EXPORT auto D2RLoaderLoadPlugin(const D2RL::PluginContext* context) 
         });
     } catch(...) {Stop();context->LogWarn("[InventoryDeposit] UI refresh worker unavailable; plugin disabled.");return false;}
     context->LogInfo(settings.anchorToGold
-        ? "[InventoryDeposit] 0.1.0-beta.13 loaded; embedded artwork, gold-relative placement (button_x/button_y reserved for manual mode)."
-        : "[InventoryDeposit] 0.1.0-beta.13 loaded; embedded artwork, manual fixed panel-local placement.");
+        ? "[InventoryDeposit] 1.3.1+rev.13 loaded; embedded artwork, gold-relative placement (button_x/button_y reserved for manual mode)."
+        : "[InventoryDeposit] 1.3.1+rev.13 loaded; embedded artwork, manual fixed panel-local placement.");
     return true;
 }
 D2RL_PLUGIN_EXPORT void D2RLoaderUnloadPlugin() noexcept {Stop();}

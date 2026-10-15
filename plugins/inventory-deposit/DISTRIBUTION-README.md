@@ -1,6 +1,6 @@
 # Inventory Deposit
 
-Version **0.1.0-beta.13** for the reviewed D2R `3.3.93787` / D2RLoader `1.3.1`
+Version **1.3.1+rev.13** for the reviewed D2R `3.3.93787` / D2RLoader `1.3.1`
 profile. This is a Windows x64 prerelease.
 
 Adds a mouse-clickable **Deposit All Gems, Materials and Runes** button beside

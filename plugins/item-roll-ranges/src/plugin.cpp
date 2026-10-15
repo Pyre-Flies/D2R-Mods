@@ -21,6 +21,7 @@
 #include "special_profile.h"
 #include "unique_range_profile.h"
 #include "header_profile.h"
+#include "level_profile.h"
 #include "header_text.h"
 #include "base_ranges.h"
 #include "weapon_profile.h"
@@ -51,6 +52,7 @@ std::atomic<bool> propertySourcesReady{false};
 std::atomic<bool> randomSkillsReady{false};
 std::atomic<bool> quantityRateReady{false};
 std::atomic<bool> alwaysReady{false};
+std::atomic<bool> levelsReady{false};
 bool alwaysConfigured{};
 std::atomic<bool> alwaysEnabled{false};
 D2RLChat::NativeCommands rollCommands;
@@ -714,8 +716,9 @@ std::vector<RangeText::Label> AffixLabels(void* source,const std::vector<Capture
         return labels;
     } catch (...) { return {}; }
 }
-bool TextReadable(const NativeText* text) noexcept {
-    return Readable(text,sizeof(NativeText)) && text->size>0 && text->size<=65536 && Readable(text->data,text->size);
+bool TextReadable(const NativeText* text,bool allowEmpty=false) noexcept {
+    return Readable(text,sizeof(NativeText)) && (text->size>0 || allowEmpty) && text->size<=65536 &&
+        (!text->size || Readable(text->data,text->size));
 }
 std::string DefenseHeaderKey() {
     NativeText resourceGroup{reinterpret_cast<const char*>(HeaderProfile::ResourceGroup),3}, name{"ItemStats1h",11};
@@ -891,6 +894,20 @@ std::string AnnotateSocketHeader(void* source,std::string_view text) {
         anchors.push_back(SocketHeaderAnchorKey(anchorName));
     return HeaderText::SocketCapacity(text,key,label,anchors);
 }
+std::string AnnotateLevelHeader(std::string_view text,const unsigned char* data,const unsigned char* row) {
+    if(!levelsReady.load(std::memory_order_acquire) || !lookupHeader ||
+       !Readable(data,LevelProfile::ItemLevelOffset+sizeof(int)) ||
+       !Readable(row,LevelProfile::QualityLevelOffset+1))return std::string(text);
+    const int itemLevel=Affixes::Read<int>(data,LevelProfile::ItemLevelOffset);
+    if(itemLevel<1)return std::string(text);
+    const auto qualityLevel=row[LevelProfile::QualityLevelOffset];
+    const auto label="(Ilvl: "+std::to_string(itemLevel)+", Qlvl: "+std::to_string(qualityLevel)+")";
+    std::vector<std::string> anchors;
+    for(const auto* name:{"ItemStats1p","ItemStats1e","ItemStats1f","ItemStats1d","ItemStats1i",
+                         "ItemStats1h","ItemStats1l","ItemStats1m","strItemStatThrowDamageRange"})
+        anchors.push_back(SocketHeaderAnchorKey(name));
+    return HeaderText::LevelInfo(text,label,anchors);
+}
 extern "C" void ObserveHeaderRequest(std::uint64_t buttons,std::uintptr_t caller,const unsigned char* frame) noexcept {
     fixedHeaderRequested=false;
     const auto observedKeys=std::exchange(tooltipModifiers,std::nullopt);
@@ -933,7 +950,7 @@ extern "C" __declspec(noinline) NativeText* __fastcall HeaderBuilderAdapter(void
         } guard(scoped?&damage:nullptr);
         result=originalBuilder(a,b,c,item,flags,d,e,f,g);
     }
-    if (!scoped || !TextReadable(result) || !Readable(frame+0x18b0,1)) return result;
+    if (!scoped || !TextReadable(result,true) || !Readable(frame+0x18b0,1)) return result;
     try {
         const auto* unit=static_cast<const unsigned char*>(item);
         if (!Readable(unit,0x1be) || Affixes::Read<unsigned>(unit,0)!=4 || unit[0x1bd]>=4) return result;
@@ -946,33 +963,33 @@ extern "C" __declspec(noinline) NativeText* __fastcall HeaderBuilderAdapter(void
             if (changed.size()<=65536 && changed!=std::string_view(result->data,result->size))
                 originalAssign(result,changed.data(),changed.size());
         }
+        const std::string_view actual{result->size?result->data:"",result->size};
         const auto key=DefenseHeaderKey();
-        if (key.empty()) return result;
         const auto baseRange=ArmorBaseRange(unit,data,armor);
-        const auto value=HeaderText::Value({result->data,result->size},key);
-        const auto fixed=HeaderText::Fixed({result->data,result->size},key,baseRange.has_value(),baseRange);
-        const auto changed=AnnotateSocketHeader(item,fixed);
+        const auto value=key.empty()?std::optional<long long>{}:HeaderText::Value(actual,key);
+        const auto fixed=key.empty()?std::string(actual):HeaderText::Fixed(actual,key,baseRange.has_value(),baseRange);
+        const auto changed=AnnotateLevelHeader(AnnotateSocketHeader(item,fixed),data,armor);
         if (frame[0x18b0]) {
             // Core will publish its range replacement next. Keep only an owned
             // text proof and receiver identity; no item/stat/table pointers.
-            if ((value || changed!=std::string_view(result->data,result->size)) && changed.size()<=65536)
-                pendingHeader={result,std::string(result->data,result->size),changed};
+            if ((value || changed!=actual) && changed.size()<=65536)
+                pendingHeader={result,std::string(actual),changed};
             return result;
         }
-        if (changed.size()<=65536 && changed!=std::string_view(result->data,result->size))
+        if (changed.size()<=65536 && changed!=actual)
             originalAssign(result,changed.data(),changed.size());
     } catch (...) { /* Keep native output if observation/allocation fails. */ }
     return result;
 }
 void* PublishHeader(bool permitted,NativeText* text,const char* data,std::size_t size) noexcept {
     if (permitted &&
-        TextReadable(text) && size>0 && size<=65536 && Readable(data,size)) {
+        TextReadable(text,true) && size<=65536 && (!size || Readable(data,size))) {
         try {
             auto proof=std::move(pendingHeader); pendingHeader={};
-            if (proof.receiver==text && proof.actual==std::string_view(text->data,text->size))
+            if (proof.receiver==text && proof.actual==std::string_view(text->size?text->data:"",text->size))
                 return originalAssign(text,proof.annotated.data(),proof.annotated.size());
             if (!Held() && !AlwaysRequested()) return originalAssign(text,data,size);
-            const auto changed=HeaderText::Merge({text->data,text->size},{data,size});
+            const auto changed=HeaderText::Merge({text->size?text->data:"",text->size},{size?data:"",size});
             if (changed.size()<=65536) return originalAssign(text,changed.data(),changed.size());
         } catch (...) { }
     }
@@ -1035,7 +1052,7 @@ void TraceProperties(unsigned annotated,unsigned unmatched,const char* actual,co
     try { seen.emplace_back(actual); } catch (...) { return; }
     char message[14000]{};
     const int n=std::snprintf(message,sizeof(message),
-        "v1.3.1+rev.44 properties annotated=%u unmatched=%u labeled=%u captured=%u\r\nACTUAL: %.4095s\r\nRANGED: %.4095s\r\nRESULT: %.4095s\r\n",annotated,unmatched,labeled,captured,actual,ranged,result);
+        "v1.3.1+rev.45 properties annotated=%u unmatched=%u labeled=%u captured=%u\r\nACTUAL: %.4095s\r\nRANGED: %.4095s\r\nRESULT: %.4095s\r\n",annotated,unmatched,labeled,captured,actual,ranged,result);
     if (n<=0 || n>=static_cast<int>(sizeof(message))) return;
     HANDLE file=CreateFileW(diagnosticPath,FILE_APPEND_DATA,FILE_SHARE_READ|FILE_SHARE_WRITE,nullptr,OPEN_ALWAYS,FILE_ATTRIBUTE_NORMAL,nullptr);
     if (file==INVALID_HANDLE_VALUE) return;
@@ -1323,6 +1340,7 @@ void LoadDisplaySettings(const D2RL::PluginContext* context) noexcept {
 }
 void Restore() noexcept {
     RestoreAlways();
+    levelsReady.store(false,std::memory_order_release);
     nativeSocketCapacity=nullptr;pendingPropertyRequest={};
     active.store(false, std::memory_order_release);
     contributionsReady.store(false);
@@ -1370,6 +1388,10 @@ bool Install(const D2RL::PluginContext* context) noexcept {
         reinterpret_cast<SocketCapacityFn>(base+HeaderProfile::SocketCapacityRva):nullptr;
     if(!nativeSocketCapacity)context->LogWarn("Item Roll Ranges: optional socket capacity witness refused; native count retained.");
     const auto* game=reinterpret_cast<const unsigned char*>(context->exeBase);
+    levelsReady.store(Match(game,LevelProfile::ItemLevelRva,LevelProfile::ItemLevel,sizeof(LevelProfile::ItemLevel)) &&
+        Match(game,LevelProfile::QualityLevelRva,LevelProfile::QualityLevel,sizeof(LevelProfile::QualityLevel)),
+        std::memory_order_release);
+    if(!levelsReady.load())context->LogWarn("Item Roll Ranges: optional item/quality-level witnesses refused; level line omitted.");
     scalingReady.store(std::all_of(std::begin(ScalingProfile::Witnesses),std::end(ScalingProfile::Witnesses),
         [&](const auto& w){return Match(w.core?base:game,w.rva,w.bytes,w.size);}));
     if(!scalingReady.load())context->LogWarn("Item Roll Ranges: scaling/proc witnesses refused; existing ranges and tier families retained.");
@@ -1508,14 +1530,14 @@ bool Install(const D2RL::PluginContext* context) noexcept {
     active.store(true, std::memory_order_release);
     context->LogInfo(propertySourcesReady.load()?"Item Roll Ranges: active linked-property/runeword source model admitted.":"Item Roll Ranges: active linked-property/runeword source model unavailable.");
     context->LogInfo(alwaysReady.load() && alwaysEnabled.load()?"Item Roll Ranges display mode: always show ranges.":"Item Roll Ranges display mode: native Ctrl/controller hold.");
-    context->LogInfo("Item Roll Ranges 1.3.1+rev.44 by PyreFly: Ctrl / RT(R2), or QOL range override; inventory, stash, Cube and vendor only. Actual values, native ranges, named P/S tiers and guarded stacked-damage details. Unsupported or ambiguous provenance is omitted.");
+    context->LogInfo("Item Roll Ranges 1.3.1+rev.45 by PyreFly: Ctrl / RT(R2), or QOL range override; inventory, stash, Cube and vendor only. Actual values, native ranges, named P/S tiers and guarded stacked-damage details. Unsupported or ambiguous provenance is omitted.");
     return true;
 }
 }
 
 D2RL_PLUGIN_EXPORT const D2RL::PluginInfo* __cdecl D2RLoaderGetPluginInfo() noexcept {
     static const D2RL::PluginInfo info{sizeof(D2RL::PluginInfo), D2RL_PLUGIN_ABI_VERSION,
-        "item-roll-ranges", "Item Roll Ranges", "1.3.1+rev.44", "PyreFly",
+        "item-roll-ranges", "Item Roll Ranges", "1.3.1+rev.45", "PyreFly",
         "Hold Ctrl or RT/R2 (R1/RB with Controller QOL) for native item stat ranges in item-management screens.",
         D2RL::PluginFlags::Client | D2RL::PluginFlags::NativeHooks, {}};
     return &info;

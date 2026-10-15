@@ -8,14 +8,15 @@ D2RLoader plugins for Diablo II: Resurrected.
 | Plugin | Suite version | Status |
 |---|---:|---|
 | [Controller QOL Updates](plugins/controller-qol/README.md) | 1.3.1+rev.78 | Production; build-specific native hooks |
-| [Item Roll Ranges](plugins/item-roll-ranges/README.md) | 1.3.1+rev.44 | Production; build-specific formatter/table integration |
+| [Item Roll Ranges](plugins/item-roll-ranges/README.md) | 1.3.1+rev.45 | Production; build-specific formatter/table integration |
 | [Map Assistance](plugins/map-assistance/README.md) | 1.3.1+rev.1 | Configurable non-town campaign coverage |
-| [Inventory Deposit (Deposit All Button)](plugins/inventory-deposit/README.md) | 0.1.0-beta.13 | Beta; mouse button for eligible advanced-storage deposits; [standalone prerelease](https://github.com/Pyre-Flies/D2R-Mods/releases/tag/beta-inventory-deposit-0.1.0-beta.13) |
-| [Floating Damage](plugins/floating-damage/README.md) | 0.1.0-beta.12 | Beta; local enemy HP-loss overlay with damage colors |
+| [Inventory Deposit (Deposit All Button)](plugins/inventory-deposit/README.md) | 1.3.1+rev.13 | Production; mouse button for eligible advanced-storage deposits |
+| [Floating Damage](plugins/floating-damage/README.md) | 1.3.1+rev.12 | Production; local enemy HP-loss overlay with damage colors |
+| [Always Show Sockets](plugins/always-show-sockets/README.md) | 1.3.1+rev.1 | Production; socket appearance and display modes |
 
 Each plugin is independently buildable and keeps its own README, changelog,
 tests, configuration, and detailed compatibility evidence. The D2RLoader SDK is
-a pinned submodule at `third_party/D2RLoader-PluginSDK`, so all five projects use the
+a pinned submodule at `third_party/D2RLoader-PluginSDK`, so all six projects use the
 same reviewed upstream interface without copying that project into this history.
 Inventory Deposit reuses Controller QOL's batch source at build time; it does
 not require the Controller QOL DLL at runtime. Each runtime ZIP can be installed

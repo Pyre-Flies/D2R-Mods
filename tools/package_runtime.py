@@ -73,8 +73,8 @@ def package_floating_damage(dll: Path, verifier: Path, output: Path,
 
     plugin = repository / "plugins/floating-damage"
     version = read_version(plugin / "src/plugin.cpp", r'\.version\s*=\s*"([^"]+)"')
-    if not re.fullmatch(r"\d+\.\d+\.\d+-beta\.\d+", version):
-        raise SystemExit(f"Expected a numeric Floating Damage beta version: {version}")
+    if not re.fullmatch(r"\d+\.\d+\.\d+(?:-beta\.\d+|\+rev\.\d+)", version):
+        raise SystemExit(f"Expected a numeric Floating Damage beta or loader+revision version: {version}")
     dll_bytes = require_file(dll)
     if not verifier.is_file():
         raise SystemExit(f"Artifact verifier does not exist: {verifier}")
@@ -109,6 +109,8 @@ def main() -> None:
     parser.add_argument("--inventory-deposit-artifact-verifier", type=Path)
     parser.add_argument("--floating-damage-dll", type=Path)
     parser.add_argument("--floating-damage-artifact-verifier", type=Path)
+    parser.add_argument("--always-show-sockets-dll", type=Path)
+    parser.add_argument("--always-show-sockets-artifact-verifier", type=Path)
     parser.add_argument("--controller-only", action="store_true",
                         help="Package only Controller QOL (for focused prereleases).")
     parser.add_argument("--output", type=Path, required=True)
@@ -116,7 +118,8 @@ def main() -> None:
     required_suite_args = (
         "ranges_dll", "map_assistance_dll", "inventory_deposit_dll",
         "inventory_deposit_artifact_verifier", "floating_damage_dll",
-        "floating_damage_artifact_verifier",
+        "floating_damage_artifact_verifier", "always_show_sockets_dll",
+        "always_show_sockets_artifact_verifier",
     )
     if not args.controller_only:
         missing = ["--" + name.replace("_", "-") for name in required_suite_args
@@ -216,7 +219,7 @@ before installing or replacing the DLL.
         "CHANGELOG.md": require_file(ranges / "CHANGELOG.md"),
         "COMPATIBILITY.txt": ranges_compatibility,
     }
-    for name in ("ALWAYS-SHOW-REV35.md", "PROPERTY-ROLLS-REV41.md", "RANDOM-SKILL-PROPERTIES-REV44.md"):
+    for name in ("ALWAYS-SHOW-REV35.md", "PROPERTY-ROLLS-REV41.md", "RANDOM-SKILL-PROPERTIES-REV44.md", "ITEM-LEVELS-REV45.md"):
         ranges_files[f"docs/{name}"] = require_file(ranges / "docs" / name)
     ranges_zip = args.output / f"Item-Roll-Ranges-{ranges_version}-PyreFly.zip"
     make_archive(ranges_zip, ranges_files)
@@ -246,8 +249,11 @@ before installing or replacing the DLL.
     floating_damage_zip = package_floating_damage(
         args.floating_damage_dll, args.floating_damage_artifact_verifier,
         args.output, repository=REPOSITORY)
+    from package_always_show_sockets import package as package_sockets
+    sockets_zip = package_sockets(args.always_show_sockets_dll,
+        args.always_show_sockets_artifact_verifier, args.output, root=REPOSITORY)
     archives = (controller_zip, ranges_zip, map_assistance_zip,
-                inventory_deposit_zip, floating_damage_zip)
+                inventory_deposit_zip, floating_damage_zip, sockets_zip)
     unexpected = set(args.output.glob("*.zip")) - set(archives)
     if unexpected:
         raise SystemExit("Output contains unrelated ZIPs; use a clean output directory: " +
@@ -265,6 +271,7 @@ before installing or replacing the DLL.
     print(map_assistance_zip)
     print(inventory_deposit_zip)
     print(floating_damage_zip)
+    print(sockets_zip)
     print(args.output / "SHA256SUMS")
 
 

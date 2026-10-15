@@ -1,4 +1,4 @@
-"""Regression tests for extraction-safe five-plugin runtime releases."""
+"""Regression tests for extraction-safe six-plugin runtime releases."""
 from contextlib import redirect_stdout, redirect_stderr
 import hashlib
 import io
@@ -116,6 +116,10 @@ class FloatingDamagePackageTests(FloatingDamagePackageFixture, unittest.TestCase
             self.package()
         self.assertFalse(self.output.exists())
 
+    def test_stable_loader_revision_package(self):
+        (self.plugin / "src/plugin.cpp").write_text('.version="1.3.1+rev.12",')
+        self.assertEqual(self.package().name, "Floating-Damage-1.3.1+rev.12-PyreFly.zip")
+
     def test_missing_verifier_or_public_document_blocks_package(self):
         self.verifier.unlink()
         with self.assertRaisesRegex(SystemExit, "verifier does not exist"):
@@ -129,7 +133,7 @@ class FloatingDamagePackageTests(FloatingDamagePackageFixture, unittest.TestCase
 
     def test_source_version_is_safe_before_verifying(self):
         (self.plugin / "src/plugin.cpp").write_text('.version="../../unsafe",')
-        with self.assertRaisesRegex(SystemExit, "numeric Floating Damage beta version"):
+        with self.assertRaisesRegex(SystemExit, "numeric Floating Damage"):
             self.package()
         self.run.assert_not_called()
         self.assertFalse(self.output.exists())
@@ -151,10 +155,15 @@ class FloatingDamagePackageTests(FloatingDamagePackageFixture, unittest.TestCase
                 path.write_bytes(original)
 
 
-class FivePluginSuiteTests(FloatingDamagePackageFixture, unittest.TestCase):
+class SixPluginSuiteTests(FloatingDamagePackageFixture, unittest.TestCase):
     def setUp(self):
         super().setUp()
         fixtures = {
+            "plugins/always-show-sockets/src/plugin.cpp": b'.version="1.3.1+rev.1",',
+            "plugins/always-show-sockets/always-show-sockets.toml": b"# Reference sockets config\n",
+            "plugins/always-show-sockets/DISTRIBUTION-README.md": b"# Sockets\n",
+            "plugins/always-show-sockets/CONFIGURATION-GUIDE.md": b"# Configuration\n",
+            "plugins/always-show-sockets/CHANGELOG.md": b"# Changelog\n",
             "plugins/controller-qol/src/plugin_main.cpp": b'.version="1.3.1-rev.75",',
             "plugins/item-roll-ranges/src/plugin.cpp": b'"item-roll-ranges", "Item Roll Ranges", "0.4.0-rev.23",',
             "plugins/item-roll-ranges/item-roll-ranges.toml": b"[display]\nalways_show_ranges = false\n",
@@ -176,11 +185,18 @@ class FivePluginSuiteTests(FloatingDamagePackageFixture, unittest.TestCase):
             ("--inventory-deposit-artifact-verifier", "inventory-deposit-artifact-tests.exe"),
             ("--floating-damage-dll", "Floating Damage.dll"),
             ("--floating-damage-artifact-verifier", "floating-damage-artifact-tests.exe"),
+            ("--always-show-sockets-dll", "Always Show Sockets.dll"),
+            ("--always-show-sockets-artifact-verifier", "socket-artifact-tests.exe"),
         ):
             path = self.root / "built" / filename
             if not path.exists():
                 path.write_bytes(b"mock verified runtime fixture")
             self.arguments.extend([argument, str(path)])
+        socket_pe = bytearray(128)
+        socket_pe[:2] = b"MZ"
+        socket_pe[60:64] = (64).to_bytes(4, "little")
+        socket_pe[64:68] = b"PE\0\0"
+        (self.root / "built/Always Show Sockets.dll").write_bytes(socket_pe)
         (self.root / "built/Controller QOL Updates.dll").write_bytes(b"controller runtime fixture")
         self.arguments.extend(["--output", str(self.output)])
 
@@ -200,14 +216,14 @@ class FivePluginSuiteTests(FloatingDamagePackageFixture, unittest.TestCase):
                 redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
             package_runtime.main()
 
-    def test_full_suite_has_exactly_five_runtime_zips_and_manifest(self):
+    def test_full_suite_has_exactly_six_runtime_zips_and_manifest(self):
         self.run_suite()
         expected_dlls = {
             "Controller QOL Updates.dll", "Item Roll Ranges.dll", "Map Assistance.dll",
-            "Inventory Deposit.dll", "Floating Damage.dll",
+            "Inventory Deposit.dll", "Floating Damage.dll", "Always Show Sockets.dll",
         }
         archives = set(self.output.glob("*.zip"))
-        self.assertEqual(len(archives), 5)
+        self.assertEqual(len(archives), 6)
         manifest = dict(line.split("  ", 1)[::-1]
                         for line in (self.output / "SHA256SUMS").read_text().splitlines())
         self.assertEqual(set(manifest), {path.name for path in archives})
@@ -228,7 +244,7 @@ class FivePluginSuiteTests(FloatingDamagePackageFixture, unittest.TestCase):
                 self.assertTrue(dlls[0].startswith("d2rloader/plugins/"))
                 actual_dlls.add(Path(dlls[0]).name)
                 if Path(dlls[0]).name == "Item Roll Ranges.dll":
-                    for name in ("ALWAYS-SHOW-REV35.md", "PROPERTY-ROLLS-REV41.md", "RANDOM-SKILL-PROPERTIES-REV44.md"):
+                    for name in ("ALWAYS-SHOW-REV35.md", "PROPERTY-ROLLS-REV41.md", "RANDOM-SKILL-PROPERTIES-REV44.md", "ITEM-LEVELS-REV45.md"):
                         self.assertIn(f"docs/{name}", zipped.namelist())
                     self.assertIn(b"always_show_ranges = false", zipped.read("defaults/item-roll-ranges.toml"))
                 self.assertFalse(any(name.lower().startswith("d2rloader/config/")
@@ -242,9 +258,9 @@ class FivePluginSuiteTests(FloatingDamagePackageFixture, unittest.TestCase):
         for path, data in customized.items():
             self.assertEqual(path.read_bytes(), data)
         self.assertFalse((self.root / "fresh/d2rloader/config").exists())
-        self.assertEqual(self.run.call_count, 2)
+        self.assertEqual(self.run.call_count, 3)
         verified = {Path(call.args[0][1]).name for call in self.run.call_args_list}
-        self.assertEqual(verified, {"Inventory Deposit.dll", "Floating Damage.dll"})
+        self.assertEqual(verified, {"Inventory Deposit.dll", "Floating Damage.dll", "Always Show Sockets.dll"})
 
     def test_controller_only_prerelease_keeps_single_plugin_contract(self):
         arguments = self.arguments[:3] + ["--controller-only", "--output", str(self.output)]

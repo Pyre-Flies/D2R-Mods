@@ -1,3 +1,5 @@
+Revision45 item/base level field witnesses and validation: [ITEM-LEVELS-REV45.md](ITEM-LEVELS-REV45.md).
+
 Revision41 active property-roll constraints, runeword state171/table binding, selector and quantity witnesses: [PROPERTY-ROLLS-REV41.md](PROPERTY-ROLLS-REV41.md).
 
 ## Rev.37 property formatter contract

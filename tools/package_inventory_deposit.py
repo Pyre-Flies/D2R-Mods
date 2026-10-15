@@ -1,4 +1,4 @@
-"""Verify and package the standalone Inventory Deposit prerelease."""
+"""Verify and package the standalone Inventory Deposit runtime."""
 
 from __future__ import annotations
 
@@ -67,9 +67,10 @@ def package_inventory_deposit(dll: Path, verifier: Path, output: Path,
                               tag: str | None = None) -> Path:
     plugin = repository / "plugins/inventory-deposit"
     version = read_version(plugin / "src/plugin_main.cpp", r'\.version\s*=\s*"([^"]+)"')
-    if not re.fullmatch(r"\d+\.\d+\.\d+-beta\.\d+", version):
-        raise SystemExit(f"Expected a numeric Inventory Deposit beta version: {version}")
-    if tag is not None and tag != f"beta-inventory-deposit-{version}":
+    if not re.fullmatch(r"\d+\.\d+\.\d+(?:-beta\.\d+|\+rev\.\d+)", version):
+        raise SystemExit(f"Expected a numeric Inventory Deposit beta or loader+revision version: {version}")
+    prefix = "beta-inventory-deposit-" if "-beta." in version else "inventory-deposit-"
+    if tag is not None and tag != prefix + version:
         raise SystemExit("Release tag does not match Inventory Deposit's source version")
 
     dll_bytes = require_file(dll)

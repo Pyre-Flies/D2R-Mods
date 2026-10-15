@@ -1,6 +1,6 @@
-# Inventory Deposit 0.1.0-beta.13
+# Inventory Deposit 1.3.1+rev.13
 
-First public prerelease of the standalone **Deposit All** inventory button.
+Stable release of the standalone **Deposit All** inventory button.
 
 - Deposit eligible gems, materials, runes and rejuvenation potions into advanced
   storage from a mouse button beside the gold display while the stash is open.

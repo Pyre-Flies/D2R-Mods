@@ -66,7 +66,7 @@ int main(int argc,char** argv){
     Check(getInfo && GetProcAddress(module,"D2RLoaderLoadPlugin") && GetProcAddress(module,"D2RLoaderUnloadPlugin"),"three lifecycle exports");
     const auto* info=getInfo();
     Check(info && info->infoSize==D2RL::PluginInfoSize && info->abiVersion==D2RL_PLUGIN_ABI_VERSION,"SDK metadata ABI");
-    Check(!std::strcmp(info->id,"inventory-deposit") && !std::strcmp(info->version,"0.1.0-beta.13"),"standalone identity and beta version");
+    Check(!std::strcmp(info->id,"inventory-deposit") && !std::strcmp(info->version,"1.3.1+rev.13"),"standalone identity and stable version");
     Check((static_cast<unsigned>(info->flags)&static_cast<unsigned>(D2RL::PluginFlags::Shared))!=0,"valid shared plugin role");
     // No load callback invocation outside the actual game/loader host.
     FreeLibrary(module);std::puts("Standalone DLL ABI and custom art resource admission, metadata, dependencies and exports passed.");

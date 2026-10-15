@@ -53,11 +53,11 @@ int wmain(int argc, wchar_t** argv) {
     for(std::size_t offset=0;offset+sizeof(VS_FIXEDFILEINFO)<=versionSize;offset+=sizeof(DWORD)) {
         VS_FIXEDFILEINFO fixed{};std::memcpy(&fixed,versionData+offset,sizeof(fixed));
         if(fixed.dwSignature!=0xFEEF04BD || fixed.dwStrucVersion!=0x10000) continue;
-        versionMatches=fixed.dwFileVersionMS==0x00000001 && fixed.dwFileVersionLS==12 &&
+        versionMatches=fixed.dwFileVersionMS==0x00010003 && fixed.dwFileVersionLS==0x0001000c &&
             fixed.dwProductVersionMS==fixed.dwFileVersionMS && fixed.dwProductVersionLS==fixed.dwFileVersionLS;
         break;
     }
-    Check(versionMatches,"Windows file/product resources identify beta.12 (0.1.0.12)");
+    Check(versionMatches,"Windows file/product resources identify stable rev.12 (1.3.1.12)");
     HRSRC config = FindResourceW(resources, MAKEINTRESOURCEW(D2RL_PLUGIN_CONFIG_RESOURCE_ID), RT_RCDATA);
     Check(config != nullptr && SizeofResource(resources, config) > 0 && SizeofResource(resources, config) <= 1024 * 1024,
         "embedded default config exists and is within loader limit");
@@ -88,7 +88,7 @@ int wmain(int argc, wchar_t** argv) {
     const auto* info = getInfo();
     Check(info != nullptr && info->infoSize == D2RL::PluginInfoSize && info->abiVersion == manifestAbi,
         "metadata layout and ABI match manifest");
-    Check(std::strcmp(info->id, "floating-damage") == 0 && std::strcmp(info->version, "0.1.0-beta.12") == 0 &&
+    Check(std::strcmp(info->id, "floating-damage") == 0 && std::strcmp(info->version, "1.3.1+rev.12") == 0 &&
         D2RL::HasValidPluginRole(info->flags), "plugin identity, version, and role are valid");
     Check((info->flags&D2RL::PluginFlags::NativeHooks)!=D2RL::PluginFlags::None,"combat observer declares required native-hook capability");
     const auto load=reinterpret_cast<D2RL::LoadPluginFn>(GetProcAddress(dll,"D2RLoaderLoadPlugin"));

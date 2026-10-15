@@ -16,7 +16,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        plugin: [controller-qol, item-roll-ranges, map-assistance, inventory-deposit, floating-damage]
+        plugin: [controller-qol, item-roll-ranges, map-assistance, inventory-deposit, floating-damage, always-show-sockets]
         include:
           - plugin: controller-qol
             dll: Controller QOL Updates.dll
@@ -28,6 +28,8 @@ jobs:
             dll: Inventory Deposit.dll
           - plugin: floating-damage
             dll: Floating Damage.dll
+          - plugin: always-show-sockets
+            dll: Always Show Sockets.dll
 
     steps:
       - uses: actions/checkout@v4

@@ -1,5 +1,20 @@
 # Item Roll Ranges changelog
 
+## [1.3.1+rev.45] - 2026-10-15
+
+- Add `(Ilvl: XX, Qlvl: YY)` while ranges are shown, below Required Level and
+  before Max Sockets / weapon Attack Speed. Items without Required Level use
+  existing header anchors; header-less and empty bodies are supported.
+- Read generated item level and active base quality level directly. Respect
+  modded base definitions without a database or calling a repairing level getter.
+- Reuse the existing guarded header callback. Two optional field witnesses omit
+  only the new line on mismatch; no additional hook or provider slot is added.
+- Nine suites and DLL artifact checks pass. The user confirmed Reimagined
+  placement and Ctrl release after restart; startup has no plugin guard refusal.
+  Unattributed UI/object-pool shutdown assertions are recorded separately.
+- Preserve actual values, roll/source behavior, existing settings and the false
+  always-show default. See [the level contract](docs/ITEM-LEVELS-REV45.md).
+
 ## [1.3.1+rev.44] - 2026-10-14
 
 - Resolve shared property rolls across resistances and grouped unique Attributes.
