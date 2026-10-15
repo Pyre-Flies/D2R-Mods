@@ -1,5 +1,12 @@
 # Changelog
 
+## Documentation
+
+- Make the plugin README the complete user reference for commands, settings
+  and editing examples. Package that same README to keep instructions aligned.
+- Controller QOL has a dedicated full controls/skill-profile guide; release
+  overviews link to it. Plugin DLLs and defaults are unchanged.
+
 ## 1.3.1+rev.2 - 2026-10-15
 
 - Save default/always/off and bare/on/toggle visibility commands, as well as

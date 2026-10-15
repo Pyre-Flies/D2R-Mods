@@ -24,7 +24,7 @@ class InventoryDepositPackageTests(unittest.TestCase):
         fixtures = {
             "plugins/inventory-deposit/src/plugin_main.cpp": b'.version="0.1.0-beta.13",',
             "plugins/inventory-deposit/inventory-deposit.toml": b"[inventory_deposit]\nenabled = true\n",
-            "plugins/inventory-deposit/RUNTIME-README.md": b"Install the DLL once.\nhttps://github.com/Pyre-Flies/D2R-Mods\n",
+            "plugins/inventory-deposit/README.md": b"Install the DLL once.\nhttps://github.com/Pyre-Flies/D2R-Mods\n",
             "plugins/inventory-deposit/RUNTIME-RELEASE-NOTES.md": b"# Changelog\nInitial public prerelease.\n",
             "LICENSE": b"Plugin license fixture\n",
             "third_party/D2RLoader-PluginSDK/LICENSE": b"SDK license fixture\n",
@@ -98,7 +98,7 @@ class InventoryDepositPackageTests(unittest.TestCase):
             self.package()
         self.run.assert_not_called()
         self.verifier.write_bytes(b"restored fixture")
-        (self.plugin / "RUNTIME-README.md").unlink()
+        (self.plugin / "README.md").unlink()
         with self.assertRaisesRegex(SystemExit, "Required file does not exist"):
             self.package()
         self.assertFalse(self.output.exists())
@@ -125,13 +125,13 @@ class InventoryDepositPackageTests(unittest.TestCase):
 
     def test_private_paths_rejected_in_docs_config_and_binary_strings(self):
         originals = {path: path.read_bytes() for path in (
-            self.plugin / "RUNTIME-README.md",
+            self.plugin / "README.md",
             self.plugin / "inventory-deposit.toml", self.dll)}
         cases = (
-            (self.plugin / "RUNTIME-README.md", b"See C:/Users/example/source/README.md"),
+            (self.plugin / "README.md", b"See C:/Users/example/source/README.md"),
             (self.plugin / "inventory-deposit.toml", b"# local D:\\work\\plugin\\config.toml"),
-            (self.plugin / "RUNTIME-README.md", b"See \\\\server\\private\\build"),
-            (self.plugin / "RUNTIME-README.md", b"See /home/developer/build"),
+            (self.plugin / "README.md", b"See \\\\server\\private\\build"),
+            (self.plugin / "README.md", b"See /home/developer/build"),
             (self.dll, b"MZ\x00C:\\Users\\example\\plugin.pdb\x00"),
             (self.dll, "C:\\Users\\example\\plugin.pdb".encode("utf-16-le")),
             (self.dll, b"x" + "C:\\Users\\example\\plugin.pdb".encode("utf-16-le")),

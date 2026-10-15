@@ -3,8 +3,9 @@
 ## Runtime documentation
 
 Runtime ZIPs contain only each plugin's DLL, reference TOMLs under defaults/
-and one README with installation, command examples and required notices.
-Detailed guides, changelogs, compatibility records, licenses and engineering
+and one complete user README with commands, all settings, editing examples
+and required notices. The package uses each plugin's canonical README.md.
+Changelogs, separate compatibility records, licenses and engineering
 reports remain in the repository. Required redistribution notices are included
 in the runtime README. Keep checksums alongside the ZIPs, not inside them.
 Check examples against the parser and distinguish session-only from saved

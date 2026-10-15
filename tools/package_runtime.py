@@ -6,6 +6,7 @@ import argparse
 import hashlib
 from pathlib import Path, PurePosixPath
 import re
+import posixpath
 import subprocess
 import zipfile
 
@@ -80,7 +81,18 @@ def require_file(path: Path) -> bytes:
 
 def runtime_readme(plugin: Path, repository: Path) -> bytes:
     """One usage document, with required redistribution notices inline."""
-    readme = require_file(plugin / "RUNTIME-README.md").rstrip()
+    text = require_file(plugin / "README.md").decode("utf-8").rstrip()
+    # Repository-relative links become usable from the standalone ZIP. Local
+    # section anchors remain local to its README.
+    base = plugin.relative_to(repository).as_posix()
+    def public_link(match):
+        target = match.group(1)
+        if target.startswith(("http:", "https:", "mailto:", "#")):
+            return match.group(0)
+        resolved = posixpath.normpath(posixpath.join(base, target))
+        return "](" + "https://github.com/Pyre-Flies/D2R-Mods/blob/main/" + resolved + ")"
+    text = re.sub(r"\]\(([^)]+)\)", public_link, text)
+    readme = text.encode("utf-8")
     notices = (b"\n\n## Notices\n\n" + require_file(repository / "LICENSE").strip() +
                b"\n\n### D2RLoader Plugin SDK\n\n" +
                require_file(repository / "third_party/D2RLoader-PluginSDK/LICENSE").strip() + b"\n")

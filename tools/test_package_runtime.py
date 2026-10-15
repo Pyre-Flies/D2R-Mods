@@ -76,7 +76,7 @@ class FloatingDamagePackageFixture:
         fixtures = {
             "plugins/floating-damage/src/plugin.cpp": b'.version="0.1.0-beta.11",',
             "plugins/floating-damage/floating-damage.toml": b"[floating-damage]\nenabled = true\n",
-            "plugins/floating-damage/RUNTIME-README.md": b"# Floating Damage\nInstall with the loader.\n",
+            "plugins/floating-damage/README.md": b"# Floating Damage\nInstall with the loader.\n",
             "plugins/floating-damage/RUNTIME-RELEASE-NOTES.md": b"# Changelog\nCritical number styling.\n",
             "plugins/floating-damage/COMPATIBILITY.txt": b"# Native contract\nExact guarded build only.\n",
             "LICENSE": b"Plugin license fixture\n",
@@ -119,6 +119,18 @@ class FloatingDamagePackageTests(FloatingDamagePackageFixture, unittest.TestCase
             self.assertIn(b"SDK license fixture", zipped.read("README.md"))
         self.assertEqual(self.package().read_bytes(), original)
 
+    def test_canonical_readme_links_work_inside_standalone_zip(self):
+        (self.plugin / "README.md").write_text(
+            "# Floating Damage\n[Config](floating-damage.toml) "
+            "[Details](../../docs/CHAT-COMMAND-SETTINGS.md#commands) "
+            "[Local](#all-chat-commands)\n", encoding="utf-8")
+        with zipfile.ZipFile(self.package()) as zipped:
+            text = zipped.read("README.md").decode("utf-8")
+            self.assertIn("https://github.com/Pyre-Flies/D2R-Mods/blob/main/plugins/floating-damage/floating-damage.toml", text)
+            self.assertIn("https://github.com/Pyre-Flies/D2R-Mods/blob/main/docs/CHAT-COMMAND-SETTINGS.md#commands", text)
+            self.assertIn("[Local](#all-chat-commands)", text)
+            self.assertEqual(set(zipped.namelist()), {"README.md", "defaults/floating-damage.toml", "d2rloader/plugins/Floating Damage.dll"})
+
     def test_verifier_failure_or_dll_change_blocks_package(self):
         self.run.side_effect = subprocess.CalledProcessError(1, ["verifier"])
         with self.assertRaises(subprocess.CalledProcessError):
@@ -139,7 +151,7 @@ class FloatingDamagePackageTests(FloatingDamagePackageFixture, unittest.TestCase
             self.package()
         self.run.assert_not_called()
         self.verifier.write_bytes(b"restored fixture")
-        (self.plugin / "RUNTIME-README.md").unlink()
+        (self.plugin / "README.md").unlink()
         with self.assertRaisesRegex(SystemExit, "Required file does not exist"):
             self.package()
         self.assertFalse(self.output.exists())
@@ -153,8 +165,8 @@ class FloatingDamagePackageTests(FloatingDamagePackageFixture, unittest.TestCase
 
     def test_private_paths_rejected_in_docs_configuration_and_dll_strings(self):
         cases = (
-            (self.plugin / "RUNTIME-README.md", b"C:/Users/private/build"),
-            (self.plugin / "RUNTIME-README.md", b"D:\\work\\private\\capture"),
+            (self.plugin / "README.md", b"C:/Users/private/build"),
+            (self.plugin / "README.md", b"D:\\work\\private\\capture"),
             (self.plugin / "floating-damage.toml", b"# /home/private/config"),
             (self.dll, b"MZ\0C:\\Users\\private\\floating.pdb\0"),
         )
@@ -174,7 +186,7 @@ class SixPluginSuiteTests(FloatingDamagePackageFixture, unittest.TestCase):
         fixtures = {
             "plugins/always-show-sockets/src/plugin.cpp": b'.version="1.3.1+rev.1",',
             "plugins/always-show-sockets/always-show-sockets.toml": b"# Reference sockets config\n",
-            "plugins/always-show-sockets/RUNTIME-README.md": b"# Sockets\n",
+            "plugins/always-show-sockets/README.md": b"# Sockets\n",
             "plugins/always-show-sockets/CONFIGURATION-GUIDE.md": b"# Configuration\n",
             "plugins/always-show-sockets/RUNTIME-RELEASE-NOTES.md": b"# Changelog\n",
             "plugins/controller-qol/src/plugin_main.cpp": b'.version="1.3.1-rev.75",',
@@ -183,7 +195,7 @@ class SixPluginSuiteTests(FloatingDamagePackageFixture, unittest.TestCase):
             "plugins/map-assistance/src/plugin.cpp": b'.version="0.1.0-rev.1",',
             "plugins/inventory-deposit/src/plugin_main.cpp": b'.version="0.1.0-beta.13",',
             "plugins/inventory-deposit/inventory-deposit.toml": b"[inventory_deposit]\nenabled = true\n",
-            "plugins/inventory-deposit/RUNTIME-README.md": b"# Inventory Deposit\nDeposit all inventory items.\n",
+            "plugins/inventory-deposit/README.md": b"# Inventory Deposit\nDeposit all inventory items.\n",
             "plugins/inventory-deposit/RUNTIME-RELEASE-NOTES.md": b"# Changelog\nDeposit button.\n",
         }
         for name, data in fixtures.items():

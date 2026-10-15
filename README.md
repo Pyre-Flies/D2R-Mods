@@ -6,12 +6,12 @@ Download individual runtime ZIPs from the
 
 | Plugin | Stable version | What it adds |
 | --- | --- | --- |
-| [Controller QOL Updates](plugins/controller-qol/DISTRIBUTION-README.md) | 1.3.1+rev.78 | Controller item shortcuts, menu navigation and right-stick aiming. |
-| [Item Roll Ranges](plugins/item-roll-ranges/docs/DISTRIBUTION-README.md) | 1.3.1+rev.46 | Roll/source breakdowns, Base damage/Defense, item and base quality levels. |
-| [Map Assistance](plugins/map-assistance/DISTRIBUTION-README.md) | 1.3.1+rev.1 | Editable map-reading advice on Keys tooltips. |
-| [Inventory Deposit](plugins/inventory-deposit/DISTRIBUTION-README.md) | 1.3.1+rev.13 | Mouse Deposit All button for eligible advanced-storage items. |
-| [Floating Damage](plugins/floating-damage/DISTRIBUTION-README.md) | 1.3.1+rev.13 | Local enemy HP-loss numbers with element colors and critical emphasis. |
-| [Always Show Sockets](plugins/always-show-sockets/DISTRIBUTION-README.md) | 1.3.1+rev.2 | Configurable socket visibility, size and opacity. |
+| [Controller QOL Updates](plugins/controller-qol/README.md) | 1.3.1+rev.78 | Controller item shortcuts, menu navigation and right-stick aiming. |
+| [Item Roll Ranges](plugins/item-roll-ranges/README.md) | 1.3.1+rev.46 | Roll/source breakdowns, Base damage/Defense, item and base quality levels. |
+| [Floating Damage](plugins/floating-damage/README.md) | 1.3.1+rev.13 | Local enemy HP-loss numbers with element colors and critical emphasis. |
+| [Always Show Sockets](plugins/always-show-sockets/README.md) | 1.3.1+rev.2 | Configurable socket visibility, size and opacity. |
+| [Map Assistance](plugins/map-assistance/README.md) | 1.3.1+rev.1 | Editable map-reading advice on Keys tooltips. |
+| [Inventory Deposit](plugins/inventory-deposit/README.md) | 1.3.1+rev.13 | Mouse Deposit All button for eligible advanced-storage items. |
 
 ## Install and update
 
@@ -27,6 +27,9 @@ manual changes. Restart after installing, removing or replacing a DLL.
 
 ## Common commands and controls
 
+Controller QOL's complete button combinations and skill-customization instructions
+are in its [full README](plugins/controller-qol/README.md).
+
 Enter slash commands in game chat; feedback appears in the loader console.
 
 | Example | What it does |
@@ -39,9 +42,8 @@ Enter slash commands in game chat; feedback appears in the loader console.
 | `/sockets always` | Show styled sockets continuously and save the mode. |
 | `/sockets default` | Return to styled sockets on normal hover/selection. |
 | `/sockets size 65` | Set inserted artwork size to 65% and save the appearance setting. |
-| Hold LB/L1 | Show Controller QOL's ground-loot shortcut assignments. |
-| Click Deposit All with stash open | Store eligible inventory materials, gems, runes and rejuvenation potions. |
 | Hover Keys outside town | Read Map Assistance's tip for the current area. |
+| Click Deposit All with stash open | Store eligible inventory materials, gems, runes and rejuvenation potions. |
 
 Each guide explains its full controls, settings, requirements and validation
 limits. Floating Damage supports local single player. Native integrations are

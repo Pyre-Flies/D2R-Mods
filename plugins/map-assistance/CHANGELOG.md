@@ -1,5 +1,12 @@
 # Packaging update - 2026-10-10
 
+## Documentation
+
+- Make the plugin README the complete user reference for commands, settings
+  and editing examples. Package that same README to keep instructions aligned.
+- Controller QOL has a dedicated full controls/skill-profile guide; release
+  overviews link to it. Plugin DLLs and defaults are unchanged.
+
 ## Distribution documentation
 
 - Keep runtime ZIPs minimal: one DLL, reference defaults and a usage README
