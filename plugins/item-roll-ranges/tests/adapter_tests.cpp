@@ -1,11 +1,12 @@
 // Exercise the actual adapter functions and pointer ownership without a game.
 #include "../src/plugin.cpp"
 #include <cstdio>
+#include <source_location>
 #include <cstdlib>
 namespace {
 std::uint64_t __fastcall FakeKey() { return 7; }
 std::uint64_t __fastcall OtherKey() { return 9; }
-void check(bool value) { if (!value) std::exit(1); }
+void check(bool value,std::source_location at=std::source_location::current()) { if (!value) {std::fprintf(stderr,"Check failed: %s:%u\n",at.file_name(),at.line());std::exit(1);} }
 void* testSlot{};
 void TestPropertyPasses();
 void TestAffixRead();
@@ -16,6 +17,10 @@ void TestUniqueRange();
 void TestHeaderDelegation();
 void TestCalculatedHeaders();
 void TestAlwaysAdapters();
+void TestLinkedProduction();
+void TestRandomSkillProduction();
+void TestLiveRandomSkillCapture(const char* path);
+void TestLiveUniqueCapture(const char* path);
 
 }
 namespace {
@@ -104,7 +109,7 @@ void TestTooltipVisibilitySnapshots() {
     check(!TooltipSelectorScope(stack,0x10000000+0x377cfc,true));coreBase=oldBase;
 }
 }
-int main() {
+int main(int argc,char** argv) {
     active.store(true);alwaysReady.store(true);alwaysEnabled.store(false);
     check(ApplyRollCommand("") && alwaysEnabled.load());
     check(ApplyRollCommand("off") && !alwaysEnabled.load());
@@ -135,6 +140,10 @@ int main() {
     const auto releasedKeys=std::exchange(tooltipModifiers,std::nullopt);
     check(releasedKeys && !FixedHeaderRequest(true,*releasedKeys,0) && !tooltipModifiers);
     TestAlwaysAdapters();
+    TestLinkedProduction();
+    TestRandomSkillProduction();
+    if(argc==2)TestLiveUniqueCapture(argv[1]);
+    if(argc==3 && std::strcmp(argv[1],"--random-skills")==0)TestLiveRandomSkillCapture(argv[2]);
     TestTooltipVisibilitySnapshots();
     check(FixedHeaderRequest(true,2,0));check(!FixedHeaderRequest(true,0,1));
     check(FixedHeaderRequest(false,0,1));check(!FixedHeaderRequest(false,2,0));
@@ -247,7 +256,7 @@ int main() {
     check(!D2RLoaderLoadPlugin(nullptr));
     auto info=D2RLoaderGetPluginInfo();
     check(std::strcmp(info->id,"item-roll-ranges")==0);
-    check(std::strcmp(info->version,"1.3.1+rev.40")==0);
+    check(std::strcmp(info->version,"1.3.1+rev.44")==0);
     std::puts("Passed real adapter passthrough/ABI, inactive late calls, atomic slot conflict/restore, exported identity.");
 }
 
@@ -287,7 +296,7 @@ const char* __fastcall FakeHeaderLookup(const NativeText* resource,const NativeT
     check(std::string_view(key->data,key->size)=="ItemStats1h" && required);
     return "Defense: %d";
 }
-unsigned char fakeTables[0x1618]{};
+unsigned char fakeTables[0x1870]{};
 const unsigned char* __fastcall FakeTables(unsigned char bank) { check(bank==2); return fakeTables; }
 int __fastcall FakeEligible(void*,const void*) { return 1; }
 template<class T> void put(unsigned char* p,std::size_t at,T value) { std::memcpy(p+at,&value,sizeof(value)); }

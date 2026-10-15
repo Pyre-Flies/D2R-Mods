@@ -216,6 +216,8 @@ before installing or replacing the DLL.
         "CHANGELOG.md": require_file(ranges / "CHANGELOG.md"),
         "COMPATIBILITY.txt": ranges_compatibility,
     }
+    for name in ("ALWAYS-SHOW-REV35.md", "PROPERTY-ROLLS-REV41.md", "RANDOM-SKILL-PROPERTIES-REV44.md"):
+        ranges_files[f"docs/{name}"] = require_file(ranges / "docs" / name)
     ranges_zip = args.output / f"Item-Roll-Ranges-{ranges_version}-PyreFly.zip"
     make_archive(ranges_zip, ranges_files)
 

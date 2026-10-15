@@ -29,6 +29,9 @@
 #include "contribution_model.h"
 #include "contribution_definitions.h"
 #include "contribution_profile.h"
+#include "property_rolls.h"
+#include "runeword_sources.h"
+#include "property_source_profile.h"
 #include "scaling_affixes.h"
 #include "scaling_profile.h"
 #include <deque>
@@ -44,6 +47,9 @@ std::atomic<bool> active{false};
 std::atomic<bool> loaded{false};
 std::atomic<bool> contributionsReady{false};
 std::atomic<bool> scalingReady{false};
+std::atomic<bool> propertySourcesReady{false};
+std::atomic<bool> randomSkillsReady{false};
+std::atomic<bool> quantityRateReady{false};
 std::atomic<bool> alwaysReady{false};
 bool alwaysConfigured{};
 std::atomic<bool> alwaysEnabled{false};
@@ -334,7 +340,7 @@ __declspec(noinline) int __fastcall SpecialAdapter(void* context,int stat,char* 
 // Read-only property definition expansion. Group IDs use high WORD 1, not
 // Properties-table indices. Bounds and depth prevent malformed/cyclic groups.
 void AddUniqueSource(const unsigned char* spec,const unsigned char* groups,std::size_t groupCount,
-                     std::size_t propertyCount,std::vector<Affixes::Rolled>& out,unsigned depth=0,bool scalarAllowed=true) {
+                     std::size_t propertyCount,std::vector<Affixes::Rolled>& out,unsigned depth=0,bool scalarAllowed=true,const char* sourceTag="[U]",bool unconditional=true) {
     if (depth>4 || out.size()>=128) return;
     const auto id=Affixes::Read<std::uint32_t>(spec,0);
     if (id==0xffffffffu) return;
@@ -343,14 +349,23 @@ void AddUniqueSource(const unsigned char* spec,const unsigned char* groups,std::
         if (index>=groupCount) return;
         const auto* row=groups+index*0xc8;
         if (row[4]>2) return;
+        unsigned viable=0;
+        for(unsigned n=0;n<8;++n)viable+=Affixes::Read<int>(row+8+n*24,20)>0;
+        bool choice=depth==0 && scalarAllowed && row[4]==2 && viable>1 && Affixes::Read<int>(spec,8)==1 && Affixes::Read<int>(spec,12)==1;
+        for(unsigned n=0;n<8;++n){const auto* entry=row+8+n*24;if(Affixes::Read<int>(entry,20)<=0)continue;
+            choice&=Affixes::Read<int>(entry,4)==Affixes::Read<int>(entry,8) && Affixes::Read<std::uint32_t>(entry,0)<propertyCount;}
+        const auto pool=static_cast<unsigned>(out.size()+1);
         for (unsigned n=0;n<8;++n) {
             const auto* entry=row+8+n*24;
             if (Affixes::Read<int>(entry,20)<=0 || Affixes::Read<int>(entry,4)!=Affixes::Read<int>(entry,8)) continue;
             unsigned char child[16]{};
             std::memcpy(child,entry,4); std::memcpy(child+4,entry+4,4);
             std::memcpy(child+8,entry+12,8);
+            const auto first=out.size();
             AddUniqueSource(child,groups,groupCount,propertyCount,out,depth+1,
-                scalarAllowed && row[4]==2 && Affixes::Read<int>(spec,8)==1 && Affixes::Read<int>(spec,12)==1);
+                scalarAllowed && row[4]==2 && Affixes::Read<int>(spec,8)==1 && Affixes::Read<int>(spec,12)==1,sourceTag,
+                unconditional && viable==1 && row[4]==2 && Affixes::Read<int>(spec,8)==1 && Affixes::Read<int>(spec,12)==1);
+            if(choice)for(auto at=first;at<out.size();++at){out[at].choicePool=pool;out[at].choiceEntry=n+1;}
         }
     } else if ((id>>16)==0 && id<propertyCount) {
         Affixes::Row row{};
@@ -358,7 +373,7 @@ void AddUniqueSource(const unsigned char* spec,const unsigned char* groups,std::
         const int absent=-1;
         std::memcpy(row.bytes.data()+0x34,&absent,4);
         std::memcpy(row.bytes.data()+0x44,&absent,4);
-        out.push_back({id,row,false,0,"[U]",scalarAllowed});
+        out.push_back({id,row,false,0,sourceTag,scalarAllowed,unconditional});
     }
 }
 std::string UniqueRange(void* source,const CapturedLine& line,const std::vector<Affixes::Rolled>& sources,
@@ -475,22 +490,32 @@ void AddOwnedScalarIdentities(void* source,const Contributions::Snapshot& snapsh
     std::span<const Affixes::PropertyGroup> groups,const unsigned char* metadata,std::size_t count,
     std::vector<CapturedLine>& observed) {
     if(!originalSingle || snapshot.own.size()>256)return;
-    std::vector<CapturedLine> candidates;
+    std::vector<CapturedLine> candidates;std::set<unsigned> seenGroups;
     for(const auto& value:snapshot.own){
         const auto stat=static_cast<unsigned>(value.key>>32),layer=static_cast<unsigned>(value.key);
         if(stat>=count || layer>INT_MAX)continue;const auto* row=metadata+stat*0x144;
         const auto desc=Affixes::Read<std::uint16_t>(row,0x32);
-        if((desc!=19 || layer) && !(stat==83 && desc==13 && layer<8))continue;
-        if(Affixes::Read<std::uint16_t>(row,0)!=stat || Affixes::Read<std::uint16_t>(row,0x3a))continue;
+        if(!desc || ((desc!=19 || layer) && !(stat==83 && desc==13 && layer<8) && !propertySourcesReady.load()))continue;
+        if(Affixes::Read<std::uint16_t>(row,0)!=stat)continue;
+        const auto group=Affixes::Read<std::uint16_t>(row,0x3a);
+        if(group){
+            if(!propertySourcesReady.load() || seenGroups.contains(group) || layer)continue;
+            bool same=true;unsigned members=0;
+            for(std::size_t member=0;member<count;++member)if(Affixes::Read<std::uint16_t>(metadata+member*0x144,0x3a)==group){
+                ++members;same&=Contributions::Value(snapshot.own,static_cast<unsigned>(member))==value.value && metadata[member*0x144+0x14]==row[0x14];
+            }
+            if(!same || members<2 || members>7)continue;
+            seenGroups.insert(group);
+        }
         if(Affixes::Label(definitions,properties,static_cast<int>(stat),static_cast<int>(layer),encoding,groups).empty())continue;
         const auto normalized=Contributions::Normalize(value.value,row[0x14]);if(!normalized)continue;
         char text[256]{};
-        if(!originalSingle(source,row,*normalized,static_cast<int>(layer),false,text,1))continue;
+        if(!originalSingle(source,row,*normalized,static_cast<int>(layer),group!=0,text,1))continue;
         const auto size=strnlen(text,256);if(!size || size==256)continue;
         const auto key=RangeText::Analyze({text,size}).key;
         unsigned matches=0;
         for(const auto line:RangeText::Lines(actual))if(RangeText::Analyze(line).key==key)++matches;
-        if(matches==1)candidates.push_back({key,static_cast<int>(stat),static_cast<int>(layer),false});
+        if(matches==1)candidates.push_back({key,static_cast<int>(stat),static_cast<int>(layer),group!=0,group});
     }
     for(auto& candidate:candidates){
         if(std::count_if(candidates.begin(),candidates.end(),[&](const CapturedLine& other){return other.key==candidate.key;})!=1)continue;
@@ -556,7 +581,7 @@ std::vector<RangeText::Label> AffixLabels(void* source,const std::vector<Capture
             const auto count=Affixes::Read<std::uint64_t>(tables,0x13d0);
             const auto* uniqueGroups=reinterpret_cast<const unsigned char*>(groupRows);
             if (record>=0 && count<32768 && static_cast<std::uint64_t>(record)<count &&
-                Readable(unique,count*0x15c) && !groups.empty()) {
+                Readable(unique,count*0x15c) && (groupCount==0 || !groups.empty())) {
                 const auto* recordRow=unique+record*0x15c;
                 // Flag8 suppresses Core's range clone for Renewed Sunders.
                 // It does not erase the original item's unique provenance.
@@ -570,10 +595,15 @@ std::vector<RangeText::Label> AffixLabels(void* source,const std::vector<Capture
         const auto itemStatCount=Affixes::Read<std::uint64_t>(tables,0x1260);
         const bool itemStatsValid=itemStatCount && itemStatCount<=4096 &&
             Readable(itemStats,static_cast<std::size_t>(itemStatCount)*0x144);
-        const auto scalingSnapshot=scalingReady.load()?CaptureItemContributions(source):std::optional<Contributions::Snapshot>{};
+        const auto scalingSnapshot=(scalingReady.load()||propertySourcesReady.load())?CaptureItemContributions(source):std::optional<Contributions::Snapshot>{};
+        if(scalingSnapshot && (scalingSnapshot->identity.flags&0x04000000u)){
+            const auto word=ReadWordDefinitions(*scalingSnapshot,properties,groups);
+            if(word)rolled.insert(rolled.end(),word->begin(),word->end());
+        }
         std::vector<CapturedLine> observed=lines;
+        auto identityEncoding=encoding;identityEncoding.randomSkills=randomSkillsReady.load();
         if(scalingSnapshot && itemStatsValid)AddOwnedScalarIdentities(source,*scalingSnapshot,actual,rolled,properties,
-            encoding,groups,itemStats,static_cast<std::size_t>(itemStatCount),observed);
+            identityEncoding,groups,itemStats,static_cast<std::size_t>(itemStatCount),observed);
         // Composite damage lines can bypass both native identity observers.
         // Require an exact line/family count; loaded native display priorities
         // provide the locale-independent mapping for different source labels.
@@ -671,6 +701,15 @@ std::vector<RangeText::Label> AffixLabels(void* source,const std::vector<Capture
         if(itemStatsValid){
             const auto sources=GatherSourceGroups(source,rolled,{rows,static_cast<std::size_t>(rowCount)},prefixIndex,autoIndex,properties);
             if(sources)AddOwnedSourceLabels(*sources,observed,actual,properties,itemStats,static_cast<std::size_t>(itemStatCount),encoding,groups,labels);
+        }
+        if(itemStatsValid && propertySourcesReady.load()){
+            const auto sources=GatherSourceGroups(source,rolled,{rows,static_cast<std::size_t>(rowCount)},prefixIndex,autoIndex,properties);
+            if(sources)AddLinkedSourceLabels(*sources,observed,actual,properties,itemStats,static_cast<std::size_t>(itemStatCount),labels,groups);
+            else if(scalingSnapshot && scalingSnapshot->sockets.empty() && !(scalingSnapshot->identity.flags&0x04000000u) &&
+                    (quality==4 || quality==6 || quality==7) && !HasRecipeExtras(*scalingSnapshot)){
+                SourceGroups own;own.capture=*scalingSnapshot;own.groups.push_back({own.capture.own,rolled,""});
+                AddLinkedSourceLabels(own,observed,actual,properties,itemStats,static_cast<std::size_t>(itemStatCount),labels,groups);
+            }
         }
         return labels;
     } catch (...) { return {}; }
@@ -996,7 +1035,7 @@ void TraceProperties(unsigned annotated,unsigned unmatched,const char* actual,co
     try { seen.emplace_back(actual); } catch (...) { return; }
     char message[14000]{};
     const int n=std::snprintf(message,sizeof(message),
-        "v1.3.1+rev.40 properties annotated=%u unmatched=%u labeled=%u captured=%u\r\nACTUAL: %.4095s\r\nRANGED: %.4095s\r\nRESULT: %.4095s\r\n",annotated,unmatched,labeled,captured,actual,ranged,result);
+        "v1.3.1+rev.44 properties annotated=%u unmatched=%u labeled=%u captured=%u\r\nACTUAL: %.4095s\r\nRANGED: %.4095s\r\nRESULT: %.4095s\r\n",annotated,unmatched,labeled,captured,actual,ranged,result);
     if (n<=0 || n>=static_cast<int>(sizeof(message))) return;
     HANDLE file=CreateFileW(diagnosticPath,FILE_APPEND_DATA,FILE_SHARE_READ|FILE_SHARE_WRITE,nullptr,OPEN_ALWAYS,FILE_ATTRIBUTE_NORMAL,nullptr);
     if (file==INVALID_HANDLE_VALUE) return;
@@ -1288,6 +1327,9 @@ void Restore() noexcept {
     active.store(false, std::memory_order_release);
     contributionsReady.store(false);
     scalingReady.store(false);
+    propertySourcesReady.store(false);
+    randomSkillsReady.store(false);
+    quantityRateReady.store(false);
     if (uniqueRowSlot) Exchange(uniqueRowSlot,reinterpret_cast<void*>(&UniqueVisibilityAdapter),reinterpret_cast<void*>(originalUniqueRow));
     if (visibilityTablesSlot) Exchange(visibilityTablesSlot,reinterpret_cast<void*>(&SetVisibilityAdapter),reinterpret_cast<void*>(getTables));
     if (damageSlot) Exchange(damageSlot,reinterpret_cast<void*>(&DamageAdapter),reinterpret_cast<void*>(originalDamage));
@@ -1334,6 +1376,17 @@ bool Install(const D2RL::PluginContext* context) noexcept {
     const bool socketSourcesReady=std::all_of(std::begin(SocketProfile::Witnesses),std::end(SocketProfile::Witnesses),
         [&](const auto& witness) {return Match(game,witness.rva,witness.bytes,witness.size);});
     if (!socketSourcesReady) context->LogWarn("Item Roll Ranges: socket ownership witnesses refused; existing tooltip behavior retained.");
+    propertySourcesReady.store(socketSourcesReady && std::all_of(std::begin(PropertySourceProfile::Witnesses),std::end(PropertySourceProfile::Witnesses),
+        [&](const auto& w){return Match(w.core?base:game,w.rva,w.bytes,w.size);}));
+    if(!propertySourcesReady.load())context->LogWarn("Item Roll Ranges: linked-property/runeword witnesses refused; existing ranges retained.");
+    randomSkillsReady.store(propertySourcesReady.load() && std::all_of(std::begin(PropertySourceProfile::RandomSkillWitnesses),std::end(PropertySourceProfile::RandomSkillWitnesses),
+        [&](const auto& w){return Match(game,w.rva,w.bytes,w.size);}) &&
+        Readable(game+PropertySourceProfile::RandomSkillDispatchRva,sizeof(void*)) &&
+        Affixes::Read<std::uintptr_t>(game,PropertySourceProfile::RandomSkillDispatchRva)==reinterpret_cast<std::uintptr_t>(game)+PropertySourceProfile::RandomSkillEntryRva);
+    if(!randomSkillsReady.load())context->LogWarn("Item Roll Ranges: optional random-skill witnesses refused; native random-skill text retained.");
+    quantityRateReady.store(propertySourcesReady.load() && std::all_of(std::begin(PropertySourceProfile::QuantityWitnesses),std::end(PropertySourceProfile::QuantityWitnesses),
+        [&](const auto& w){return Match(game,w.rva,w.bytes,w.size);}));
+    if(!quantityRateReady.load())context->LogWarn("Item Roll Ranges: optional quantity cadence witnesses refused; native quantity text retained.");
     contributionsReady.store(socketSourcesReady&&std::all_of(std::begin(ContributionProfile::Witnesses),std::end(ContributionProfile::Witnesses),
         [&](const auto& w){return Match(w.core?base:game,w.rva,w.bytes,w.size);}));
     contributionContext=context;contributionTables=nullptr;
@@ -1453,15 +1506,16 @@ bool Install(const D2RL::PluginContext* context) noexcept {
     if(!InstallAlways(base,game,context))
         context->LogWarn("Item Roll Ranges: always-show query admission failed; ordinary hold mode retained.");
     active.store(true, std::memory_order_release);
+    context->LogInfo(propertySourcesReady.load()?"Item Roll Ranges: active linked-property/runeword source model admitted.":"Item Roll Ranges: active linked-property/runeword source model unavailable.");
     context->LogInfo(alwaysReady.load() && alwaysEnabled.load()?"Item Roll Ranges display mode: always show ranges.":"Item Roll Ranges display mode: native Ctrl/controller hold.");
-    context->LogInfo("Item Roll Ranges 1.3.1+rev.40 by PyreFly: Ctrl / RT(R2), or QOL range override; inventory, stash, Cube and vendor only. Actual values, native ranges, named P/S tiers and guarded stacked-damage details. Unsupported or ambiguous provenance is omitted.");
+    context->LogInfo("Item Roll Ranges 1.3.1+rev.44 by PyreFly: Ctrl / RT(R2), or QOL range override; inventory, stash, Cube and vendor only. Actual values, native ranges, named P/S tiers and guarded stacked-damage details. Unsupported or ambiguous provenance is omitted.");
     return true;
 }
 }
 
 D2RL_PLUGIN_EXPORT const D2RL::PluginInfo* __cdecl D2RLoaderGetPluginInfo() noexcept {
     static const D2RL::PluginInfo info{sizeof(D2RL::PluginInfo), D2RL_PLUGIN_ABI_VERSION,
-        "item-roll-ranges", "Item Roll Ranges", "1.3.1+rev.40", "PyreFly",
+        "item-roll-ranges", "Item Roll Ranges", "1.3.1+rev.44", "PyreFly",
         "Hold Ctrl or RT/R2 (R1/RB with Controller QOL) for native item stat ranges in item-management screens.",
         D2RL::PluginFlags::Client | D2RL::PluginFlags::NativeHooks, {}};
     return &info;

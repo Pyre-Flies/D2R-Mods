@@ -88,6 +88,14 @@ int main() {
     check(!thorns[2].SameFamily(thorns[3],tierProperties)); // Mixed handlers are not coefficients.
     tierProperties[1].bytes[0x19]=0;
     number(thorns[3],0x28,0);check(!thorns[2].SameFamily(thorns[3],tierProperties));
+    Affixes::Property randomSkill{};randomSkill.bytes[0x18]=12;randomSkill.bytes[0x20]=107;
+    std::vector<Affixes::Row> randomFamily;
+    for(int bonus=2;bonus<=5;++bonus){auto r=row(bonus==2?35:bonus==3?55:bonus==4?75:85,201);
+        number(r,0x28,bonus);number(r,0x2c,251);number(r,0x30,280);randomFamily.push_back(r);}
+    check(Affixes::Tier(randomFamily[0],randomFamily,true,100,yes,{&randomSkill,1})==4);
+    check(Affixes::Tier(randomFamily[3],randomFamily,true,100,yes,{&randomSkill,1})==1);
+    auto otherClass=randomFamily[3];number(otherClass,0x2c,6);number(otherClass,0x30,35);
+    check(!randomFamily[3].SameFamily(otherClass,{&randomSkill,1}));
     std::array<unsigned char,36> experience{};for(unsigned n=0;n<8;++n){int cap=100;std::memcpy(experience.data()+n*4,&cap,4);}
     check(ScalingAffixes::LevelCap(experience,102)==100);
     check(!ScalingAffixes::LevelCap(experience,101));

@@ -1,6 +1,6 @@
 # Item Roll Ranges
 
-**By PyreFly · Version 1.3.1+rev.40**
+**By PyreFly · Version 1.3.1+rev.44**
 
 Show item roll ranges beside actual values in light blue:
 `[+80 - +120] +118 Defense`.
@@ -38,7 +38,13 @@ Unknown individual rolls remain `?` when the saved total cannot identify them.
 Active rune/gem definitions use the host item's context. Level-scaled bounds
 use the active level cap and compatible coefficient/rounding rules. Affix
 families retain distinct property/selector identities even when names repeat.
-Enchantments, unsupported layered/grouped operations, runewords, set bonuses
+Runeword-owned properties use `[RW]`; rune contributions retain socket labels.
+Recipes and ranges come from active compiled tables, including mod changes.
+Shared property rolls can resolve resistance overlaps and grouped Attributes.
+Random skill/class/tab properties show their bonus bounds, not the selected
+skill ID interval; Gnostics can display `[+5]` for its selected skill.
+Replenishes Quantity can show its guarded recurring interval.
+Enchantments, unsupported transforms, ambiguous conditional groups, set bonuses
 and crafting-recipe contributions do not have complete source attribution.
 
 ## Install
@@ -67,7 +73,7 @@ Exact provider and live code guards disable unsupported/conflicting paths.
 Other plugins modifying the same tooltip functions can still conflict. Hot
 reload is unsupported. Production formatter diagnostic dumps are disabled.
 
-All seven automated suites pass. User checks confirm the reviewed socket and
+All nine automated suites pass. User checks confirm the reviewed socket and
 corruption breakdowns, fixed and modified Defense headers, Shadow Mantle's
 overlapping ED/flat Thorns and the corrected Max Sockets header placement.
 No-clone tooltips also receive verified source bounds. Dedicated live controller,
@@ -98,3 +104,15 @@ Eight suites pass; user checks confirm the session toggle and fixed Sash repair.
 Unknown property formatter replacements/entry detours refuse admission rather
 than attempting undocumented composition. Broader localization/controller and
 arbitrary-plugin combinations have not been exhaustively validated.
+
+## Revision44 validation
+
+Private active-table replays inspect2,026 affix rows and resolve219/219 enabled
+Reimagined recipes;56 random-selector specifications verify fixed bonus bounds.
+These counts describe data/model checks, not exhaustive visible coverage.
+User tests confirm resistance overlaps, grouped Attributes, Bone, Lightning and
+Honor in Reimagined, independent fire endpoints, replenishment display,
+Ctrl/session toggles and Wake of Fire. Later vanilla smoke checks also passed.
+Captured real charm/amulet metadata is replayed privately and is not distributed.
+Unknown transforms and ambiguous contributions retain native text.
+See `docs/PROPERTY-ROLLS-REV41.md` and `docs/RANDOM-SKILL-PROPERTIES-REV44.md`.

@@ -227,6 +227,10 @@ class FivePluginSuiteTests(FloatingDamagePackageFixture, unittest.TestCase):
                 self.assertEqual(len(dlls), 1)
                 self.assertTrue(dlls[0].startswith("d2rloader/plugins/"))
                 actual_dlls.add(Path(dlls[0]).name)
+                if Path(dlls[0]).name == "Item Roll Ranges.dll":
+                    for name in ("ALWAYS-SHOW-REV35.md", "PROPERTY-ROLLS-REV41.md", "RANDOM-SKILL-PROPERTIES-REV44.md"):
+                        self.assertIn(f"docs/{name}", zipped.namelist())
+                    self.assertIn(b"always_show_ranges = false", zipped.read("defaults/item-roll-ranges.toml"))
                 self.assertFalse(any(name.lower().startswith("d2rloader/config/")
                                      for name in zipped.namelist()))
                 for line in zipped.read("SHA256SUMS").decode().splitlines():

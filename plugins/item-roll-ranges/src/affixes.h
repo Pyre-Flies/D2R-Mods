@@ -20,11 +20,25 @@ struct Row {
         for (unsigned n=0;n<3;++n) {
             const auto at=0x24+16*n;
             if (Number(at)!=other.Number(at)) return false;
+            const int id=Number(at);
+            if(id>=0 && static_cast<std::size_t>(id)<properties.size()) {
+                bool random=false,onlyRandom=true;
+                for(unsigned slot=0;slot<7;++slot) {
+                    const auto fn=properties[static_cast<std::size_t>(id)].bytes[0x18+slot];
+                    random|=fn==12;onlyRandom&=!fn || fn==12;
+                }
+                if(random && onlyRandom) {
+                    // Function12's parameter is bonus strength; min/max select
+                    // a stat layer. Keep class/skill pools distinct across tiers.
+                    if(Number(at+4)<=0 || other.Number(at+4)<=0 ||
+                       Number(at+8)!=other.Number(at+8) || Number(at+12)!=other.Number(at+12))return false;
+                    continue;
+                }
+            }
             if (Number(at+4)!=other.Number(at+4)) {
                 // Function17's nonzero parameter is a coefficient, not a skill,
                 // class or layer selector. Keep different coefficients in one
                 // family; different property IDs and mixed functions stay apart.
-                const int id=Number(at);
                 if (id<0 || static_cast<std::size_t>(id)>=properties.size() ||
                     Number(at+4)<=0 || other.Number(at+4)<=0) return false;
                 bool coefficient=false;
@@ -55,8 +69,12 @@ template<class Eligible> unsigned Tier(const Row& rolled,std::span<const Row> fa
     }
     return 1+static_cast<unsigned>(higher.size());
 }
-struct LayerEncoding { unsigned skillBits{6}, skillMask{63}; };
-inline bool PropertyContributes(const Property& property,int param,int level,int stat,int layer,
+struct LayerEncoding { unsigned skillBits{6}, skillMask{63}; bool randomSkills{}; };
+inline bool RandomLayerSpec(int param,int low,int high,unsigned layer) {
+    return param>0 && param<=1000000 && low>=0 && low<=high && high<=65535 &&
+        layer>=static_cast<unsigned>(low) && layer<=static_cast<unsigned>(high);
+}
+inline bool PropertyContributes(const Property& property,int param,int low,int level,int stat,int layer,
                                 LayerEncoding encoding={}) {
     const auto* p=property.bytes.data();
     for (unsigned slot=0;slot<7;++slot) {
@@ -75,6 +93,8 @@ inline bool PropertyContributes(const Property& property,int param,int level,int
             if (param>=0 && param<24 && (param/3*8+param%3)==layer) return true;
         } else if (fn==22 || fn==24) {
             if (param>=0 && param==layer) return true;
+        } else if(fn==12) {
+            if(encoding.randomSkills && layer>=0 && RandomLayerSpec(param,low,level,static_cast<unsigned>(layer)))return true;
         } else if (fn==11 || fn==19) { // triggered/charged skill + fixed level
             if (param>=0 && level>0 && encoding.skillBits>0 && encoding.skillBits<16 &&
                 encoding.skillMask==((1u<<encoding.skillBits)-1) &&
@@ -86,12 +106,12 @@ inline bool PropertyContributes(const Property& property,int param,int level,int
     }
     return false;
 }
-inline bool SpecContributes(std::uint32_t id,int param,int level,
+inline bool SpecContributes(std::uint32_t id,int param,int low,int level,
                             std::span<const Property> properties,std::span<const PropertyGroup> groups,
                             int stat,int layer,LayerEncoding encoding,unsigned depth=0) {
     if (depth>4 || id==0xffffffffu) return false;
     if ((id>>16)==0)
-        return id<properties.size() && PropertyContributes(properties[id],param,level,stat,layer,encoding);
+        return id<properties.size() && PropertyContributes(properties[id],param,low,level,stat,layer,encoding);
     if ((id>>16)!=1 || (id&0xffff)>=groups.size()) return false;
     const auto* group=groups[id&0xffff].bytes.data();
     if (group[4]>2) return false;
@@ -105,18 +125,18 @@ inline bool SpecContributes(std::uint32_t id,int param,int level,
         selected=entry;
     }
     return selected && SpecContributes(Read<std::uint32_t>(selected,0),Read<int>(selected,4),
-        Read<int>(selected,16),properties,groups,stat,layer,encoding,depth+1);
+        Read<int>(selected,12),Read<int>(selected,16),properties,groups,stat,layer,encoding,depth+1);
 }
 inline bool Contributes(const Row& row,std::span<const Property> properties,int stat,int layer,
                         LayerEncoding encoding={},std::span<const PropertyGroup> groups={}) {
     for (unsigned n=0;n<3;++n) {
         const auto id=static_cast<std::uint32_t>(row.Number(0x24+16*n));
-        if (SpecContributes(id,row.Number(0x28+16*n),row.Number(0x30+16*n),
+        if (SpecContributes(id,row.Number(0x28+16*n),row.Number(0x2c+16*n),row.Number(0x30+16*n),
                             properties,groups,stat,layer,encoding)) return true;
     }
     return false;
 }
-struct Rolled { std::uint32_t id{}; Row row; bool prefix{}; unsigned tier{}; const char* source{}; bool uniqueScalar{}; };
+struct Rolled { std::uint32_t id{}; Row row; bool prefix{}; unsigned tier{}; const char* source{}; bool uniqueScalar{}; bool unconditionalScalar{true}; unsigned choicePool{},choiceEntry{}; };
 inline bool UniqueScalarBounds(const Rolled& source,std::span<const Property> properties,int stat,int layer,int& low,int& high) {
     if (!source.uniqueScalar || !source.source || layer || source.row.Number(0x34)!=-1 || source.row.Number(0x44)!=-1) return false;
     const int id=source.row.Number(0x24);

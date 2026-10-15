@@ -1,4 +1,5 @@
 // Full production source capture -> active definitions -> labels -> merge.
+#include <fstream>
 namespace {
 std::array<DefinitionTable,77> contributionFixtureTables{};
 bool contributionFixtureBusy{},contributionFixtureStale{};
@@ -49,7 +50,7 @@ struct ContributionFixture {
         contributionFixtureBusy=contributionFixtureStale=false;
     }
     ~ContributionFixture(){contributionsReady.store(false);contributionContext=nullptr;contributionTables=nullptr;
-        getTables=nullptr;eligibleAffix=nullptr;}
+        getTables=nullptr;eligibleAffix=nullptr;std::memset(fakeTables,0,sizeof(fakeTables));}
     void Property(unsigned index,unsigned fn,unsigned stat){props[index]={};props[index].bytes[0x18]=static_cast<unsigned char>(fn);
         put(props[index].bytes.data(),0x20,static_cast<std::uint16_t>(stat));}
     void Roll(unsigned index,unsigned property,int low,int high,const char* name){auto* row=rows[index].bytes.data();
@@ -340,5 +341,186 @@ void TestOwnedContributionAdapter(){
     f.own.back().value=67;check(f.Render(17,"+341% Enhanced Weapon Damage").find("[C]")==std::string::npos);
     f.own.back().value=168;put(f.Data(),0x18,0x04000000u);check(f.Labels(17,"+341% Enhanced Weapon Damage")[0].ownedParts.empty());
     std::puts("Production owned capture, variable jewel/Life/ED/flat-max, socket-only, El contexts, Ruby pair and corruption splits pass; unsupported sources retain prior output.");
+}
+}
+
+namespace {
+void TestLinkedProduction(){
+    ContributionFixture f;propertySourcesReady.store(true);quantityRateReady.store(true);
+    put(f.modifier.data(),0x68,static_cast<unsigned char*>(nullptr));
+    f.Property(0,1,39);
+    for(unsigned k=1;k<4;++k){f.props[0].bytes[0x18+k]=3;put(f.props[0].bytes.data(),0x20+k*2,std::uint16_t(39+k*2));}
+    f.Property(1,1,45);f.Roll(0,0,16,20,"Prismatic");f.Roll(1,1,11,20,"Viridian");put(f.Data()-20,0,2u);
+    f.own=f.Stats({{39,20},{41,20},{43,20},{45,32}});f.total=f.own;
+    auto text=f.Render(45,"Poison Resist +32%");check(text.find("Poison Resist +20%")!=std::string::npos && text.find("Poison Resist +12%")!=std::string::npos);
+    f.own.back().value=42;f.total=f.own;check(f.Render(45,"Poison Resist +42%").find("[Combined]")==std::string::npos);
+    // Hidden quantity parameter and variable source bounds use the same path.
+    f.Property(0,17,253);f.Roll(0,0,0,0,"of Replenishing");put(f.rows[0].bytes.data(),0x28,5);put(f.Data()-20,0,0u);
+    f.own=f.Stats({{253,5}});f.total=f.own;text=f.Render(253,"Replenishes Quantity");check(text.find("[1 per 20.04s]")!=std::string::npos);
+    put(f.rows[0].bytes.data(),0x28,0);put(f.rows[0].bytes.data(),0x2c,20);put(f.rows[0].bytes.data(),0x30,25);
+    f.own=f.Stats({{253,25}});f.total=f.own;text=f.Render(253,"Replenishes Quantity");check(text.find("[1 per 5 - 5.04s]")!=std::string::npos && text.find("(1 per 5s)")!=std::string::npos);
+    quantityRateReady.store(false);check(f.Render(253,"Replenishes Quantity").find("1 per")==std::string::npos);quantityRateReady.store(true);
+    // Unique grouped attributes retain equal ranges and source labels.
+    put(f.Data(),0,7u);put(f.Data()+0x34,0,0);put(f.Data()-24,0,0u);f.Property(2,1,0);
+    for(unsigned k=1;k<4;++k){f.props[2].bytes[0x18+k]=3;put(f.props[2].bytes.data(),0x20+k*2,std::uint16_t(k));}
+    std::array<unsigned char,348> unique{};for(unsigned k=0;k<12;++k)put(unique.data(),0x98+k*16,UINT32_MAX);
+    put(unique.data(),0x98,2u);put(unique.data(),0xa0,3);put(unique.data(),0xa4,8);
+    std::array<Affixes::PropertyGroup,1> groups{};put(fakeTables,0x258,groups.data());put(fakeTables,0x260,std::uint64_t{1});
+    put(fakeTables,0x13c8,unique.data());put(fakeTables,0x13d0,std::uint64_t{1});
+    for(unsigned k=0;k<4;++k)put(f.statRows.data()+k*0x144,0x3a,std::uint16_t{1});
+    f.statRows[1*0x144+0x50]=8;f.statRows[3*0x144+0x50]=9;
+    f.own=f.Stats({{0,6},{1,6},{2,6},{3,6}});f.total=f.own;f.Bind();
+    const std::string attrs="+6 to All Attributes";
+    auto labels=AffixLabels(f.host.data(),{{RangeText::Analyze(attrs).key,0,0,true,1}},attrs);
+    text=RangeText::Merge(attrs,attrs,4096,labels).text;check(text.find("[+3 - +8]")!=std::string::npos && text.find("[U]")!=std::string::npos && text.find("(?)")==std::string::npos);
+    // Ordinary direct unique properties also work without a PropertyGroups table.
+    put(fakeTables,0x260,std::uint64_t{0});
+    labels=AffixLabels(f.host.data(),{{RangeText::Analyze(attrs).key,0,0,true,1}},attrs);
+    text=RangeText::Merge(attrs,attrs,4096,labels).text;check(text.find("[+3 - +8]")!=std::string::npos);
+    // A one-choice weighted pool can supply an observed stat's marginal bounds,
+    // but its alternative candidates cannot be independent additive variables.
+    unsigned char spec[16]{};put(spec,0,0x10000u);put(spec,8,1);put(spec,12,1);
+    std::array<Affixes::PropertyGroup,1> pool{};pool[0].bytes[4]=2;
+    put(pool[0].bytes.data(),8,0u);put(pool[0].bytes.data(),20,5);put(pool[0].bytes.data(),24,10);put(pool[0].bytes.data(),28,1);
+    put(pool[0].bytes.data(),32,1u);put(pool[0].bytes.data(),44,11);put(pool[0].bytes.data(),48,20);put(pool[0].bytes.data(),52,1);
+    std::vector<Affixes::Rolled> alternatives;AddUniqueSource(spec,reinterpret_cast<const unsigned char*>(pool.data()),1,f.props.size(),alternatives);
+    check(alternatives.size()==2 && alternatives[0].uniqueScalar && !alternatives[0].unconditionalScalar);
+    f.Property(0,1,7);int lo{},hi{};check(Affixes::UniqueScalarBounds(alternatives[0],f.props,7,0,lo,hi) && lo==5 && hi==10);
+    const auto conditional=PropertyRolls::Compile(alternatives,f.props);check(conditional.variables.empty() && conditional.blocked.contains(7));
+    // Synthetic weighted Attributes/FRW/MF pool, with a separate MF roll.
+    pool={};pool[0].bytes[4]=2;f.Property(1,8,79);f.Property(3,8,96);
+    for(unsigned k=0;k<3;++k){auto* entry=pool[0].bytes.data()+8+k*24;
+        put(entry,0,k==0?2u:k==1?3u:1u);put(entry,12,k==0?3:k==1?10:15);put(entry,16,k==0?8:k==1?20:30);put(entry,20,1);}
+    std::memcpy(unique.data()+0x98,spec,16);put(unique.data(),0xa8,1u);put(unique.data(),0xb0,45);put(unique.data(),0xb4,75);
+    put(fakeTables,0x258,pool.data());put(fakeTables,0x260,std::uint64_t{1});
+    f.own=f.Stats({{0,6},{1,6},{2,6},{3,6},{79,55}});f.total=f.own;f.Bind();
+    labels=AffixLabels(f.host.data(),{{RangeText::Analyze(attrs).key,0,0,true,1}},attrs);
+    text=RangeText::Merge(attrs,attrs,4096,labels).text;check(text.find("[+3 - +8]")!=std::string::npos && text.find("(?)")==std::string::npos);
+    // Separate independently rolled elemental endpoints on a single affix.
+    put(f.Data(),0,6u);put(f.Data()-24,0,1u);put(f.Data()-20,0,0u);f.Property(0,1,48);f.Property(1,1,49);
+    f.Roll(0,0,121,170,"Scorching");put(f.rows[0].bytes.data(),0x34,1);put(f.rows[0].bytes.data(),0x3c,181);put(f.rows[0].bytes.data(),0x40,240);
+    f.own=f.Stats({{48,156},{49,181}});f.total=f.own;text=f.Render(48,"Adds 156-181 Weapon Fire Damage");
+    check(text.find("[121 - 170 / 181 - 240]")!=std::string::npos && text.find("Adds 156-181")!=std::string::npos && text.find("(?)")==std::string::npos);
+    f.total.back().value=241;check(f.Render(48,"Adds 156-241 Weapon Fire Damage").find("[121 - 170 / 181 - 240]")==std::string::npos);
+    put(f.rows[0].bytes.data(),0x34,-1);
+    // Active compiled runeword with a reciprocal owned socket, empty property
+    // groups (vanilla), mana and a class-skill layer; no source-name database.
+    put(fakeTables,0x258,static_cast<const Affixes::PropertyGroup*>(nullptr));put(fakeTables,0x260,std::uint64_t{0});
+    put(f.Data(),0,2u);put(f.Data()+0x18,0,0x04000010u);put(f.modifier.data(),0x20,171u);
+    put(f.modifier.data(),0x68,f.socketRoot.data());put(f.JewelData(),0,2u);put(f.JewelData()-24,0,0u);
+    f.Property(4,1,9);f.Property(5,21,83);put(f.props[5].bytes.data(),0x0a,std::uint16_t{2});
+    f.own={{std::uint64_t{9}<<32,119*256},{(std::uint64_t{83}<<32)|2,2}};f.socket={};f.total=f.own;f.total.push_back({std::uint64_t{194}<<32,1});f.Bind();
+    f.statRows[9*0x144+0x14]=8;put(f.statRows.data()+83*0x144,0x32,std::uint16_t{13});
+    std::array<unsigned char,448*3> items{};std::array<unsigned char,232*3> types{};std::array<unsigned char,192> gems{};std::array<unsigned char,232> runes{};
+    put(items.data(),0x12e,std::int16_t{1});put(items.data(),0x130,std::int16_t{-1});
+    put(types.data(),0,ContributionDefinitions::Code("armo"));put(types.data()+232,0,ContributionDefinitions::Code("weap"));put(types.data()+464,0,ContributionDefinitions::Code("shld"));
+    std::memcpy(gems.data(),"Fixture Rune",13);put(gems.data(),0x28,2u);for(unsigned k=0;k<9;++k)put(gems.data(),0x30+k*16,UINT32_MAX);
+    runes[0x44]=1;put(runes.data(),0x46,std::uint16_t{10});put(runes.data(),0x4a,std::int16_t{1});
+    for(unsigned k=0;k<6;++k)put(runes.data(),0x5c+k*4,-1);put(runes.data(),0x5c,2);
+    for(unsigned k=0;k<7;++k)put(runes.data(),0x74+k*16,UINT32_MAX);
+    put(runes.data(),0x74,4u);put(runes.data(),0x7c,100);put(runes.data(),0x80,150);
+    put(runes.data(),0x84,5u);put(runes.data(),0x8c,2);put(runes.data(),0x90,2);
+    put(fakeTables,0x1860,runes.data());put(fakeTables,0x1868,std::uint64_t{1});
+    D2RL::DataTableService service{.serviceSize=D2RL::DataTableServiceRequiredSize,.serviceVersion=D2RL::DataTableService::AbiVersion,.getTable=FixtureTable};D2RL::PluginContext context{};
+    contributionContext=&context;contributionTables=&service;
+    contributionFixtureTables[16]={reinterpret_cast<const unsigned char*>(f.props.data()),f.props.size(),48};
+    contributionFixtureTables[59]={items.data(),3,448};contributionFixtureTables[41]={types.data(),3,232};contributionFixtureTables[62]={gems.data(),1,192};contributionFixtureTables[66]={runes.data(),1,232};
+    auto snapshot=CaptureItemContributions(f.host.data());check(snapshot && snapshot->word.size()==2);
+    check(ReadWordDefinitions(*snapshot,f.props,{}).has_value());
+    text=f.Render(9,"+119 to Mana");check(text.find("[+100 - +150]")!=std::string::npos && text.find("[RW]")!=std::string::npos);
+    const std::string skill="+2 to Necromancer Skill Levels";
+    labels=AffixLabels(f.host.data(),{{RangeText::Analyze(skill).key,83,2,false}},skill);text=RangeText::Merge(skill,skill,4096,labels).text;
+    check(text.find("[+2]")!=std::string::npos && text.find("[RW]")!=std::string::npos);
+    // Selector zero is a real layer (Amazon), not the absence of a selector.
+    put(f.props[5].bytes.data(),0x0a,std::uint16_t{0});f.own[1].key=std::uint64_t{83}<<32;f.total=f.own;f.total.push_back({std::uint64_t{194}<<32,1});f.Bind();
+    text=f.Render(83,"+2 to Amazon Skill Levels");check(text.find("[+2]")!=std::string::npos && text.find("[RW]")!=std::string::npos);
+    f.Property(5,24,97);put(runes.data(),0x88,133);put(runes.data(),0x8c,3);put(runes.data(),0x90,6);
+    f.own[1]={(std::uint64_t{97}<<32)|133,5};f.total=f.own;f.total.push_back({std::uint64_t{194}<<32,1});f.Bind();
+    const std::string oskill="+5 to Teleport";
+    labels=AffixLabels(f.host.data(),{{RangeText::Analyze(oskill).key,97,133,false}},oskill);text=RangeText::Merge(oskill,oskill,4096,labels).text;
+    check(text.find("[+3 - +6]")!=std::string::npos && text.find("+5 to Teleport")!=std::string::npos && text.find("[RW]")!=std::string::npos);
+    contributionFixtureBusy=true;check(!ReadWordDefinitions(*snapshot,f.props,{}));contributionFixtureBusy=false;
+    put(fakeTables,0x1868,std::uint64_t{2});check(!ReadWordDefinitions(*snapshot,f.props,{}));put(fakeTables,0x1868,std::uint64_t{1});
+    put(f.Data()+0x18,0,0u);
+    check(!CaptureItemContributions(f.host.data()));propertySourcesReady.store(false);quantityRateReady.store(false);
+    std::puts("Production shared-resist reverse inference, grouped unique attributes, quantity rates and active-table runeword sources pass.");
+}
+bool __fastcall FixtureRandomSkillSingle(void*,const void* metadata,int value,int layer,bool grouped,char* output,int mode) {
+    if(Affixes::Read<std::uint16_t>(static_cast<const unsigned char*>(metadata),0)!=107 || layer!=262)return false;
+    check(!grouped && mode==1);
+    std::snprintf(output,256,"+%d to Wake of Fire (Assassin Only)",value);return true;
+}
+void TestRandomSkillProduction(){
+    ContributionFixture f;propertySourcesReady.store(true);randomSkillsReady.store(true);
+    put(f.modifier.data(),0x68,static_cast<unsigned char*>(nullptr));put(fakeTables,0x1608,f.rows.data());
+    f.Property(0,12,107);f.Roll(0,0,251,280,"Gnostics");put(f.rows[0].bytes.data(),0x28,5);
+    f.own={{(std::uint64_t{107}<<32)|262,5}};f.total=f.own;f.Bind();
+    originalSingle=FixtureRandomSkillSingle;const std::string actual="+5 to Wake of Fire (Assassin Only)";
+    // No captured identity/clone: recover through the existing native formatter.
+    auto labels=AffixLabels(f.host.data(),{},actual);auto text=RangeText::Merge(actual,actual,4096,labels).text;
+    check(text.find("[+5]")!=std::string::npos && text.find("[P] [Gnostics]")!=std::string::npos && text.find("251") ==std::string::npos);
+    randomSkillsReady.store(false);labels=AffixLabels(f.host.data(),{},actual);
+    check(RangeText::Merge(actual,actual,4096,labels).text==actual);randomSkillsReady.store(true);
+    f.own[0].value=6;f.total=f.own;f.Bind();labels=AffixLabels(f.host.data(),{},"+6 to Wake of Fire (Assassin Only)");
+    text=RangeText::Merge("+6 to Wake of Fire (Assassin Only)","+6 to Wake of Fire (Assassin Only)",4096,labels).text;
+    check(text.find("[+5]")==std::string::npos && text.find("Gnostics")==std::string::npos);
+    originalSingle=nullptr;randomSkillsReady.store(false);propertySourcesReady.store(false);
+    std::puts("Production random-skill clone-less identity, fixed bonus/source display, mismatch and optional guard refusal pass.");
+}
+void TestLiveRandomSkillCapture(const char* path){
+    std::ifstream input(path,std::ios::binary);char magic[4]{};input.read(magic,4);check(std::memcmp(magic,"IRRS",4)==0);
+    unsigned itemClass{},quality{},flags{},version{},prefix{},automagic{},size{};std::array<unsigned,6> ids{};
+    for(auto* field:{&itemClass,&quality,&flags,&version,&prefix,&automagic,&size})input.read(reinterpret_cast<char*>(field),4);
+    input.read(reinterpret_cast<char*>(ids.data()),24);check(input.good() && size<=256 && version<=65535);
+    Contributions::Stats actual(size);for(auto& value:actual){input.read(reinterpret_cast<char*>(&value.key),8);input.read(reinterpret_cast<char*>(&value.value),8);}
+    std::vector<std::vector<unsigned char>> bytes(4);const unsigned strides[]={48,200,140,324};std::array<unsigned,4> counts{};
+    for(unsigned n=0;n<4;++n){unsigned stride{};input.read(reinterpret_cast<char*>(&counts[n]),4);input.read(reinterpret_cast<char*>(&stride),4);
+        check(input.good() && counts[n]<=32768 && stride==strides[n]);bytes[n].resize(static_cast<std::size_t>(counts[n])*stride);
+        input.read(reinterpret_cast<char*>(bytes[n].data()),static_cast<std::streamsize>(bytes[n].size()));check(input.good());}
+    check(input.peek()==std::char_traits<char>::eof() && prefix<=automagic && automagic<=counts[2]);
+    ContributionFixture f;propertySourcesReady.store(true);randomSkillsReady.store(true);
+    put(f.host.data(),4,itemClass);put(f.Data(),0,quality);put(f.Data()+0x18,0,flags);put(f.Data()+0x40,0,static_cast<std::uint16_t>(version));
+    std::memcpy(f.Data()-24,ids.data(),24);put(f.modifier.data(),0x68,static_cast<unsigned char*>(nullptr));f.own=actual;f.total=actual;f.Bind();
+    put(fakeTables,0x240,bytes[0].data());put(fakeTables,0x248,std::uint64_t{counts[0]});put(fakeTables,0x258,bytes[1].data());put(fakeTables,0x260,std::uint64_t{counts[1]});
+    put(fakeTables,0x15e8,bytes[2].data());put(fakeTables,0x15f0,std::uint64_t{counts[2]});put(fakeTables,0x1600,bytes[2].data());
+    put(fakeTables,0x1608,bytes[2].data()+prefix*140);put(fakeTables,0x1610,bytes[2].data()+automagic*140);
+    put(fakeTables,0x1258,bytes[3].data());put(fakeTables,0x1260,std::uint64_t{counts[3]});
+    originalSingle=FixtureRandomSkillSingle;const std::string text="+5 to Wake of Fire (Assassin Only)";
+    const auto labels=AffixLabels(f.host.data(),{},text);const auto rendered=RangeText::Merge(text,text,4096,labels).text;
+    std::printf("Captured random-skill amulet: %s\n",rendered.c_str());
+    check(rendered.find("[+5]")!=std::string::npos && rendered.find("[P] [Gnostics] [T1]")!=std::string::npos && rendered.find("(?)")==std::string::npos);
+    originalSingle=nullptr;propertySourcesReady.store(false);randomSkillsReady.store(false);
+}
+void TestLiveUniqueCapture(const char* path){
+    std::ifstream input(path,std::ios::binary);char magic[4]{};input.read(magic,4);check(std::memcmp(magic,"IRRU",4)==0);
+    int record{};unsigned itemClass{},flags{},size{};
+    input.read(reinterpret_cast<char*>(&record),4);input.read(reinterpret_cast<char*>(&itemClass),4);input.read(reinterpret_cast<char*>(&flags),4);input.read(reinterpret_cast<char*>(&size),4);check(input.good() && size<=256);
+    Contributions::Stats actual(size);for(auto& value:actual){input.read(reinterpret_cast<char*>(&value.key),8);input.read(reinterpret_cast<char*>(&value.value),8);}
+    std::vector<std::vector<unsigned char>> bytes(4);const unsigned strides[]={48,200,348,324};std::array<unsigned,4> counts{};
+    for(unsigned n=0;n<4;++n){unsigned stride{};input.read(reinterpret_cast<char*>(&counts[n]),4);input.read(reinterpret_cast<char*>(&stride),4);
+        check(input.good() && counts[n]>0 && counts[n]<=32768 && stride==strides[n]);bytes[n].resize(static_cast<std::size_t>(counts[n])*stride);
+        input.read(reinterpret_cast<char*>(bytes[n].data()),static_cast<std::streamsize>(bytes[n].size()));check(input.good());}
+    check(input.peek()==std::char_traits<char>::eof());ContributionFixture f;propertySourcesReady.store(true);
+    put(f.host.data(),4,itemClass);put(f.Data(),0,7u);put(f.Data()+0x18,0,flags);put(f.Data()+0x34,0,record);put(f.Data()-24,0,0u);
+    put(f.modifier.data(),0x68,static_cast<unsigned char*>(nullptr));f.own=actual;f.total=actual;f.Bind();
+    put(fakeTables,0x240,bytes[0].data());put(fakeTables,0x248,std::uint64_t{counts[0]});
+    put(fakeTables,0x258,bytes[1].data());put(fakeTables,0x260,std::uint64_t{counts[1]});
+    put(fakeTables,0x13c8,bytes[2].data());put(fakeTables,0x13d0,std::uint64_t{counts[2]});
+    put(fakeTables,0x1258,bytes[3].data());put(fakeTables,0x1260,std::uint64_t{counts[3]});
+    originalSingle=nullptr;const std::string text="+10 to All Attributes";
+    auto labels=AffixLabels(f.host.data(),{{RangeText::Analyze(text).key,0,0,true,1}},text);
+    const auto rendered=RangeText::Merge(text,text,4096,labels).text;
+    if(rendered.find("[+5 - +10]")==std::string::npos){
+        const auto properties=std::span(reinterpret_cast<const Affixes::Property*>(bytes[0].data()),counts[0]);
+        const auto groups=std::span(reinterpret_cast<const Affixes::PropertyGroup*>(bytes[1].data()),counts[1]);
+        std::vector<Affixes::Rolled> defs;
+        for(unsigned n=0;n<12;++n)AddUniqueSource(bytes[2].data()+static_cast<std::size_t>(record)*348+0x98+n*16,bytes[1].data(),counts[1],counts[0],defs);
+        const auto normalize=[&](unsigned stat,std::int64_t raw)->std::optional<int>{if(stat>=counts[3])return {};const auto* row=bytes[3].data()+stat*324;if(!PropertyRolls::ItemScalarOperand(row))return {};return Contributions::Normalize(raw,row[0x14]);};
+        const auto solved=PropertyRolls::SolveSources(defs,properties,actual,normalize,groups);
+        std::fprintf(stderr,"Loaded replay: defs=%zu complete=%d stat0 verified=%d blocked=%d rendered=%s\n",defs.size(),solved.model.complete,solved.verified.contains(0),solved.model.blocked.contains(0),rendered.c_str());
+        for(const auto& d:defs)std::fprintf(stderr,"property=%d bounds=%d..%d pool=%u entry=%u unconditional=%d\n",d.row.Number(0x24),d.row.Number(0x2c),d.row.Number(0x30),d.choicePool,d.choiceEntry,d.unconditionalScalar);
+    }
+    check(rendered.find("[+5 - +10]")!=std::string::npos && rendered.find("[U]")!=std::string::npos && rendered.find("(?)")==std::string::npos);
+    propertySourcesReady.store(false);std::puts("Current loaded unique/group/property/stat metadata and owned stat replay: selected Attributes5..10 pool renders correctly.");
 }
 }

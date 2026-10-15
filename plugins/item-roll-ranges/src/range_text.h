@@ -142,10 +142,41 @@ struct Label {
     std::vector<OwnedContribution> ownedParts{};
     std::optional<int> ownedTotal{},ownedMaxTotal{};
     bool replaceNativeRange{};
+    bool quantityRate{};
 };
+inline std::string QuantitySeconds(int rate) {
+    if(rate<=0)return "?";
+    // Qualified recurring event cadence: floor(2500 / rate) + 1 frames,
+    // clamped to at least 125 frames at 25 simulation frames per second.
+    const int frames=std::max(125,2500/rate+1);
+    if(frames%25==0)return std::to_string(frames/25);
+    char text[48]{};std::snprintf(text,sizeof(text),"%.2f",frames/25.0);
+    std::string result=text;while(result.ends_with('0'))result.pop_back();if(result.ends_with('.'))result.pop_back();
+    return result;
+}
+inline std::string ExpandQuantity(std::string_view original,const Label& label) {
+    if(!label.quantityRate || !label.ownedTotal || *label.ownedTotal<=0 || label.ownedParts.empty() || label.ownedParts.size()>12)return {};
+    long long low=0,high=0,sum=0;bool exact=true;
+    for(const auto& p:label.ownedParts){
+        if(p.low<=0 || p.high<p.low || (p.value&&(*p.value<p.low || *p.value>p.high)))return {};
+        low+=p.low;high+=p.high;if(p.value)sum+=*p.value;else exact=false;
+    }
+    if(low>INT_MAX || high>INT_MAX || *label.ownedTotal<low || *label.ownedTotal>high || (exact&&sum!=*label.ownedTotal))return {};
+    const auto interval=[](int lo,int hi){return "1 per "+QuantitySeconds(hi)+(lo==hi?"":" - "+QuantitySeconds(lo))+"s";};
+    const auto rate=[](std::optional<int> value){return value?"1 per "+QuantitySeconds(*value)+"s":std::string("?");};
+    const std::string marker="\xee\x81\xbe";
+    std::string result;
+    if(label.ownedParts.size()>1)for(auto at=label.ownedParts.rbegin();at!=label.ownedParts.rend();++at)
+        result+=marker+"5["+interval(at->low,at->high)+"] "+std::string(original)+" ("+rate(at->value)+") "+at->label+marker+"3\n";
+    result+=marker+"U["+interval(static_cast<int>(low),static_cast<int>(high))+"]"+marker+"3 "+std::string(original);
+    if(low!=high || label.ownedParts.size()>1)result+=" ("+rate(label.ownedTotal)+")";
+    result+=" "+marker+"U"+(label.ownedParts.size()==1?label.ownedParts[0].label:"[Combined]")+marker+"3";
+    return result;
+}
 // An owned source has independently captured actuals and agreeing definitions.
 // Native partial intervals are replaced only when every source is accounted for.
 inline std::string ExpandOwned(std::string_view original,const Label& label) {
+    if(label.quantityRate)return ExpandQuantity(original,label);
     if(label.ownedParts.empty()||label.ownedParts.size()>12||!label.ownedTotal)return {};
     const bool paired=label.ownedMaxTotal.has_value();
     std::string plain;

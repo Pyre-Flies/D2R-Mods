@@ -15,7 +15,7 @@ inline std::optional<int> LevelCap(std::span<const unsigned char> header,std::si
 }
 inline std::optional<int> Coefficient(const Affixes::Rolled& affix,
     std::span<const Affixes::Property> properties,int stat) {
-    if(affix.source && std::string_view(affix.source)=="[U]" && !affix.uniqueScalar)return {};
+    if(affix.source && (std::string_view(affix.source)=="[U]" || std::string_view(affix.source)=="[RW]") && !affix.uniqueScalar)return {};
     std::optional<int> result;
     for(unsigned n=0;n<3;++n){
         const int id=affix.row.Number(0x24+n*16);
@@ -41,7 +41,7 @@ inline std::optional<std::pair<int,int>> Bounds(std::span<const unsigned char> r
 // Positive level and chance are separate fixed operands of property function11.
 inline std::optional<std::pair<int,int>> Proc(const Affixes::Rolled& affix,
     std::span<const Affixes::Property> properties,int stat,int layer,Affixes::LayerEncoding encoding) {
-    if(affix.source || encoding.skillBits<1 || encoding.skillBits>8 ||
+    if((affix.source && (std::string_view(affix.source)!="[RW]" || !affix.uniqueScalar)) || encoding.skillBits<1 || encoding.skillBits>8 ||
        encoding.skillMask!=((1u<<encoding.skillBits)-1))return {};
     std::optional<std::pair<int,int>> result;
     for(unsigned n=0;n<3;++n){

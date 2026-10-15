@@ -30,11 +30,11 @@ struct Identity {
     int qualityRecord{-1};
 };
 struct Socket {Identity identity;Stats values;};
-struct Snapshot {Identity identity;Stats own,primary,total;std::vector<Socket> sockets;};
+struct Snapshot {Identity identity;Stats own,primary,total;std::vector<Socket> sockets;Stats word{};};
 inline bool ExtendedFlags(unsigned flags) {return flags==0x80000000u || flags==0xa0000000u;}
 // No pointer escapes: source metadata and values are owned copies. Nested socket
 // original modifier children duplicate the attached aggregate and are not walked.
-template<class Read> std::optional<Snapshot> Capture(std::uintptr_t unit,Read read) {
+template<class Read> std::optional<Snapshot> Capture(std::uintptr_t unit,Read read,unsigned wordState=0) {
     auto load=[&](std::uintptr_t at,auto& out){return at>=0x10000 && at<=0x7fffffffffffULL-sizeof(out) && read(at,&out,sizeof(out));};
     auto vector=[&](std::uintptr_t list,unsigned offset)->std::optional<Stats>{
         std::array<std::uint64_t,3> v{};
@@ -66,24 +66,28 @@ template<class Read> std::optional<Snapshot> Capture(std::uintptr_t unit,Read re
     const auto primary=vector(root,0x30),total=vector(root,0xa8);if(!primary||!total)return {};
     Snapshot out{*host,{},*primary,*total,{}};
     struct Attached {std::uintptr_t unit;Socket socket;};
-    std::vector<Attached> attached;std::vector<std::uintptr_t> seen;
+    std::vector<Attached> attached;std::vector<std::uintptr_t> seen;unsigned wordLists=0;
     while(child){
         if(seen.size()>=64||std::find(seen.begin(),seen.end(),child)!=seen.end())return {};
         seen.push_back(child);std::uintptr_t parent{},owner{};unsigned state{};int expiry{};
         if(!load(child+0x78,parent)||parent!=root||!load(child+0x1c,flags)||
-           !load(child+0x20,state)||state||!load(child+0x18,expiry))return {};
+           !load(child+0x20,state)||!load(child+0x18,expiry))return {};
+        const bool word=wordState && state==wordState && (host->flags&0x04000000u);
+        if(state && !word)return {};
         if(ExtendedFlags(flags)){
             std::uintptr_t ownerRoot{};
-            if(expiry||attached.size()>=6||!load(child+0xa0,owner)||owner==unit||!load(owner+0x88,ownerRoot)||ownerRoot!=child)return {};
+            if(state||expiry||attached.size()>=6||!load(child+0xa0,owner)||owner==unit||!load(owner+0x88,ownerRoot)||ownerRoot!=child)return {};
             const auto id=identity(owner);const auto values=vector(child,0xa8);
             if(!id||!values||id->bank!=host->bank||std::any_of(attached.begin(),attached.end(),[&](const Attached& a){return a.unit==owner||a.socket.identity.id==id->id;}))return {};
             attached.push_back({owner,{*id,*values}});
         } else {
             if(flags!=0x40||expiry!=-1||!load(child,owner)||owner!=unit)return {};
             const auto values=vector(child,0x30);if(!values||!Add(out.own,*values))return {};
+            if(word && (++wordLists!=1 || !Add(out.word,*values)))return {};
         }
         if(!load(child+0x68,child))return {};
     }
+    if(wordState && (host->flags&0x04000000u) && wordLists!=1)return {};
     if(attached.empty())return out;
     std::uintptr_t control{},inventory{};unsigned refs{},magic{};
     if(!load(unit+0xa0,control)||(control&&!load(control+8,refs))||

@@ -1,3 +1,5 @@
+Revision41 active property-roll constraints, runeword state171/table binding, selector and quantity witnesses: [PROPERTY-ROLLS-REV41.md](PROPERTY-ROLLS-REV41.md).
+
 ## Rev.37 property formatter contract
 
 Core slot 0x704490 must target game+0x2DC4B0, with entry bytes

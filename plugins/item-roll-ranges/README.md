@@ -1,6 +1,6 @@
 # Item Roll Ranges
 
-Experimental 1.3.1+rev.40, PyreFly. Separate client plugin for the installed D2RLoader.
+Version 1.3.1+rev.44, PyreFly. Separate client plugin for the installed D2RLoader.
 
 Light-blue `[P] [Name] [Tn]` / `[S] [Name] [Tn]` labels identify verified rolled
 magic/rare/crafted affix contributions, including fixed-value affixes. Repeated
@@ -26,6 +26,37 @@ prefix; no bounds are invented. If prefixes exceed the buffer capacity, the
 whole original property block is retained. Ranges reflect current definitions.
 
 ## Status
+
+Revision44 adds guarded random skill/class/tab attribution from active property
+definitions. It proves selected layers alongside fixed skill sources and displays
+the parameter's fixed bonus rather than the selector's ID interval. Strength
+tiers share a family only within the same selection domain. See
+[the contract and validation](docs/RANDOM-SKILL-PROPERTIES-REV44.md).
+Nine suites and catalog/captured-item replays pass; loaded guards match and the
+user confirmed Wake of Fire's fixed bounds, Gnostics source and tier in-game.
+Revision44 is the production release; the user also confirmed subsequent vanilla smoke checks.
+
+Revision43 corrects Energy/Vitality's item-operand classification for grouped
+Attributes. Nine suites and a replay of the exact loaded charm tables/values
+pass. The user confirmed Attributes, Prismatic overlap, Bone sources, Raven
+Song fire bounds, replenishment display and hold/always-show behavior in-game,
+plus Lightning (Reimagined) and Honor (vanilla-origin) runewords. These are
+sampled visible checks, not a visual audit of every active recipe. Constraint
+budget exhaustion retains uncertainty instead of eliminating a possible weighted
+alternative.
+
+Revision42 extends the source solver to bounded, exactly-one weighted unique
+choices, using all captured stats to prove selected alternatives. It also
+formats independently rolled minimum/maximum elemental damage on one affix.
+These address missing grouped Attributes on the live charm and Raven Song's
+fire-damage prefix. Nine suites pass; both paths were user-confirmed in revision43.
+
+Revision41 adds shared property-roll constraints, inverse resistance attribution,
+grouped unique attributes and active-table runeword recipe/source resolution.
+Recipe lookup covers all active runewords; `[RW]` identifies their own properties
+while runes retain socket labels. Verified replenishment parameters display
+recurring intervals. Nine suites and a219-recipe replay pass; visible candidate
+validation on the revision43 samples is recorded above. See [the contract and coverage limits](docs/PROPERTY-ROLLS-REV41.md).
 
 Revision35 adds optional always-show mode in `item-roll-ranges.toml`:
 
@@ -73,8 +104,8 @@ stat lists. The user confirmed Beast Shell shows `Defense: 246 (Base: 127 - 127)
 and preserves its Life/socket breakdown; all seven automated suites pass.
 
 Revision27 is a local candidate for socket and corruption source breakdowns.
-For example, a host's +96 maximum damage (81–100) and an inserted jewel's +11
-(10–15) show the native +107 total with combined bounds91–115, followed by
+For example, a host's +96 maximum damage (81â€“100) and an inserted jewel's +11
+(10â€“15) show the native +107 total with combined bounds91â€“115, followed by
 gray source rows. `[Socket n]` uses native insertion order. Supported rune/gem
 lines use the active host context; proven completed corruption bonuses use
 `[C]`. Socket-only properties need only one labeled row. No new input hooks,

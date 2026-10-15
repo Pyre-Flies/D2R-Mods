@@ -1,5 +1,82 @@
 # Item Roll Ranges changelog
 
+## [1.3.1+rev.44] - 2026-10-14
+
+- Resolve shared property rolls across resistances and grouped unique Attributes.
+  Infer overlapping contributions only when owned stats uniquely constrain them.
+- Resolve all active runeword recipes from ordered sockets, eligible bases and
+  separate word-owned stats. Add `[RW]` sources using current compiled tables,
+  respecting vanilla/mod differences without a shipped runeword database.
+- Display independently rolled elemental-damage endpoints on a single affix,
+  and replenishment intervals from qualified native timing and active parameters.
+- Support random skill/class/tab properties: their parameter is bonus strength,
+  while min/max select the stat layer. Prove selections alongside fixed skill
+  sources; show compact fixed bounds such as `[+5]`. Group tiers within the same
+  selector pool and keep class pools separate.
+- Keep ambiguous, unsupported or budget-limited attribution native. Add optional
+  exact semantic/dispatcher guards; no new hook or arbitrary formatter chaining.
+- Nine suites pass. Private replays inspect2,026 affix rows, resolve219/219
+  active Reimagined runewords and verify56 random-selector specifications.
+  Captured charm/amulet metadata replays pass. User checks confirm Reimagined
+  resistances, Attributes, Bone/Lightning/Honor, fire endpoints, replenishment,
+  hold/toggle behavior and Wake of Fire; subsequent vanilla smoke checks were
+  also user-confirmed. These samples are distinct from catalog/automated coverage.
+- Always-show remains disabled by default. Existing user configuration is
+  preserved. See [property coverage](docs/PROPERTY-ROLLS-REV41.md) and
+  [random selector contracts](docs/RANDOM-SKILL-PROPERTIES-REV44.md).
+
+## Development candidates included in rev.44
+
+The following records describe intermediate validation before this release.
+Those candidate versions were not published separately.
+
+## 1.3.1+rev.43 (local candidate)
+
+- Treat ItemStatCost operations8/9 as direct item attribute operands; their
+  character-resource conversion metadata does not scale displayed item points.
+  This restores grouped Attributes with real Energy/Vitality metadata.
+- Add an optional private replay of the current charm's unique/group/property/
+  stat tables and owned values. It renders the active5..10 Attributes bounds;
+  the previous synthetic fixture incorrectly used operation0 for every member.
+- Keep proof-budget exhaustion distinct from a contradiction when resolving
+  weighted alternatives; unknown implicit targets refuse the unproved model.
+- Nine suites and the exact captured charm replay pass. The user confirmed the
+  Attributes prefix, Prismatic overlap, Bone sources, Raven Song fire bounds,
+  replenishment display and hold/always-show behavior in standalone rev.43.
+  Lightning (Reimagined) and Honor (vanilla-origin) runewords also passed the
+  user's live checks. These samples do not prove every recipe's visible output.
+  No public release.
+
+## 1.3.1+rev.42 (local candidate)
+
+- Prove selected alternatives in supported exactly-one weighted unique pools
+  using owned stat constraints. Keep ambiguous candidates conditional while
+  preserving existing witnessed unique marginal bounds. This covers grouped
+  All Attributes when it is an alternative to FRW or Faster Hit Recovery.
+- Render independently rolled elemental damage endpoints for a single host
+  affix, as well as overlapping socket sources. This fixes Raven Song's
+  Scorching fire-damage range without changing its actual damage values.
+- Nine suites pass, including the weighted-pool and two-endpoint production
+  regressions. All2026 active affix rows and219 runeword recipes were inspected;
+  that data audit is distinct from complete visible tooltip validation.
+- Installed in standalone Reimagined with configuration/companions preserved;
+  visible restart confirmation remains pending. No public release.
+
+## 1.3.1+rev.41 (local candidate)
+
+- Interpret shared property rolls across linked stats; infer overlapping
+  resistance contributions only when owned values uniquely constrain them.
+  Add grouped All Attributes bounds from active unique definitions.
+- Resolve all active runeword recipes using ordered sockets, base restrictions
+  and separate runeword stat ownership. Add `[RW]` sources and verified
+  scalar/class/tab/skill/proc bounds without a runeword database.
+- Show quantity-replenishment intervals from active parameters and guarded
+  recurring timing conversion. Unsupported operations retain native display.
+- Permit direct unique properties with empty PropertyGroups; refuse numeric
+  assumptions about ambiguous weighted groups and non-additive operations.
+- Nine suites and a private219-recipe replay pass; visible candidate validation
+  remains pending. See [coverage and native evidence](docs/PROPERTY-ROLLS-REV41.md).
+
 ## 1.3.1+rev.40
 
 - Add optional always-show ranges, disabled by default in embedded and reference

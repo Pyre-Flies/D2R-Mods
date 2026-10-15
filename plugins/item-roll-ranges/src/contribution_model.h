@@ -12,7 +12,7 @@ inline bool Supported(unsigned stat) {
     default:return false;}
 }
 inline bool Bounds(const Affixes::Rolled& definition,std::span<const Affixes::Property> properties,int stat,int& low,int& high) {
-    if(definition.source&&std::string_view(definition.source)=="[U]"&&!definition.uniqueScalar)return false;
+    if(!definition.unconditionalScalar || (definition.source&&(std::string_view(definition.source)=="[U]"||std::string_view(definition.source)=="[RW]")&&!definition.uniqueScalar))return false;
     auto plain=definition;plain.source=nullptr;
     return Affixes::ScalarBounds(plain,properties,stat,0,low,high);
 }
@@ -31,7 +31,7 @@ inline std::optional<RangeText::Label> Build(std::string key,unsigned stat,unsig
             const bool contributes=Affixes::Contributes(definition.row,properties,static_cast<int>(stat),0);
             const bool contributesMax=paired && Affixes::Contributes(definition.row,properties,static_cast<int>(stat+1),0);
             if(!contributes&&!contributesMax)continue;
-            if(definition.source&&std::string_view(definition.source)=="[U]"&&!definition.uniqueScalar)return {};
+            if(!definition.unconditionalScalar || (definition.source&&(std::string_view(definition.source)=="[U]"||std::string_view(definition.source)=="[RW]")&&!definition.uniqueScalar))return {};
             RangeText::OwnedContribution part;part.label=group.prefix+Affixes::NamedLabel(definition);
             if(paired){
                 auto plain=definition;plain.source=nullptr;

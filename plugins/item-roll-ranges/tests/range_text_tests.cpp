@@ -249,5 +249,13 @@ int main() {
     // Even a missing ranged header cannot erase an available actual header.
     result=RangeText::Merge("Defense: 2\n+30 Defense\n","+30 Defense\n",1024);
     check(result.text=="Defense: 2\n+30 Defense\n");
+    RangeText::Label quantity;quantity.quantityRate=true;quantity.ownedTotal=25;quantity.ownedParts={{25,25,25,"[U]"}};
+    check(RangeText::ExpandOwned("Replenishes Quantity",quantity).find("[1 per 5s]")!=std::string::npos);
+    check(RangeText::QuantitySeconds(1)=="100.04" && RangeText::QuantitySeconds(30)=="5" && RangeText::QuantitySeconds(20)=="5.04");
+    quantity.ownedParts[0].value=24;check(RangeText::ExpandOwned("Replenishes Quantity",quantity).empty());
+    quantity.ownedParts={{0,25,25,"[U]"}};check(RangeText::ExpandOwned("Replenishes Quantity",quantity).empty());
+    quantity.ownedParts={{20,25,{},"[U]"}};
+    check(RangeText::ExpandOwned("Replenishes Quantity",quantity).find("[1 per 5 - 5.04s]")!=std::string::npos);
+    check(RangeText::Merge("Replenishes Quantity","Replenishes Quantity",12,{quantity}).text=="Replenishes Quantity");
     std::puts("Passed Defense header/modifier separation and fixed-value retention; native header production is outside this fixture.");
 }
