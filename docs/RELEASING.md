@@ -1,5 +1,16 @@
 # Publishing releases
 
+## Runtime documentation
+
+Runtime ZIPs contain curated distribution READMEs, configuration examples,
+RUNTIME-RELEASE-NOTES.md (packaged as CHANGELOG.md), compatibility requirements
+and licenses. Keep engineering reports, development workflow files and build
+recipes out of runtime ZIPs. Check command examples against the current parser
+and clearly distinguish session-only toggles from saved settings. Scan all
+packaged text for private paths and internal tooling references. Source archives
+retain technical evidence; export-ignore excludes local contributor workflow
+material. Documentation changes must preserve the tested DLL bytes.
+
 ## Current stable suite
 
 The staged suite contains Controller QOL rev.78, Item Roll Ranges rev.45,

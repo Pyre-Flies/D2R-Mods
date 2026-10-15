@@ -93,7 +93,7 @@ profiles leave the plugin unavailable and preserve normal game behavior.
 
 The runtime DLL embeds its original button artwork and reference configuration.
 No separate MPQ, loose image files or Controller QOL DLL is required.
-Close D2R and D2RLoader before installing or replacing the DLL. Reference
+Close the game before installing or replacing the DLL. Reference
 configuration is under defaults/ and must not replace an existing live config.
 See README.md for installation, known limitations and live-validation scope.
 """.encode("utf-8")
@@ -101,7 +101,7 @@ See README.md for installation, known limitations and live-validation scope.
         "d2rloader/plugins/Inventory Deposit.dll": dll_bytes,
         "defaults/inventory-deposit.toml": require_file(plugin / "inventory-deposit.toml"),
         "README.md": require_file(plugin / "DISTRIBUTION-README.md"),
-        "CHANGELOG.md": require_file(plugin / "CHANGELOG.md"),
+        "CHANGELOG.md": require_file(plugin / "RUNTIME-RELEASE-NOTES.md"),
         "COMPATIBILITY.txt": compatibility,
         "LICENSE": require_file(repository / "LICENSE"),
         "licenses/D2RLoader-PluginSDK-LICENSE": require_file(

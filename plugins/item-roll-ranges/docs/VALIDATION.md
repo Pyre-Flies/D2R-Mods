@@ -35,7 +35,7 @@ range appears correctly in a running game.
 ## Historical 0.1.0 installation (superseded)
 
 With D2R closed, the new DLL was copied (without replacing an existing plugin)
-to `F:/SteamLibrary/steamapps/common/Diablo II Resurrected/mods/Reimagined/d2rloader/plugins/Item Roll Ranges.dll`.
+to `<game-directory>/mods/Reimagined/d2rloader/plugins/Item Roll Ranges.dll`.
 Built and installed SHA-256 both equal
 `88E8C3A6A0F9E87B99452D294661A12A6FBF30A91C64513319964F1D0A0F84D3`.
 QOL and loader configuration were not changed. First launch remains pending.
@@ -80,7 +80,7 @@ eight native arguments and actual value at return-slot+0x4C through a JMP detour
 No automated result establishes live game behavior for this new formatter.
 
 Built DLL SHA-256: `DC4A85196B29B04309D5FE96C7E260C06D23B5C65F100E010A8C331D5AF11151`.
-Rollback package: `outputs/Item-Roll-Ranges-0.1.1-experimental.zip` in the Codex
+Rollback package: `outputs/Item-Roll-Ranges-0.1.1-experimental.zip` in the private
 2026-09-22 workspace. Complex/grouped stat lines currently retain actual values
 without range prefixes. Run the in-game matrix above after a cold launch.
 

@@ -1,59 +1,67 @@
 # Inventory Deposit
 
-Version **1.3.1+rev.13** for the reviewed D2R `3.3.93787` / D2RLoader `1.3.1`
-profile. This is a Windows x64 prerelease.
+**1.3.1+rev.13 · by PyreFly**
 
-Adds a mouse-clickable **Deposit All Gems, Materials and Runes** button beside
-the inventory gold display while the stash is open. It deposits eligible main
-inventory gems, materials, runes and rejuvenation potions into advanced storage.
-Native rules decide which items qualify; equipment, belt items, the Cube and
-Charm Inventory are not sources.
+Adds a **Deposit All Gems, Materials and Runes** button beside inventory gold
+while the advanced stash is open in keyboard/mouse mode.
 
-The button follows the gold display, greys out while holding an item or when
-nothing is eligible, and highlights on hover when available. Each affected
-Gems, Materials or Runes tab receives the existing supplemental animation once
-per batch. Custom stone-and-gold artwork and all four interaction states are
-embedded in the DLL. No MPQ, loose images or Controller QOL installation is needed.
+## Use the button
 
-## Install or update
+Open the stash and click **Deposit All**. Eligible gems, runes, materials and
+rejuvenation potions in the main inventory move into advanced storage. The
+game's normal eligibility rules apply. Equipment, belt, Cube and Charm
+Inventory contents are excluded. The button is disabled while holding an item,
+while busy, or when nothing qualifies. No chat command is needed or provided.
 
-1. Close D2R and D2RLoader. Back up any previous `Inventory Deposit.dll`.
-2. Extract the ZIP into the game directory, placing the DLL at
-   `d2rloader/plugins/Inventory Deposit.dll`. For a mod-scoped installation use
-   that mod's active `d2rloader/plugins/` directory instead. Install one copy.
-3. Start through D2RLoader, open the stash in keyboard/mouse mode, and hover the
-   button to see **Deposit All Gems, Materials and Runes**.
+Transfers stop if a move fails or cannot be confirmed. A batch can be partly
+completed: check inventory and destination totals before repeating it. Avoid
+starting Controller QOL's bulk deposit at the same time.
 
-`defaults/inventory-deposit.toml` is a reference only. The loader creates missing
-settings from the embedded defaults. The ZIP contains no live
-`d2rloader/config/` files and preserves existing settings.
+## Configuration example
 
-The live config is `d2rloader/config/inventory-deposit.toml` in the active scope.
-Default gold-relative placement uses `anchor_to_gold = true`, `gold_gap = 85`
-and `gold_offset_y = 1`. `button_x` and `button_y` apply only when automatic
-anchoring is disabled. Restart after config or DLL changes; native children
-are not hot-reloadable. To roll back, close the game and restore the previous
-DLL. To remove the feature, remove its DLL while the game is closed.
+Edit existing settings in `d2rloader/config/inventory-deposit.toml`, then restart:
 
-## Compatibility and validation
+```toml
+[inventory_deposit]
+enabled = true
+anchor_to_gold = true  # Follow the inventory gold display
+gold_gap = 85          # Horizontal gap after gold, in inventory UI units
+gold_offset_y = 1      # Vertical offset from the centered position
+```
 
-The exact Core hash and native byte/layout guards are required; see
-`COMPATIBILITY.txt`. Unsupported profiles leave this optional button unavailable.
-The reviewed setup is Reimagined's HD keyboard/mouse inventory and advanced
-stash. Controller and legacy layouts are outside this button's scope.
-No stock or Charm Inventory panel resource is replaced. Another plugin's button
-may occupy the same footer space; adjust the placement settings if needed.
+To position it manually, set `anchor_to_gold = false` and adjust the existing
+`button_x` and `button_y` keys. If another button occupies the same space,
+adjust the gap or manual position.
 
-The user confirmed deposits, artwork, fit, tab feedback, disabled states and
-hover behavior in game, including the final shortened tooltip. Automated
-checks cover UI lifecycle, eligibility, batch/transfer rules, native state
-transitions, embedded art and DLL admission. Multiple resolutions, low-end
-rendering, remote TCP/IP behavior and save/reload persistence are not fully
-validated. This is why the first public release remains a prerelease.
+## Install, update or remove
 
-Transfers are not atomic; partial or unconfirmed batches stop without retrying.
-Controller QOL and Inventory Deposit have independent queues. Avoid starting
-both bulk actions concurrently while a transfer is awaiting completion.
+1. Close the game. The D2RR launcher may remain open.
+2. Back up the previous DLL, then extract the ZIP into the game directory for
+   a global install, or the active mod directory for a mod-specific install.
+   The DLL belongs in `d2rloader/plugins/`. Keep one active copy per plugin.
+3. Start the game through D2RLoader.
 
-Source, detailed evidence and the changelog are available at
-[Pyre-Flies/D2R-Mods](https://github.com/Pyre-Flies/D2R-Mods/tree/main/plugins/inventory-deposit).
+For a launcher-managed mod pack, use its normal update process. The `defaults/`
+files are references: updates preserve your active `d2rloader/config/` settings.
+The loader creates a missing main configuration on first launch. Edit active
+configuration files with the game closed, then restart to apply manual changes.
+
+To remove or roll back, close the game and remove the plugin DLL or restore its
+backup. Restart after any DLL change; hot reload is unsupported.
+
+## Compatibility and limits
+
+Requires the supported Windows x64 D2RLoader 1.3.1/Core profile in
+`COMPATIBILITY.txt` and Reimagined's HD keyboard/mouse inventory with advanced
+storage. Controller and classic layouts are outside this button's scope.
+No separate artwork files or Controller QOL installation are required.
+Unsupported builds leave the button unavailable.
+
+Live checks cover deposits, button placement, hover/disabled states and tab
+feedback. Twelve automated suites passed. Remote multiplayer behavior, multiple
+resolutions and save/reload persistence are not fully validated.
+
+For requirements, see the included compatibility file. Report problems at
+[GitHub Issues](https://github.com/Pyre-Flies/D2R-Mods/issues), including the plugin
+version, game/mod version, and steps to reproduce. Check logs for personal
+information before sharing them. `SHA256SUMS` lists the packaged file checksums.

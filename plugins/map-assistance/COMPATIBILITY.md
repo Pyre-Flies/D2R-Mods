@@ -1,6 +1,6 @@
 # Compatibility and limitations
 
-- Requires a current D2RLoader release supporting PluginSDK ABI v1, public
+- Requires a current D2RLoader release supporting plugin ABI 4, public
   Item, Shared Event, Lifecycle, and plugin-config services.
 - Uses no native hooks, D2R/D2RCore RVAs, injected patches, or external runtime
   dependencies.

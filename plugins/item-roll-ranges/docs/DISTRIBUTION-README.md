@@ -1,120 +1,105 @@
 # Item Roll Ranges
 
-**By PyreFly · Version 1.3.1+rev.45**
+**1.3.1+rev.45 · by PyreFly**
 
-Show item roll ranges beside actual values in light blue:
-`[+80 - +120] +118 Defense`.
+Shows possible modifier rolls and their sources beside the item's actual
+values. Ranges use the active game's definitions, including supported modded
+affixes, uniques and runewords.
 
-Hold **Ctrl** on keyboard or **RT/R2** on controller. Controller QOL's active
-menu/range remap uses **R1/RB** instead. The plugin follows Core's native input
-decision and does not consume button presses or poll physical keys separately.
-Display enhancements apply in inventory, stash, Horadric Cube and vendor screens
-while the game is in the foreground. Release returns to the usual tooltip.
+## Controls and examples
 
-Defense and physical damage headers keep current values and add their verified
-intrinsic base range, including explicit fixed endpoints:
+Hold **Ctrl** on keyboard or **RT/R2** on controller to show ranges. With
+Controller QOL's menu remap active, use **RB/R1** instead. Release to restore
+the normal tooltip. Inventory, stash, Cube and vendor tooltips are supported.
 
-- `Two-Hand Damage: 32 to 69 (Base: 9 - 19)`
-- `Defense: 25 (Base: 2 - 2)` on Bloodrune
+| Example | Meaning |
+| --- | --- |
+| `[+80 - +120] +118 Defense` | Actual roll 118; possible rolls 80 through 120. |
+| `[+38] +38 to Life` | This source has a fixed value. |
+| `Two-Hand Damage: 32 to 69 (Base: 9 - 19)` | Final physical damage, followed by intrinsic base damage. |
+| `Defense: 246 (Base: 127 - 127)` | Final Defense, followed by its fixed pre-affix base. Enhanced Defense can cause the game's maximum-base-plus-one rule. |
+| `(Ilvl: 99, Qlvl: 33)` | Generated item level and the base type's quality level. |
 
-Base values include ethereal scaling and native Enhanced Defense base generation
-(maximum base Defense plus one). They exclude affix percentage/flat additions.
-Individual modifier lines retain their own roll ranges and source labels.
-Fixed modifier bounds are compact, such as `[+38]`; Base headers retain both
-endpoints. Socketed items also show Max Sockets in the normal header position
-while ranges are held. Weapons use Required Level / item-level details / Max Sockets / Attack Speed.
-The new `(Ilvl: XX, Qlvl: YY)` line shows generated item level and active base
-quality level. Items without Required Level use the remaining header position.
-Unrelated triggered skills do not prevent a known header base from displaying.
-Unresolved expected ranges show `(?)` and
-`(?) Range Unavailable - Please report item affixes`.
+Level details appear below Required Level, or in the available header position
+when no required level exists. Max Sockets appears in the header, before weapon
+Attack Speed. Base values account for applicable quality/ethereal rules and
+exclude added affix damage/Defense. Fixed Base bounds retain both endpoints.
 
-Magic/rare/crafted affixes can show `[P] [Name] [Tn]` / `[S] [Name] [Tn]` labels.
-T1 is the highest distinct affix level in the applicable family for that item
-type/quality; duplicate levels share a tier. Unique properties use `[U]`
-and verified inherent contributions use `[Base]`. Ambiguous contributions are
-not assigned invented ranges or tiers. Supported overlapping host, socket and
-completed corruption contributions show a `[Combined]` total followed by gray
-source rows; sockets use `[Socket n]` in insertion order and corruptions `[C]`.
-Unknown individual rolls remain `?` when the saved total cannot identify them.
-Active rune/gem definitions use the host item's context. Level-scaled bounds
-use the active level cap and compatible coefficient/rounding rules. Affix
-families retain distinct property/selector identities even when names repeat.
-Runeword-owned properties use `[RW]`; rune contributions retain socket labels.
-Recipes and ranges come from active compiled tables, including mod changes.
-Shared property rolls can resolve resistance overlaps and grouped Attributes.
-Random skill/class/tab properties show their bonus bounds, not the selected
-skill ID interval; Gnostics can display `[+5]` for its selected skill.
-Replenishes Quantity can show its guarded recurring interval.
-Enchantments, unsupported transforms, ambiguous conditional groups, set bonuses
-and crafting-recipe contributions do not have complete source attribution.
+## Sources and combined modifiers
 
-## Install
+| Label | Meaning |
+| --- | --- |
+| `[P]`, `[S]` | Prefix or suffix; name and tier follow. T1 is the strongest applicable tier in that family. |
+| `[U]` | Unique-item property. |
+| `[RW]` | Runeword-owned property. |
+| `[Base]` | Inherent property of the base item. |
+| `[Socket 1]` | Contribution from the first socketed item; subsequent sockets are numbered. |
+| `[C]` | Identified corruption contribution. |
+| `[Combined]` | Total of overlapping sources; gray rows show their individual contributions. |
 
-1. Close Diablo II: Resurrected and D2RLoader and back up the existing DLL.
-2. Extract into the game folder for a global install at
-   `d2rloader/plugins/Item Roll Ranges.dll`. For a mod-scoped install, extract
-   into the active mod folder instead. Keep only one active copy.
-3. Enable the following in the effective D2RLoader configuration:
+When the saved total cannot uniquely identify an individual roll, that source
+can remain `?`. A `(?)` range warning means the plugin could not establish a
+reliable bound. Set source labels, enchantments and all crafting/set-bonus
+contributions are not fully attributed. Keep screenshots of uncertain cases
+with ranges shown when reporting them.
 
-   ```toml
-   [d2rcore.items]
-   item_stat_ranges = true
-   ```
+## Always-show chat commands
 
-4. Launch through D2RLoader. Use a cold restart after updates.
+Enter these in game chat. Feedback appears in the loader console.
 
-## Compatibility and validation
+| Command | What it does |
+| --- | --- |
+| `/AlwaysShowRolls` | Toggle always-show for this session. |
+| `/AlwaysShowRolls on` | Show ranges without holding Ctrl/RT. |
+| `/AlwaysShowRolls off` | Return to holding Ctrl/RT for ranges. |
+| `/AlwaysShowRolls status` | Report the current state. |
 
-Requires Windows x64, D2RLoader plugin ABI4 and the supported D2RCore build in
-`COMPATIBILITY.txt`. Controller QOL, Python and SDK installation are optional.
-Native queries support the game's selected controller backend; Item Roll Ranges
-no longer requires separate XInput polling.
+Lowercase `/alwaysshowrolls` also works. Chat changes last for the current
+session. To choose startup behavior, edit the active
+`d2rloader/config/item-roll-ranges.toml`, then restart:
 
-Exact provider and live code guards disable unsupported/conflicting paths.
-Other plugins modifying the same tooltip functions can still conflict. Hot
-reload is unsupported. Production formatter diagnostic dumps are disabled.
+```toml
+[display]
+always_show_ranges = false
+```
 
-All nine automated suites pass. User checks confirm the reviewed socket and
-corruption breakdowns, fixed and modified Defense headers, Shadow Mantle's
-overlapping ED/flat Thorns and the corrected Max Sockets header placement.
-No-clone tooltips also receive verified source bounds. Dedicated live controller,
-every item family, localization and plugin combination remain incompletely
-validated. Ranges reflect the active item definitions, including mod changes.
+`false` is the default; `true` enables always-show on startup.
 
-## Uninstall
+## Install, update or remove
 
-Close the game and loader, remove this DLL from the active plugins folder and
-relaunch. Core's native range behavior remains. `SHA256SUMS` records runtime
-archive contents; the source archive is supplied separately.
+1. Close the game. The D2RR launcher may remain open.
+2. Back up the previous DLL, then extract the ZIP into the game directory for
+   a global install, or the active mod directory for a mod-specific install.
+   The DLL belongs in `d2rloader/plugins/`. Keep one active copy per plugin.
+3. Start the game through D2RLoader.
 
-Unique source labels use `[U]` in revision25. Set modifier ranges remain native; the plugin does not currently add set source labels.
+For a launcher-managed mod pack, use its normal update process. The `defaults/`
+files are references: updates preserve your active `d2rloader/config/` settings.
+The loader creates a missing main configuration on first launch. Edit active
+configuration files with the game closed, then restart to apply manual changes.
 
-## Optional always-show ranges
+To remove or roll back, close the game and remove the plugin DLL or restore its
+backup. Restart after any DLL change; hot reload is unsupported.
 
-The default is `display.always_show_ranges = false`: hold Ctrl or RT/R2
-(or the Controller QOL override) to view ranges. Set this option to true in
-`d2rloader/config/item-roll-ranges.toml` and restart to enable at startup.
-`defaults/item-roll-ranges.toml` is a reference; existing settings are preserved.
-In game, `/AlwaysShowRolls` toggles for the current session. Arguments `on`,
-`off` and `status` are supported. Use lowercase `/alwaysshowrolls` if needed.
-Feedback is written to the loader console. Restart restores the saved setting.
-The range hint is hidden while always-show is active; normal input stays native.
+## Enable native ranges
 
-Rev.40 fixes the plain Sash fixed Base header with always-show off and Ctrl held.
-Eight suites pass; user checks confirm the session toggle and fixed Sash repair.
-Unknown property formatter replacements/entry detours refuse admission rather
-than attempting undocumented composition. Broader localization/controller and
-arbitrary-plugin combinations have not been exhaustively validated.
+In your effective D2RLoader configuration, ensure:
 
-## Revision44 validation
+```toml
+[d2rcore.items]
+item_stat_ranges = true
+```
 
-Private active-table replays inspect2,026 affix rows and resolve219/219 enabled
-Reimagined recipes;56 random-selector specifications verify fixed bonus bounds.
-These counts describe data/model checks, not exhaustive visible coverage.
-User tests confirm resistance overlaps, grouped Attributes, Bone, Lightning and
-Honor in Reimagined, independent fire endpoints, replenishment display,
-Ctrl/session toggles and Wake of Fire. Later vanilla smoke checks also passed.
-Captured real charm/amulet metadata is replayed privately and is not distributed.
-Unknown transforms and ambiguous contributions retain native text.
-See `docs/PROPERTY-ROLLS-REV41.md` and `docs/RANDOM-SKILL-PROPERTIES-REV44.md`.
+Requires Windows x64, plugin ABI 4 and the D2RCore build listed in
+`COMPATIBILITY.txt`. Controller QOL is optional. Unsupported or conflicting
+formatter paths retain native behavior.
+
+Nine automated suites passed. Live checks cover header placement and release,
+fixed Defense, resistance/Attributes combinations, socket/corruption breakdowns
+and vanilla/Reimagined runewords. Every item, language and plugin combination
+has not been individually tested.
+
+For requirements, see the included compatibility file. Report problems at
+[GitHub Issues](https://github.com/Pyre-Flies/D2R-Mods/issues), including the plugin
+version, game/mod version, and steps to reproduce. Check logs for personal
+information before sharing them. `SHA256SUMS` lists the packaged file checksums.

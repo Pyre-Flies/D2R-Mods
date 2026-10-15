@@ -1,5 +1,13 @@
 # Packaging update - 2026-10-10
 
+## Distribution documentation
+
+- Package concise install/configuration guides, command examples and release notes;
+  keep engineering reports in source documentation. Remove private paths and
+  internal workflow references from distributable documentation.
+- Packaging/privacy checks are automated; plugin DLLs and live-tested behavior
+  are unchanged by this documentation update.
+
 - Runtime archives now place reference settings under `defaults/` so extracting
   an update preserves the live configuration. Missing configs still use embedded
   defaults. No Map Assistance DLL or gameplay behavior change.

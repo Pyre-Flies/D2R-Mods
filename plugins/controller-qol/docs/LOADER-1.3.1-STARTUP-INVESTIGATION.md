@@ -38,7 +38,7 @@ Shared core_compatibility.h retains the original exact SHA256 and query instruct
 
 Official 0.3.0 headers inspected at https://raw.githubusercontent.com/D2RLoader/PluginSDK/master/include/D2RLPlugin/input.h and version.h. InputService still has keyboard registerAction/unregisterAction/getBinding, not a native controller-state query. Build remains ABI 4 with bundled 0.2.0 headers for this bounded repair. Broad SDK migration is separate.
 
-Global deployment: F:/SteamLibrary/steamapps/common/Diablo II Resurrected/d2rloader. Preserve global TOML byte-for-byte and back up DLL/config before replacing only the DLL. Do not change mods/Reimagined. Ten suites include concurrent bridge fallback and rejection of absent/foreign core modules. Runtime confirmation with the new loader is still required.
+Global deployment: <game-directory>/d2rloader. Preserve global TOML byte-for-byte and back up DLL/config before replacing only the DLL. Do not change mods/Reimagined. Ten suites include concurrent bridge fallback and rejection of absent/foreign core modules. Runtime confirmation with the new loader is still required.
 
 Runtime confirmation: global QOL log at 2026-09-24 08:57:35.742 reports QOL 1.5.21 loaded; global loader log at 08:57:42.239 reports D2R startup complete. Startup blocker no longer reproduces in this launch. Main-menu interaction/gameplay and disabled navigation feature restoration remain separate checks. Logs captured in the 1.5.21 source package.
 

@@ -1,5 +1,13 @@
 # Changelog
 
+## Distribution documentation
+
+- Package concise install/configuration guides, command examples and release notes;
+  keep engineering reports in source documentation. Remove private paths and
+  internal workflow references from distributable documentation.
+- Packaging/privacy checks are automated; plugin DLLs and live-tested behavior
+  are unchanged by this documentation update.
+
 ## 1.3.1+rev.12 - 2026-10-15 stable release staging
 
 - Promote 0.1.0-beta.12 to the shared loader-version plus independent revision format.

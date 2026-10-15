@@ -48,6 +48,24 @@ class RuntimeArchiveTests(unittest.TestCase):
                     make_archive(Path(temp) / "bad.zip", {name: b"fixture"})
 
 
+class PublicDocumentationTests(unittest.TestCase):
+    def test_private_tooling_and_build_recipes_block_runtime_docs(self):
+        for content in ("Generated with Codex", "ChatGPT tools", "OpenAI workflow",
+                        "AI-assisted build", "cmake --build build/plugin", "ctest --test-dir build"):
+            with self.subTest(content=content), self.assertRaises(SystemExit):
+                package_runtime.check_public_text("README.md", content.encode())
+
+    def test_user_commands_and_reference_settings_are_allowed(self):
+        package_runtime.check_public_text("README.md", b"/AlwaysShowRolls on\n/sockets size 65\n/damagenumbers off\n")
+        package_runtime.check_public_text("defaults/example.toml", b"[display]\nalways_show_ranges = false\n")
+
+    def test_archive_checks_all_curated_text_not_only_readme(self):
+        with tempfile.TemporaryDirectory() as temp:
+            for name in ("README.md", "CHANGELOG.md", "COMPATIBILITY.txt", "defaults/example.toml"):
+                with self.subTest(name=name), self.assertRaisesRegex(SystemExit, "Internal tooling"):
+                    make_archive(Path(temp) / "bad.zip", {name: b"Internal Codex instructions"})
+
+
 class FloatingDamagePackageFixture:
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
@@ -59,8 +77,8 @@ class FloatingDamagePackageFixture:
             "plugins/floating-damage/src/plugin.cpp": b'.version="0.1.0-beta.11",',
             "plugins/floating-damage/floating-damage.toml": b"[floating-damage]\nenabled = true\n",
             "plugins/floating-damage/DISTRIBUTION-README.md": b"# Floating Damage\nInstall with the loader.\n",
-            "plugins/floating-damage/CHANGELOG.md": b"# Changelog\nCritical number styling.\n",
-            "plugins/floating-damage/NATIVE-CONTRACT.md": b"# Native contract\nExact guarded build only.\n",
+            "plugins/floating-damage/RUNTIME-RELEASE-NOTES.md": b"# Changelog\nCritical number styling.\n",
+            "plugins/floating-damage/COMPATIBILITY.txt": b"# Native contract\nExact guarded build only.\n",
             "LICENSE": b"Plugin license fixture\n",
             "third_party/D2RLoader-PluginSDK/LICENSE": b"SDK license fixture\n",
             "plugins/floating-damage/private.log": b"private capture fixture",
@@ -91,7 +109,7 @@ class FloatingDamagePackageTests(FloatingDamagePackageFixture, unittest.TestCase
         self.assertEqual(archive.name, "Floating-Damage-0.1.0-beta.11-PyreFly.zip")
         expected = {
             "d2rloader/plugins/Floating Damage.dll", "defaults/floating-damage.toml",
-            "README.md", "CHANGELOG.md", "NATIVE-CONTRACT.md", "LICENSE",
+            "README.md", "CHANGELOG.md", "COMPATIBILITY.txt", "LICENSE",
             "licenses/D2RLoader-PluginSDK-LICENSE",
         }
         original = archive.read_bytes()
@@ -141,7 +159,7 @@ class FloatingDamagePackageTests(FloatingDamagePackageFixture, unittest.TestCase
     def test_private_paths_rejected_in_docs_configuration_and_dll_strings(self):
         cases = (
             (self.plugin / "DISTRIBUTION-README.md", b"C:/Users/private/build"),
-            (self.plugin / "NATIVE-CONTRACT.md", b"D:\\work\\private\\capture"),
+            (self.plugin / "COMPATIBILITY.txt", b"D:\\work\\private\\capture"),
             (self.plugin / "floating-damage.toml", b"# /home/private/config"),
             (self.dll, b"MZ\0C:\\Users\\private\\floating.pdb\0"),
         )
@@ -163,7 +181,7 @@ class SixPluginSuiteTests(FloatingDamagePackageFixture, unittest.TestCase):
             "plugins/always-show-sockets/always-show-sockets.toml": b"# Reference sockets config\n",
             "plugins/always-show-sockets/DISTRIBUTION-README.md": b"# Sockets\n",
             "plugins/always-show-sockets/CONFIGURATION-GUIDE.md": b"# Configuration\n",
-            "plugins/always-show-sockets/CHANGELOG.md": b"# Changelog\n",
+            "plugins/always-show-sockets/RUNTIME-RELEASE-NOTES.md": b"# Changelog\n",
             "plugins/controller-qol/src/plugin_main.cpp": b'.version="1.3.1-rev.75",',
             "plugins/item-roll-ranges/src/plugin.cpp": b'"item-roll-ranges", "Item Roll Ranges", "0.4.0-rev.23",',
             "plugins/item-roll-ranges/item-roll-ranges.toml": b"[display]\nalways_show_ranges = false\n",
@@ -171,7 +189,7 @@ class SixPluginSuiteTests(FloatingDamagePackageFixture, unittest.TestCase):
             "plugins/inventory-deposit/src/plugin_main.cpp": b'.version="0.1.0-beta.13",',
             "plugins/inventory-deposit/inventory-deposit.toml": b"[inventory_deposit]\nenabled = true\n",
             "plugins/inventory-deposit/DISTRIBUTION-README.md": b"# Inventory Deposit\nDeposit all inventory items.\n",
-            "plugins/inventory-deposit/CHANGELOG.md": b"# Changelog\nDeposit button.\n",
+            "plugins/inventory-deposit/RUNTIME-RELEASE-NOTES.md": b"# Changelog\nDeposit button.\n",
         }
         for name, data in fixtures.items():
             path = self.repo / name
@@ -241,11 +259,13 @@ class SixPluginSuiteTests(FloatingDamagePackageFixture, unittest.TestCase):
             with zipfile.ZipFile(archive) as zipped:
                 dlls = [name for name in zipped.namelist() if name.lower().endswith(".dll")]
                 self.assertEqual(len(dlls), 1)
+                self.assertFalse(any(name.startswith("docs/") and name != "docs/SKILL-DISCOVERY-CONFIG.md"
+                                     for name in zipped.namelist()))
                 self.assertTrue(dlls[0].startswith("d2rloader/plugins/"))
                 actual_dlls.add(Path(dlls[0]).name)
                 if Path(dlls[0]).name == "Item Roll Ranges.dll":
-                    for name in ("ALWAYS-SHOW-REV35.md", "PROPERTY-ROLLS-REV41.md", "RANDOM-SKILL-PROPERTIES-REV44.md", "ITEM-LEVELS-REV45.md"):
-                        self.assertIn(f"docs/{name}", zipped.namelist())
+                    self.assertNotIn("docs/ITEM-LEVELS-REV45.md", zipped.namelist())
+                    self.assertIn("README.md", zipped.namelist())
                     self.assertIn(b"always_show_ranges = false", zipped.read("defaults/item-roll-ranges.toml"))
                 self.assertFalse(any(name.lower().startswith("d2rloader/config/")
                                      for name in zipped.namelist()))

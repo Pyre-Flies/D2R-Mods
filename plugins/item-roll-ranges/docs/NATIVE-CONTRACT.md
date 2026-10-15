@@ -32,7 +32,7 @@ Version 0.4.1 targets D2RCore 1.3.1-beta and D2R 3.3.93787. See [the 0.4.1 migra
 # Native range provider and input adapters
 
 Investigated 2026-09-23/24. Addresses below are RVAs, never absolute VAs.
-New source root: `F:/SteamLibrary/steamapps/common/Diablo II Resurrected/Documentation/item-roll-ranges`.
+New source root: `plugins/item-roll-ranges`.
 Prior note: `E:/d2r-reimagined-mod/d2r-reimagined-mod/plugins/controller-qol/docs/ITEM-ROLL-RANGES.md`.
 
 ## Discovery that supersedes the proposed independent calculator

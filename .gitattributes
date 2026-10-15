@@ -15,3 +15,8 @@
 *.zip binary
 *.png binary
 *.jpg binary
+
+# Local contributor workflow material is not part of release source archives.
+/AGENTS.md export-ignore
+/skills export-ignore
+/docs/AI-HANDOFF.md export-ignore

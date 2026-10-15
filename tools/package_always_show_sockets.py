@@ -29,6 +29,8 @@ def privacy(name,data):
     for region in regions:
         texts=[region.decode('utf8',errors='replace')]+[region[n:].decode('utf-16-le',errors='replace') for n in (0,1)]
         if any(MACHINE.search(s) for s in texts):raise ValueError('Machine path in '+name)
+    from package_runtime import check_public_text
+    check_public_text(name,data)
 def validate_version(version,tag=None):
     beta=bool(re.fullmatch(r'\d+\.\d+\.\d+-beta\.\d+',version))
     stable=bool(re.fullmatch(r'\d+\.\d+\.\d+\+rev\.\d+',version))
@@ -47,7 +49,7 @@ def package(dll,verifier,output,tag=None,root=ROOT):
            'defaults/always-show-sockets.toml':(plugin/'always-show-sockets.toml').read_bytes(),
            'CONFIGURATION-GUIDE.md':(plugin/'CONFIGURATION-GUIDE.md').read_bytes(),
            'README.md':(plugin/'DISTRIBUTION-README.md').read_bytes(),
-           'CHANGELOG.md':(plugin/'CHANGELOG.md').read_bytes(),
+           'CHANGELOG.md':(plugin/'RUNTIME-RELEASE-NOTES.md').read_bytes(),
            'LICENSE':(root/'LICENSE').read_bytes(),
            'licenses/D2RLoader-PluginSDK-LICENSE':(root/'third_party/D2RLoader-PluginSDK/LICENSE').read_bytes(),
            'COMPATIBILITY.txt':('Always Show Sockets '+version+'\nWindows x64 / D2RLoader 1.3.1 / plugin ABI 4\nRequired D2RLoader.exe SHA-256:\n93021DAD48533BCFCA8A95C69A0CC00CDB9008A3CE6CEBA1D04C7ACA71985A10\nRequired D2RCore.dll SHA-256:\n2A868D013D2E0830BD2D9E04B918B19E46A73CF726C833E70D089B948FDEB5A2\nExact hashes and native byte guards must match. Unsupported builds preserve native behavior.\nSee README.md for live coverage and limitations.\n').encode()}

@@ -1,7 +1,7 @@
 # D2R Mods stable suite - 2026.10.15.1
 
-Six independently installable plugins now use the shared `1.3.1+rev.N` format.
-Revision numbers remain independent per plugin; all six are stable releases.
+Six independently installable plugins now use stable `1.3.1+rev.N` versions.
+Each plugin has its own revision number.
 
 | Plugin | Version |
 | --- | --- |
@@ -12,43 +12,61 @@ Revision numbers remain independent per plugin; all six are stable releases.
 | Floating Damage | 1.3.1+rev.12 |
 | Always Show Sockets | 1.3.1+rev.1 |
 
-- Item Roll Ranges adds `(Ilvl: XX, Qlvl: YY)` below Required Level, before
-  Max Sockets and weapon Attack Speed. Items without Required Level have
-  placement fallbacks. Values come directly from the item and active base
-  definition; the existing range hotkey and opt-in always-show mode apply.
-- Always Show Sockets joins the suite with default/always/off display modes,
-  scaled/faded inserted artwork, independent ring/center opacity and artwork
-  lift. Appearance commands save to the active config; startup display mode
-  remains default. Includes the command/configuration guide.
-- Inventory Deposit and Floating Damage move from beta names to stable
-  loader-plus-revision versions. Their previously released behavior, native
-  guards and configuration defaults are unchanged. Controller QOL and Map
-  Assistance retain their released source and versions.
+## Changes
 
-Each ZIP contains only its own runtime DLL and reference TOMLs under defaults/.
-No live d2rloader/config/ files are shipped. Existing saved settings are
-preserved; Item Roll Ranges always-show remains false by default. Close the
-game before replacing DLLs, retain a backup and use one active copy per plugin.
-Pack-managed Ladder installs distribute through the approved package route.
+- **Item Roll Ranges:** Adds `(Ilvl: XX, Qlvl: YY)` below Required Level and
+  above Max Sockets/weapon Attack Speed, including items without Required Level.
+  Uses the existing range controls; always-show remains off by default.
+- **Always Show Sockets:** Joins the suite with hover/selection, continuous and
+  native display modes. Size, opacity, ring, center and lift commands save your
+  appearance settings; each launch starts in default hover/selection mode.
+- **Inventory Deposit and Floating Damage:** Move from beta names to the stable
+  version format, preserving their existing behavior and settings.
+- **All packages:** Include focused installation/configuration guides and
+  command examples, with concise release notes and preserved configuration.
+  Controller QOL and Map Assistance retain their released behavior.
+
+## Commands and controls
+
+Enter slash commands in game chat. Feedback appears in the loader console.
+
+| Example | Effect |
+| --- | --- |
+| Hold Ctrl or RT/R2 | Show ranges and item/base levels. Controller QOL's menu remap uses RB/R1. |
+| `/AlwaysShowRolls on` | Show ranges continuously for this session. |
+| `/AlwaysShowRolls off` | Return to holding the range control. |
+| `/AlwaysShowRolls status` | Report always-show state. |
+| `/sockets always` | Keep styled sockets visible for this session. |
+| `/sockets default` | Show styled sockets on normal hover/selection. |
+| `/sockets ring 80` | Set ring opacity to 80% and save it. |
+| `/sockets center 40` | Set black-center opacity to 40% and save it. |
+| `/sockets status` | Report socket mode and appearance values. |
+| `/damagenumbers off` | Hide floating damage numbers for this session. |
+| `/damagenumbers motion off` | Use straight-rise animation for this session. |
+
+See each ZIP's README for all controls, configuration examples and requirements.
+
+## Installation
+
+Close the game, back up the previous DLLs and extract each selected ZIP into
+the game directory or active mod directory. DLLs go under `d2rloader/plugins/`.
+Use one active copy per plugin, then restart through D2RLoader. The D2RR launcher
+can remain open. Managed mod packs should use their normal update process.
+
+Existing settings are preserved. Files under `defaults/` are references;
+missing main configs are created automatically. No live config files are
+shipped. `SHA256SUMS` covers the downloads and each ZIP's contents.
 
 ## Validation and limits
 
-All67 plugin suites pass: Controller QOL33, Item Roll Ranges9, Map Assistance2,
-Inventory Deposit12, Floating Damage7 and Always Show Sockets4. All30 packaging
-checks pass. The six-package checks
-cover stable/beta channel validation, exact runtime layout, checksum integrity,
-config preservation, privacy and actual DLL ABI/resource/version admission.
-Unchanged Controller QOL/Map source retains its prior released coverage.
+All 67 plugin suites and the packaging checks passed locally. Live checks
+confirmed the new level line's placement and Ctrl release. Prior live coverage
+includes the documented item shortcuts, ranges, socket appearance and damage
+numbers; stable naming does not extend that coverage.
 
-The user confirmed revision45's level placement and Ctrl release in Reimagined.
-Socket rendering, controls and modes have accepted live coverage on preceding
-artifacts; autosave/restart is verified by SDK fixtures and still needs an
-actual loader-backed persistence check. Promoting a version does not imply
-new live coverage for all items, resolutions, vendors, trade or companion mods.
-Existing UI/object-pool assertions on exit remain unattributed; this suite
-does not claim a whole-game shutdown fix. Floating Damage targets local
-authoritative gameplay, with the documented multiplayer limitations.
-
-Exact executable/Core byte/hash guards and ABI4 requirements remain in the
-included compatibility records. Packages are staged locally; GitHub CI and
-published-download verification must pass before publication is reported.
+Socket appearance autosave/restart and the latest Floating Damage 4K/critical
+style visuals still need live confirmation. Floating Damage supports local
+single player. Not every item, mod, controller or resolution has been tested.
+Existing shutdown issues remain under investigation; this release does not
+claim to fix them. Native features require the supported builds listed in each
+package's compatibility file and disable unsupported paths.

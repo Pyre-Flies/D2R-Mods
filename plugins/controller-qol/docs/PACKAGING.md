@@ -9,7 +9,7 @@ Controller QOL Updates 1.5.14, PyreFly. Packaging revision: 2026-09-23.
 
 ## Evidence and reproduction
 
-The local upstream SDK `F:/SteamLibrary/steamapps/common/Diablo II Resurrected/Documentation/PluginSDK-master/README.md`, lines 90 onward, specifies `<scope>/d2rloader/config/<plugin-id>.toml`, creation only if missing, and preservation of existing config. Its `examples/config-file/config-file-sample.toml` lines 3–4 confirms the ID-based path. Bundled `sdk/include/D2RLPlugin/context.h` exposes `pluginConfigPath` and the native `ReadConfig` API, which this plugin continues to use.
+The local upstream SDK `PluginSDK-master/README.md`, lines 90 onward, specifies `<scope>/d2rloader/config/<plugin-id>.toml`, creation only if missing, and preservation of existing config. Its `examples/config-file/config-file-sample.toml` lines 3–4 confirms the ID-based path. Bundled `sdk/include/D2RLPlugin/context.h` exposes `pluginConfigPath` and the native `ReadConfig` API, which this plugin continues to use.
 
 The installed `D2RCore.dll` contains the validation diagnostic `Use only lowercase letters, numbers, '.', '_' or '-'` immediately between missing-ID and invalid-ID diagnostics. SHA256: `AE1EA9B7F97AF5B89A550281E6A6C6B6E9C74E73AC8759E6558B40E751428CD0`. Diagnostic file offset: `0x5CB0A8`, PE RVA: `0x5CC2A8` (not a callable function address). Re-find this ASCII string and the neighboring `Plugin id is invalid` message after loader updates. The exact display name with spaces/capitals is therefore not used as the plugin ID; the supported lowercase, hyphenated identity preserves native configuration management. No new runtime hook or game RVA is introduced.
 

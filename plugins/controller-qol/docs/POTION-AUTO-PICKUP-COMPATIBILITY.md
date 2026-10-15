@@ -38,7 +38,7 @@ User-associated plugin: https://github.com/yinyin333333/D2RL-yin-Junk-Room/tree/
 
 ## Reproduction and patch recovery
 
-All addresses are D2R.exe-relative RVAs; runtime VA = exeBase + RVA. Evidence: decrypted work/runtime-game.exe under the original Codex project directory, SHA256 81af5adeef90f6be190ca596cc39e6a6c794a47f0231f71a09c0dd27105904c5. Raw offsets equal RVAs in this capture; use PE section mapping for others. Its .pdata is unavailable, so unwind data was not used to infer function boundaries. Pickup entry 0x471950 already contains a process-specific E9 detour: never adopt it as a native signature. The legacy pickup hook admission remains unchanged; new fixed evidence covers only 18 handlers and the belt entry.
+All addresses are D2R.exe-relative RVAs; runtime VA = exeBase + RVA. Evidence: decrypted work/runtime-game.exe in the private research workspace, SHA256 81af5adeef90f6be190ca596cc39e6a6c794a47f0231f71a09c0dd27105904c5. Raw offsets equal RVAs in this capture; use PE section mapping for others. Its .pdata is unavailable, so unwind data was not used to infer function boundaries. Pickup entry 0x471950 already contains a process-specific E9 detour: never adopt it as a native signature. The legacy pickup hook admission remains unchanged; new fixed evidence covers only 18 handlers and the belt entry.
 
 Run: python tools/audit_portals.py --image <decrypted-PE> --evidence docs/compatibility-evidence.json
 

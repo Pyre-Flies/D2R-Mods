@@ -25,7 +25,7 @@ class InventoryDepositPackageTests(unittest.TestCase):
             "plugins/inventory-deposit/src/plugin_main.cpp": b'.version="0.1.0-beta.13",',
             "plugins/inventory-deposit/inventory-deposit.toml": b"[inventory_deposit]\nenabled = true\n",
             "plugins/inventory-deposit/DISTRIBUTION-README.md": b"Install the DLL once.\nhttps://github.com/Pyre-Flies/D2R-Mods\n",
-            "plugins/inventory-deposit/CHANGELOG.md": b"# Changelog\nInitial public prerelease.\n",
+            "plugins/inventory-deposit/RUNTIME-RELEASE-NOTES.md": b"# Changelog\nInitial public prerelease.\n",
             "LICENSE": b"Plugin license fixture\n",
             "third_party/D2RLoader-PluginSDK/LICENSE": b"SDK license fixture\n",
             # These source/build files must never leak into the runtime ZIP.

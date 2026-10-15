@@ -9,7 +9,7 @@ proposal below is superseded for the first plugin by remapping the provider's
 range-only input checks to ALT/R1 and adding panel/focus gates.
 
 Standalone source, native address ledger and tests:
-`F:/SteamLibrary/steamapps/common/Diablo II Resurrected/Documentation/item-roll-ranges`.
+`plugins/item-roll-ranges`.
 See its `docs/NATIVE-CONTRACT.md` for exact D2RCore exports, callsites, slots,
 fingerprints, original formatter candidates and patch recovery; see
 `docs/VALIDATION.md` for remaining in-game checks. Version 0.1.0 is experimental,
@@ -21,7 +21,7 @@ Investigated 2026-09-23 against installed Reimagined files and bundled D2RLoader
 
 ## Verified example
 
-Installed source: F:/SteamLibrary/steamapps/common/Diablo II Resurrected/mods/Reimagined/Reimagined.mpq/data/global/excel/setitems.txt, line 69. Row index label Aldur's Stony Gaze, *ID 66, item dr8 (Hunter's Guise). Property slot 1: prop1=ac, min1=80, max1=120. User reports their item rolled +118; inventory value was not independently read during this investigation.
+Installed source: <game-directory>/mods/Reimagined/Reimagined.mpq/data/global/excel/setitems.txt, line 69. Row index label Aldur's Stony Gaze, *ID 66, item dr8 (Hunter's Guise). Property slot 1: prop1=ac, min1=80, max1=120. User reports their item rolled +118; inventory value was not independently read during this investigation.
 
 properties.txt maps ac to armorclass (func1=1). itemstatcost.txt line 33 identifies armorclass as stat 31, descpriority=71, descfunc=19, descstrpos/descstrneg=ModStr1i. Distinguish the +Defense property roll from the helmet's overall defense display (base defense and other contributions).
 
@@ -53,7 +53,7 @@ Acceptance: correct Aldur 80..120 range from active definitions, exact +118 disp
 
 ## Implemented follow-up (0.2.0 experimental)
 
-Standalone source: F:/SteamLibrary/steamapps/common/Diablo II Resurrected/Documentation/item-roll-ranges.
+Standalone source: plugins/item-roll-ranges.
 The user confirmed 0.1.1's ALT/R1 hook displays the native Ctrl/RT range information.
 Version 0.2.0 adds `[+80 - +120] +118 Defense` using the realized raw stat from the
 verified native caller and the localized single-value formatter. Five automated
