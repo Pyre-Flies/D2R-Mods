@@ -262,7 +262,7 @@ state/cyclic inventory and ethereal fixed base190. Existing socket/corruption,
 header/input, artifact and text suites still pass. New header rendering is
 pending live confirmation. Receipt `outputs/flatmax-beast-shell-defense.json`
 and probe output remain local, along with the user's screenshot
-`codex-clipboard-b2701fab-84f7-4834-8011-bdfb93dc5b7b.png`; no game assets/logs
+`screenshot-b2701fab-84f7-4834-8011-bdfb93dc5b7b.png`; no game assets/logs
 are committed. Enchantment inference remains deferred; no release published.
 
 After the user confirmed the game/loader closed, revision28 was installed in

@@ -12,9 +12,7 @@ class PackageTests(unittest.TestCase):
         # Minimal PE fixture with no data sections; native artifact checks run separately.
         data=bytearray(128);data[:2]=b'MZ';data[60:64]=(64).to_bytes(4,'little');data[64:68]=b'PE\0\0'
         files['d2rloader/plugins/Always Show Sockets.dll']=bytes(data)
-        checks=''.join(hashlib.sha256(v).hexdigest()+'  '+n+'\n' for n,v in files.items())
         if corrupt:files['README.md']=b'changed'
-        files['SHA256SUMS']=checks.encode()
         if extra:files[extra]=b'unexpected'
         with zipfile.ZipFile(path,'w') as z:
             for n,v in files.items():z.writestr(n,v)
@@ -25,12 +23,17 @@ class PackageTests(unittest.TestCase):
     def test_reference_config_and_guide(self):
         with zipfile.ZipFile(self.archive()) as z:
             self.assertIn('defaults/always-show-sockets.toml',z.namelist())
-            self.assertIn('CONFIGURATION-GUIDE.md',z.namelist())
+            self.assertIn('README.md',z.namelist())
+            self.assertEqual(len(z.namelist()),3)
+            self.assertNotIn('SHA256SUMS',z.namelist())
             self.assertFalse(any(name.startswith('d2rloader/config/') for name in z.namelist()))
     def test_traversal(self):
         with self.assertRaises(ValueError):verify(self.archive('../escape'))
     def test_checksum(self):
-        with self.assertRaises(ValueError):verify(self.archive(corrupt=True))
+        reference=self.archive()
+        digest=hashlib.sha256(reference.read_bytes()).hexdigest()
+        verify(reference,digest)
+        with self.assertRaises(ValueError):verify(self.archive(corrupt=True),digest)
     def test_machine_paths(self):
         for data in (b'C:\\Users\\private\\file', '/home/private/file'.encode(), 'I:\\private\\file'.encode('utf-16-le')):
             with self.assertRaises(ValueError):privacy('README.md',data)

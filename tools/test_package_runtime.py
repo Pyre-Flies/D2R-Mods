@@ -30,9 +30,9 @@ class RuntimeArchiveTests(unittest.TestCase):
             make_archive(archive, files)
             with zipfile.ZipFile(archive) as zipped:
                 zipped.extractall(root)
-                for line in zipped.read("SHA256SUMS").decode().splitlines():
-                    digest, name = line.split("  ", 1)
-                    self.assertEqual(digest, hashlib.sha256(zipped.read(name)).hexdigest())
+                for name, data in files.items():
+                    self.assertEqual(zipped.read(name), data)
+                self.assertNotIn("SHA256SUMS", zipped.namelist())
             self.assertEqual(live.read_bytes(), custom)
             self.assertFalse((root / "d2rloader/config/map-assistance.toml").exists())
             self.assertEqual((root / "defaults/controller-qol-updates.toml").read_bytes(), files["defaults/controller-qol-updates.toml"])
@@ -61,7 +61,7 @@ class PublicDocumentationTests(unittest.TestCase):
 
     def test_archive_checks_all_curated_text_not_only_readme(self):
         with tempfile.TemporaryDirectory() as temp:
-            for name in ("README.md", "CHANGELOG.md", "COMPATIBILITY.txt", "defaults/example.toml"):
+            for name in ("README.md", "defaults/example.toml"):
                 with self.subTest(name=name), self.assertRaisesRegex(SystemExit, "Internal tooling"):
                     make_archive(Path(temp) / "bad.zip", {name: b"Internal Codex instructions"})
 
@@ -76,7 +76,7 @@ class FloatingDamagePackageFixture:
         fixtures = {
             "plugins/floating-damage/src/plugin.cpp": b'.version="0.1.0-beta.11",',
             "plugins/floating-damage/floating-damage.toml": b"[floating-damage]\nenabled = true\n",
-            "plugins/floating-damage/DISTRIBUTION-README.md": b"# Floating Damage\nInstall with the loader.\n",
+            "plugins/floating-damage/RUNTIME-README.md": b"# Floating Damage\nInstall with the loader.\n",
             "plugins/floating-damage/RUNTIME-RELEASE-NOTES.md": b"# Changelog\nCritical number styling.\n",
             "plugins/floating-damage/COMPATIBILITY.txt": b"# Native contract\nExact guarded build only.\n",
             "LICENSE": b"Plugin license fixture\n",
@@ -108,20 +108,15 @@ class FloatingDamagePackageTests(FloatingDamagePackageFixture, unittest.TestCase
             [str(self.verifier.resolve()), str(self.dll.resolve())], check=True)
         self.assertEqual(archive.name, "Floating-Damage-0.1.0-beta.11-PyreFly.zip")
         expected = {
-            "d2rloader/plugins/Floating Damage.dll", "defaults/floating-damage.toml",
-            "README.md", "CHANGELOG.md", "COMPATIBILITY.txt", "LICENSE",
-            "licenses/D2RLoader-PluginSDK-LICENSE",
+            "d2rloader/plugins/Floating Damage.dll", "defaults/floating-damage.toml", "README.md",
         }
         original = archive.read_bytes()
         with zipfile.ZipFile(archive) as zipped:
-            self.assertEqual(set(zipped.namelist()), expected | {"SHA256SUMS"})
+            self.assertEqual(set(zipped.namelist()), expected)
             self.assertEqual(zipped.read("d2rloader/plugins/Floating Damage.dll"),
                              self.dll.read_bytes())
-            sums = dict(line.split("  ", 1)[::-1]
-                        for line in zipped.read("SHA256SUMS").decode().splitlines())
-            self.assertEqual(set(sums), expected)
-            for name, digest in sums.items():
-                self.assertEqual(digest, hashlib.sha256(zipped.read(name)).hexdigest())
+            self.assertIn(b"Plugin license fixture", zipped.read("README.md"))
+            self.assertIn(b"SDK license fixture", zipped.read("README.md"))
         self.assertEqual(self.package().read_bytes(), original)
 
     def test_verifier_failure_or_dll_change_blocks_package(self):
@@ -144,7 +139,7 @@ class FloatingDamagePackageTests(FloatingDamagePackageFixture, unittest.TestCase
             self.package()
         self.run.assert_not_called()
         self.verifier.write_bytes(b"restored fixture")
-        (self.plugin / "DISTRIBUTION-README.md").unlink()
+        (self.plugin / "RUNTIME-README.md").unlink()
         with self.assertRaisesRegex(SystemExit, "Required file does not exist"):
             self.package()
         self.assertFalse(self.output.exists())
@@ -158,8 +153,8 @@ class FloatingDamagePackageTests(FloatingDamagePackageFixture, unittest.TestCase
 
     def test_private_paths_rejected_in_docs_configuration_and_dll_strings(self):
         cases = (
-            (self.plugin / "DISTRIBUTION-README.md", b"C:/Users/private/build"),
-            (self.plugin / "COMPATIBILITY.txt", b"D:\\work\\private\\capture"),
+            (self.plugin / "RUNTIME-README.md", b"C:/Users/private/build"),
+            (self.plugin / "RUNTIME-README.md", b"D:\\work\\private\\capture"),
             (self.plugin / "floating-damage.toml", b"# /home/private/config"),
             (self.dll, b"MZ\0C:\\Users\\private\\floating.pdb\0"),
         )
@@ -179,7 +174,7 @@ class SixPluginSuiteTests(FloatingDamagePackageFixture, unittest.TestCase):
         fixtures = {
             "plugins/always-show-sockets/src/plugin.cpp": b'.version="1.3.1+rev.1",',
             "plugins/always-show-sockets/always-show-sockets.toml": b"# Reference sockets config\n",
-            "plugins/always-show-sockets/DISTRIBUTION-README.md": b"# Sockets\n",
+            "plugins/always-show-sockets/RUNTIME-README.md": b"# Sockets\n",
             "plugins/always-show-sockets/CONFIGURATION-GUIDE.md": b"# Configuration\n",
             "plugins/always-show-sockets/RUNTIME-RELEASE-NOTES.md": b"# Changelog\n",
             "plugins/controller-qol/src/plugin_main.cpp": b'.version="1.3.1-rev.75",',
@@ -188,7 +183,7 @@ class SixPluginSuiteTests(FloatingDamagePackageFixture, unittest.TestCase):
             "plugins/map-assistance/src/plugin.cpp": b'.version="0.1.0-rev.1",',
             "plugins/inventory-deposit/src/plugin_main.cpp": b'.version="0.1.0-beta.13",',
             "plugins/inventory-deposit/inventory-deposit.toml": b"[inventory_deposit]\nenabled = true\n",
-            "plugins/inventory-deposit/DISTRIBUTION-README.md": b"# Inventory Deposit\nDeposit all inventory items.\n",
+            "plugins/inventory-deposit/RUNTIME-README.md": b"# Inventory Deposit\nDeposit all inventory items.\n",
             "plugins/inventory-deposit/RUNTIME-RELEASE-NOTES.md": b"# Changelog\nDeposit button.\n",
         }
         for name, data in fixtures.items():
@@ -259,7 +254,9 @@ class SixPluginSuiteTests(FloatingDamagePackageFixture, unittest.TestCase):
             with zipfile.ZipFile(archive) as zipped:
                 dlls = [name for name in zipped.namelist() if name.lower().endswith(".dll")]
                 self.assertEqual(len(dlls), 1)
-                self.assertFalse(any(name.startswith("docs/") and name != "docs/SKILL-DISCOVERY-CONFIG.md"
+                self.assertEqual(set(zipped.namelist()), {dlls[0], "README.md"} |
+                                 {name for name in zipped.namelist() if name.startswith("defaults/")})
+                self.assertFalse(any(name.lower().endswith(".toml") and not name.startswith("defaults/")
                                      for name in zipped.namelist()))
                 self.assertTrue(dlls[0].startswith("d2rloader/plugins/"))
                 actual_dlls.add(Path(dlls[0]).name)
@@ -269,9 +266,7 @@ class SixPluginSuiteTests(FloatingDamagePackageFixture, unittest.TestCase):
                     self.assertIn(b"always_show_ranges = false", zipped.read("defaults/item-roll-ranges.toml"))
                 self.assertFalse(any(name.lower().startswith("d2rloader/config/")
                                      for name in zipped.namelist()))
-                for line in zipped.read("SHA256SUMS").decode().splitlines():
-                    digest, name = line.split("  ", 1)
-                    self.assertEqual(digest, hashlib.sha256(zipped.read(name)).hexdigest())
+                self.assertNotIn("SHA256SUMS", zipped.namelist())
                 zipped.extractall(install)
                 zipped.extractall(self.root / "fresh")
         self.assertEqual(actual_dlls, expected_dlls)

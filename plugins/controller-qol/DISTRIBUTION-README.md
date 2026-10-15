@@ -55,7 +55,7 @@ backup. Restart after any DLL change; hot reload is unsupported.
 ## Compatibility and limits
 
 Requires Windows x64, D2RLoader 1.3.1 / plugin ABI 4 and supported native builds;
-see `COMPATIBILITY.txt`. Unsupported paths keep native behavior. Advanced
+see the repository [compatibility record](COMPATIBILITY.txt). Unsupported paths keep native behavior. Advanced
 storage and General Skills features require those facilities in the active mod.
 
 Live checks cover item actions, menu navigation, skill profiles and hosted
@@ -66,7 +66,10 @@ uses inventory items and an eligible highlighted tome in Inventory or Personal
 Stash; Cube targets are excluded. A separate shutdown issue remains under
 investigation, with its cause unconfirmed.
 
-For requirements, see the included compatibility file. Report problems at
+For requirements, see the repository compatibility record. Report problems at
 [GitHub Issues](https://github.com/Pyre-Flies/D2R-Mods/issues), including the plugin
 version, game/mod version, and steps to reproduce. Check logs for personal
-information before sharing them. `SHA256SUMS` lists the packaged file checksums.
+information before sharing them. `SHA256SUMS` is provided alongside the download ZIPs.
+
+Runtime ZIPs contain only the DLL, reference defaults and a usage README.
+Detailed guides and compatibility records stay in this repository.

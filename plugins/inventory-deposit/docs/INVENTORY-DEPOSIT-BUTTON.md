@@ -337,7 +337,7 @@ remains a real validation/design boundary, not something these tests prove.
 ## User-confirmed operation and alignment adjustment - 2026-10-11
 
 The user reported "That worked really well" and supplied
-`codex-clipboard-e63b66b4-593c-4f6e-a672-ae269dd8ea54.png` (2767 by 1439).
+`screenshot-e63b66b4-593c-4f6e-a672-ae269dd8ea54.png` (2767 by 1439).
 It shows the deposit button rendered in the inventory footer alongside the
 gold control, with the Charm Inventory arrow still present. This confirms
 visible integration; the user report confirms their deposit interaction worked.
@@ -383,7 +383,7 @@ the user can see the new placement using their existing DLL after restarting.
 ## Held-item visibility fix - beta.10, 2026-10-11
 
 The user reported that picking up an inventory item hid the button and supplied
-`codex-clipboard-19536af6-d688-4f62-ae85-80be9c67b8ea.png`. The source explains
+`screenshot-19536af6-d688-4f62-ae85-80be9c67b8ea.png`. The source explains
 this directly: the button's visibility callback previously called strict
 `Available()`, so either existing cursor check hid it. This was a plugin
 presentation bug; no missing panel resource or artwork was implicated.

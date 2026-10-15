@@ -1,8 +1,8 @@
 # D2RLoader controller SDK request and technical evidence
 
 **Author:** PyreFly, Controller QOL Updates  
-**Updated:** 2026-09-24 — production native-input release 1.3.1+rev.5  
-**Purpose:** One self-contained engineering handoff for maintainer review and AI-assisted investigation.  
+**Updated:** 2026-09-24 — production native-input release 1.3.1+rev.5
+**Purpose:** One self-contained engineering handoff for maintainer review and technical investigation.
 **Scope:** Controller input, focused UI context, navigation, prompts, native item actions and world interaction. Item Roll Ranges is not part of this feature request.
 
 ## Reading guide

@@ -52,7 +52,7 @@ backup. Restart after any DLL change; hot reload is unsupported.
 ## Compatibility and limits
 
 Requires the supported Windows x64 D2RLoader 1.3.1/Core profile in
-`COMPATIBILITY.txt` and Reimagined's HD keyboard/mouse inventory with advanced
+the repository [compatibility record](COMPATIBILITY.txt) and Reimagined's HD keyboard/mouse inventory with advanced
 storage. Controller and classic layouts are outside this button's scope.
 No separate artwork files or Controller QOL installation are required.
 Unsupported builds leave the button unavailable.
@@ -61,7 +61,10 @@ Live checks cover deposits, button placement, hover/disabled states and tab
 feedback. Twelve automated suites passed. Remote multiplayer behavior, multiple
 resolutions and save/reload persistence are not fully validated.
 
-For requirements, see the included compatibility file. Report problems at
+For requirements, see the repository compatibility record. Report problems at
 [GitHub Issues](https://github.com/Pyre-Flies/D2R-Mods/issues), including the plugin
 version, game/mod version, and steps to reproduce. Check logs for personal
-information before sharing them. `SHA256SUMS` lists the packaged file checksums.
+information before sharing them. `SHA256SUMS` is provided alongside the download ZIPs.
+
+Runtime ZIPs contain only the DLL, reference defaults and a usage README.
+Detailed guides and compatibility records stay in this repository.

@@ -3,7 +3,7 @@
 ## Beta.8 top-edge clearance, 2026-10-11
 
 The user reported that beta.7 still obscured the gold lip in
-`codex-clipboard-dcaaecda-cf92-4c59-af9c-8f77d64e96df.png` (124-by-114).
+`screenshot-dcaaecda-cf92-4c59-af9c-8f77d64e96df.png` (124-by-114).
 The runtime log confirms beta.7 loaded at 08:44:31 and gap 85/offset-1 placement
 was verified at 08:44:48; installed DLL SHA-256 matches the beta.7 record.
 Screenshot matching also agrees with the revised gold-inlay artwork.
@@ -29,7 +29,7 @@ are unchanged. Final lip clearance remains pending live-game review.
 
 The user confirmed beta.6's left alignment and requested a 1-2 pixel reduction
 because the upper gold lip was obscured in
-`codex-clipboard-f9b4aec7-234c-4df0-b4d8-c02f35b330de.png` (427-by-152).
+`screenshot-f9b4aec7-234c-4df0-b4d8-c02f35b330de.png` (427-by-152).
 The beta.7 button was 144-by-140 UI units, with unchanged `gold_gap=85` and
 `gold_offset_y=-1`. Reference gold `(492,1656,246,48)` now resolves to
 `(823,1609,144,140)`: the top moves down 2 UI units, the bottom moves up 2,
@@ -52,7 +52,7 @@ moves 25 UI units left and 7 up, and its lower edge extends 5 units down.
 The existing gold-relative calculation and native geometry guards are unchanged.
 
 The user's annotated 202-by-196 screenshot
-`codex-clipboard-caa0475a-ccfe-4fdd-82f2-23f3ba41ab8c.png` marks the top gap in
+`screenshot-caa0475a-ccfe-4fdd-82f2-23f3ba41ab8c.png` marks the top gap in
 red and the left background strip in green. Matching the current normal sprite
 to that image gives an approximately 88-pixel canvas at `(50,73)`, or two-thirds
 screen pixels per UI unit. At alpha128 the 132-pixel normal sprite has bounds

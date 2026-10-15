@@ -44,7 +44,7 @@ backup. Restart after any DLL change; hot reload is unsupported.
 ## Compatibility and limits
 
 Requires Windows x64 and the exact D2RLoader 1.3.1/Core profile in
-`COMPATIBILITY.txt`. Appearance controls apply to HD graphics; classic graphics
+the repository [compatibility record](COMPATIBILITY.txt). Appearance controls apply to HD graphics; classic graphics
 retain native size and opacity. Unsupported builds preserve native behavior.
 
 Live checks cover inventory/equipment, Cube, personal/shared stash, mixed
@@ -54,7 +54,10 @@ actual loader-backed save/restart still needs live confirmation. The latest
 revision has not been retested alongside Quality Backgrounds. Vendor, trade,
 controller-specific and broader resolution coverage remain unverified.
 
-For requirements, see the included compatibility file. Report problems at
+For requirements, see the repository compatibility record. Report problems at
 [GitHub Issues](https://github.com/Pyre-Flies/D2R-Mods/issues), including the plugin
 version, game/mod version, and steps to reproduce. Check logs for personal
-information before sharing them. `SHA256SUMS` lists the packaged file checksums.
+information before sharing them. `SHA256SUMS` is provided alongside the download ZIPs.
+
+Runtime ZIPs contain only the DLL, reference defaults and a usage README.
+Detailed guides and compatibility records stay in this repository.

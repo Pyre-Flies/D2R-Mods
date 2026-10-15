@@ -68,7 +68,7 @@ backup. Restart after any DLL change; hot reload is unsupported.
 ## Compatibility and limits
 
 Requires Windows x64 and the exact D2RLoader/Core profile in
-`COMPATIBILITY.txt`. Remote multiplayer clients are unsupported. Controller QOL
+the repository [compatibility record](COMPATIBILITY.txt). Remote multiplayer clients are unsupported. Controller QOL
 is optional. Unsupported builds leave the feature unavailable.
 
 Live checks cover ordinary/killing numbers, movement, commands, element/poison
@@ -81,7 +81,10 @@ For troubleshooting only, `/damagenumbers capture on` records up to 128
 diagnostic entries in the plugin log. `/damagenumbers capture off` stops it;
 `/damagenumbers capture status` reports its state. Capture stops at game exit.
 
-For requirements, see the included compatibility file. Report problems at
+For requirements, see the repository compatibility record. Report problems at
 [GitHub Issues](https://github.com/Pyre-Flies/D2R-Mods/issues), including the plugin
 version, game/mod version, and steps to reproduce. Check logs for personal
-information before sharing them. `SHA256SUMS` lists the packaged file checksums.
+information before sharing them. `SHA256SUMS` is provided alongside the download ZIPs.
+
+Runtime ZIPs contain only the DLL, reference defaults and a usage README.
+Detailed guides and compatibility records stay in this repository.

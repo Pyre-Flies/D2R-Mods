@@ -58,7 +58,10 @@ area tips have not each been individually checked. See `COMPATIBILITY.md`.
 Based on Kryszard's PD2 Loot Filter map-reading notes. Attribution and the
 original project link are in [CREDITS.md](CREDITS.md).
 
-For requirements, see the included compatibility file. Report problems at
+For requirements, see the repository compatibility record. Report problems at
 [GitHub Issues](https://github.com/Pyre-Flies/D2R-Mods/issues), including the plugin
 version, game/mod version, and steps to reproduce. Check logs for personal
-information before sharing them. `SHA256SUMS` lists the packaged file checksums.
+information before sharing them. `SHA256SUMS` is provided alongside the download ZIPs.
+
+Runtime ZIPs contain only the DLL, reference defaults and a usage README.
+Detailed guides and compatibility records stay in this repository.

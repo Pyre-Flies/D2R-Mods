@@ -2,9 +2,9 @@
 
 ## Distribution documentation
 
-- Package concise install/configuration guides, command examples and release notes;
-  keep engineering reports in source documentation. Remove private paths and
-  internal workflow references from distributable documentation.
+- Keep runtime ZIPs minimal: one DLL, reference defaults and a usage README
+  with command examples and required notices. Keep detailed guides, release
+  history and engineering reports in the repository. Sanitize public documents.
 - Packaging/privacy checks are automated; plugin DLLs and live-tested behavior
   are unchanged by this documentation update.
 

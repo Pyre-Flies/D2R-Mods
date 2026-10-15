@@ -52,8 +52,7 @@ Stable version numbers do not imply every mod, controller or item is tested.
 
 Report bugs at [GitHub Issues](https://github.com/Pyre-Flies/D2R-Mods/issues).
 Include plugin/game/mod versions and reproduction steps. Review logs for
-personal information before sharing. Runtime ZIPs and release assets include
-`SHA256SUMS` for verification.
+personal information before sharing. The release includes `SHA256SUMS` alongside the ZIPs for verification.
 
 If you enjoy these plugins, you can support their development on Ko-fi.
 

@@ -9,7 +9,7 @@ import re
 import struct
 import subprocess
 
-from package_runtime import make_archive, read_version, require_file
+from package_runtime import make_archive, read_version, require_file, runtime_readme
 
 
 REPOSITORY = Path(__file__).resolve().parents[1]
@@ -18,10 +18,6 @@ RUNTIME_NAMES = frozenset({
     "d2rloader/plugins/Inventory Deposit.dll",
     "defaults/inventory-deposit.toml",
     "README.md",
-    "CHANGELOG.md",
-    "COMPATIBILITY.txt",
-    "LICENSE",
-    "licenses/D2RLoader-PluginSDK-LICENSE",
 })
 MACHINE_PATH = re.compile(
     r"(?<![A-Za-z0-9])[A-Za-z]:[/\\]|\\\\[A-Za-z0-9][^\s\\]*\\|/(?:Users|home)/",
@@ -80,32 +76,10 @@ def package_inventory_deposit(dll: Path, verifier: Path, output: Path,
     if require_file(dll) != dll_bytes:
         raise SystemExit("DLL changed while its artifact verification was running")
 
-    compatibility = f"""Inventory Deposit by PyreFly
-Plugin version: {version}
-D2RLoader plugin ABI: 4 (Windows x64 client)
-Qualified native profile: D2R 3.3.93787 / D2RLoader 1.3.1 family
-Required D2RCore.dll SHA-256:
-{CORE_SHA256}
-
-The exact provider hash, live code witnesses and widget/item contracts must
-all match. A version label alone does not establish compatibility. Unsupported
-profiles leave the plugin unavailable and preserve normal game behavior.
-
-The runtime DLL embeds its original button artwork and reference configuration.
-No separate MPQ, loose image files or Controller QOL DLL is required.
-Close the game before installing or replacing the DLL. Reference
-configuration is under defaults/ and must not replace an existing live config.
-See README.md for installation, known limitations and live-validation scope.
-""".encode("utf-8")
     files = {
         "d2rloader/plugins/Inventory Deposit.dll": dll_bytes,
         "defaults/inventory-deposit.toml": require_file(plugin / "inventory-deposit.toml"),
-        "README.md": require_file(plugin / "DISTRIBUTION-README.md"),
-        "CHANGELOG.md": require_file(plugin / "RUNTIME-RELEASE-NOTES.md"),
-        "COMPATIBILITY.txt": compatibility,
-        "LICENSE": require_file(repository / "LICENSE"),
-        "licenses/D2RLoader-PluginSDK-LICENSE": require_file(
-            repository / "third_party/D2RLoader-PluginSDK/LICENSE"),
+        "README.md": runtime_readme(plugin, repository),
     }
     if files.keys() != RUNTIME_NAMES:
         raise SystemExit("Unexpected Inventory Deposit runtime contents")

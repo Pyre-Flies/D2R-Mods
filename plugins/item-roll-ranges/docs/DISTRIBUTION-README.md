@@ -91,7 +91,7 @@ item_stat_ranges = true
 ```
 
 Requires Windows x64, plugin ABI 4 and the D2RCore build listed in
-`COMPATIBILITY.txt`. Controller QOL is optional. Unsupported or conflicting
+the repository [compatibility record](COMPATIBILITY.txt). Controller QOL is optional. Unsupported or conflicting
 formatter paths retain native behavior.
 
 Nine automated suites passed. Live checks cover header placement and release,
@@ -99,7 +99,10 @@ fixed Defense, resistance/Attributes combinations, socket/corruption breakdowns
 and vanilla/Reimagined runewords. Every item, language and plugin combination
 has not been individually tested.
 
-For requirements, see the included compatibility file. Report problems at
+For requirements, see the repository compatibility record. Report problems at
 [GitHub Issues](https://github.com/Pyre-Flies/D2R-Mods/issues), including the plugin
 version, game/mod version, and steps to reproduce. Check logs for personal
-information before sharing them. `SHA256SUMS` lists the packaged file checksums.
+information before sharing them. `SHA256SUMS` is provided alongside the download ZIPs.
+
+Runtime ZIPs contain only the DLL, reference defaults and a usage README.
+Detailed guides and compatibility records stay in this repository.

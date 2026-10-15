@@ -2,13 +2,14 @@
 
 ## Runtime documentation
 
-Runtime ZIPs contain curated distribution READMEs, configuration examples,
-RUNTIME-RELEASE-NOTES.md (packaged as CHANGELOG.md), compatibility requirements
-and licenses. Keep engineering reports, development workflow files and build
-recipes out of runtime ZIPs. Check command examples against the current parser
-and clearly distinguish session-only toggles from saved settings. Scan all
-packaged text for private paths and internal tooling references. Source archives
-retain technical evidence; export-ignore excludes local contributor workflow
+Runtime ZIPs contain only each plugin's DLL, reference TOMLs under defaults/
+and one README with installation, command examples and required notices.
+Detailed guides, changelogs, compatibility records, licenses and engineering
+reports remain in the repository. Required redistribution notices are included
+in the runtime README. Keep checksums alongside the ZIPs, not inside them.
+Check examples against the parser and distinguish session-only from saved
+settings. Scan packaged text for private paths and internal tooling references.
+Source archives retain technical evidence; export-ignore excludes local workflow
 material. Documentation changes must preserve the tested DLL bytes.
 
 ## Current stable suite
@@ -37,7 +38,7 @@ python tools/package_inventory_deposit.py --dll "build/inventory-deposit/Release
 ```
 
 The archive contains only this plugin's DLL, reference config under `defaults/`,
-distribution docs, licenses and internal checksums. Editable original PNGs live
+a usage README with required notices. Editable original PNGs live
 in the source archive; no MPQ or generated sprite files need separate install.
 Verify the tag commit, CI, prerelease status, downloaded archive checksums and
 DLL identity after publication. Preserve the existing stable release and all
@@ -108,19 +109,19 @@ they want to change.
 
 Run `python tools/test_package_runtime.py` before packaging. Both the packager
 and regression tests enforce safe paths and preservation of customized configs.
-Verify internal and external checksums and audit packaged text for private data.
+Verify adjacent ZIP checksums and packaged file bytes; audit text for private data.
 Record automated results separately from live-game validation.
 
 For QOL, keep shared defaults in `controller-qol-updates.toml` and per-skill
-defaults in `skill-defaults.toml`. Package both as references, include the
+defaults in `skill-defaults.toml`. Package both as references, link the repository
 [configuration guide](../plugins/controller-qol/docs/SKILL-DISCOVERY-CONFIG.md),
 and describe migrations and changed defaults in release notes. Existing explicit
 settings must remain intact; never deploy a whole default file over user tuning.
 After publication, verify the tag's exact commit, successful CI, stable/prerelease
 status, all expected assets and downloaded checksums.
 
-Each ZIP contains its own `SHA256SUMS` for installed files. The adjacent release
-`SHA256SUMS` covers the six ZIP assets themselves. Verify that there are exactly
+The adjacent release `SHA256SUMS` covers the six ZIP assets. The ZIPs
+contain no checksum files, separate guides, changelogs or development documents. Verify that there are exactly
 six plugin ZIPs and one adjacent `SHA256SUMS`, and that each ZIP installs exactly
 its own DLL. Source archives are separate GitHub-generated downloads.
 

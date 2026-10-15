@@ -22,8 +22,8 @@ Each plugin has its own revision number.
   appearance settings; each launch starts in default hover/selection mode.
 - **Inventory Deposit and Floating Damage:** Move from beta names to the stable
   version format, preserving their existing behavior and settings.
-- **All packages:** Include focused installation/configuration guides and
-  command examples, with concise release notes and preserved configuration.
+- **All packages:** Contain only the DLL, reference defaults and one usage
+  README with command examples. Detailed documentation stays in the repository.
   Controller QOL and Map Assistance retain their released behavior.
 
 ## Commands and controls
@@ -55,7 +55,7 @@ can remain open. Managed mod packs should use their normal update process.
 
 Existing settings are preserved. Files under `defaults/` are references;
 missing main configs are created automatically. No live config files are
-shipped. `SHA256SUMS` covers the downloads and each ZIP's contents.
+shipped. `SHA256SUMS` alongside the downloads covers all six ZIP files.
 
 ## Validation and limits
 

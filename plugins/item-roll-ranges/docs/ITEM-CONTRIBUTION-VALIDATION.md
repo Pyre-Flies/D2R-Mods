@@ -710,8 +710,8 @@ candidate rendering controls; they do not add live coverage for converted
 rares or the earlier absent IAS/Life/flat-max/El/Ruby fixtures.
 
 Screenshot references supplied by the user:
-`codex-clipboard-be41d166-3dd0-489b-ab88-ad174445d1d8.png` (Stone Fang) and
-`codex-clipboard-c2fd02da-cb6b-4a0d-9bc5-4e46ad0c5ab6.png` (Cruel sword).
+`screenshot-be41d166-3dd0-489b-ab88-ad174445d1d8.png` (Stone Fang) and
+`screenshot-c2fd02da-cb6b-4a0d-9bc5-4e46ad0c5ab6.png` (Cruel sword).
 Images remain local attachments, not repository assets. Enchantment `[E]`
 attribution remains unimplemented; revision27 remains unpublished.
 
