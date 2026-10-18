@@ -1,3 +1,15 @@
+## 1.3.1+rev.80 - consolidated release
+
+- Consolidate the tested beta.7 controller fixes and Unhoarder 1.2.9
+  compatibility into one supported release version.
+- Keep hidden loot out of LB slots and configured controller pickups, while
+  preserving standalone filtering, gold exceptions and native safety checks.
+- Include the tested cube controls, readable pickup captions, remote transfer
+  and controller query forwarding repairs.
+
+The release version changes metadata only from the tested opacity.1 build.
+Automated checks and focused user testing do not cover every hosted setup.
+
 ## 1.3.1+rev.80-beta.7-opacity.1
 
 - Preserve the tested beta.7 controller behavior and add exact compatibility

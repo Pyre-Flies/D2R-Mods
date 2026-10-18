@@ -1,4 +1,4 @@
-# Supported controller options review — 2026-09-24
+# Supported controller options review â€” 2026-09-24
 
 Scope: local plugin/SDK source plus current official SDK 0.3.0 public headers. This is a public-contract review, not a live runtime service probe or review of the loader's internal hook manager. No DLLs, native hooks or production archives changed.
 

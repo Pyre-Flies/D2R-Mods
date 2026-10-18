@@ -21,6 +21,12 @@ void TestLinkedProduction();
 void TestRandomSkillProduction();
 void TestLiveRandomSkillCapture(const char* path);
 void TestLiveUniqueCapture(const char* path);
+void TestReportedCapture(const char* path,const char* which);
+void TestOwnedDurabilityPhysical();
+void TestChargeSourceOnly();
+void TestIntrinsicReportedBase();
+void TestPermanentSetProduction();
+void TestPoisonDurationProduction();
 
 }
 namespace {
@@ -122,6 +128,10 @@ bool __cdecl WriteRangeConfig(const D2RL::PluginContext*,const char* text) noexc
 }
 }
 int main(int argc,char** argv) {
+    if(argc==2 && std::strcmp(argv[1],"--intrinsic-base")==0){TestIntrinsicReportedBase();return 0;}
+    if(argc==4 && std::strcmp(argv[1],"--reported-capture")==0){TestReportedCapture(argv[2],argv[3]);return 0;}
+    TestOwnedDurabilityPhysical();
+    TestChargeSourceOnly();
     const D2RL::PluginApi rangeApi{.apiSize=D2RL::PluginApiSize,.readConfig=ReadRangeConfig,.writeConfig=WriteRangeConfig};
     const D2RL::PluginContext rangeContext{.contextSize=sizeof(D2RL::PluginContext),.api=&rangeApi};
     contributionContext=&rangeContext;
@@ -172,6 +182,9 @@ int main(int argc,char** argv) {
     TestAlwaysAdapters();
     TestLinkedProduction();
     TestRandomSkillProduction();
+    TestIntrinsicReportedBase();
+    TestPermanentSetProduction();
+    TestPoisonDurationProduction();
     if(argc==2)TestLiveUniqueCapture(argv[1]);
     if(argc==3 && std::strcmp(argv[1],"--random-skills")==0)TestLiveRandomSkillCapture(argv[2]);
     TestTooltipVisibilitySnapshots();
@@ -286,7 +299,7 @@ int main(int argc,char** argv) {
     check(!D2RLoaderLoadPlugin(nullptr));
     auto info=D2RLoaderGetPluginInfo();
     check(std::strcmp(info->id,"item-roll-ranges")==0);
-    check(std::strcmp(info->version,"1.3.1+rev.46")==0);
+    check(std::strcmp(info->version,"1.3.1+rev.55")==0);
     std::puts("Passed real adapter passthrough/ABI, inactive late calls, atomic slot conflict/restore, exported identity.");
 }
 
@@ -423,7 +436,10 @@ void TestAffixRead() {
     labels=AffixLabels(unit,{},"+7 Weapon Poison Damage over 3 seconds");
     check(labels.size()==1 && labels[0].text=="[S] [of Blight] [T2]" &&
           labels[0].key==RangeText::Analyze("+7 Weapon Poison Damage over 3 seconds").key);
-    check(AffixLabels(unit,{},"Unidentified fixed line\n+7 Weapon Poison Damage over 3 seconds").empty());
+    check(AffixLabels(unit,{},"Unidentified fixed line\n+7 Weapon Poison Damage over 3 seconds").size()==1);
+    check(AffixLabels(unit,{},"+50% Damage to Undead\n+7 Weapon Poison Damage over 3 seconds").size()==1);
+    // An extra two-number candidate is still ambiguous and must refuse.
+    check(AffixLabels(unit,{},"5% Chance to cast level 10 Nova\n+7 Weapon Poison Damage over 3 seconds").empty());
     props[0].bytes[0x18]=1; props[0].bytes[0x20]=31;
     put(data,0,7); check(AffixLabels(unit,lines).empty()); // No unique definition yet.
     // Renewed Sunder regression: flag8 and no affix IDs still have unique sources.
@@ -464,6 +480,12 @@ std::uint64_t __fastcall FakeProperties(void* item,char* output,int cap,int mode
     }
     return 0x12345678;
 }
+std::uint64_t __fastcall AppendProperties(void*,char* output,int cap,int,int,int,int,int,const void*,void*) {
+    const auto used=std::strlen(output);
+    std::snprintf(output+used,cap-used,"+1 to All Skills\n");
+    CaptureRangeIdentity(127,0,"+1 to All Skills");
+    return 42;
+}
 void TestPropertyPasses() {
     unsigned char source[0x90]{},clone[0x90]{};
     void* overlay[]={source,clone};
@@ -481,6 +503,15 @@ void TestPropertyPasses() {
     check(propertyCalls==2 && !rendering);
     check(std::strstr(output,"[+80 - +120]\xff" "c3 +118 Defense"));
     check(std::strstr(output,"[+25 - +50]\xff" "c3 +38% Enhanced Weapon Damage"));
+    originalProperties=AppendProperties;
+    const std::string prefix="\xff" "cU[+1]\xff" "c3 +1 to All Skills \xff" "cU[Set]\xff" "c3\n";
+    strcpy_s(output,prefix.c_str());
+    for(unsigned n=0;n<6;++n){
+        const std::string before=output;
+        check(RenderProperties(source,source,output,1024,0,165,0,0,0,nullptr,nullptr)==42);
+        check(std::string_view(output).starts_with(before));
+        check(std::string(output)==before+"+1 to All Skills\n");
+    }
     std::puts("Verified original source pass, cleared range args, clone range pass, returned ABI, exact actual values and overlay identity.");
 }
 int __fastcall FakeRangeHelper(void* unit,void* stats,int stat,int layer,int low,int high,char* output,int mode) {
@@ -577,3 +608,10 @@ void TestSpecial() {
 
 #include "contribution_adapter_tests.h"
 
+
+#include "definition_catalog_tests.h"
+#include "reported_capture_tests.h"
+
+#include "intrinsic_base_tests.h"
+
+#include "set_property_tests.h"

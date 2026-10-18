@@ -69,7 +69,7 @@ template<class Eligible> unsigned Tier(const Row& rolled,std::span<const Row> fa
     }
     return 1+static_cast<unsigned>(higher.size());
 }
-struct LayerEncoding { unsigned skillBits{6}, skillMask{63}; bool randomSkills{}; };
+struct LayerEncoding { unsigned skillBits{6}, skillMask{63}; bool randomSkills{}; bool chargeSourcesOnly{}; };
 inline bool RandomLayerSpec(int param,int low,int high,unsigned layer) {
     return param>0 && param<=1000000 && low>=0 && low<=high && high<=65535 &&
         layer>=static_cast<unsigned>(low) && layer<=static_cast<unsigned>(high);
@@ -80,6 +80,7 @@ inline bool PropertyContributes(const Property& property,int param,int low,int l
     for (unsigned slot=0;slot<7;++slot) {
         const auto fn=p[0x18+slot];
         if (!fn) continue;
+        if(encoding.chargeSourcesOnly && stat==204 && (fn!=19 || p[2+slot]))continue;
         const int target=Read<std::uint16_t>(p,0x20+slot*2);
         // Physical damage functions have implicit stats, not statN fields.
         if (!layer && ((fn==5 && (stat==21 || stat==23)) ||
@@ -95,6 +96,14 @@ inline bool PropertyContributes(const Property& property,int param,int low,int l
             if (param>=0 && param==layer) return true;
         } else if(fn==12) {
             if(encoding.randomSkills && layer>=0 && RandomLayerSpec(param,low,level,static_cast<unsigned>(layer)))return true;
+        } else if (fn==19 && encoding.chargeSourcesOnly && stat==204 && level<0) {
+            // Source identity only: negative level operands are calculated by
+            // the game. The saved affix/property still identifies its skill.
+            // Do not expose this match to any numeric-bound calculation.
+            if(!p[2+slot] && param>=0 && encoding.skillBits>0 && encoding.skillBits<16 &&
+               encoding.skillMask==((1u<<encoding.skillBits)-1) && layer>=0 &&
+               (static_cast<unsigned>(layer)>>encoding.skillBits)==static_cast<unsigned>(param) &&
+               (static_cast<unsigned>(layer)&encoding.skillMask)>0)return true;
         } else if (fn==11 || fn==19) { // triggered/charged skill + fixed level
             if (param>=0 && level>0 && encoding.skillBits>0 && encoding.skillBits<16 &&
                 encoding.skillMask==((1u<<encoding.skillBits)-1) &&
@@ -189,7 +198,7 @@ inline bool ScalarBounds(const Rolled& affix,std::span<const Property> propertie
             const auto fn=p[0x18+slot];
             if ((fn==5 && (stat==21 || stat==23)) || (fn==6 && (stat==22 || stat==24)) ||
                 (fn==7 && (stat==17 || stat==18)) ||
-                ((!layer && (fn==1 || fn==8 || (fn==2 && stat==16)) && Read<std::uint16_t>(p,0x20+slot*2)==stat) ||
+                ((!layer && (fn==1 || fn==8 || (fn==2 && stat==16) || (fn==13 && stat==75 && !p[2+slot])) && Read<std::uint16_t>(p,0x20+slot*2)==stat) ||
                  (fn==21 && stat==83 && Read<std::uint16_t>(p,0x20+slot*2)==83 &&
                   layer>=0 && layer<8 && Read<std::uint16_t>(p,0x0a+slot*2)==layer))) ++matches;
         }
@@ -204,8 +213,9 @@ inline bool ScalarBounds(const Rolled& affix,std::span<const Property> propertie
 // functions 15/16 take the mod minimum and maximum as fixed damage endpoints.
 inline bool DamageEndpointBounds(const Rolled& affix,std::span<const Property> properties,
                                  int minStat,int maxStat,int& minLow,int& minHigh,
-                                 int& maxLow,int& maxHigh) {
+                                 int& maxLow,int& maxHigh,bool allowMissing=false) {
     if (affix.source || minStat<0 || maxStat<0) return false;
+    minLow=minHigh=maxLow=maxHigh=0;
     bool foundMin=false,foundMax=false;
     for (unsigned n=0;n<3;++n) {
         const int id=affix.row.Number(0x24+16*n);
@@ -216,6 +226,8 @@ inline bool DamageEndpointBounds(const Rolled& affix,std::span<const Property> p
         for (unsigned slot=0;slot<7;++slot) {
             const auto fn=p[0x18+slot];
             const int target=Read<std::uint16_t>(p,0x20+slot*2);
+            if(fn && (target==minStat || target==maxStat) &&
+               ((target==minStat && fn!=1 && fn!=15) || (target==maxStat && fn!=1 && fn!=16) || p[2+slot]))return false;
             if (target==minStat && (fn==1 || fn==15)) {
                 if (foundMin) return false;
                 minLow=minHigh=(fn==15?low:0);
@@ -229,7 +241,19 @@ inline bool DamageEndpointBounds(const Rolled& affix,std::span<const Property> p
             }
         }
     }
-    return foundMin && foundMax;
+    return allowMissing?(foundMin || foundMax):(foundMin && foundMax);
+}
+// Require one source candidate; matching a skill alone cannot disambiguate
+// multiple calculated-level sources. Ordinary numeric matching stays strict.
+inline std::string ChargeSourceLabel(std::span<const Rolled> rolled,std::span<const Property> properties,
+                                     int layer,LayerEncoding encoding,std::span<const PropertyGroup> groups={}) {
+    encoding.chargeSourcesOnly=true;
+    const Rolled* found=nullptr;
+    for(const auto& affix:rolled){
+        if(!affix.unconditionalScalar || !Contributes(affix.row,properties,204,layer,encoding,groups))continue;
+        if(found)return {};found=&affix;
+    }
+    return found?NamedLabel(*found):std::string{};
 }
 inline std::string Label(std::span<const Rolled> rolled,std::span<const Property> properties,int stat,int layer,
                          LayerEncoding encoding={},std::span<const PropertyGroup> groups={}) {

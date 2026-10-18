@@ -40,9 +40,9 @@ inline std::string SocketCapacity(std::string_view text,std::string_view capacit
 // Use the same localized requirement/header anchors as capacity, after capacity
 // has been inserted. This displays Required Level / levels / Max Sockets / speed.
 // Jewelry and other items can have no native numeric header at all; use the
-// upper body boundary in that case. Full-tooltip live validation is still needed.
+// caller-proven title boundary in that case; otherwise omit the line.
 inline std::string LevelInfo(std::string_view text,std::string_view label,
-    const std::vector<std::string>& anchors) {
+    const std::vector<std::string>& anchors,std::string_view title={}) {
     const auto key=RangeText::Analyze(label).key;
     if(key.empty() || anchors.empty() || anchors[0].empty())return std::string(text);
     const auto lines=RangeText::Lines(text);
@@ -56,9 +56,17 @@ inline std::string LevelInfo(std::string_view text,std::string_view label,
         for(const auto& anchor:anchors)if(!anchor.empty() &&
             (shape==anchor || shape==anchor+"#" || shape==anchor+"(?)"))return std::string(text);
     }
-    if(!result.empty() && !result.ends_with('\n'))result+='\n';
-    result+="\xee\x81\xbe" "0"+std::string(label);
-    if(text.ends_with('\n'))result+='\n';
+    // A full tooltip already contains its title. Appending here displays the
+    // metadata above it. Only insert at a caller-proven single-line title.
+    if(title.empty() || lines.empty() || lines.back()!=title)return std::string(text);
+    unsigned titles=0;for(const auto line:lines)titles+=line==title;
+    if(titles!=1)return std::string(text);
+    result.clear();
+    for(std::size_t n=0;n<lines.size();++n){
+        if(n+1==lines.size())result+="\xee\x81\xbe" "0"+std::string(label)+'\n';
+        result+=lines[n];result+='\n';
+    }
+    if(!text.ends_with('\n'))result.pop_back();
     return result;
 }
 inline std::vector<long long> Numbers(std::string_view line) {

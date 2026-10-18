@@ -355,8 +355,8 @@ Scoped wrapper execution:
    No item memory is written. Buffers and source references are call-local.
 
 Native localization keys in installed item-modifiers.json:
-ChronicleModifierRange (27979): `ÿcU(%s-%s)ÿc3`.
-ChronicleModifierRangeNoParen (28084): `ÿcU%s-%sÿc3`.
+ChronicleModifierRange (27979): `Ã¿cU(%s-%s)Ã¿c3`.
+ChronicleModifierRangeNoParen (28084): `Ã¿cU%s-%sÃ¿c3`.
 `U` is the requested light blue; `3` restores the property blue. Both single-byte
 FF and UTF-8 C3 BF color markers are supported. Existing actual-line color tags
 remain untouched and take effect after the prefix.
@@ -387,8 +387,8 @@ previously missing RANGED buffer. It contains precisely these two native spans:
 Fixed lines remain Slows Target by15%, +25% Faster Hit Recovery and +1 Druid skills.
 
 EE 81 BE is UTF-8 U+E07E. The live localization pipeline replaces the source
-`ÿc` introducer with that private-use character, directly followed by the color
-selector. It is not the UTF-8 encoding of `ÿc` (C3 BF 63), nor raw FF 63. Prior
+`Ã¿c` introducer with that private-use character, directly followed by the color
+selector. It is not the UTF-8 encoding of `Ã¿c` (C3 BF 63), nor raw FF 63. Prior
 0.3.0 test fixtures only modeled the source encodings, causing false confidence.
 
 0.3.2 recognizes all three encodings. Analyze retains the exact introducer from

@@ -1,7 +1,6 @@
-# Controller QOL 1.3.1+rev.79-beta.4
+# Controller QOL beta history
 
-- Fixed gem withdrawals with LB+X and LB+Y.
-- Restored the aiming reticle and R3 skill toggles.
-- Improved item transfer and identification compatibility with other plugins.
-
-Existing settings and controls are preserved. This is a testing beta; please report any issues.
+The tested beta.7 fixes and Unhoarder opacity compatibility are consolidated
+in **Controller QOL 1.3.1+rev.80** on main. Use the
+[latest stable release](https://github.com/Pyre-Flies/D2R-Mods/releases/latest).
+Older beta releases remain available for history and rollback.

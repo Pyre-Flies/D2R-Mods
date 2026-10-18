@@ -1,0 +1,10 @@
+{
+  "unhoarder": {
+    "repository": "Pyre-Flies/d2rl-unhoarder",
+    "tag": "v1.2.9",
+    "asset": "Unhoarder-1.2.9-Reimagined.zip",
+    "sha256": "37abf060f7a927c4de6240e7a030652a912d9a474ca7c7d0a441363e41177d8d",
+    "dllSha256": "1e102ef38b1d26c56bbe12a118d7f21ea75e9cb10f527fca70b856dc34d393ff",
+    "soundsSha256": "b9303d841ebc26b22bfb2471c199659d880eac5d456b01c6859dac35c005a8a1"
+  }
+}

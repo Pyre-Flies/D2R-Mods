@@ -38,7 +38,7 @@ int main() {
     check(result.text.find("[+25 - +50]\xff" "c3 +38% Enhanced Weapon Damage")!=std::string::npos);
     check(result.text.ends_with("+25% Faster Hit Recovery\n"));
     result=RangeText::Merge("Adds 12 to 35 Fire Damage","Adds "+range("(10-20)")+" to "+range("(30-40)")+" Fire Damage",1024);
-    check(result.annotated==1 && result.text.find("[+10 - +40]")!=std::string::npos);
+    check(result.annotated==1 && result.text.find("[+10 - +20 / +30 - +40]")!=std::string::npos);
     check(result.text.ends_with("Adds 12 to 35 Fire Damage"));
     const auto fireKey=RangeText::Analyze("Adds 12 to 35 Fire Damage").key;
     std::vector<RangeText::Label> stackedFire={{fireKey,"[P] [Smoldering] [T3] [S] [of Flame] [T4]"}};
@@ -49,7 +49,7 @@ int main() {
     check(fireLines.size()==3 && fireLines[0].find("Adds ? to ? Fire Damage")!=std::string_view::npos);
     check(fireLines[0].find("[S] [of Flame] [T4]")!=std::string_view::npos);
     check(fireLines[1].find("[P] [Smoldering] [T3]")!=std::string_view::npos);
-    check(fireLines[2].find("[+10 - +40]")!=std::string_view::npos &&
+    check(fireLines[2].find("[+10 - +20 / +30 - +40]")!=std::string_view::npos &&
           fireLines[2].find("[Combined]")!=std::string_view::npos);
     result=RangeText::Merge("Adds 12 to 35 Fire Damage","Adds 12 to 35 Fire Damage",2048,stackedFire);
     const auto noNativeRange=RangeText::Lines(result.text);
@@ -84,7 +84,7 @@ int main() {
     check(RangeText::Analyze("Adds 1-"+range("(6-8)")+" Lightning Damage").prefix=="+6 - +8");
     check(RangeText::Analyze("-"+range("(11-20)")+"% Target Defense").prefix=="-20 - -11");
     check(RangeText::Analyze("Level 5: -"+range("(11-20)")+"% Target Defense").prefix=="-20 - -11");
-    check(RangeText::DisplayBounds("+27 - +51; +63 - +95")=="+27 - +95");
+    check(RangeText::DisplayBounds("+27 - +51; +63 - +95")=="+27 - +51 / +63 - +95");
     result=RangeText::Merge("-11% Target Defense","-"+range("(11-20)")+"% Target Defense",1024);
     check(result.annotated==1 && result.text.find("[-20 - -11]")!=std::string::npos &&
           result.text.ends_with("-11% Target Defense"));
@@ -197,8 +197,8 @@ int main() {
         prefix+speed+capacity+levelLine+weaponHeader);
     check(HeaderText::LevelInfo(prefix+capacity+noLevel,levels,headerAnchors)==prefix+capacity+levelLine+noLevel);
     check(HeaderText::LevelInfo(prefix+noRequirements,levels,headerAnchors)==prefix+levelLine+noRequirements);
-    check(HeaderText::LevelInfo(prefix,levels,headerAnchors)==prefix+levelLine);
-    check(HeaderText::LevelInfo("",levels,headerAnchors)==levelLine.substr(0,levelLine.size()-1));
+    check(HeaderText::LevelInfo(prefix,levels,headerAnchors)==prefix);
+    check(HeaderText::LevelInfo("",levels,headerAnchors).empty());
     check(HeaderText::LevelInfo(existing+"\nRequired Level: 72",levels,headerAnchors)==existing+"\nRequired Level: 72");
     check(HeaderText::LevelInfo(existing,levels,{})==existing);
     const auto withLevels=HeaderText::LevelInfo(existing,levels,headerAnchors);
@@ -272,4 +272,24 @@ int main() {
     check(RangeText::ExpandOwned("Replenishes Quantity",quantity).find("[1 per 5 - 5.04s]")!=std::string::npos);
     check(RangeText::Merge("Replenishes Quantity","Replenishes Quantity",12,{quantity}).text=="Replenishes Quantity");
     std::puts("Passed Defense header/modifier separation and fixed-value retention; native header production is outside this fixture.");
+    // Crowded tooltips keep native rows and compact totals rather than
+    // reverting every annotation when a socket breakdown exceeds capacity.
+    const std::string crowded="+35 to Life\n+17 to Mana\n";
+    RangeText::Label life;life.key=RangeText::Analyze("+35 to Life").key;life.ownedTotal=35;
+    life.ownedParts={{10,20,15,"[Set]"},{20,20,20,"[Socket 1] [Ruby]"}};
+    RangeText::Label mana;mana.key=RangeText::Analyze("+17 to Mana").key;mana.text="[Set]";mana.fallbackRange="+10 - +20";
+    const std::vector<RangeText::Label> crowdedLabels{life,mana};
+    const auto roomy=RangeText::Merge(crowded,crowded,4096,crowdedLabels);
+    check(roomy.text.find("[Socket 1]")!=std::string::npos);
+    const auto compact=RangeText::Merge(crowded,crowded,160,crowdedLabels);
+    check(compact.text.size()<160 && compact.labeled==2 && compact.text.find("[Combined]")!=std::string::npos);
+    check(compact.text.find("[Socket 1]")==std::string::npos && compact.text.find("[+30 - +40]")!=std::string::npos);
+    for(std::size_t cap=crowded.size()+1;cap<=256;++cap){
+        const auto limited=RangeText::Merge(crowded,crowded,cap,crowdedLabels);
+        check(limited.text.size()<cap && limited.text.find("+35 to Life")!=std::string::npos && limited.text.find("+17 to Mana")!=std::string::npos);
+    }
+    const auto minimal=RangeText::Merge(crowded,crowded,50,crowdedLabels);
+    check(minimal.labeled>0 && minimal.text.find("[Combined]")!=std::string::npos);
+    check(RangeText::Merge(crowded,crowded,crowded.size()+1,crowdedLabels).text==crowded);
+
 }

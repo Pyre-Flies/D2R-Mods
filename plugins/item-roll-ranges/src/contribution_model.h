@@ -7,8 +7,8 @@ struct Group {Contributions::Stats values;std::vector<Affixes::Rolled> definitio
 inline bool Supported(unsigned stat) {
     switch(stat){case 0:case 1:case 2:case 3:case 7:case 9:case 16:case 17:case 18:case 19:
     case 21:case 22:case 23:case 24:case 31:case 34:case 35:case 36:case 37:case 39:case 41:case 43:case 45:
-    case 48:case 49:case 50:case 51:case 52:case 53:case 54:case 55:case 60:case 62:case 74:
-    case 78:case 79:case 80:case 85:case 86:case 89:case 93:case 96:case 99:case 102:case 149:return true;
+    case 48:case 49:case 50:case 51:case 52:case 53:case 54:case 55:case 57:case 60:case 62:case 74:case 75:
+    case 78:case 79:case 80:case 85:case 86:case 89:case 93:case 96:case 99:case 102:case 122:case 149:return true;
     default:return false;}
 }
 inline bool Bounds(const Affixes::Rolled& definition,std::span<const Affixes::Property> properties,int stat,int& low,int& high) {
@@ -19,7 +19,7 @@ inline bool Bounds(const Affixes::Rolled& definition,std::span<const Affixes::Pr
 inline std::optional<RangeText::Label> Build(std::string key,unsigned stat,unsigned shift,
     std::span<const Group> groups,std::span<const Affixes::Property> properties,bool paired=false) {
     if(!Supported(stat)||groups.empty()||groups.size()>8)return {};
-    if(paired && (stat<48||stat>54||(stat&1)))return {};
+    if(paired && stat!=21 && stat!=23 && stat!=57 && (stat<48||stat>54||(stat&1)))return {};
     RangeText::Label label;label.key=std::move(key);long long total=0,maxTotal=0;
     for(const auto& group:groups){
         const auto actual=Contributions::Normalize(Contributions::Value(group.values,stat),shift);
@@ -36,9 +36,20 @@ inline std::optional<RangeText::Label> Build(std::string key,unsigned stat,unsig
             if(paired){
                 auto plain=definition;plain.source=nullptr;
                 if(!Affixes::DamageEndpointBounds(plain,properties,static_cast<int>(stat),static_cast<int>(stat+1),
-                    part.low,part.high,part.maxLow,part.maxHigh))return {};
+                    part.low,part.high,part.maxLow,part.maxHigh,true))return {};
             } else if(!Bounds(definition,properties,static_cast<int>(stat),part.low,part.high))return {};
-            lo+=part.low;hi+=part.high;maxLo+=part.maxLow;maxHi+=part.maxHigh;parts.push_back(std::move(part));
+            lo+=part.low;hi+=part.high;maxLo+=part.maxLow;maxHi+=part.maxHigh;
+            // Unique/set/runeword specs are separate property blocks from one
+            // owned source. Keep their independent endpoint domains together.
+            auto same=paired && definition.source?std::find_if(parts.begin(),parts.end(),
+                [&](const auto& old){return old.label==part.label;}):parts.end();
+            if(same!=parts.end()){
+                const auto add=[](int a,int b)->std::optional<int>{const auto sum=std::int64_t{a}+b;
+                    return sum<INT_MIN||sum>INT_MAX?std::optional<int>{}:std::optional<int>{static_cast<int>(sum)};};
+                const auto a=add(same->low,part.low),b=add(same->high,part.high),
+                    c=add(same->maxLow,part.maxLow),d=add(same->maxHigh,part.maxHigh);
+                if(!a||!b||!c||!d)return {};same->low=*a;same->high=*b;same->maxLow=*c;same->maxHigh=*d;
+            }else parts.push_back(std::move(part));
         }
         if(parts.empty()){if(*actual||*maxActual)return {};continue;}
         if(*actual<lo||*actual>hi||(paired&&(*maxActual<maxLo||*maxActual>maxHi)))return {};

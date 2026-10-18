@@ -171,6 +171,22 @@ void TestScalingAffixAdapter(){
     check(labels.size()==1 && labels[0].fallbackRange=="100%");
     text=RangeText::Merge(proc,proc,4096,labels).text;check(text.find("[100%]")!=std::string::npos);
     check(text.find("100 - 17")==std::string::npos && text.find("level 17")!=std::string::npos);
+    const std::string procMarker="\xee\x81\xbe";
+    const std::string nativeProc="100% Chance to cast level "+procMarker+"U(12-17)"+procMarker+"3 Chilling Armor when you Level-Up";
+    text=RangeText::Merge(proc,nativeProc,4096,labels).text;
+    check(text.find("[100%]")!=std::string::npos && text.find("12 - 17")==std::string::npos);
+    // The reported death-proc uses a different stat and a native skill-level range.
+    f.Property(0,11,197);put(f.rows[0].bytes.data(),0x28,48);put(f.rows[0].bytes.data(),0x30,48);
+    f.own={{(std::uint64_t{197}<<32)|3120u,100}};f.total=f.own;f.Bind();
+    const char* nova="100% Chance to cast level 48 Nova when you Die";
+    const std::vector<CapturedLine> novaLines={{RangeText::Analyze(nova).key,197,3120,false}};
+    const auto novaLabels=AffixLabels(f.host.data(),novaLines,nova);
+    const std::string nativeNova="100% Chance to cast level "+procMarker+"U(36-48)"+procMarker+"3 Nova when you Die";
+    text=RangeText::Merge(nova,nativeNova,4096,novaLabels).text;
+    check(text.find("[100%]")!=std::string::npos && text.find("36 - 48")==std::string::npos && text.find("level 48 Nova")!=std::string::npos);
+    f.Property(0,11,199);put(f.rows[0].bytes.data(),0x28,60);put(f.rows[0].bytes.data(),0x30,17);
+    f.own={{(std::uint64_t{199}<<32)|3857u,100}};f.total=f.own;f.Bind();
+
     f.own[0].value=99;f.total=f.own;f.Bind();check(AffixLabels(f.host.data(),procLines,proc)[0].fallbackRange.empty());
     f.own[0].value=100;f.total=f.own;f.Bind();
     check(AffixLabels(f.host.data(),procLines,"100% Chance to cast level 18 Chilling Armor when you Level-Up")[0].fallbackRange.empty());
@@ -249,9 +265,19 @@ void TestLevelHeaderAdapter(){
     check(AnnotateLevelHeader(prefix+noLevel,f.Data(),row.data())==prefix+label+'\n'+noLevel);
     const std::string belt="Defense: 2 \xee\x81\xbe" "U(Base: 2 - 2)\xee\x81\xbe" "3";
     check(AnnotateLevelHeader(belt,f.Data(),row.data())==label+'\n'+belt);
-    check(AnnotateLevelHeader("+5 to Life",f.Data(),row.data())=="+5 to Life\n"+label);
-    check(AnnotateLevelHeader("+5 to Life\n",f.Data(),row.data())=="+5 to Life\n"+label+'\n');
-    check(AnnotateLevelHeader("",f.Data(),row.data())==label);
+    check(AnnotateLevelHeader("+5 to Life",f.Data(),row.data())=="+5 to Life");
+    check(AnnotateLevelHeader("+5 to Life\n",f.Data(),row.data())=="+5 to Life\n");
+    check(AnnotateLevelHeader("",f.Data(),row.data()).empty());
+    put(f.Data(),0,4u);row[LevelProfile::QualityLevelOffset]=1;
+    const std::string amulet="3% Chance to cast level 3 Inner Sight on striking\n\xee\x81\xbe" "3Amulet of Inner Sight (99)";
+    const std::string expected="3% Chance to cast level 3 Inner Sight on striking\n\xee\x81\xbe" "0(Ilvl: 99, Qlvl: 1)\n\xee\x81\xbe" "3Amulet of Inner Sight (99)";
+    check(AnnotateLevelHeader(amulet,f.Data(),row.data())==expected);
+    check(AnnotateLevelHeader(amulet+'\n',f.Data(),row.data())==expected+'\n');
+    check(AnnotateLevelHeader(expected,f.Data(),row.data())==expected);
+    put(f.Data(),0,6u);check(AnnotateLevelHeader(amulet,f.Data(),row.data())==amulet);
+    put(f.Data(),0,4u);put(f.Data(),LevelProfile::ItemLevelOffset,98);
+    check(AnnotateLevelHeader(amulet,f.Data(),row.data())==amulet);
+    put(f.Data(),0,6u);put(f.Data(),LevelProfile::ItemLevelOffset,99);row[LevelProfile::QualityLevelOffset]=20;
     const auto ambiguous=actual+"\nRequired Level: 63";
     check(AnnotateLevelHeader(ambiguous,f.Data(),row.data())==ambiguous);
     originalAssign=RecordHeader;NativeText receiver{actual.data(),actual.size()};
@@ -569,5 +595,72 @@ void TestLiveUniqueCapture(const char* path){
     }
     check(rendered.find("[+5 - +10]")!=std::string::npos && rendered.find("[U]")!=std::string::npos && rendered.find("(?)")==std::string::npos);
     propertySourcesReady.store(false);std::puts("Current loaded unique/group/property/stat metadata and owned stat replay: selected Attributes5..10 pool renders correctly.");
+}
+}
+
+namespace {
+void TestOwnedDurabilityPhysical(){
+    ContributionFixture f;
+    f.Property(0,13,75);f.Roll(0,0,25,25,"Durable");f.statRows[75*0x144+0x50]=13;
+    SourceGroups sources;sources.groups.push_back({f.Stats({{75,25}}),{{1,f.rows[0],true,1}},""});
+    sources.capture.total=f.Stats({{73,40}}); // Capacity is not the percent.
+    auto render=[&](int stat,const char* text){
+        std::vector<RangeText::Label> labels;
+        const std::array<CapturedLine,1> observed={CapturedLine{RangeText::Analyze(text).key,stat,0,false}};
+        AddLinkedSourceLabels(sources,observed,text,f.props,f.statRows.data(),400,labels);
+        return RangeText::Merge(text,text,4096,labels).text;
+    };
+    check(render(75,"Increase Maximum Durability 25%").find("[25%]")!=std::string::npos);
+    check(render(75,"Increase Maximum Durability 26%").find("[25%]")==std::string::npos);
+    f.props[0].bytes[2]=1;
+    check(render(75,"Increase Maximum Durability 25%").find("[25%]")==std::string::npos);
+    f.props[0].bytes[2]=0;f.statRows[75*0x144+0x50]=12;
+    check(render(75,"Increase Maximum Durability 25%").find("[25%]")==std::string::npos);
+    f.Property(0,15,21);f.props[0].bytes[0x19]=16;put(f.props[0].bytes.data(),0x22,std::uint16_t{22});
+    f.Roll(0,0,5,10,"Damage");sources.groups[0]={f.Stats({{21,5},{22,10}}),{{1,f.rows[0],true,1}},""};
+    sources.capture.total=f.Stats({{21,8},{22,29}}); // Base weapon damage must not leak into the modifier.
+    check(render(21,"Adds 5-10 Weapon Damage").find("[5 / 10]")!=std::string::npos);
+    check(render(22,"Adds 5-10 Weapon Damage").find("[5 / 10]")!=std::string::npos);
+    check(render(21,"Adds 8-29 Weapon Damage").find("[5 / 10]")==std::string::npos);
+    f.props[0].bytes[0x19]=25;
+    check(render(21,"Adds 5-10 Weapon Damage").find("[5 / 10]")==std::string::npos);
+    f.props[0].bytes[0x19]=16;f.props[0].bytes[2]=1;
+    check(render(21,"Adds 5-10 Weapon Damage").find("[5 / 10]")==std::string::npos);
+    std::puts("Verified owned durability and physical endpoint rendering, base exclusion, mismatches and operation guards.");
+}
+}
+
+namespace {
+void TestChargeSourceOnly(){
+    ContributionFixture f;f.Property(0,19,204);f.Roll(0,0,-60,-10,"of Miasma Bolt");
+    put(f.rows[0].bytes.data(),0x28,395);put(fakeTables,0x14d0,6u);put(fakeTables,0x14d4,63u);
+    const int layer=(395<<6)|11;
+    f.own={{(std::uint64_t{204}<<32)|static_cast<unsigned>(layer),36486}};f.total=f.own;f.Bind();
+    const char* actual="Level 11 Miasma Bolt (134/142 Charges)";
+    const auto key=RangeText::Analyze(actual).key;
+    const std::vector<CapturedLine> observed={CapturedLine{key,204,layer,false}};
+    const auto labels=AffixLabels(f.host.data(),observed,actual);
+    const auto rendered=RangeText::Merge(actual,actual,4096,labels);
+    check(rendered.text.find("[S] [of Miasma Bolt] [T1]")!=std::string::npos);
+    check(rendered.text.starts_with(actual) && rendered.annotated==0 && rendered.text.find('?')==std::string::npos);
+    const std::string marker="\xee\x81\xbe";
+    const std::string native="Level "+marker+"U(1-20)"+marker+"3 Miasma Bolt (134/142 Charges)";
+    const auto suppressed=RangeText::Merge(actual,native,4096,labels);
+    check(suppressed.text==rendered.text && suppressed.annotated==0);
+    check(RangeText::Merge(actual,native,10,labels).text==actual);
+    const Affixes::Rolled affix{1,f.rows[0],false,2};const Affixes::LayerEncoding encoding{6,63};
+    check(!Affixes::Contributes(affix.row,f.props,204,layer,encoding)); // Numeric matching not relaxed.
+    check(Affixes::ChargeSourceLabel({&affix,1},f.props,layer,encoding)=="[S] [of Miasma Bolt] [T2]");
+    check(Affixes::ChargeSourceLabel({&affix,1},f.props,(396<<6)|11,encoding).empty());
+    check(Affixes::ChargeSourceLabel({&affix,1},f.props,395<<6,encoding).empty());
+    check(Affixes::ChargeSourceLabel({&affix,1},f.props,layer,{6,31}).empty());
+    const std::array duplicate{affix,affix};check(Affixes::ChargeSourceLabel(duplicate,f.props,layer,encoding).empty());
+    auto fixed=affix;put(fixed.row.bytes.data(),0x30,11);
+    check(!Affixes::ChargeSourceLabel({&fixed,1},f.props,layer,encoding).empty());
+    check(Affixes::ChargeSourceLabel({&fixed,1},f.props,(395<<6)|10,encoding).empty());
+    for(const char* source:{"[U]","[Set]","[RW]"}){auto named=affix;named.source=source;named.tier=0;
+        check(Affixes::ChargeSourceLabel({&named,1},f.props,layer,encoding)==source);}
+    f.props[0].bytes[2]=1;check(Affixes::ChargeSourceLabel({&affix,1},f.props,layer,encoding).empty());
+    std::puts("Verified charge source-only labels, calculated/fixed levels, unchanged remaining/capacity, ambiguity and native-range suppression.");
 }
 }

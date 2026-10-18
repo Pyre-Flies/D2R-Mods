@@ -1,5 +1,85 @@
 # Item Roll Ranges changelog
 
+## 1.3.1+rev.55 - 2026-10-18
+
+- Keep annotations on crowded tooltips such as Tal Rasha's Horadric Crest with four facets. Collapse detailed source rows to combined totals when space is tight; retain fitting source labels if totals still exceed the native limit.
+- Preserve every native property line and value. Includes the existing controller-query and poison fixes.
+- Captured-helmet replay and automated checks verify the original capacity limit. Live display confirmation is pending; enchantment/corruption attribution gaps remain separate.
+
+## 1.3.1+rev.54 - 2026-10-17
+
+- Show poison weapon-damage bounds with their set/unique/affix source when a single source and fixed duration can be verified, including Cleglaw's Claw. Preserve the native damage and duration text.
+- Include the rev.53 controller-query forwarding repair.
+- Rev.52 set transitions, socket overlap and weapon-swap checks were reported good by the user; poison display confirmation is pending.
+
+## 1.3.1+rev.53-beta.1 - 2026-10-17
+
+- Preserve the original tooltip caller when forwarding controller queries so
+  Controller QOL can recognize and remap RT/R2 to R1/RB again.
+- Retain always-show ranges, its saved setting and command, native query return
+  bits, and one predecessor call. Unrelated controller queries pass through.
+- Add a production-adapter regression composing both plugins; the old wrapper
+  fails it. Automated validation is recorded in
+  `docs/R1-QOL-COEXISTENCE-2026-10-17.md`; live validation is pending.
+
+## 1.3.1+rev.52 - 2026-10-17
+
+- Keep permanent set-item roll ranges when additional set pieces are equipped. Activated bonuses remain in their native presentation.
+- Stop later set-bonus formatter passes from repeatedly rewriting earlier range/source labels.
+- Automated regressions cover activated set states, overlapping All Skills, repeated appends, removal, and malformed-list refusal. Live Sigon equip-transition confirmation is pending.
+
+## 1.3.1+rev.51 - 2026-10-17
+
+- Place level details below a verified single-line title when an item has no
+  numeric requirement/header. Omit the unanchored line for unrecognized title
+  layouts instead of displaying it above the name.
+
+- Prefer a verified triggered-skill chance prefix over native bounds for a
+  different operand, such as Nova's skill level. Automated regressions pass;
+  live validation is pending.
+
+## 1.3.1+rev.50 - 2026-10-17
+
+- Label charged-skill sources, including affixes with calculated skill levels.
+  Show the affix type, name and tier without numeric ranges or missing-range marks.
+- Preserve the displayed skill level and remaining/maximum charges. Ambiguous
+  source matches are omitted. Live rev.50 validation is pending.
+
+## 1.3.1+rev.49 - 2026-10-17
+
+- Show fixed physical weapon damage endpoints and maximum-durability percent
+  bounds from verified owned modifiers, including Gemini Coat and Xanadu Dreams.
+- Validate modifier values independently of base weapon damage and final
+  durability capacity. Unsupported operations and mismatched values remain omitted.
+- Captured-item replay and automated regressions cover these changes; live
+  validation passed for Gemini Coat and Xanadu Dreams.
+
+## 1.3.1+rev.48 - 2026-10-17
+
+- Restore independent modifier ranges when a source also grants indestructible
+  or ethereal properties. Keep affected base/durability values on their existing
+  native paths; unknown operations and replacement definitions remain guarded.
+- Automated: all nine suites, three captured-item replays, 1,287 elemental
+  samples and 2,258 permanent set scalar samples pass. This includes all 38
+  previously refused samples across eight set definitions. Live rev.48 pending.
+
+## 1.3.1+rev.47 - 2026-10-16
+
+- Keep independent damage minimum/maximum roll intervals separate, including
+  unique, set and runeword properties stored in separate definition blocks.
+- Stop unrelated scalar/base and nonnumeric lines from suppressing elemental
+  line recovery. Fixed cold damage retains its source and endpoint bounds.
+- Recover permanent set-item rolls directly from active definitions when no
+  native range clone is available; identify those properties with `[Set]`.
+  Conditional set bonuses remain outside numeric attribution.
+- Label the qualified built-in blunt-weapon undead bonus `[Base]`, including
+  separate contributions when rolled undead damage overlaps it.
+- Correct the earlier text test that expected two intervals to be flattened.
+  Captured-item replays and generic native-text/model regressions are automated;
+  the new build still requires visible in-game validation. No new hook, slot,
+  input consumption or relaxed compatibility guard is introduced.
+
+
 ## Documentation
 
 - Make the plugin README the complete user reference for commands, settings
@@ -237,7 +317,7 @@ Those candidate versions were not published separately.
   custom low-quality bases. Normal and superior behavior stays intact:
   durability-only superior armor varies; generated ED uses a fixed max+1 base.
 - Read-only inventory controls confirm normal121, crude87 and durability-only
-  superior118 with active Serpentskin bounds111–126. Regression tests cover
+  superior118 with active Serpentskin bounds111ï¿½126. Regression tests cover
   these shapes, refusals and fixed modifier formatting; all seven suites pass.
   Visual confirmation for revision29 remains pending; no release is published.
 - Extend the same quality check to weapon Base headers. Live Long Sword
@@ -258,7 +338,7 @@ Those candidate versions were not published separately.
   owners, native header colors, ethereal generation, excluding socket-only ED,
   guard mismatch, bad parent/state and cyclic insertion refusal. Live read-only
   capture confirms the failure mechanism and values; the user confirms
-  Defense246 with Base127–127 and the preserved Life/socket breakdown.
+  Defense246 with Base127ï¿½127 and the preserved Life/socket breakdown.
 
 ## [1.3.1+rev.27] - 2026-10-12 (local candidate)
 

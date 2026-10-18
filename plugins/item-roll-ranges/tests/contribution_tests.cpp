@@ -59,6 +59,27 @@ void TestSamples(){
     auto pairedPhysical=p;pairedPhysical[2].bytes[0x19]=5;
     check(!ContributionModel::Build("max",22,0,std::vector<ContributionModel::Group>{{stats(22,11),{roll(2,10,15)},""}},pairedPhysical));
 }
+
+void TestSeparateEndpointSources(){
+    for(unsigned minimum:{48u,50u,52u,54u})for(const char* source:{"[U]","[Set]","[RW]"}){
+        std::vector<Affixes::Property> props={property(1,minimum),property(1,minimum+1)};
+        auto low=roll(0,10,12,source),high=roll(1,15,25,source);low.uniqueScalar=high.uniqueScalar=true;
+        Contributions::Stats values={{std::uint64_t{minimum}<<32,12},{std::uint64_t{minimum+1}<<32,15}};
+        const std::string actual="Adds 12-15 Element Damage";
+        std::vector<ContributionModel::Group> groups={{values,{low,high},""}};
+        auto pair=ContributionModel::Build(RangeText::Analyze(actual).key,minimum,0,groups,props,true);
+        check(pair && pair->ownedParts.size()==1);
+        check(RangeText::ExpandOwned(actual,*pair).find("[10 - 12 / 15 - 25]")!=std::string::npos);
+        groups[0].values[1].value=26;check(!ContributionModel::Build("pair",minimum,0,groups,props,true));
+        groups[0].values=values;groups[0].definitions[0].unconditionalScalar=false;
+        check(!ContributionModel::Build("pair",minimum,0,groups,props,true));
+        groups[0].definitions[0].unconditionalScalar=true;props[0].bytes[2]=1;
+        check(!ContributionModel::Build("pair",minimum,0,groups,props,true));
+        props[0].bytes[2]=0;props[0].bytes[0x18]=3;
+        check(!ContributionModel::Build("pair",minimum,0,groups,props,true));
+    }
+}
+
 void TestDefinitions(){
     std::array<unsigned char,448*3> items{};std::array<unsigned char,232*4> types{};
     put(items.data(),0x12e,std::int16_t{2});put(items.data(),0x130,std::int16_t{-1});put(items.data()+448,0x80,ContributionDefinitions::Code("ka3 "));
@@ -160,6 +181,6 @@ void TestActiveTables(const std::filesystem::path& directory){
     check(elWeapon->at(1).property==15&&elWeapon->at(1).low==50&&elArmor->at(1).property==0&&elArmor->at(1).low==15);
     std::puts("Local active compiled-table replay: host weapon/armor contexts, completed roll67 ED50/LL8 winner, and El contexts agree.");
 }
-int main(int argc,char** argv){TestSamples();TestDefinitions();TestCapture();
+int main(int argc,char** argv){TestSamples();TestSeparateEndpointSources();TestDefinitions();TestCapture();
     if(argc==2)TestActiveTables(argv[1]);
     std::puts("Owned IAS/Life/flat-max/ED/socket-only/fire sources, corruption outcomes and atomic refusals pass.");}

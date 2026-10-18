@@ -25,6 +25,15 @@ struct Model {
     std::vector<std::string> names;
     bool complete{true};
 };
+// Known implicit item operations do not invalidate unrelated scalar equations.
+// Conservatively exclude their base/durability domain; those values retain the
+// existing native/header paths rather than being solved as additive affixes.
+inline bool BlockImplicit(unsigned fn,unsigned stat,unsigned replacement,std::set<unsigned>& blocked){
+    if(stat!=65535 || replacement || (fn!=20 && fn!=23))return false;
+    for(unsigned affected:{72u,73u,152u})blocked.insert(affected);
+    if(fn==23)for(unsigned affected:{16u,21u,22u,23u,24u,91u,92u})blocked.insert(affected);
+    return true;
+}
 inline bool BlockPossible(std::uint32_t id,std::span<const Affixes::Property> properties,
     std::span<const Affixes::PropertyGroup> groups,std::set<unsigned>& blocked,unsigned depth=0){
     if(id==UINT32_MAX)return true;if(depth>4)return false;
@@ -32,7 +41,8 @@ inline bool BlockPossible(std::uint32_t id,std::span<const Affixes::Property> pr
         if(id>=properties.size())return false;const auto& row=properties[id].bytes;
         for(unsigned slot=0;slot<7;++slot){const unsigned fn=row[0x18+slot];if(!fn)continue;
             const unsigned stat=Affixes::Read<std::uint16_t>(row.data(),0x20+slot*2);if(stat<4096)blocked.insert(stat);
-            if(stat>=4096 && fn!=5 && fn!=6 && fn!=7 && fn!=20 && fn!=23)return false;
+            if(BlockImplicit(fn,stat,row[2+slot],blocked))continue;
+            if(stat>=4096 && fn!=5 && fn!=6 && fn!=7)return false;
             if(fn==7){blocked.insert(17);blocked.insert(18);}if(fn==5){blocked.insert(21);blocked.insert(23);}if(fn==6){blocked.insert(22);blocked.insert(24);}}
         return true;
     }
@@ -72,6 +82,7 @@ inline Model Compile(std::span<const Affixes::Rolled> sources,std::span<const Af
                 if(fn==7){affected.insert(17);affected.insert(18);}
                 if(fn==5){affected.insert(21);affected.insert(23);}
                 if(fn==6){affected.insert(22);affected.insert(24);}
+                if(BlockImplicit(fn,stat,row[2+slot],affected)){valid=false;previous.reset();continue;}
                 // Compiled uint16 property id, then seven replacement flags.
                 if(stat>=4096 || row[2+slot]){if(stat>=4096 && fn!=5 && fn!=6 && fn!=7)out.complete=false;valid=false;previous.reset();continue;}
                 if(fn==1 || fn==8 || fn==17){

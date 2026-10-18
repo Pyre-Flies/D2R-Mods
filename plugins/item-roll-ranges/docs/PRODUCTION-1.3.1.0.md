@@ -1,4 +1,4 @@
-# Production snapshot 1.3.1.0 — 2026-09-24
+# Production snapshot 1.3.1.0 â€” 2026-09-24
 
 Baseline: user-verified 0.4.8. Version scheme: 1.3.1 matches the targeted D2RLoader release; the final component is the independent plugin revision, starting at 0. This is not a promise of compatibility with arbitrary future loader binaries. Existing provider fingerprints remain enforced.
 

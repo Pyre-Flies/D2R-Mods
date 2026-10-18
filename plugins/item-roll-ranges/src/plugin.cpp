@@ -42,6 +42,7 @@
 #include <utility>
 
 extern "C" void HeaderBuilderEntry();
+extern "C" std::uint64_t __fastcall AlwaysButtonAdapter(void*,unsigned,unsigned) noexcept;
 
 namespace {
 using PanelFn = bool(__fastcall*)(int);
@@ -51,6 +52,7 @@ std::atomic<bool> loaded{false};
 std::atomic<bool> contributionsReady{false};
 std::atomic<bool> scalingReady{false};
 std::atomic<bool> propertySourcesReady{false};
+std::atomic<bool> poisonDisplayReady{false};
 std::atomic<bool> randomSkillsReady{false};
 std::atomic<bool> quantityRateReady{false};
 std::atomic<bool> alwaysReady{false};
@@ -109,10 +111,19 @@ __declspec(noinline) std::uint64_t __fastcall AlwaysModifierAdapter() noexcept {
     return RollRanges::AlwaysKeyboard(value,tooltipCaller,
         Allowed(),alwaysReady.load(std::memory_order_acquire) && alwaysEnabled.load());
 }
-__declspec(noinline) std::uint64_t __fastcall AlwaysButtonAdapter(void* device,unsigned user,unsigned mask) noexcept {
-    const auto value=originalButtons(device,user,mask);
-    return RollRanges::AlwaysController(value,reinterpret_cast<std::uintptr_t>(_ReturnAddress())==buttonReturn,
-        Allowed(),alwaysReady.load(std::memory_order_acquire) && alwaysEnabled.load(),device!=nullptr,user,mask);
+__declspec(noinline) std::uint64_t __fastcall AlwaysForcedButtons(void* device,unsigned user,unsigned mask) noexcept {
+    // The selector already qualified this query. Preserve the predecessor call
+    // and every other return bit; a setting change applies to the next query.
+    return originalButtons(device,user,mask)|1u;
+}
+extern "C" ButtonQueryFn __fastcall SelectAlwaysButtonTarget(void* device,unsigned user,unsigned mask,
+    std::uintptr_t caller) noexcept {
+    const bool enabled=alwaysReady.load(std::memory_order_acquire) && alwaysEnabled.load();
+    const bool force=RollRanges::AlwaysController(0,caller==buttonReturn,
+        enabled && Allowed(),enabled,device!=nullptr,user,mask)!=0;
+    // The assembly entry tail-forwards the unmodified arguments and original
+    // return address. QOL can still qualify its exact Core tooltip caller.
+    return force?&AlwaysForcedButtons:originalButtons;
 }
 bool TooltipSelectorScope(const void* stack,std::uintptr_t caller,bool unique) noexcept {
     if (!coreBase || !Readable(stack,0x138)) return false;
@@ -225,10 +236,14 @@ bool AddUnobservedCompositeIdentities(std::vector<CapturedLine>& lines,std::stri
     std::span<const Affixes::Rolled> rolled,std::span<const Affixes::Property> properties,
     Affixes::LayerEncoding encoding,std::span<const Affixes::PropertyGroup> groups,
     const unsigned char* itemStats,std::size_t itemStatCount) {
+    const bool poisonPossible=std::any_of(rolled.begin(),rolled.end(),[&](const auto& d){return Affixes::Contributes(d.row,properties,57,0,encoding,groups);});
     std::vector<std::string> candidates;
     for (const auto text:RangeText::Lines(actual)) {
         const auto key=RangeText::Analyze(text).key;
-        if (key.empty()) continue;
+        // Poison adds a duration token. Other damage families retain their
+        // two-number matching rule; unrelated scalar lines stay excluded.
+        const auto numbers=std::count(key.begin(),key.end(),'#');
+        if (numbers!=2 && !(numbers==3 && poisonPossible)) continue;
         bool observed=false;
         for (const auto& line:lines) if (line.key==key) { observed=true; break; }
         if (!observed) candidates.push_back(key);
@@ -274,6 +289,8 @@ bool AddUnobservedCompositeIdentities(std::vector<CapturedLine>& lines,std::stri
     std::sort(sources.begin(),sources.end(),[](const FamilySource& a,const FamilySource& b) {
         return a.priority<b.priority;
     });
+    for(std::size_t n=0;n<sources.size();++n)
+        if(std::count(candidates[n].begin(),candidates[n].end(),'#')==3 && sources[n].stat!=57)return false;
     for (std::size_t n=1;n<sources.size();++n)
         if (sources[n-1].priority==sources[n].priority) return false;
     // Core appends lower display priorities first; D2R lays those buffer lines
@@ -593,6 +610,19 @@ std::vector<RangeText::Label> AffixLabels(void* source,const std::vector<Capture
                     AddUniqueSource(recordRow+0x98+n*16,uniqueGroups,groups.size(),properties.size(),rolled);
             }
         }
+        if (quality==5) {
+            const int record=Affixes::Read<int>(data,0x34);
+            const auto* sets=Affixes::Read<const unsigned char*>(tables,0x13a8);
+            const auto count=Affixes::Read<std::uint64_t>(tables,0x13b0);
+            if (record>=0 && count<=32768 && static_cast<std::uint64_t>(record)<count &&
+                Readable(sets,count*0x1cc) && (groupCount==0 || !groups.empty())) {
+                // Core's qualified set selector copies these nine permanent
+                // properties. Conditional set bonuses start at +0x128.
+                const auto* recordRow=sets+static_cast<std::size_t>(record)*0x1cc;
+                for(unsigned n=0;n<9;++n)AddUniqueSource(recordRow+0x98+n*16,
+                    reinterpret_cast<const unsigned char*>(groupRows),groups.size(),properties.size(),rolled,0,true,"[Set]");
+            }
+        }
         const Affixes::LayerEncoding encoding{Affixes::Read<unsigned>(tables,0x14d0),
                                               Affixes::Read<unsigned>(tables,0x14d4)};
         const auto* itemStats=Affixes::Read<const unsigned char*>(tables,0x1258);
@@ -616,6 +646,13 @@ std::vector<RangeText::Label> AffixLabels(void* source,const std::vector<Capture
         std::vector<RangeText::Label> labels;
         const auto levelCap=ActiveLevelCap(tables);
         for (const auto& line:observed) {
+            if(line.stat==204 && !line.grouped){
+                if(std::none_of(labels.begin(),labels.end(),[&](const auto& old){return old.key==line.key;})){
+                    RangeText::Label label{line.key,Affixes::ChargeSourceLabel(rolled,properties,line.layer,encoding,groups)};
+                    label.sourceOnly=true;labels.push_back(std::move(label));
+                }
+                continue;
+            }
             std::string text;
             if (line.grouped) {
                 if (!line.group || !itemStatsValid) continue;
@@ -677,7 +714,12 @@ std::vector<RangeText::Label> AffixLabels(void* source,const std::vector<Capture
                         if(!range.empty()){label.fallbackRange=range;label.replaceNativeRange=true;}
                         ScalingParts(line,rolled,properties,itemStats+static_cast<std::size_t>(line.stat)*0x144,*levelCap,actual,label);
                     }
-                    if(label.fallbackRange.empty())label.fallbackRange=FixedProcRange(line,rolled,properties,encoding,*scalingSnapshot,actual);
+                    if(label.fallbackRange.empty()){
+                        label.fallbackRange=FixedProcRange(line,rolled,properties,encoding,*scalingSnapshot,actual);
+                        // Native ranges can describe the proc level rather than
+                        // its chance. A verified chance prefix takes precedence.
+                        if(!label.fallbackRange.empty())label.replaceNativeRange=true;
+                    }
                 }
                 bool duplicate=false;
                 for (const auto& previous:labels) if (previous.key==label.key) {
@@ -710,11 +752,15 @@ std::vector<RangeText::Label> AffixLabels(void* source,const std::vector<Capture
             const auto sources=GatherSourceGroups(source,rolled,{rows,static_cast<std::size_t>(rowCount)},prefixIndex,autoIndex,properties);
             if(sources)AddLinkedSourceLabels(*sources,observed,actual,properties,itemStats,static_cast<std::size_t>(itemStatCount),labels,groups);
             else if(scalingSnapshot && scalingSnapshot->sockets.empty() && !(scalingSnapshot->identity.flags&0x04000000u) &&
-                    (quality==4 || quality==6 || quality==7) && !HasRecipeExtras(*scalingSnapshot)){
-                SourceGroups own;own.capture=*scalingSnapshot;own.groups.push_back({own.capture.own,rolled,""});
+                    (quality==4 || quality==5 || quality==6 || quality==7) && !HasRecipeExtras(*scalingSnapshot)){
+                SourceGroups own;own.capture=*scalingSnapshot;PermanentSetTotals(own.capture);own.groups.push_back({own.capture.own,rolled,""});
                 AddLinkedSourceLabels(own,observed,actual,properties,itemStats,static_cast<std::size_t>(itemStatCount),labels,groups);
             }
         }
+        if(scalingSnapshot && itemStatsValid && propertySourcesReady.load())
+            AddIntrinsicUndeadLabel(source,tables,*scalingSnapshot,rolled,
+                {rows,static_cast<std::size_t>(rowCount)},prefixIndex,autoIndex,properties,
+                itemStats,static_cast<std::size_t>(itemStatCount),actual,labels);
         return labels;
     } catch (...) { return {}; }
 }
@@ -908,7 +954,22 @@ std::string AnnotateLevelHeader(std::string_view text,const unsigned char* data,
     for(const auto* name:{"ItemStats1p","ItemStats1e","ItemStats1f","ItemStats1d","ItemStats1i",
                          "ItemStats1h","ItemStats1l","ItemStats1m","strItemStatThrowDamageRange"})
         anchors.push_back(SocketHeaderAnchorKey(name));
-    return HeaderText::LevelInfo(text,label,anchors);
+    // The qualified builder's full tooltip is bottom-to-top. Normal/magic
+    // titles occupy one line; verify Core's exact item-level suffix before
+    // using that line when no numeric header exists. Do not guess multi-line
+    // rare/set/unique title boundaries or titles without the suffix.
+    std::string_view title;
+    const auto quality=Affixes::Read<unsigned>(data,0);
+    const auto lines=RangeText::Lines(text);
+    if(quality>=1 && quality<=4 && !lines.empty()){
+        const auto candidate=lines.back();std::string plain;
+        for(std::size_t n=0;n<candidate.size();){char color{};const auto token=RangeText::Color(candidate,n,color);
+            if(token)n+=token;else plain+=candidate[n++];}
+        const auto suffix=" ("+std::to_string(itemLevel)+")";
+        const auto numbers=HeaderText::Numbers(candidate);
+        if(plain.size()>suffix.size() && plain.ends_with(suffix) && numbers.size()==1 && numbers[0]==itemLevel)title=candidate;
+    }
+    return HeaderText::LevelInfo(text,label,anchors,title);
 }
 extern "C" void ObserveHeaderRequest(std::uint64_t buttons,std::uintptr_t caller,const unsigned char* frame) noexcept {
     fixedHeaderRequested=false;
@@ -1054,7 +1115,7 @@ void TraceProperties(unsigned annotated,unsigned unmatched,const char* actual,co
     try { seen.emplace_back(actual); } catch (...) { return; }
     char message[14000]{};
     const int n=std::snprintf(message,sizeof(message),
-        "v1.3.1+rev.46 properties annotated=%u unmatched=%u labeled=%u captured=%u\r\nACTUAL: %.4095s\r\nRANGED: %.4095s\r\nRESULT: %.4095s\r\n",annotated,unmatched,labeled,captured,actual,ranged,result);
+        "v1.3.1+rev.55 properties annotated=%u unmatched=%u labeled=%u captured=%u\r\nACTUAL: %.4095s\r\nRANGED: %.4095s\r\nRESULT: %.4095s\r\n",annotated,unmatched,labeled,captured,actual,ranged,result);
     if (n<=0 || n>=static_cast<int>(sizeof(message))) return;
     HANDLE file=CreateFileW(diagnosticPath,FILE_APPEND_DATA,FILE_SHARE_READ|FILE_SHARE_WRITE,nullptr,OPEN_ALWAYS,FILE_ATTRIBUTE_NORMAL,nullptr);
     if (file==INVALID_HANDLE_VALUE) return;
@@ -1183,10 +1244,22 @@ std::uint64_t RenderProperties(void* source,void* item,char* output,int capacity
         if (actualLength==cap || rangedLength==cap) {
             std::memcpy(output,actualLength<cap?actual.data():ranged.data(),cap); output[cap-1]=0; return result;
         }
+        // Native callers append several passes to one tooltip. Never parse an
+        // earlier pass's generated range/source markup a second time.
+        if(actualLength<initial || rangedLength<initial ||
+           std::memcmp(actual.data(),output,initial) || std::memcmp(ranged.data(),output,initial)) {
+            std::memcpy(output,actual.data(),actualLength+1);return result;
+        }
+        // Native state selectors 165..170 are activated set properties, not
+        // the nine permanent SetItems definitions used by AffixLabels.
+        const auto* sourceData=Readable(source,0x18)?Affixes::Read<const unsigned char*>(static_cast<const unsigned char*>(source),0x10):nullptr;
+        const bool setBonus=Readable(sourceData,4) && Affixes::Read<unsigned>(sourceData,0)==5 &&
+            ((state1>=165 && state1<=170)||(state2>=165 && state2<=170));
+        if(setBonus){std::memcpy(output,actual.data(),actualLength+1);return result;}
         const auto propertyActual=std::string_view(actual.data()+initial,actualLength-initial);
         const auto sourceLabels=AffixLabels(source,captured,propertyActual);
-        auto merged=RangeText::Merge({actual.data(),actualLength},{ranged.data(),rangedLength},cap,sourceLabels);
-        std::memcpy(output,merged.text.c_str(),merged.text.size()+1);
+        auto merged=RangeText::Merge(propertyActual,{ranged.data()+initial,rangedLength-initial},cap-initial,sourceLabels);
+        std::memcpy(output+initial,merged.text.c_str(),merged.text.size()+1);
         TraceProperties(merged.annotated,merged.unmatched,actual.data(),output,ranged.data(),merged.labeled,
             static_cast<unsigned>(captured.size()),&captured,&sourceLabels);
         return result;
@@ -1360,6 +1433,7 @@ void Restore() noexcept {
     contributionsReady.store(false);
     scalingReady.store(false);
     propertySourcesReady.store(false);
+    poisonDisplayReady.store(false);
     randomSkillsReady.store(false);
     quantityRateReady.store(false);
     if (uniqueRowSlot) Exchange(uniqueRowSlot,reinterpret_cast<void*>(&UniqueVisibilityAdapter),reinterpret_cast<void*>(originalUniqueRow));
@@ -1415,6 +1489,10 @@ bool Install(const D2RL::PluginContext* context) noexcept {
     propertySourcesReady.store(socketSourcesReady && std::all_of(std::begin(PropertySourceProfile::Witnesses),std::end(PropertySourceProfile::Witnesses),
         [&](const auto& w){return Match(w.core?base:game,w.rva,w.bytes,w.size);}));
     if(!propertySourcesReady.load())context->LogWarn("Item Roll Ranges: linked-property/runeword witnesses refused; existing ranges retained.");
+    constexpr unsigned char poisonDamage[]={0x8b,0x4f,0x10,0x8b,0xc1,0x0f,0xaf,0x47,0x08,0x0f,0xaf,0x4f,0x0c,0x83,0xe8,0x80,0xc1,0xf8,0x08,0x83,0xe9,0x80,0xc1,0xf9,0x08};
+    constexpr unsigned char poisonSeconds[]={0xb8,0x1f,0x85,0xeb,0x51,0xf7,0x6f,0x10,0xc1,0xfa,0x03,0x8b,0xc2,0xc1,0xe8,0x1f,0x03,0xd0};
+    poisonDisplayReady.store(propertySourcesReady.load() && Match(game,0x2d8d31,poisonDamage,sizeof(poisonDamage)) && Match(game,0x2d8f08,poisonSeconds,sizeof(poisonSeconds)));
+    if(!poisonDisplayReady.load())context->LogWarn("Item Roll Ranges: optional poison display witnesses refused; native poison text retained.");
     randomSkillsReady.store(propertySourcesReady.load() && std::all_of(std::begin(PropertySourceProfile::RandomSkillWitnesses),std::end(PropertySourceProfile::RandomSkillWitnesses),
         [&](const auto& w){return Match(game,w.rva,w.bytes,w.size);}) &&
         Readable(game+PropertySourceProfile::RandomSkillDispatchRva,sizeof(void*)) &&
@@ -1544,14 +1622,14 @@ bool Install(const D2RL::PluginContext* context) noexcept {
     active.store(true, std::memory_order_release);
     context->LogInfo(propertySourcesReady.load()?"Item Roll Ranges: active linked-property/runeword source model admitted.":"Item Roll Ranges: active linked-property/runeword source model unavailable.");
     context->LogInfo(alwaysReady.load() && alwaysEnabled.load()?"Item Roll Ranges display mode: always show ranges.":"Item Roll Ranges display mode: native Ctrl/controller hold.");
-    context->LogInfo("Item Roll Ranges 1.3.1+rev.46 by PyreFly: Ctrl / RT(R2), or QOL range override; inventory, stash, Cube and vendor only. Actual values, native ranges, named P/S tiers and guarded stacked-damage details. Unsupported or ambiguous provenance is omitted.");
+    context->LogInfo("Item Roll Ranges 1.3.1+rev.55 by PyreFly: Ctrl / RT(R2), or QOL range override; inventory, stash, Cube and vendor only. Actual values, native ranges, named P/S tiers and guarded stacked-damage details. Unsupported or ambiguous provenance is omitted.");
     return true;
 }
 }
 
 D2RL_PLUGIN_EXPORT const D2RL::PluginInfo* __cdecl D2RLoaderGetPluginInfo() noexcept {
     static const D2RL::PluginInfo info{sizeof(D2RL::PluginInfo), D2RL_PLUGIN_ABI_VERSION,
-        "item-roll-ranges", "Item Roll Ranges", "1.3.1+rev.46", "PyreFly",
+        "item-roll-ranges", "Item Roll Ranges", "1.3.1+rev.55", "PyreFly",
         "Hold Ctrl or RT/R2 (R1/RB with Controller QOL) for native item stat ranges in item-management screens.",
         D2RL::PluginFlags::Client | D2RL::PluginFlags::NativeHooks, {}};
     return &info;

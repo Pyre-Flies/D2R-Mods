@@ -1,5 +1,27 @@
 # Publishing releases
 
+## Consolidated release and Unhoarder
+
+The current supported source is on main. Release the six D2R-Mods plugins
+together, with Unhoarder 1.2.9 included as a separate Reimagined upgrade ZIP.
+Experimental probes are excluded. Earlier beta releases are historical and
+must link users to the latest stable suite rather than competing downloads.
+
+`release-companions.json` pins the Unhoarder release ZIP, DLL and both sound
+tables by SHA256. Release tooling downloads and verifies that exact artifact.
+The normal workflow builds the six suite plugins; after successful publication,
+include the verified Unhoarder ZIP and regenerate the release SHA256SUMS.
+Local QOL validation includes actual companion admission and mutation refusal;
+the default CI also exercises its portable forwarding-contract tests.
+Do not replace it with an arbitrary CI rebuild: QOL's native admission is
+artifact-specific. Unhoarder source and GPL notices remain in its own fork;
+its release supplies corresponding source and the exact tested DLL.
+
+The Unhoarder ZIP extracts into `mods/Reimagined`, includes active and
+launcher-clean sound tables, and contains only a commented reference filter.
+It does not overwrite live configs or filters. Other suite ZIPs retain their
+existing independently installable, reference-default layouts.
+
 ## Runtime documentation
 
 Runtime ZIPs contain only each plugin's DLL, reference TOMLs under defaults/

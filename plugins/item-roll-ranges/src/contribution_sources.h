@@ -30,11 +30,11 @@ struct Identity {
     int qualityRecord{-1};
 };
 struct Socket {Identity identity;Stats values;};
-struct Snapshot {Identity identity;Stats own,primary,total;std::vector<Socket> sockets;Stats word{};};
+struct Snapshot {Identity identity;Stats own,primary,total;std::vector<Socket> sockets;Stats word{},activeSet{};};
 inline bool ExtendedFlags(unsigned flags) {return flags==0x80000000u || flags==0xa0000000u;}
 // No pointer escapes: source metadata and values are owned copies. Nested socket
 // original modifier children duplicate the attached aggregate and are not walked.
-template<class Read> std::optional<Snapshot> Capture(std::uintptr_t unit,Read read,unsigned wordState=0) {
+template<class Read> std::optional<Snapshot> Capture(std::uintptr_t unit,Read read,unsigned wordState=0,bool isolateSetStates=false) {
     auto load=[&](std::uintptr_t at,auto& out){return at>=0x10000 && at<=0x7fffffffffffULL-sizeof(out) && read(at,&out,sizeof(out));};
     auto vector=[&](std::uintptr_t list,unsigned offset)->std::optional<Stats>{
         std::array<std::uint64_t,3> v{};
@@ -73,7 +73,8 @@ template<class Read> std::optional<Snapshot> Capture(std::uintptr_t unit,Read re
         if(!load(child+0x78,parent)||parent!=root||!load(child+0x1c,flags)||
            !load(child+0x20,state)||!load(child+0x18,expiry))return {};
         const bool word=wordState && state==wordState && (host->flags&0x04000000u);
-        if(state && !word)return {};
+        const bool setBonus=isolateSetStates && host->quality==5 && state>=165 && state<=170;
+        if(state && !word && !setBonus)return {};
         if(ExtendedFlags(flags)){
             std::uintptr_t ownerRoot{};
             if(state||expiry||attached.size()>=6||!load(child+0xa0,owner)||owner==unit||!load(owner+0x88,ownerRoot)||ownerRoot!=child)return {};
@@ -82,7 +83,7 @@ template<class Read> std::optional<Snapshot> Capture(std::uintptr_t unit,Read re
             attached.push_back({owner,{*id,*values}});
         } else {
             if(flags!=0x40||expiry!=-1||!load(child,owner)||owner!=unit)return {};
-            const auto values=vector(child,0x30);if(!values||!Add(out.own,*values))return {};
+            const auto values=vector(child,0x30);if(!values||!Add(setBonus?out.activeSet:out.own,*values))return {};
             if(word && (++wordLists!=1 || !Add(out.word,*values)))return {};
         }
         if(!load(child+0x68,child))return {};

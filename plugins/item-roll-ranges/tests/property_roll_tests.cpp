@@ -10,6 +10,19 @@ Affixes::Property property(std::initializer_list<unsigned> stats){Affixes::Prope
 Affixes::Rolled roll(unsigned id,int low,int high,const char* tag=nullptr){Affixes::Rolled r{};r.id=id+1;r.source=tag;r.uniqueScalar=tag!=nullptr;for(unsigned n=0;n<3;++n)put(r.row.bytes.data(),0x24+n*16,-1);put(r.row.bytes.data(),0x24,id);put(r.row.bytes.data(),0x2c,low);put(r.row.bytes.data(),0x30,high);return r;}
 Contributions::Stats stats(std::initializer_list<std::pair<unsigned,int>> entries){Contributions::Stats out;for(auto [s,v]:entries)out.push_back({std::uint64_t{s}<<32,v});std::sort(out.begin(),out.end(),[](auto a,auto b){return a.key<b.key;});return out;}
 auto solve(std::span<const Affixes::Rolled> d,std::span<const Affixes::Property> p,const Contributions::Stats& a){return PropertyRolls::Solve(PropertyRolls::Compile(d,p),a,[](unsigned,std::int64_t raw){return Contributions::Normalize(raw,0);});}
+void ImplicitProperties(){
+ for(unsigned fn:{20u,23u})for(const char* tag:{"[Set]","[U]","[RW]"}){
+  auto implicit=property({65535});implicit.bytes[0x18]=static_cast<unsigned char>(fn);
+  std::vector<Affixes::Property> p={property({39}),implicit,property({16}),property({72})};
+  std::vector<Affixes::Rolled> d={roll(0,40,50,tag),roll(1,1,1,tag),roll(2,10,20,tag),roll(3,10,20,tag)};
+  auto s=solve(d,p,stats({{39,45},{16,15},{72,15}}));
+  check(s.model.complete && PropertyRolls::Label(s,"resist",39,45).has_value());
+  check(!PropertyRolls::Label(s,"durability",72,15));
+  if(fn==23)check(!PropertyRolls::Label(s,"base defense",16,15));
+  p[1].bytes[0x18]=25;check(!solve(d,p,stats({{39,45}})).model.complete);
+  p[1]=implicit;p[1].bytes[2]=1;check(!solve(d,p,stats({{39,45}})).model.complete);
+ }
+}
 void Linked(){
  std::vector<Affixes::Property> p={property({39,41,43,45}),property({39}),property({41}),property({45}),property({0,1,2,3}),property({7})};
  std::vector<Affixes::Rolled> d={roll(0,16,20),roll(1,11,20),roll(2,21,30)};
@@ -172,4 +185,5 @@ void Choices(){
 }
 }
 #include "active_property_audit.h"
-int main(int argc,char** argv){Linked();Words();LayerSelectors();RandomLayers();Choices();if(argc==2)AuditActiveWords(argv[1]);std::puts("Linked scalar/shared rolls, random/fixed selector proofs, reverse attribution, integer constraints and active recipe variants pass.");}
+#include "operation_gap_tests.h"
+int main(int argc,char** argv){ImplicitProperties();Linked();Words();LayerSelectors();RandomLayers();Choices();if(argc==2)AuditActiveWords(argv[1]);if(argc==3 && std::strcmp(argv[1],"--operation-gaps")==0)AuditOperationGaps(argv[2]);std::puts("Linked scalar/shared rolls, random/fixed selector proofs, reverse attribution, integer constraints and active recipe variants pass.");}

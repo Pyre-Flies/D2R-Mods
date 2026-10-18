@@ -1,4 +1,4 @@
-# Hook inventory — first pass, 2026-09-24
+# Hook inventory â€” first pass, 2026-09-24
 
 Reviewed source: Controller QOL1.3.1+rev.4 and Item Roll Ranges1.3.1+rev.1. Static inventory of installation paths, not a fresh live-process verification. Feature gates/failures can reduce actual installed counts. No DLL changes, rebuild, or new addresses discovered in this pass.
 

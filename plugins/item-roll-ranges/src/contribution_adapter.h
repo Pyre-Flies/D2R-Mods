@@ -3,7 +3,7 @@ using DefinitionTable=ContributionDefinitions::Table;
 std::optional<Contributions::Snapshot> CaptureItemContributions(const void* source) {
     if(!contributionsReady.load())return {};
     return Contributions::Capture(reinterpret_cast<std::uintptr_t>(source),[](std::uintptr_t at,void* out,std::size_t size){
-        const auto* ptr=reinterpret_cast<const void*>(at);if(!Readable(ptr,size))return false;std::memcpy(out,ptr,size);return true;},propertySourcesReady.load()?171u:0u);
+        const auto* ptr=reinterpret_cast<const void*>(at);if(!Readable(ptr,size))return false;std::memcpy(out,ptr,size);return true;},propertySourcesReady.load()?171u:0u,propertySourcesReady.load());
 }
 std::optional<DefinitionTable> ContributionTable(D2RL::DataTables::TableId id,unsigned bank,
     unsigned stride,std::uint64_t& revision,bool allowEmpty=false) {
@@ -99,6 +99,14 @@ bool HasRecipeExtras(const Contributions::Snapshot& capture){
     for(unsigned stat:{361u,362u,392u,393u,394u,395u})if(Contributions::Value(capture.own,stat))return true;
     return false;
 }
+// The permanent set formatter displays owned modifiers separately from both
+// base defense and activated set states. Use that same source scope for solving.
+bool PermanentSetTotals(Contributions::Snapshot& capture) {
+    if(capture.identity.quality!=5)return true;
+    capture.total=capture.own;
+    for(const auto& socket:capture.sockets)if(!Contributions::Add(capture.total,socket.values))return false;
+    return true;
+}
 struct SourceGroups {
     Contributions::Snapshot capture;std::vector<ContributionModel::Group> groups;
     std::vector<Affixes::Rolled> corruption;std::deque<std::string> names;
@@ -107,7 +115,7 @@ std::optional<SourceGroups> GatherSourceGroups(void* source,std::span<const Affi
     std::span<const Affixes::Row> rows,std::size_t prefixIndex,std::size_t autoIndex,
     std::span<const Affixes::Property> properties) {
     auto capture=CaptureItemContributions(source);
-    if(!capture)return {};
+    if(!capture || !PermanentSetTotals(*capture))return {};
     for(unsigned stat:{392u,393u,394u,395u})if(Contributions::Value(capture->own,stat))return {};
     const bool corrupted=Contributions::Value(capture->own,361)||Contributions::Value(capture->own,362);
     if(capture->sockets.empty()&&!corrupted)return {};
@@ -236,8 +244,75 @@ void AddLinkedSourceLabels(const SourceGroups& sources,std::span<const CapturedL
     for(const auto& group:sources.groups)solved.push_back(PropertyRolls::SolveSources(group.definitions,properties,group.values,normalize,propertyGroups));
     std::set<std::string> handled;
     for(const auto& line:observed){
-        if(line.stat<0 || static_cast<std::size_t>(line.stat)>=count || !handled.insert(line.key).second)continue;
+        if(line.stat<0 || line.stat==204 || static_cast<std::size_t>(line.stat)>=count || !handled.insert(line.key).second)continue;
         const unsigned stat=static_cast<unsigned>(line.stat);std::vector<unsigned> members;
+        // Physical endpoints and durability percent live on owned modifiers.
+        // Aggregate physical damage includes the base weapon; aggregate
+        // durability contains the resulting capacity, not stat75's percentage.
+        // Require the displayed modifier to match the complete owned value.
+        if(!line.layer && !line.grouped && (stat==75 || (stat>=21 && stat<=24))){
+            const bool physical=stat!=75;const unsigned minimum=physical?((stat&1)?stat:stat-1):stat;
+            const unsigned maximum=physical?minimum+1:minimum;
+            if(maximum>=count)continue;
+            bool admitted=true;
+            for(unsigned member=minimum;member<=maximum;++member){const auto* row=metadata+member*0x144;
+                admitted &= Affixes::Read<std::uint16_t>(row,0)==member && row[0x14]==0 &&
+                    row[0x50]==(physical?0:13) && Affixes::Read<std::uint16_t>(row,0x32)==19;}
+            if(!admitted)continue;
+            const auto owned=ContributionModel::Build(line.key,minimum,0,sources.groups,properties,physical);
+            if(!owned)continue;unsigned matches=0;bool renders=false;
+            for(const auto text:RangeText::Lines(actual))if(RangeText::Analyze(text).key==line.key){++matches;renders=!RangeText::ExpandOwned(text,*owned).empty();}
+            if(matches==1 && renders){std::erase_if(labels,[&](const auto& old){return old.key==line.key;});labels.push_back(*owned);}continue;
+        }
+        if(!line.layer && !line.grouped && stat>=57 && stat<=59){
+            // Poison stores 1/256 damage-per-frame rates, not displayed totals.
+            // Only one proven source with fixed duration is currently split.
+            if(!poisonDisplayReady.load() || count<=59)continue;
+            bool metadataValid=true;
+            for(unsigned member=57;member<=59;++member)
+                metadataValid &= Affixes::Read<std::uint16_t>(metadata+member*0x144,0)==member &&
+                    !metadata[member*0x144+0x14] && !metadata[member*0x144+0x50];
+            if(!metadataValid)continue;
+            const ContributionModel::Group* poison=nullptr;bool valid=true;
+            for(const auto& g:sources.groups)if(Contributions::Value(g.values,57)||Contributions::Value(g.values,58)||Contributions::Value(g.values,59)){
+                if(poison){valid=false;break;}poison=&g;
+            }
+            if(!valid || !poison || Contributions::Value(poison->values,326)>1)continue;
+            const auto frames=Contributions::Value(poison->values,59);
+            if(frames<=0 || frames>1000000)continue;
+            unsigned durations=0;
+            for(const auto& d:poison->definitions){
+                if(!Affixes::Contributes(d.row,properties,59,0))continue;
+                if(!d.unconditionalScalar || (d.source && !d.uniqueScalar)){valid=false;break;}
+                for(unsigned n=0;n<3;++n){
+                    const auto id=d.row.Number(0x24+n*16);if(id<0 || static_cast<std::size_t>(id)>=properties.size())continue;
+                    const auto* p=properties[id].bytes.data();
+                    for(unsigned slot=0;slot<7;++slot)if(p[0x18+slot] && Affixes::Read<std::uint16_t>(p,0x20+slot*2)==59){
+                        if(p[0x18+slot]!=17 || p[2+slot] || d.row.Number(0x28+n*16)!=frames)valid=false;
+                        ++durations;
+                    }
+                }
+            }
+            if(!valid || durations!=1)continue;
+            auto poisonLabel=ContributionModel::Build(line.key,57,0,sources.groups,properties,true);
+            if(!poisonLabel || poisonLabel->ownedParts.size()!=1)continue;
+            const auto convert=[&](int rate)->std::optional<int>{
+                const auto product=std::int64_t{rate}*frames;
+                if(rate<0 || product>INT_MAX-128)return {};
+                return static_cast<int>((product+128)/256);
+            };
+            auto& part=poisonLabel->ownedParts.front();
+            const auto low=convert(part.low),high=convert(part.high),maxLow=convert(part.maxLow),maxHigh=convert(part.maxHigh);
+            const auto actualLow=convert(*poisonLabel->ownedTotal),actualHigh=convert(*poisonLabel->ownedMaxTotal);
+            if(!low||!high||!maxLow||!maxHigh||!actualLow||!actualHigh)continue;
+            part.low=*low;part.high=*high;part.maxLow=*maxLow;part.maxHigh=*maxHigh;
+            part.value=*actualLow;part.maxValue=*actualHigh;
+            poisonLabel->ownedTotal=*actualLow;poisonLabel->ownedMaxTotal=*actualHigh;
+            poisonLabel->ownedDurationSeconds=static_cast<int>(frames/25);
+            unsigned matches=0;bool renders=false;
+            for(const auto text:RangeText::Lines(actual))if(RangeText::Analyze(text).key==line.key){++matches;renders=!RangeText::ExpandOwned(text,*poisonLabel).empty();}
+            if(matches==1 && renders){std::erase_if(labels,[&](const auto& old){return old.key==line.key;});labels.push_back(*poisonLabel);}continue;
+        }
         if(!line.layer && !line.grouped && stat>=48 && stat<=55){
             const unsigned minimum=stat&~1u,maximum=minimum+1;
             if(maximum>=count || metadata[minimum*0x144+0x14]!=metadata[maximum*0x144+0x14] ||
@@ -296,4 +371,56 @@ void AddLinkedSourceLabels(const SourceGroups& sources,std::span<const CapturedL
         if(matches!=1 || !renders)continue;
         std::erase_if(labels,[&](const RangeText::Label& old){return old.key==line.key;});labels.push_back(std::move(label));
     }
+}
+
+// The already-qualified native Normalize witness adds50 to stat122 for item
+// type57. This bonus has no saved stat entry or rolled affix definition.
+void AddIntrinsicUndeadLabel(void* source,const unsigned char* tables,
+    const Contributions::Snapshot& capture,std::span<const Affixes::Rolled> definitions,
+    std::span<const Affixes::Row> affixes,std::size_t prefixIndex,std::size_t autoIndex,
+    std::span<const Affixes::Property> properties,const unsigned char* metadata,
+    std::size_t count,std::string_view actual,std::vector<RangeText::Label>& labels) {
+    constexpr unsigned stat=122,type=57;constexpr int bonus=50;
+    if(!getArmor || !originalSingle || stat>=count || !Readable(tables,0x1358) ||
+       metadata[stat*0x144+0x14] || metadata[stat*0x144+0x50] ||
+       Affixes::Read<std::uint16_t>(metadata+stat*0x144,0)!=stat)return;
+    const auto* row=getArmor(static_cast<unsigned char>(capture.identity.bank),capture.identity.classId);
+    const auto* typeRows=Affixes::Read<const unsigned char*>(tables,0x1348);
+    const auto typeCount=Affixes::Read<std::uint64_t>(tables,0x1350);
+    if(!Readable(row,0x132) || typeCount<=type || typeCount>32768 ||
+       !Readable(typeRows,static_cast<std::size_t>(typeCount)*232) ||
+       Affixes::Read<unsigned>(typeRows+type*232,0)!=ContributionDefinitions::Code("blun"))return;
+    const auto blunt=ContributionDefinitions::Type({typeRows,static_cast<std::size_t>(typeCount),232},
+        Affixes::Read<std::int16_t>(row,0x12e),Affixes::Read<std::int16_t>(row,0x130),type);
+    if(!blunt || !*blunt)return;
+    auto owned=GatherSourceGroups(source,definitions,affixes,prefixIndex,autoIndex,properties);
+    std::vector<ContributionModel::Group> groups;
+    if(owned){if(!owned->corruption.empty())return;groups=owned->groups;}
+    else {
+        if(!capture.sockets.empty() || (capture.identity.flags&0x04000000u) || HasRecipeExtras(capture))return;
+        groups.push_back({capture.own,{definitions.begin(),definitions.end()},""});
+    }
+    long long stored=0;for(const auto& group:groups)stored+=Contributions::Value(group.values,stat);
+    if(stored!=Contributions::Value(capture.total,stat) || stored<0 || stored>1000000-bonus)return;
+    // Find an equivalent additive property from the active table; no named
+    // property/item catalog or speculative residual range is introduced.
+    std::optional<unsigned> property;
+    for(std::size_t n=0;n<properties.size();++n){
+        const auto* p=properties[n].bytes.data();bool matches=false,valid=true;
+        for(unsigned k=0;k<7;++k){const auto fn=p[0x18+k];if(!fn)continue;
+            if(matches || fn!=1 || p[2+k] || Affixes::Read<std::uint16_t>(p,0x20+k*2)!=stat){valid=false;break;}matches=true;}
+        if(valid && matches){property=static_cast<unsigned>(n);break;}
+    }
+    if(!property)return;
+    const std::array<ContributionDefinitions::Spec,1> spec={ContributionDefinitions::Spec{*property,0,bonus,bonus}};
+    groups.push_back({{{std::uint64_t{stat}<<32,bonus}},{SpecBlock(spec,"[Base]")},""});
+    char text[256]{};
+    if(!originalSingle(source,metadata+stat*0x144,static_cast<int>(stored)+bonus,0,false,text,1))return;
+    const auto size=strnlen(text,256);if(!size || size==256)return;
+    const auto key=RangeText::Analyze({text,size}).key;
+    const auto label=ContributionModel::Build(key,stat,0,groups,properties);if(!label)return;
+    unsigned matches=0;bool renders=false;
+    for(const auto line:RangeText::Lines(actual))if(RangeText::Analyze(line).key==key){++matches;renders=!RangeText::ExpandOwned(line,*label).empty();}
+    if(matches!=1 || !renders)return;
+    std::erase_if(labels,[&](const auto& old){return old.key==key;});labels.push_back(*label);
 }

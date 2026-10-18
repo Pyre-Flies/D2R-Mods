@@ -139,6 +139,7 @@ def main() -> None:
     parser.add_argument("--floating-damage-artifact-verifier", type=Path)
     parser.add_argument("--always-show-sockets-dll", type=Path)
     parser.add_argument("--always-show-sockets-artifact-verifier", type=Path)
+    parser.add_argument("--unhoarder-runtime-zip", type=Path)
     parser.add_argument("--controller-only", action="store_true",
                         help="Package only Controller QOL (for focused prereleases).")
     parser.add_argument("--output", type=Path, required=True)
@@ -223,6 +224,9 @@ def main() -> None:
         args.always_show_sockets_artifact_verifier, args.output, root=REPOSITORY)
     archives = (controller_zip, ranges_zip, map_assistance_zip,
                 inventory_deposit_zip, floating_damage_zip, sockets_zip)
+    if args.unhoarder_runtime_zip:
+        from release_companion import stage
+        archives += (stage(args.unhoarder_runtime_zip, args.output, REPOSITORY),)
     unexpected = set(args.output.glob("*.zip")) - set(archives)
     if unexpected:
         raise SystemExit("Output contains unrelated ZIPs; use a clean output directory: " +

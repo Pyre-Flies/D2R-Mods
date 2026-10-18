@@ -1,4 +1,4 @@
-# Plugin coexistence review — 2026-09-24
+# Plugin coexistence review â€” 2026-09-24
 
 Production baseline: 1.3.1.0. This is a static source review, not a claim of universal compatibility. Existing tests pass (QOL 8, ranges 5). No compatibility hook changes are included in this snapshot.
 

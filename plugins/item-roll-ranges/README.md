@@ -1,6 +1,6 @@
 # Item Roll Ranges
 
-**1.3.1+rev.46 · by PyreFly**
+**1.3.1+rev.55 · by PyreFly**
 
 Shows possible modifier rolls and their sources beside the item's actual
 values. Ranges use the active game's definitions, including supported modded
@@ -126,3 +126,7 @@ information before sharing them. `SHA256SUMS` is provided alongside the download
 
 Runtime ZIPs contain only the DLL, reference defaults and a usage README.
 Compatibility records and release history stay in this repository.
+
+Charged skills show their source label (affix type, name and tier where applicable).
+Their displayed skill level and remaining/maximum charges stay unchanged; charges
+do not receive numeric roll ranges or missing-range markers.

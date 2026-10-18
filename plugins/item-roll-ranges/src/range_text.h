@@ -105,9 +105,13 @@ inline std::string DisplayBounds(const std::string& bounds) {
             &firstLow,&firstHigh,&secondLow,&secondHigh,&used)==4 &&
         used==static_cast<int>(bounds.size()) && firstLow<=firstHigh &&
         secondLow<=secondHigh && firstLow<=secondHigh) {
-        char result[96]{};
-        std::snprintf(result,sizeof(result),"%+lld - %+lld",firstLow,secondHigh);
-        return result;
+        const auto endpoint=[](long long low,long long high){
+            char result[96]{};
+            if(low==high)std::snprintf(result,sizeof(result),"%+lld",high);
+            else std::snprintf(result,sizeof(result),"%+lld - %+lld",low,high);
+            return std::string(result);
+        };
+        return endpoint(firstLow,firstHigh)+" / "+endpoint(secondLow,secondHigh);
     }
     used=0;
     if(sscanf_s(bounds.c_str(),"%lld - %lld%n",&firstLow,&firstHigh,&used)==2 &&
@@ -143,6 +147,8 @@ struct Label {
     std::optional<int> ownedTotal{},ownedMaxTotal{};
     bool replaceNativeRange{};
     bool quantityRate{};
+    bool sourceOnly{};
+    std::optional<int> ownedDurationSeconds{};
 };
 inline std::string QuantitySeconds(int rate) {
     if(rate<=0)return "?";
@@ -191,8 +197,12 @@ inline std::string ExpandOwned(std::string_view original,const Label& label) {
         if(errno||finish<=at||(finish<plain.size()&&(plain[finish]=='.'||plain[finish]==',')))return {};
         numbers.push_back({at,finish,value,plain[at]=='+',finish<plain.size()&&plain[finish]=='%'});i=finish;
     }
-    if(numbers.size()!=(paired?2u:1u)||numbers[0].value!=*label.ownedTotal||
-       (paired && (numbers[1].value!=*label.ownedMaxTotal||numbers[0].percent||numbers[1].percent)))return {};
+    const bool duration=label.ownedDurationSeconds.has_value();
+    const bool collapsed=duration && paired && label.ownedTotal==label.ownedMaxTotal && numbers.size()==2;
+    const auto damageNumbers=paired&&!collapsed?2u:1u;
+    if(numbers.size()!=damageNumbers+(duration?1u:0u)||numbers[0].value!=*label.ownedTotal||
+       (paired && !collapsed && (numbers[1].value!=*label.ownedMaxTotal||numbers[0].percent||numbers[1].percent)) ||
+       (duration && (label.ownedParts.size()!=1 || numbers.back().value!=*label.ownedDurationSeconds || numbers.back().percent)))return {};
     long long lo=0,hi=0,maxLo=0,maxHi=0,valueSum=0,maxValueSum=0;bool allValues=true,allMaxValues=true;
     for(const auto& p:label.ownedParts){
         if(p.low>p.high||(p.value&&(*p.value<p.low||*p.value>p.high))||
@@ -491,8 +501,12 @@ inline std::string ExpandPaired(std::string_view original,const Analysis& native
 }
 struct Result { std::string text; unsigned annotated{}, unmatched{}, labeled{}; };
 inline Result Merge(std::string_view actual,std::string_view ranged,std::size_t capacity,
-                    const std::vector<Label>& labels={}) {
+                    const std::vector<Label>& labels={},bool compact=false) {
     const auto originals=Lines(actual), ranges=Lines(ranged);
+    const auto expansion=[&](const std::string& text){
+        const auto at=compact?text.rfind('\n'):std::string::npos;
+        return at==std::string::npos?text:text.substr(at+1);
+    };
     bool unavailable=false;
     std::vector<Analysis> a,r;
     for (auto line: originals) a.push_back(Analyze(line));
@@ -511,10 +525,19 @@ inline Result Merge(std::string_view actual,std::string_view ranged,std::size_t 
         } else if (actualCount!=1 || rangeCount!=1) ++result.unmatched;
         const Label* label=nullptr; unsigned labelCount=0;
         for (const auto& entry:labels) if (entry.key==a[i].key) { label=&entry; ++labelCount; }
+        if(actualCount==1&&labelCount==1&&label&&label->sourceOnly){
+            if(!prefix.empty())--result.annotated;
+            result.text+=originals[i];
+            if(!label->text.empty()){
+                result.text+=" \xee\x81\xbe" "U"+label->text+"\xee\x81\xbe" "3";++result.labeled;
+            }
+            if(i+1<originals.size()||actual.ends_with('\n'))result.text+='\n';
+            continue;
+        }
         if(actualCount==1&&labelCount==1&&label&&!label->ownedParts.empty()){
             const auto expanded=ExpandOwned(originals[i],*label);
             if(!expanded.empty()){
-                result.text+=expanded;++result.labeled;
+                result.text+=expansion(expanded);++result.labeled;
                 if(i+1<originals.size()||actual.ends_with('\n'))result.text+='\n';
                 continue;
             }
@@ -522,7 +545,7 @@ inline Result Merge(std::string_view actual,std::string_view ranged,std::size_t 
         if (actualCount==1 && labelCount==1 && label && label->fixedSocketParts) {
             const auto expanded=ExpandFixedSockets(originals[i],label->parts);
             if (!expanded.empty()) {
-                result.text+=expanded;++result.labeled;
+                result.text+=expansion(expanded);++result.labeled;
                 if (i+1<originals.size() || actual.ends_with('\n')) result.text+='\n';
                 continue;
             }
@@ -530,7 +553,7 @@ inline Result Merge(std::string_view actual,std::string_view ranged,std::size_t 
         if(actualCount==1&&labelCount==1&&label&&prefix.empty()){
             const auto expanded=ExpandFixedAffixes(originals[i],label->parts);
             if(!expanded.empty()){
-                result.text+=expanded;++result.labeled;
+                result.text+=expansion(expanded);++result.labeled;
                 if(i+1<originals.size()||actual.ends_with('\n'))result.text+='\n';
                 continue;
             }
@@ -545,7 +568,7 @@ inline Result Merge(std::string_view actual,std::string_view ranged,std::size_t 
             if (expanded.empty()) expanded=ExpandPaired(originals[i],*match,label->pairedParts);
             if (expanded.empty()) expanded=ExpandUnknown(originals[i],*match,label->unknownSources);
             if (!expanded.empty()) {
-                result.text+=expanded; ++result.labeled;
+                result.text+=expansion(expanded); ++result.labeled;
                 if (i+1<originals.size() || actual.ends_with('\n')) result.text+='\n';
                 continue;
             }
@@ -558,7 +581,7 @@ inline Result Merge(std::string_view actual,std::string_view ranged,std::size_t 
             auto expanded=ExpandPaired(originals[i],a[i],label->pairedParts);
             if (expanded.empty()) expanded=ExpandUnknown(originals[i],a[i],label->unknownSources);
             if (!expanded.empty()) {
-                result.text+=expanded; ++result.labeled;
+                result.text+=expansion(expanded); ++result.labeled;
                 if (i+1<originals.size() || actual.ends_with('\n')) result.text+='\n';
                 continue;
             }
@@ -581,7 +604,31 @@ inline Result Merge(std::string_view actual,std::string_view ranged,std::size_t 
         // emitted line is the footer. Emit it once for the entire block.
         result.text="\xee\x81\xbe" "5(?) Range Unavailable - Please report item affixes\xee\x81\xbe" "3\n"+result.text;
     }
-    if (result.text.size()>=capacity) { result.text=actual; result.annotated=0; result.labeled=0; }
+    if (result.text.size()>=capacity) {
+        // Native property buffers are fixed-size. Prefer totals over duplicated
+        // child breakdowns, then retain as many source labels as fit. Never
+        // truncate a native value or discard all labels because one split grew.
+        if(!compact)return Merge(actual,ranged,capacity,labels,true);
+        Result bounded;
+        if(actual.size()>=capacity){bounded.text=actual;return bounded;}
+        auto available=capacity-actual.size()-1;
+        for(std::size_t i=0;i<originals.size();++i){
+            bounded.text+=originals[i];
+            const auto count=std::count_if(a.begin(),a.end(),[&](const auto& entry){return entry.key==a[i].key;});
+            const Label* found=nullptr;unsigned matches=0;
+            for(const auto& label:labels)if(label.key==a[i].key){found=&label;++matches;}
+            if(count==1 && matches==1 && found){
+                std::string text=found->text;
+                if(!found->ownedParts.empty())text=found->ownedParts.size()==1?found->ownedParts.front().label:"[Combined]";
+                if(!text.empty()){
+                    const auto suffix=" \xee\x81\xbe" "U"+text+"\xee\x81\xbe" "3";
+                    if(suffix.size()<=available){bounded.text+=suffix;available-=suffix.size();++bounded.labeled;}
+                }
+            }
+            if(i+1<originals.size() || actual.ends_with('\n'))bounded.text+='\n';
+        }
+        return bounded;
+    }
     return result;
 }
 }
