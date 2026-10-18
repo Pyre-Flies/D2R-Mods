@@ -38,6 +38,11 @@ int main() {
     unsigned char encoded[5]{};
     CHECK(QolGlyphCalls::Encode(QolPlacardCall::Site,QolPlacardCall::Target,encoded));
     CHECK(std::memcmp(encoded,QolPlacardCall::Expected,5)==0);
-    CHECK(std::memcmp(QolPlacardCall::Witness+sizeof(QolPlacardCall::Witness)-5,encoded,5)==0);
+    // Name CALL and its return address remain native in either plugin order.
+    CHECK(QolPlacardCall::Site==QolPlacardCall::NameSite+5);
+    int32_t nameDisplacement{};
+    std::memcpy(&nameDisplacement,QolPlacardCall::Witness+sizeof(QolPlacardCall::Witness)-4,4);
+    CHECK(QolPlacardCall::NameSite+5+nameDisplacement==0xcbeb0);
+    CHECK(QolPlacardCall::WitnessRva+sizeof(QolPlacardCall::Witness)==QolPlacardCall::Site);
     std::puts("Placard ownership, narrow/wide formatting preservation, capacity and call-target tests passed.");
 }

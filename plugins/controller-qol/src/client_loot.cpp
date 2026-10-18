@@ -1,5 +1,8 @@
+#include "item_code_compatibility.h"
+#include "unhoarder_dispatch_compatibility.h"
 #include "relay_allocation.h"
 #include "client_loot.h"
+#include "unhoarder_visibility.h"
 #include "client_loot_profile.h"
 #include "loot_approach_profile.h"
 #include "loot_run_policy.h"
@@ -12,6 +15,10 @@
 #include <unordered_map>
 #include <cstring>
 #include <cstdio>
+extern "C" {
+    void QolLootRunBridge();
+    void* QolLootNativeRunQuery=nullptr;
+}
 namespace QolClientLoot {
 namespace {
 std::recursive_mutex mutex;
@@ -29,8 +36,6 @@ std::atomic<bool> lifecycleAvailable{false},localPlayerReady{false};
 LocalSession localSession;
 std::array<NativePickupPermit,7> pickupPermits{};
 RepeatGate repeatGate{};
-using MovementFn=void(__fastcall*)(uint32_t,void*,uint32_t,uint32_t);
-MovementFn originalMovement{};
 bool runHook{};
 unsigned char installedMovement[5]{};
 uint32_t runGuid{};
@@ -54,6 +59,7 @@ using InGameFn=bool(__cdecl*)() noexcept;
 InGameFn inGame{};
 Slots slots{};
 std::unordered_map<uint32_t,uint64_t> visible;
+std::unordered_map<uint32_t,VisibilityProof> providerHidden;
 uintptr_t playerIdentity{}; // comparison only; never dereferenced between callbacks
 uint32_t playerGuid{};
 uint64_t epoch{1};
@@ -78,7 +84,7 @@ bool Validate() noexcept {
         if(s.rva==0xfa180 && interactionHook) {
             if(!context->CheckExpectedBytes(s.rva,installedInteraction,sizeof(installedInteraction)) ||
                !context->CheckExpectedBytes(s.rva+15,s.bytes+15,s.size-15))return false;
-        } else if(!context->CheckExpectedBytes(s.rva,s.bytes,s.size))return false;
+        } else if(!QolItemCode::Check(context,s.rva,s.bytes,s.size))return false;
     }
     return true;
 }
@@ -100,9 +106,20 @@ bool Read(void* player,uint32_t guid,uint32_t radius,Candidate& out) noexcept {
         const auto code=reinterpret_cast<uint32_t(__fastcall*)(void*)>(base+0x36ef50)(unit);
         const auto data=*reinterpret_cast<const uint32_t* const*>(static_cast<const unsigned char*>(unit)+0x10);
         if(!data)return false;
+        if(QolLootVisibility::Hidden(context,unit,guid,code))return false;
         char text[5]{};std::memcpy(text,&code,4);
         out={guid,code,*data,distance,rankItem(text,*data)};
         return true;
+    } __except(EXCEPTION_EXECUTE_HANDLER) {return false;}
+}
+bool HiddenCandidate(const Candidate& item) noexcept {
+    __try {
+        if(!item.guid || !context)return false;
+        const auto unit=reinterpret_cast<void*(__fastcall*)(uint32_t,uint32_t)>(context->exeBase+0x9a5d0)(item.guid,4);
+        if(!unit)return false;
+        const auto* words=static_cast<const uint32_t*>(unit);
+        if(words[0]!=4 || words[2]!=item.guid || words[3]!=3)return false;
+        return QolLootVisibility::Hidden(context,unit,item.guid,item.code);
     } __except(EXCEPTION_EXECUTE_HANDLER) {return false;}
 }
 bool Session(void*& player) noexcept {
@@ -110,20 +127,20 @@ bool Session(void*& player) noexcept {
         player=Player();
         if(!player) {
             if(playerIdentity || wasHeld)++epoch;
-            slots={};visible.clear();playerIdentity=0;playerGuid=0;wasHeld=false;pickupPermits={};repeatGate={};runGuid=0;
+            slots={};visible.clear();providerHidden.clear();playerIdentity=0;playerGuid=0;wasHeld=false;pickupPermits={};repeatGate={};runGuid=0;
             return false;
         }
         const auto guid=static_cast<const uint32_t*>(player)[2];
         if(!localSession.Matches(static_cast<const uint32_t*>(player)[0],guid)) {
-            ++epoch;slots={};visible.clear();wasHeld=false;pickupPermits={};repeatGate={};runGuid=0;return false;
+            ++epoch;slots={};visible.clear();providerHidden.clear();wasHeld=false;pickupPermits={};repeatGate={};runGuid=0;return false;
         }
         if(playerIdentity && (playerIdentity!=reinterpret_cast<uintptr_t>(player) || playerGuid!=guid)) {
             ++epoch;
-            slots={};visible.clear();wasHeld=false;pickupPermits={};repeatGate={};runGuid=0;
+            slots={};visible.clear();providerHidden.clear();wasHeld=false;pickupPermits={};repeatGate={};runGuid=0;
         }
         playerIdentity=reinterpret_cast<uintptr_t>(player);playerGuid=guid;
         return true;
-    } __except(EXCEPTION_EXECUTE_HANDLER) {++epoch;slots={};visible.clear();wasHeld=false;pickupPermits={};repeatGate={};runGuid=0;return false;}
+    } __except(EXCEPTION_EXECUTE_HANDLER) {++epoch;slots={};visible.clear();providerHidden.clear();wasHeld=false;pickupPermits={};repeatGate={};runGuid=0;return false;}
 }
 bool ValidateApproach() noexcept {
     for(const auto& s:ApproachProfile::Sites) {
@@ -132,11 +149,13 @@ bool ValidateApproach() noexcept {
             if(!context->CheckExpectedBytes(s.rva,s.bytes,offset) ||
                !context->CheckExpectedBytes(QolLootRun::CallSite,installedMovement,5) ||
                !context->CheckExpectedBytes(QolLootRun::CallSite+5,s.bytes+offset+5,s.size-offset-5))return false;
-        } else if(!context->CheckExpectedBytes(s.rva,s.bytes,s.size))return false;
+        } else if(s.rva==0xfabe0) {
+            if(!QolUnhoarderDispatch::Check(context,s.bytes,s.size))return false;
+        } else if(!QolItemCode::Check(context,s.rva,s.bytes,s.size))return false;
     }
-    return true;
+    return context && context->CheckExpectedBytes(QolLootRun::Target,QolLootRun::GetterWitness,sizeof(QolLootRun::GetterWitness));
 }
-void __fastcall HookMovement(uint32_t action,void* player,uint32_t type,uint32_t guid) noexcept {
+uint32_t SelectMovement(uint32_t action,void* player,uint32_t type,uint32_t guid) noexcept {
     const D2RL::PluginContext* ctx{};
     const auto previous=action;
     {
@@ -156,14 +175,14 @@ void __fastcall HookMovement(uint32_t action,void* player,uint32_t type,uint32_t
         std::snprintf(message,sizeof(message),"[QOL/ClientLoot] GUID=%u movement requested=run native=%s.",guid,previous==2?"walk":"run");
         ctx->LogInfo(message);
     }
-    if(originalMovement)originalMovement(action,player,type,guid);
+    return action;
 }
 bool InstallCall(const D2RL::PluginContext* ctx,uintptr_t site,const unsigned char* expected,
                  const void* destination,unsigned char (&installedBytes)[5]) noexcept {
     if(!ctx->CheckExpectedBytes(site,expected,5))return false;
     HMODULE pinned{};
     if(!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS|GET_MODULE_HANDLE_EX_FLAG_PIN,
-        reinterpret_cast<LPCWSTR>(&HookMovement),&pinned))return false;
+        reinterpret_cast<LPCWSTR>(&QolLootRunBridge),&pinned))return false;
     auto* relay=QolRelay::Allocate(ctx->exeBase+site,64);
     if(!relay)return false;
     relay[0]=0xff;relay[1]=0x25;std::memset(relay+2,0,4);
@@ -216,7 +235,7 @@ void __fastcall HookInteraction(uint16_t type,uint32_t guid) noexcept {
 void Initialize(const D2RL::PluginContext* ctx,RankFn rank,BlockPickupFn filter,HeldFn held) noexcept {
     std::lock_guard lock(mutex);
     context=ctx;rankItem=rank;blockPickup=filter;heldNow=held;queuedApproach={};
-    active=false;slots={};visible.clear();playerIdentity=0;playerGuid=0;wasHeld=false;++epoch;
+    active=false;slots={};visible.clear();providerHidden.clear();playerIdentity=0;playerGuid=0;wasHeld=false;++epoch;
     lifecycleAvailable=false;localPlayerReady=false;localSession={};pickupPermits={};repeatGate={};runGuid=0;
     inGame=reinterpret_cast<InGameFn>(GetProcAddress(GetModuleHandleW(L"D2RCore.dll"),"IsInGame"));
     ready=rank && Validate();
@@ -232,9 +251,9 @@ void Initialize(const D2RL::PluginContext* ctx,RankFn rank,BlockPickupFn filter,
         InstallCall(ctx,QolLootUpdate::CallSite,QolLootUpdate::Window+14,
                     reinterpret_cast<const void*>(&HookClientUpdate),installedUpdate);
     approachReady=ready && updateHook && ValidateApproach();
-    originalMovement=reinterpret_cast<MovementFn>(ctx->exeBase+0xfabe0);
+    QolLootNativeRunQuery=reinterpret_cast<void*>(ctx->exeBase+QolLootRun::Target);
     runHook=approachReady && InstallCall(ctx,QolLootRun::CallSite,QolLootRun::Expected,
-                                       reinterpret_cast<const void*>(&HookMovement),installedMovement);
+                                       reinterpret_cast<const void*>(&QolLootRunBridge),installedMovement);
     ctx->LogInfo(updateHook?"[QOL/ClientLoot] Approach requests queued at native client update.":
         "[QOL/ClientLoot] Native client update unavailable; approach disabled.");
     ctx->LogInfo(runHook?"[QOL/ClientLoot] Scoped native run requests enabled for shortcut loot.":
@@ -257,7 +276,7 @@ void OnLifecycle(const D2RL::Lifecycle::GameplayEvent* event) noexcept {
     } else {localSession.Leave();}
     queuedApproach={};
     localPlayerReady=localSession.Matches(0,localSession.playerId);
-    ++epoch;active=false;slots={};visible.clear();wasHeld=false;playerIdentity=0;playerGuid=0;pickupPermits={};repeatGate={};runGuid=0;
+    ++epoch;active=false;slots={};visible.clear();providerHidden.clear();wasHeld=false;playerIdentity=0;playerGuid=0;pickupPermits={};repeatGate={};runGuid=0;
 }
 bool IsLocalActor(uint32_t type,uint32_t id) noexcept {
     std::lock_guard lock(mutex);
@@ -274,7 +293,7 @@ bool TakeNativePickupPermit(uint32_t actorId,uint32_t guid) noexcept {
 void Shutdown() noexcept {
     std::lock_guard lock(mutex);
     active=false;ready=false;lifecycleAvailable=false;localPlayerReady=false;localSession={};pickupPermits={};repeatGate={};runGuid=0;
-    slots={};visible.clear();queuedApproach={};heldNow=nullptr;blockPickup=nullptr;context=nullptr;inGame=nullptr;
+    slots={};visible.clear();providerHidden.clear();queuedApproach={};heldNow=nullptr;blockPickup=nullptr;context=nullptr;inGame=nullptr;
 }
 bool Activate() noexcept {
     std::lock_guard lock(mutex);
@@ -291,11 +310,28 @@ void Deactivate() noexcept {
     if(active.exchange(false)) {queuedApproach={};++epoch;slots={};wasHeld=false;playerIdentity=0;playerGuid=0;}
 }
 bool Active() noexcept {return active.load();}
+bool HiddenForPickup(uint32_t guid) noexcept {
+    std::lock_guard lock(mutex);
+    uint32_t code{};
+    if(!Ready() || !context || !guid || !Validate() || !ReadPickupCode(guid,code) ||
+       !HiddenCandidate(Candidate{guid,code})) {providerHidden.erase(guid);return false;}
+    if(providerHidden.size()<2048 || providerHidden.contains(guid))
+        providerHidden[guid]={localSession.generation,GetTickCount64(),code};
+    return true;
+}
+bool CachedHiddenForPickup(uint32_t guid) noexcept {
+    std::lock_guard lock(mutex);
+    const auto found=providerHidden.find(guid);
+    return Ready() && found!=providerHidden.end() &&
+        found->second.Current(localSession.generation,GetTickCount64());
+}
 bool Ready() noexcept {return ready.load() && lifecycleAvailable.load() && localPlayerReady.load();}
 uint64_t Epoch() noexcept {std::lock_guard lock(mutex);return epoch;}
 void Track(uint32_t guid,bool shown) noexcept {
     std::lock_guard lock(mutex);
     if(!Ready() || !guid)return;
+    if(shown)(void)HiddenForPickup(guid);
+    else providerHidden.erase(guid);
     if(!shown)visible.erase(guid);
     else if(visible.size()<2048 || visible.contains(guid))visible[guid]=GetTickCount64();
 }
@@ -332,6 +368,9 @@ bool Refresh(uint32_t radius,bool held) noexcept {
             ++it;
         }
         slots=HoldSnapshot(slots,Assign({},std::move(candidates)),firstRefresh);
+        std::vector<uint32_t> hidden;
+        for(const auto& slot:slots)if(HiddenCandidate(slot))hidden.push_back(slot.guid);
+        slots=PruneHiddenSlots(slots,hidden);
     }
     for(unsigned i=0;i<slots.size();++i)
         if(old[i].guid!=slots[i].guid) {
@@ -395,4 +434,9 @@ void Submit(const Request& request,uint32_t radius,bool held) noexcept {
     // Keep assignment/placard until the client observes removal. No optimistic
     // success and no automatic resend on rejection/full inventory/latency.
 }
+}
+
+extern "C" uint64_t QolLootSelectRunFlag(uint64_t native,void* player,uint32_t type,uint32_t guid) noexcept {
+    const auto action=((native>>8)&0xff)?4u:2u;
+    return QolLootRun::Packed(native,QolClientLoot::SelectMovement(action,player,type,guid));
 }

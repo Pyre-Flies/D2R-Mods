@@ -1,4 +1,5 @@
 #include "belt_actions.h"
+#include "item_code_compatibility.h"
 #include "materials_actions.h"
 #include "vendor_buy.h"
 #include "vendor_policy.h"
@@ -150,7 +151,7 @@ NativeCall Native(const D2RL::PluginContext* ctx, const Info& info, Action actio
         __try {
             call.refusal="client-helper-guard";
             if(!QolBeltCompat::Match(ctx->exeBase+0x9a5d0,QolVendor::ClientUnitBytes,sizeof(QolVendor::ClientUnitBytes)) ||
-                !QolBeltCompat::Match(ctx->exeBase+0x36ef50,QolVendor::ItemCodeBytes,sizeof(QolVendor::ItemCodeBytes)) ||
+                !QolItemCode::Match(ctx->exeBase,0x36ef50,QolVendor::ItemCodeBytes,sizeof(QolVendor::ItemCodeBytes)) ||
                 !QolBeltCompat::Match(ctx->exeBase+0x36cfe0,QolVendor::ItemPageBytes,sizeof(QolVendor::ItemPageBytes)) ||
                 !QolBeltCompat::Match(ctx->exeBase+0xce500,QolMaterials::Signatures::UiMode,sizeof(QolMaterials::Signatures::UiMode)) ||
                 !QolBeltCompat::Match(ctx->exeBase+0x1c7360,QolIdentifyProbe::Blocked,sizeof(QolIdentifyProbe::Blocked)) ||

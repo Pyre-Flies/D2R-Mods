@@ -332,7 +332,13 @@ struct SyntheticHoldEngine {
 
 static SyntheticHoldEngine s_HoldEngine;
 static VendorContextPredicate s_VendorContextPredicate = nullptr;
+static CubeInputCallback s_CubeInputCallback=nullptr;
+static CubeResetCallback s_CubeResetCallback=nullptr;
+void SetCubeControlsCallbacks(CubeInputCallback input,CubeResetCallback reset) noexcept {
+    std::lock_guard lock(s_InputStateMutex);s_CubeInputCallback=input;s_CubeResetCallback=reset;
+}
 static void ResetShortcutTracking() noexcept {
+    if(s_CubeResetCallback)s_CubeResetCallback();
     for(unsigned n=0;n<8;++n) {
         s_PrevDpadButtons[n]=s_PrevRawButtons[n]=0;
         s_QuickMoveTriggeredX[n]=s_QuickMoveTriggeredY[n]=s_AutoFillBeltTriggered[n]=false;
@@ -372,7 +378,7 @@ void SetVendorContextPredicate(VendorContextPredicate pred) noexcept {
     s_VendorContextPredicate = pred;
 }
 
-static void ProcessGamepadShortcuts(DWORD dwUserIndex, XINPUT_STATE* pState) noexcept {
+static void ProcessGamepadShortcuts(DWORD dwUserIndex, XINPUT_STATE* pState,bool nativeUi=false) noexcept {
     std::lock_guard lock(s_InputStateMutex);
     if (!pState || dwUserIndex >= 8) return;
 
@@ -386,6 +392,13 @@ static void ProcessGamepadShortcuts(DWORD dwUserIndex, XINPUT_STATE* pState) noe
     s_PrevRawButtons[dwUserIndex] = rawButtons;
 
     const bool modHeld = IsActiveModifierHeldForPad(dwUserIndex, pState);
+    // Cube actions inspect native focus synchronously on the input/UI thread.
+    if(nativeUi && s_CubeInputCallback) {
+        const auto cubeKeys=static_cast<uint16_t>(rawButtons|
+            (pState->Gamepad.bLeftTrigger>s_ActiveTriggerThreshold?QolNativeInput::TriggerLeft:0)|
+            (pState->Gamepad.bRightTrigger>s_ActiveTriggerThreshold?QolNativeInput::TriggerRight:0));
+        buttons&=static_cast<uint16_t>(~s_CubeInputCallback(cubeKeys,modHeld,GetTickCount64()));
+    }
     // Advanced counters and some Shared grid actions bypass ItemInteraction.
     // Own A only after a recently validated cell accepts its belt mailbox request.
     if(s_AdvancedBeltGesture[dwUserIndex].Update(modHeld,(rawButtons&XINPUT_GAMEPAD_A)!=0,
@@ -552,7 +565,7 @@ static void ProcessNativeState(unsigned primaryKey=0,bool primaryPressed=false) 
     XINPUT_STATE state{};
     state.Gamepad.wButtons=raw.buttons;
     state.Gamepad.bLeftTrigger=raw.leftTrigger;state.Gamepad.bRightTrigger=raw.rightTrigger;
-    ProcessGamepadShortcuts(s_NativeIndex,&state);
+    ProcessGamepadShortcuts(s_NativeIndex,&state,true);
     auto filtered=raw;filtered.buttons=state.Gamepad.wButtons;
     filtered.leftTrigger=state.Gamepad.bLeftTrigger;filtered.rightTrigger=state.Gamepad.bRightTrigger;
     const unsigned desired=QolNativeInput::Encode(filtered);

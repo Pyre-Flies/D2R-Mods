@@ -1,3 +1,4 @@
+#include "item_code_compatibility.h"
 #include "materials_actions.h"
 #include "materials_policy.h"
 #include "cube_shortcut_policy.h"
@@ -55,7 +56,7 @@ bool BeltOnly(uintptr_t rva) noexcept {
 bool Validate(const D2RL::PluginContext* ctx,bool belt=false) noexcept {
     for (const auto& site: Signatures::All) {
         if(!belt && BeltOnly(site.rva))continue;
-        if (!(site.rva==0x3862D0 ? QolCompat::ValidateBeltEntry(ctx->exeBase+site.rva) : ctx->CheckExpectedBytes(site.rva,site.bytes,site.size))) {
+        if (!(site.rva==0x3862D0 ? QolCompat::ValidateBeltEntry(ctx->exeBase+site.rva) : QolItemCode::Check(ctx,site.rva,site.bytes,site.size))) {
         char message[160];
         std::snprintf(message,sizeof(message),"[QOL/Materials] Native profile mismatch at RVA 0x%llX; %s.",
             static_cast<unsigned long long>(site.rva),belt?"advanced belt withdrawal refused":"advanced withdrawals disabled");

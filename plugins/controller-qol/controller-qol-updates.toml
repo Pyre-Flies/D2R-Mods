@@ -16,6 +16,9 @@ identify_all = true
 # No automatic native retry after a failed SDK mutation.
 native_identify = false
 quick_move = true
+# Controller Cube: tap A opens, hold A picks up; modifier+B transmutes while highlighted or open.
+cube_tap_open = true
+cube_transmute_shortcut = true
 quick_deposit = true
 require_tome_or_scroll = true
 consume_tome_or_scroll = true

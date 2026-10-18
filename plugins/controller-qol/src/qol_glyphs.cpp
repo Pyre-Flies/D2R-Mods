@@ -5,6 +5,7 @@
 #include "glyph_signatures.h"
 #include "glyph_calls.h"
 #include "header_policy.h"
+#include "cube_controls.h"
 #include "controller_input.h"
 #include <mutex>
 #include <windows.h>
@@ -149,6 +150,7 @@ bool DrawHeader(const char* text,void* rect,void* style,float scale,const Header
         const char* compact=QolHeaderPolicy::Compact({text,size});
         const char* primary=compact?compact:text;
         if(slot==5 && QolNavigation::RangesRemapEnabled())primary="\xEE\x80\xA8" "Show Ranges";
+        if(slot==0)if(const auto cube=QolCubeControls::PrimaryHint())primary=cube;
         const char* rows[2]={primary,snapshot.lines[slot]};
         // Native font metrics include the active controller artwork. Fit within
         // the existing slot; never write native rectangles or text buffers.
@@ -198,7 +200,10 @@ void __fastcall HookText(const char* text,void* rect,void* style,float scale) {
         {std::lock_guard lock(headerMutex);snapshot=headerSnapshot;}
         const auto bulkContext=bulkHeaderContext.load();
         const char* bulkModifier=bulkContext?bulkContext():nullptr;
-        if(QolHeaderPolicy::Compose(snapshot.lines,QolHeaderPolicy::Fresh(GetTickCount64(),snapshot.tick),bulkModifier) && DrawHeader(currentHeaderLabel[0]?currentHeaderLabel:text,rect,style,scale,snapshot))return;
+        const bool composed=QolHeaderPolicy::Compose(snapshot.lines,QolHeaderPolicy::Fresh(GetTickCount64(),snapshot.tick),bulkModifier);
+        const auto transmute=QolCubeControls::TransmuteHint();
+        if(transmute)std::snprintf(snapshot.lines[6],sizeof(snapshot.lines[6]),"%s",transmute);
+        if((composed || transmute || QolCubeControls::PrimaryHint()) && DrawHeader(currentHeaderLabel[0]?currentHeaderLabel:text,rect,style,scale,snapshot))return;
     }
 
     if(currentHeader && active.load(std::memory_order_relaxed) &&

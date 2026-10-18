@@ -279,31 +279,31 @@ int main() {
     QolClientLoot::Submit(approachRequest,10,true);QolClientLoot::HookClientUpdate(local);
     Check(approaches==1,"native client update submits frozen item beyond acquisition radius");
     QolClientLoot::HookClientUpdate(local);Check(approaches==1,"consumed client update request is not resent");
-    QolClientLoot::originalMovement=&Movement;QolClientLoot::runHook=true;
-    QolClientLoot::HookMovement(2,local,4,42);Check(movementAction==4,"owned LB approach upgrades native walk to run");
-    QolClientLoot::HookMovement(4,local,4,42);Check(movementAction==4,"already-running native approach stays run");
-    QolClientLoot::HookMovement(2,peer,4,42);Check(movementAction==2,"peer movement remains native");
-    QolClientLoot::HookMovement(2,local,4,43);Check(movementAction==2,"unrelated item movement remains native");
-    QolClientLoot::HookMovement(2,local,2,42);Check(movementAction==2,"object movement remains native");
-    QolClientLoot::HookMovement(22,local,4,42);Check(movementAction==22,"unrelated action remains native");
+    QolClientLoot::runHook=true;
+    movementAction=QolClientLoot::SelectMovement(2,local,4,42);Check(movementAction==4,"owned LB approach upgrades native walk to run");
+    movementAction=QolClientLoot::SelectMovement(4,local,4,42);Check(movementAction==4,"already-running native approach stays run");
+    movementAction=QolClientLoot::SelectMovement(2,peer,4,42);Check(movementAction==2,"peer movement remains native");
+    movementAction=QolClientLoot::SelectMovement(2,local,4,43);Check(movementAction==2,"unrelated item movement remains native");
+    movementAction=QolClientLoot::SelectMovement(2,local,2,42);Check(movementAction==2,"object movement remains native");
+    movementAction=QolClientLoot::SelectMovement(22,local,4,42);Check(movementAction==22,"unrelated action remains native");
     *reinterpret_cast<unsigned*>(manager+0xdc)=0;
-    QolClientLoot::HookMovement(2,local,4,42);Check(movementAction==2,"keyboard mouse approach remains native");
+    movementAction=QolClientLoot::SelectMovement(2,local,4,42);Check(movementAction==2,"keyboard mouse approach remains native");
     *reinterpret_cast<unsigned*>(manager+0xdc)=1;
     const auto savedPermits=QolClientLoot::pickupPermits;
     for(auto& permit:QolClientLoot::pickupPermits)if(permit.guid)permit.issued-=6000;
-    QolClientLoot::HookMovement(2,local,4,42);Check(movementAction==2,"expired request cannot force movement");
+    movementAction=QolClientLoot::SelectMovement(2,local,4,42);Check(movementAction==2,"expired request cannot force movement");
     QolClientLoot::pickupPermits=savedPermits;
     ++QolClientLoot::localSession.generation;
-    QolClientLoot::HookMovement(2,local,4,42);Check(movementAction==2,"stale session cannot force movement");
+    movementAction=QolClientLoot::SelectMovement(2,local,4,42);Check(movementAction==2,"stale session cannot force movement");
     --QolClientLoot::localSession.generation;
-    guard=false;QolClientLoot::HookMovement(2,local,4,42);Check(movementAction==2,"run override fails open on changed contract");guard=true;
-    QolClientLoot::runHook=false;QolClientLoot::HookMovement(2,local,4,42);Check(movementAction==2,"unavailable run hook preserves native choice");
+    guard=false;movementAction=QolClientLoot::SelectMovement(2,local,4,42);Check(movementAction==2,"run override fails open on changed contract");guard=true;
+    QolClientLoot::runHook=false;movementAction=QolClientLoot::SelectMovement(2,local,4,42);Check(movementAction==2,"unavailable run hook preserves native choice");
     QolClientLoot::runHook=true;
     QolClientLoot::Submit(approachRequest,10,true);Check(approaches==1,"pending approach is not duplicated");
     QolClientLoot::repeatGate.issued-=250;
     QolClientLoot::Submit(approachRequest,10,true);QolClientLoot::HookClientUpdate(local);Check(approaches==2,"explicit retry after 250ms renews still-live completion permit");
     Check(QolClientLoot::TakeNativePickupPermit(10,42),"retry retains completion permission");
-    QolClientLoot::HookMovement(2,local,4,42);Check(movementAction==2,"consumed request cannot force later movement");
+    movementAction=QolClientLoot::SelectMovement(2,local,4,42);Check(movementAction==2,"consumed request cannot force later movement");
     QolClientLoot::runHook=false;
     QolClientLoot::Submit(approachRequest,10,true);Check(approaches==2,"consuming permission does not bypass repeat debounce");
     QolClientLoot::repeatGate={};
@@ -425,6 +425,29 @@ int main() {
     // #8: no packet observers or scans installed for loot, only existing projection.
     const auto scanned=enumerations;Check(QolCompat::ActionHooks::Install(&context,nullptr,+[](void*,const void*,int32_t,std::array<uint8_t,5>&) noexcept {return false;}),"projection-only hooks install");
     Check(installed==1 && enumerations==scanned,"loot installation does not observe/enumerate server actors");QolCompat::ActionHooks::Shutdown();
+    // Actual post-name observer: metadata is never text; one-byte names stay
+    // narrow, filtered labels unregister, inactive observer is inert.
+    {
+        unsigned nameUnit[4]={4,0,42,0};
+        char nameRecord[128]{};std::memcpy(nameRecord,"META",4);
+        const auto previousGroundPickup=g_Settings.groundPickup;
+        g_Settings.groundPickup=false;
+        PlacardOverlay::s_TrackedPlacards.clear();PlacardOverlay::s_Active=true;
+        std::strcpy(nameRecord+4,"A");
+        QolPlacardObserveCompletedName(nameUnit,nameRecord);
+        Check(PlacardOverlay::IsPlacardActive(42),"post-name observer tracks one-byte visible name");
+        const auto& nameTrack=PlacardOverlay::s_TrackedPlacards.at(42);
+        Check(nameTrack.textBuffer==nameRecord+4 && nameTrack.bufferSize==124 && !nameTrack.isWide,
+            "post-name observer uses bounded narrow text after metadata");
+        Check(std::memcmp(nameRecord,"METAA",5)==0,"native metadata and name preserved");
+        std::strcpy(nameRecord+4,"\xff" "c4");
+        QolPlacardObserveCompletedName(nameUnit,nameRecord);
+        Check(!PlacardOverlay::IsPlacardActive(42),"color-only hidden foreign label stays filtered");
+        PlacardOverlay::s_Active=false;std::strcpy(nameRecord+4,"Foreign name");
+        QolPlacardObserveCompletedName(nameUnit,nameRecord);
+        Check(!PlacardOverlay::IsPlacardActive(42),"inactive observer cannot register names");
+        g_Settings.groundPickup=previousGroundPickup;
+    }
     g_PollingRunning=false;QolClientLoot::Shutdown();ControllerQoL::s_NativeGame=0;ControllerQoL::s_NativeInstalled=false;
     VirtualFree(image,0,MEM_RELEASE);std::printf("Controller QOL production audit regressions: %u checks passed.\n",checks.load());
 }

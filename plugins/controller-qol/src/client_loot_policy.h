@@ -4,6 +4,13 @@
 #include <vector>
 #include <algorithm>
 namespace QolClientLoot {
+struct VisibilityProof {
+    uint64_t generation{},observed{};
+    uint32_t code{};
+    bool Current(uint64_t session,uint64_t now) const noexcept {
+        return generation && generation==session && now>=observed && now-observed<=250;
+    }
+};
 inline bool IsGoldCode(uint32_t code) noexcept {return code==0x20646c67u || code==0x00646c67u;}
 // The SDK's UI lifecycle supplies identity, never a borrowed native player.
 struct LocalSession {
@@ -55,6 +62,13 @@ using Slots = std::array<Candidate,7>;
 // removed items. Submission separately revalidates visibility/native identity.
 inline Slots HoldSnapshot(const Slots& original,const Slots& observed,bool firstRefresh) {
     return firstRefresh?observed:original;
+}
+inline Slots PruneHiddenSlots(const Slots& original,const std::vector<uint32_t>& hidden) {
+    auto result=original;
+    for(auto& slot:result) {
+        if(std::find(hidden.begin(),hidden.end(),slot.guid)!=hidden.end())slot={};
+    }
+    return result; // Leave holes while held; never redirect an existing button.
 }
 struct Request { Candidate item{}; uint64_t epoch{}, queuedAt{}; };
 inline bool CurrentRequest(const Request& request,uint64_t epoch,uint64_t now,bool held) {

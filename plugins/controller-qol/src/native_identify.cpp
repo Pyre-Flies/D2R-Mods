@@ -1,4 +1,5 @@
 #include "plugin_coexistence.h"
+#include "item_code_compatibility.h"
 #include "native_identify.h"
 #include "native_identify_profile.h"
 #include "identify_stat.h"
@@ -36,6 +37,7 @@ struct Work {QolIdentify::Info target{},tome{};D2RL::PlayerHandle player{};ULONG
 template<class T>T At(uintptr_t rva) noexcept {return reinterpret_cast<T>(context->exeBase+rva);}
 const char* admissionReason="not-initialized";
 bool Bytes(uintptr_t base,uintptr_t rva,const unsigned char* expected,size_t size,const char* module) noexcept {
+    if(base==context->exeBase && rva==QolItemCode::Rva && QolItemCode::Compatible(base,expected,size))return true;
     auto actual=reinterpret_cast<const unsigned char*>(base+rva);
     for(size_t i=0;i<size;++i)if(actual[i]!=expected[i]) {
         char line[256];std::snprintf(line,sizeof(line),"[QOL/IdentifyNative] refused=byte-mismatch module=%s RVA=0x%llX offset=0x%llX expected=%02X actual=%02X.",module,static_cast<unsigned long long>(rva),static_cast<unsigned long long>(i),static_cast<unsigned>(expected[i]),static_cast<unsigned>(actual[i]));

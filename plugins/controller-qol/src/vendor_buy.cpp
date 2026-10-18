@@ -1,4 +1,5 @@
 #include "plugin_coexistence.h"
+#include "item_code_compatibility.h"
 #include "vendor_buy.h"
 #include "vendor_policy.h"
 #include "vendor_compatibility.h"
@@ -17,9 +18,9 @@ bool Validate(const D2RL::PluginContext* ctx) noexcept {
     if (!ctx || !ctx->exeBase) return false;
     for (const auto& s: QolVendor::Sites)
         if (!(s.rva==0x10D160 ? QolVendor::ValidateTransaction(ctx->exeBase) :
-            QolBeltCompat::Match(ctx->exeBase+s.rva,s.bytes,s.size))) return false;
+            QolItemCode::Match(ctx->exeBase,s.rva,s.bytes,s.size))) return false;
     for (const auto& s: QolCustomProfile::Game)
-        if (!QolBeltCompat::Match(ctx->exeBase+s.rva,s.bytes,s.size)) return false;
+        if (!QolItemCode::Match(ctx->exeBase,s.rva,s.bytes,s.size)) return false;
     return true;
 }
 void* Stock(uintptr_t base, const D2RL::Items::ItemInfo& info, void*& panel) noexcept {

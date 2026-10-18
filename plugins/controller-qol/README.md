@@ -1,3 +1,12 @@
+# Tested beta.7 source snapshot
+
+This branch contains Controller QOL `1.3.1+rev.80-beta.7-opacity.1`, paired
+with Unhoarder 1.2.9 from the Pyre-Flies fork. It preserves the tested beta.7
+baseline and adds exact admission of the opacity-fixed companion. See
+[compatibility and validation](docs/UNHOARDER-OPACITY-COMPATIBILITY.md).
+Existing configs are preserved; no runtime DLLs or sound tables are committed.
+Historical release details below remain records of their named revisions.
+
 # Controller QOL Updates
 
 **1.3.1+rev.79-beta.4 · by PyreFly · Windows x64 / D2RLoader 1.3.1 / plugin ABI 4**

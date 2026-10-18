@@ -57,6 +57,10 @@ void SetTriggerPassThroughPredicate(TriggerPassThroughPredicate predicate) noexc
 // Must be lock-free: called inside the native input gate, before game dispatch.
 void SetGroundPickupPredicate(TriggerPassThroughPredicate predicate) noexcept;
 
+using CubeInputCallback = uint16_t(*)(uint16_t,bool,uint64_t) noexcept;
+using CubeResetCallback = void(*)() noexcept;
+void SetCubeControlsCallbacks(CubeInputCallback,CubeResetCallback) noexcept;
+
 using QuickMoveCallback = void(*)();
 void SetQuickMoveCallback(QuickMoveCallback callback) noexcept;
 

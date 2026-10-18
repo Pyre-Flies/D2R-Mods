@@ -1,3 +1,15 @@
+## 1.3.1+rev.80-beta.7-opacity.1
+
+- Preserve the tested beta.7 controller behavior and add exact compatibility
+  with Unhoarder 1.2.9, whose filter backgrounds support varying native opacity.
+- Respect Unhoarder-hidden items in LB shortcut assignments and configured
+  controller pickup blocking; preserve normal standalone filtering and gold.
+- Retain the tested controller cube, caption and native forwarding repairs.
+
+Validation: all 63 QOL tests pass with the reviewed companion fixtures;
+the user confirmed the background fix and earlier visibility/pickup behavior.
+This branch preserves the matching source snapshot; it publishes no binaries.
+
 # Controller QOL changelog
 
 ## 1.3.1+rev.79-beta.4 - 2026-10-15

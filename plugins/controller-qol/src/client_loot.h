@@ -15,6 +15,8 @@ void Shutdown() noexcept;
 bool Activate() noexcept;
 void Deactivate() noexcept;
 bool Active() noexcept;
+bool HiddenForPickup(uint32_t guid) noexcept; // Qualified presentation query only.
+bool CachedHiddenForPickup(uint32_t guid) noexcept; // Owned IDs only; safe for native/server guard.
 bool Ready() noexcept; // Lock-free admission check for the native input gate.
 uint64_t Epoch() noexcept;
 // Called by the existing filtered tooltip callback; stores IDs, never units/buffers.

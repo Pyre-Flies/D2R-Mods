@@ -1,3 +1,5 @@
+#include "item_code_compatibility.h"
+#include "cube_controls.h"
 #include "relay_allocation.h"
 #include "identify_bulk.h"
 #include "owned_payloads.h"
@@ -68,6 +70,8 @@ struct PluginSettings {
     bool identifyAll = true;
     bool nativeIdentify = false;
     bool quickMove = true;
+    bool cubeTapOpen = true;
+    bool cubeTransmuteShortcut = true;
     bool quickDeposit = true;
     bool groundPickup = true;
     uint32_t groundPickupDistance = 6;
@@ -161,7 +165,7 @@ static constexpr D2RL::PluginInfo ControllerQoLPluginInfo {
     .abiVersion  = D2RL_PLUGIN_ABI_VERSION,
     .id          = "controller-qol-updates",
     .name        = "Controller QOL Updates",
-    .version     = "1.3.1+rev.79-beta.4",
+    .version     = "1.3.1+rev.80-beta.7-opacity.1",
     .author      = "PyreFly",
     .description = "Direct controller looting with filtered labels, inventory shortcuts, and stash navigation.",
     .flags       = D2RL::PluginFlags::Shared | D2RL::PluginFlags::NativeHooks,
@@ -201,6 +205,8 @@ static void LoadConfiguration(const D2RL::PluginContext* context) noexcept {
     parseBool("identify_all", g_Settings.identifyAll);
     parseBool("native_identify", g_Settings.nativeIdentify);
     parseBool("quick_move", g_Settings.quickMove);
+    parseBool("cube_tap_open", g_Settings.cubeTapOpen);
+    parseBool("cube_transmute_shortcut", g_Settings.cubeTransmuteShortcut);
     parseBool("quick_deposit", g_Settings.quickDeposit);
     parseBool("ground_pickup", g_Settings.groundPickup);
     parseBool("require_tome_or_scroll", g_Settings.requireTomeOrScroll);
@@ -297,12 +303,14 @@ static void __cdecl IdentifySessionChanged(const D2RL::PluginContext*,const D2RL
     s_ClientLootRefreshToken=0;
     CancelOwnedRequests();
     QolClientLoot::OnLifecycle(event);
+    QolCubeControls::OnLifecycle(event);
     PlacardOverlay::ForgetSession(); // Never restore a buffer belonging to the old game.
     {std::lock_guard lock(s_FocusIdentityMutex);s_FocusIdentity={};s_FocusIdentityTick=0;}
     s_FocusedItem=0;s_FocusedCode=0;s_FocusedTick=0;s_LastPlayerHandle=0;
 }
 static void __cdecl GroundPlayerReady(const D2RL::PluginContext*,const D2RL::Lifecycle::GameplayEvent* event,void*) noexcept {
     QolClientLoot::OnLifecycle(event);
+    QolCubeControls::OnLifecycle(event);
 }
 static void InitializeIdentifyQueue(const D2RL::PluginContext* ctx) noexcept {
     IdentifySessionChanged(nullptr,nullptr,nullptr);s_IdentifySessionEvents=false;
@@ -388,7 +396,7 @@ static void TriggerNativeSellOnFocusedItem(const D2RL::PluginContext* ctx,
     static ULONGLONG lastSell{}; // UI-thread only; native immediate action also throttles at 500ms.
     const auto now=GetTickCount64();
     if (lastSell && now-lastSell<500) return;
-    for (const auto& site:QolVendor::Sites) if (!(site.rva==0x10D160 ? QolVendor::ValidateTransaction(ctx->exeBase) : ctx->CheckExpectedBytes(site.rva,site.bytes,site.size))) {
+    for (const auto& site:QolVendor::Sites) if (!(site.rva==0x10D160 ? QolVendor::ValidateTransaction(ctx->exeBase) : QolItemCode::Check(ctx,site.rva,site.bytes,site.size))) {
         char msg[144]; std::snprintf(msg,sizeof(msg),"[QOL/Sell] Native profile mismatch at RVA 0x%X; refused.",site.rva);
         ctx->LogWarn(msg); return;
     }
@@ -1371,7 +1379,8 @@ namespace GroundLoot {
     static bool BlockClientPickup(uint32_t guid,uint32_t code) noexcept {
         if(!g_Settings.enabled || !g_Settings.blockFilteredPickup ||
            !ControllerQoL::IsControllerUiActive() || QolClientLoot::IsGoldCode(code))return false;
-        const bool blocked=!PlacardOverlay::IsPlacardActive(guid);
+        const bool blocked=!PlacardOverlay::IsPlacardActive(guid) ||
+            QolClientLoot::HiddenForPickup(guid);
         if(blocked && g_PluginContext && g_Settings.debugLogging) {
             char message[128];std::snprintf(message,sizeof(message),"[QOL/ClientLoot] Suppressed filtered pickup GUID=%u before submission.",guid);
             g_PluginContext->LogInfo(message);
@@ -1445,7 +1454,8 @@ namespace GroundLoot {
         const bool modifierHeld = shortcutsEnabled &&
             ControllerQoL::IsGroundPickupActive(g_Settings.groundPickupButton);
         const bool blockFilteredPickup = g_Settings.blockFilteredPickup && ControllerQoL::IsControllerUiActive();
-        const bool placardActive = !blockFilteredPickup || PlacardOverlay::IsPlacardActive(guid);
+        const bool placardActive = !blockFilteredPickup ||
+            (PlacardOverlay::IsPlacardActive(guid) && !QolClientLoot::CachedHiddenForPickup(guid));
         if (Probe::BlockNativePickup(shortcutsEnabled, modifierHeld,
                 blockFilteredPickup, placardActive)) {
             // Gold is exempt even when its label is hidden or LB is held.
@@ -1621,10 +1631,12 @@ namespace GroundLoot {
 
 static bool ClientGroundHeld() noexcept;
 
+extern "C" {
+    void QolPlacardPostNameBridge();
+    void* QolPlacardNativeQuery=nullptr;
+}
 namespace PlacardOverlay {
     constexpr std::uintptr_t BuildGroundItemTooltipRva = 0xCBEB0;
-    typedef int64_t (__fastcall *BuildGroundItemTooltipFn)(void* unit, void* textBuffer, size_t bufferSize, void* colorCode);
-    inline BuildGroundItemTooltipFn s_OriginalBuildGroundItemTooltip = nullptr;
     inline std::atomic<uint32_t> s_HookCallCount{0};
     inline bool s_Active=false; // guarded by s_PlacardMutex
 
@@ -1641,29 +1653,17 @@ namespace PlacardOverlay {
     inline std::unordered_map<uint32_t, PlacardTrack> s_TrackedPlacards;
 
     static bool HasVisiblePlacardText(const void* buffer, size_t bufferSize) noexcept {
-        if (!buffer || bufferSize < 2) return false;
+        if (!buffer || !bufferSize) return false;
         __try {
-            const auto* raw = reinterpret_cast<const uint8_t*>(buffer);
-            if (raw[0] != 0 && raw[1] == 0) {
-                // Wide UTF-16
-                const auto* w = reinterpret_cast<const wchar_t*>(buffer);
-                for(size_t i=0;i<bufferSize && w[i];++i) {
-                    if(w[i]==0xFF && i+2<bufferSize && w[i+1]==L'c' && w[i+2]) {i+=2;continue;}
-                    if(w[i]>32) return true;
-                }
-                return false;
-            } else {
-                // Narrow / UTF-8
-                const auto* c = reinterpret_cast<const char*>(buffer);
-                for(size_t i=0;i<bufferSize && c[i];++i) {
-                    if(static_cast<unsigned char>(c[i])==0xFF && i+2<bufferSize && c[i+1]=='c' && c[i+2]) {i+=2;continue;}
-                    if(static_cast<unsigned char>(c[i])>32) return true;
-                }
-                return false;
+            // This observed native name record contains narrow text, including
+            // one-character names. Capacity is bytes, never UTF-16 elements.
+            const auto* text=static_cast<const unsigned char*>(buffer);
+            for(size_t i=0;i<bufferSize && text[i];++i) {
+                if(text[i]==0xff && i+2<bufferSize && text[i+1]=='c' && text[i+2]) {i+=2;continue;}
+                if(text[i]>32) return true;
             }
-        } __except (EXCEPTION_EXECUTE_HANDLER) {
             return false;
-        }
+        } __except(EXCEPTION_EXECUTE_HANDLER) {return false;}
     }
 
     inline void RegisterPlacard(uint32_t guid, void* textBuffer, size_t bufferSize, bool isWide) {
@@ -1772,30 +1772,26 @@ namespace PlacardOverlay {
         __try {return unit ? static_cast<const uint32_t*>(unit)[2] : 0;}
         __except(EXCEPTION_EXECUTE_HANDLER) {return 0;}
     }
-    inline int64_t __fastcall HookBuildGroundItemTooltip(void* unit, void* textBuffer, size_t bufferSize, void* colorCode) {
+    // Runs after the native name writer, before the caller measures the label.
+    // The native buffer has a four-byte prefix; only its 124-byte text is ours.
+    void ObserveCompletedName(void* unit, void* output) {
         ++s_HookCallCount;
-        int64_t result = 0;
-        if (s_OriginalBuildGroundItemTooltip) {
-            result = s_OriginalBuildGroundItemTooltip(unit, textBuffer, bufferSize, colorCode);
-        }
-
+        auto* textBuffer=static_cast<unsigned char*>(output)+4;
+        constexpr size_t bufferSize=0x80-4;
         std::lock_guard<std::recursive_mutex> processing(s_PlacardMutex);
-        if (!s_Active || !unit || !textBuffer || bufferSize < 8) return result;
+        if (!s_Active || !unit || !textBuffer || bufferSize < 8) return;
 
         const uint32_t guid=ReadPlacardGuid(unit);
 
-        if (guid == 0) return result;
+        if (guid == 0) return;
 
         if (!HasVisiblePlacardText(textBuffer, bufferSize)) {
             QolClientLoot::Track(guid,false);
             UnregisterPlacard(guid);
-            return result;
+            return;
         }
 
-        const uint8_t* rawBytes = reinterpret_cast<const uint8_t*>(textBuffer);
-        bool isWide = (rawBytes[0] != 0 && rawBytes[1] == 0);
-
-        RegisterPlacard(guid, textBuffer, bufferSize, isWide);
+        RegisterPlacard(guid, textBuffer, bufferSize, false);
         QolClientLoot::Track(guid,true);
 
         // If ground pickup modifier is currently held down, apply the prefix immediately
@@ -1812,26 +1808,27 @@ namespace PlacardOverlay {
             }
         }
 
-        return result;
+        return;
     }
 
     bool Install(const D2RL::PluginContext* context) noexcept {
         using namespace QolPlacardCall;
-        if(!context->CheckExpectedBytes(WitnessRva,Witness,sizeof(Witness))) return false;
+        if(!context->CheckExpectedBytes(WitnessRva,Witness,sizeof(Witness)) ||
+            !context->CheckExpectedBytes(Site,Expected,sizeof(Expected))) return false;
         HMODULE pinned{};
         if(!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS|GET_MODULE_HANDLE_EX_FLAG_PIN,
-            reinterpret_cast<LPCWSTR>(&HookBuildGroundItemTooltip),&pinned)) return false;
+            reinterpret_cast<LPCWSTR>(&QolPlacardPostNameBridge),&pinned)) return false;
         auto* relay=QolRelay::Allocate(context->exeBase+Site,64);
         if(!relay) return false;
         relay[0]=0xff;relay[1]=0x25;std::memset(relay+2,0,4);
-        const auto destination=&HookBuildGroundItemTooltip;std::memcpy(relay+6,&destination,8);
+        const auto destination=&QolPlacardPostNameBridge;std::memcpy(relay+6,&destination,8);
         unsigned char replacement[5]{};DWORD old{};
         if(!QolGlyphCalls::Encode(context->exeBase+Site,reinterpret_cast<uintptr_t>(relay),replacement) ||
             !VirtualProtect(relay,64,PAGE_EXECUTE_READ,&old)) {
             VirtualFree(relay,0,MEM_RELEASE);return false;
         }
         FlushInstructionCache(GetCurrentProcess(),relay,64);
-        s_OriginalBuildGroundItemTooltip=reinterpret_cast<BuildGroundItemTooltipFn>(context->exeBase+Target);
+        QolPlacardNativeQuery=reinterpret_cast<void*>(context->exeBase+Target);
         // Retain relay after attempted publication, including ambiguous failures.
         // SDK owns patch cleanup; the pinned wrapper becomes passthrough on shutdown.
         const bool installed=context->PatchBytes(Site,Expected,5,replacement,5);
@@ -1843,6 +1840,11 @@ namespace PlacardOverlay {
         s_Active=false;s_TrackedPlacards.clear();
     }
 }
+extern "C" void QolPlacardObserveCompletedName(void* unit,void* output) noexcept {
+    if(!unit || !output) return;
+    try {PlacardOverlay::ObserveCompletedName(unit,output);} catch(...) {}
+}
+
 
 
 struct PickupTaskArgs {
@@ -2148,7 +2150,7 @@ D2RL_PLUGIN_EXPORT auto D2RLoaderLoadPlugin(const D2RL::PluginContext* context) 
 
             const bool hookOk=PlacardOverlay::Install(context);
             context->LogInfo(hookOk
-                ? "[QOL/Placards] Scoped label call installed at game+0x1FAA18; shared builder+0xCBEB0 untouched."
+                ? "[QOL/Placards] Post-name observer installed at game+0x1FAA1D; name call+0x1FAA18 and builder+0xCBEB0 untouched."
                 : "[QOL/Placards] Label caller guard/patch failed; controller label hints unavailable.");
 
             const bool pickupCallsOk = GroundLoot::InstallPickupCalls(context);
@@ -2162,6 +2164,7 @@ D2RL_PLUGIN_EXPORT auto D2RLoaderLoadPlugin(const D2RL::PluginContext* context) 
     QolNativeIdentify::Initialize(context,g_Items,g_Threads);
     QolClientLoot::Initialize(context,&GroundLoot::GetItemCodeRank,&GroundLoot::BlockClientPickup,&ClientGroundHeld);
     InitializeIdentifyQueue(context);
+    QolCubeControls::Initialize(context,g_Widgets,g_Settings.cubeTapOpen,g_Settings.cubeTransmuteShortcut,g_Settings.modifier);
     if(!QolClientTransfer::Initialize(context))context->LogWarn("[QOL/ClientTransfer] Profile/services unavailable; remote transfers disabled.");
     (void)QolCustomPage::Initialize(context);
     if (!QolMaterials::Initialize(context))
@@ -2191,6 +2194,10 @@ D2RL_PLUGIN_EXPORT auto D2RLoaderLoadPlugin(const D2RL::PluginContext* context) 
     ControllerQoL::SetQuickMoveCubeCallback(TriggerQuickMoveToCubeOnFocusedItem);
     ControllerQoL::SetAutoFillBeltCallback(TriggerAutoFillBelt);
     ControllerQoL::SetVendorContextPredicate(nullptr); // Native LB+X sale; no synthetic X hold.
+    ControllerQoL::SetCubeControlsCallbacks(+[](uint16_t buttons,bool modifier,uint64_t now) noexcept -> uint16_t {
+        if(!g_Settings.enabled)return 0;
+        return QolCubeControls::Input(buttons,modifier,now,QolNativeIdentify::Busy() || QolClientTransfer::Busy() || QolBelt::Busy() || QolMaterials::Busy() || QolBulkStash::Busy());
+    },QolCubeControls::Cancel);
     const bool nativeInputOk=ControllerQoL::InstallNativeInputHook(context,g_Threads);
     const bool hooksOk = nativeInputOk || ControllerQoL::InstallXInputHooks();
     char hookLog[128];
@@ -2409,7 +2416,7 @@ D2RL_PLUGIN_EXPORT auto D2RLoaderLoadPlugin(const D2RL::PluginContext* context) 
         g_Settings.groundPickupButton, g_Settings.portalPriorityDistance);
     if(!QolAim::Initialize(context,g_Settings.enabled))
         context->LogWarn("[QOL/Aim] Aim unavailable; other QOL features remain loaded.");
-    context->LogInfo("[QOL] QOL v1.3.1+rev.79-beta.4 loaded: controller item features and integrated v0.6 navigation/label hooks.");
+    context->LogInfo("[QOL] QOL v1.3.1+rev.80-beta.7-opacity.1 loaded: controller item features and integrated v0.6 navigation/label hooks.");
     return true;
 }
 
@@ -2436,6 +2443,8 @@ D2RL_PLUGIN_EXPORT void D2RLoaderUnloadPlugin() noexcept {
     ControllerQoL::SetAutoFillBeltCallback(nullptr);
     QolNavigation::Shutdown();
     ControllerQoL::SetTriggerPassThroughPredicate(nullptr);
+    ControllerQoL::SetCubeControlsCallbacks(nullptr,nullptr);
+    QolCubeControls::Shutdown();
     ControllerQoL::SetQuickMoveCallback(nullptr);
     ControllerQoL::SetQuickMoveCubeCallback(nullptr);
     ControllerQoL::SetVendorContextPredicate(nullptr);

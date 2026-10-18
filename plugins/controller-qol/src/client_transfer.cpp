@@ -1,3 +1,4 @@
+#include "item_code_compatibility.h"
 #include "client_transfer.h"
 #include "client_transfer_profile.h"
 #include "client_request_profile.h"
@@ -42,7 +43,7 @@ struct Work {
 template<class T>T At(uintptr_t rva) noexcept {return reinterpret_cast<T>(context->exeBase+rva);}
 bool Guard() noexcept {
     if(!context)return false;
-    for(const auto& site:Profile::Sites)if(!context->CheckExpectedBytes(site.rva,site.bytes,site.size))return false;
+    for(const auto& site:Profile::Sites)if(!QolItemCode::Check(context,site.rva,site.bytes,site.size))return false;
     using namespace QolBelt::Signatures;
     using namespace QolNativeIdentifyProfile;
     const Profile::Site helpers[]={
@@ -56,7 +57,7 @@ bool Guard() noexcept {
         {0x23af50,SharedPageNative::SelectedTab,sizeof(SharedPageNative::SelectedTab)},
         {0x2ef880,SharedOwnerIdBytes,sizeof(SharedOwnerIdBytes)}
     };
-    for(const auto& site:helpers)if(!context->CheckExpectedBytes(site.rva,site.bytes,site.size))return false;
+    for(const auto& site:helpers)if(!QolItemCode::Check(context,site.rva,site.bytes,site.size))return false;
     // Core redirects one CALL inside this owner resolver. Reuse the reviewed
     // relocation-aware contract: unchanged body, exact thunk target and wrapper.
     if(!QolShared::ValidateOwner(context->exeBase)) {

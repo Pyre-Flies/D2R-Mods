@@ -1,3 +1,4 @@
+#include "item_code_compatibility.h"
 #pragma once
 #include "client_transfer_policy.h"
 #include "storage_focus_profile.h"
@@ -34,7 +35,7 @@ inline bool Matches(const D2RL::PluginContext* ctx,const QolClientTransfer::Info
         if(!ctx->CheckExpectedBytes(0x846020,QolFilterFocus::FocusGetter,sizeof(QolFilterFocus::FocusGetter)) ||
            !ctx->CheckExpectedBytes(0x876160,QolStorageProfile::ControllerFocus,sizeof(QolStorageProfile::ControllerFocus)) ||
            !ctx->CheckExpectedBytes(0x2a89c0,QolStorageProfile::ControllerItem,sizeof(QolStorageProfile::ControllerItem)) ||
-           !ctx->CheckExpectedBytes(0x36ef50,Code,sizeof(Code)))return false;
+           !QolItemCode::Check(ctx,0x36ef50,Code,sizeof(Code)))return false;
         const auto base=ctx->exeBase;
         auto manager=*reinterpret_cast<const unsigned char**>(base+0x3440170);
         auto focus=manager?*reinterpret_cast<const unsigned char* const*>(manager+0xd0):nullptr;

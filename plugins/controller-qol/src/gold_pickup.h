@@ -1,3 +1,4 @@
+#include "item_code_compatibility.h"
 #pragma once
 #include "gold_pickup_profile.h"
 #include "client_loot_policy.h"
@@ -8,7 +9,7 @@ namespace QolGoldPickup {
 // Follow that entry's adjacent-room enumeration; never borrow client/UI units.
 inline bool IsGold(const D2RL::PluginContext* context,void* player,uint32_t guid) noexcept {
     if(!context || !player || !guid)return false;
-    for(const auto& s:Sites)if(!context->CheckExpectedBytes(s.rva,s.bytes,s.size))return false;
+    for(const auto& s:Sites)if(!QolItemCode::Check(context,s.rva,s.bytes,s.size))return false;
     __try {
         const auto base=context->exeBase;
         auto room=reinterpret_cast<void*(__fastcall*)(void*)>(base+0x34b440)(player);

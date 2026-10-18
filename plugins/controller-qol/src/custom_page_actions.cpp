@@ -1,4 +1,5 @@
 #include "custom_page_actions.h"
+#include "item_code_compatibility.h"
 #include "custom_page_profile.h"
 #include "core_compatibility.h"
 #include "native_input_profile.h"
@@ -22,7 +23,7 @@ static_assert(sizeof(Snapshot)==0x10);
 template<class T> T At(uintptr_t base, uintptr_t rva) noexcept { return reinterpret_cast<T>(base+rva); }
 bool Check(uintptr_t base,const QolCustomProfile::Site* sites,size_t count) noexcept {
     for(size_t i=0;i<count;++i)
-        if(std::memcmp(reinterpret_cast<void*>(base+sites[i].rva),sites[i].bytes,sites[i].size)) return false;
+        if(!QolItemCode::Match(base,sites[i].rva,sites[i].bytes,sites[i].size)) return false;
     return true;
 }
 bool Guard(uintptr_t base, uintptr_t game) noexcept {
