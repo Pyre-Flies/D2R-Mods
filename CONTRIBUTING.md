@@ -8,10 +8,10 @@ Current plugin versions and player behavior are documented in [README.md](README
 
 Initialize the pinned SDK with `git submodule update --init --recursive`.
 From the repository root in a Visual Studio x64 Developer Prompt, build one plugin
-in the [external local workspace](docs/WORKSPACE.md), for example:
+in the [ignored local workspace](docs/WORKSPACE.md), for example:
 
 ```powershell
-$work = if ($env:D2R_MODS_WORKSPACE) { $env:D2R_MODS_WORKSPACE } else { Join-Path (Split-Path (Get-Location) -Parent) 'D2R-Mods-Local' }
+$work = python tools/local_workspace.py
 $build = Join-Path $work 'scratch/controller-qol/build'
 cmake -S plugins/controller-qol -B $build -G "NMake Makefiles" -DCMAKE_BUILD_TYPE=Release
 cmake --build $build

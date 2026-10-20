@@ -1,4 +1,4 @@
-"""Locate machine-local artifacts without adding them to the source checkout."""
+"""Locate ignored machine-local artifacts within the repository."""
 import os
 from pathlib import Path
 import sys
@@ -6,7 +6,7 @@ import sys
 
 def workspace_root() -> Path:
     repo = Path(__file__).resolve().parents[1]
-    return Path(os.environ.get("D2R_MODS_WORKSPACE", str(repo.parent / "D2R-Mods-Local"))).expanduser().resolve()
+    return Path(os.environ.get("D2R_MODS_WORKSPACE", str(repo / "outputs"))).expanduser().resolve()
 
 
 def add_python_dependencies() -> None:

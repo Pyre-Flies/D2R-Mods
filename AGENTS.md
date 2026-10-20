@@ -19,7 +19,7 @@ plugin's `src/` and `tests/` first; historical records are opt-in (`rg --no-igno
 
 ## Working and finishing
 
-- Use the sibling `../D2R-Mods-Local/` workspace (override with
+- Use the ignored `outputs/` workspace (override with
   `D2R_MODS_WORKSPACE`) for builds and artifacts; see [workspace layout](docs/WORKSPACE.md).
 - Validate affected behavior. Distinguish automated checks, installation and live
   game results. Update the plugin changelog for player-visible or compatibility changes.

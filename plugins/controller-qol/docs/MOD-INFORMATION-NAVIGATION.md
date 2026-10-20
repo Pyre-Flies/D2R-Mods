@@ -8,7 +8,7 @@ The user reports LT/RT changing the game panels behind an open Mod Information
 window and requested L1/R1 for the information tabs. The custom shell is
 `modinfo_aa`, with direct child `OptionsTabs`. Its seven content pages are
 separate panels. The prior softmod work is recorded in
-`controller-mod-information-softmod.md`, preserved with the external workspace's
+`controller-mod-information-softmod.md`, preserved with the ignored local workspace's
 unpublished mod-data research records.
 No softmod files are changed by this plugin update.
 
@@ -123,7 +123,7 @@ two remaining layout/input issues: both bumper indicators occupy the left edge,
 and controller scrolling cannot reach content below the initial viewport.
 This confirms page switching, not every input/lifecycle check below. The
 indicator placement and scrollbar focus follow-up is documented in that separate
-softmod investigation. Its original evidence remains preserved outside this plugin checkout.
+softmod investigation. Its original evidence remains in the local workspace's unpublished records.
 
 Remaining live checks after the layout follow-up:
 

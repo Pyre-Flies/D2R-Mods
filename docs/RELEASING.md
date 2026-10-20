@@ -11,8 +11,8 @@ Experimental and diagnostic plugins stay in D2R-Mods-Research.
    the main checkout. Preserve unrelated work. Use a `Pyre/` branch for new publication work.
 2. Build and test the affected scope from the exact reviewed commit using
    [CONTRIBUTING.md](../CONTRIBUTING.md). Check version resources, changelogs and READMEs.
-3. Prepare candidates under the external workspace's `scratch/<task>/` directory.
-   See [WORKSPACE.md](WORKSPACE.md); the source checkout is not an artifact store.
+3. Prepare candidates under `outputs/scratch/<task>/` in the ignored local workspace.
+   See [WORKSPACE.md](WORKSPACE.md) for the layout and optional location override.
 4. Run the relevant packaging checks:
 
    ```powershell
@@ -50,7 +50,7 @@ A successful build or deployment is not new live-game acceptance.
 
 ## Promote and clean
 
-Promote download-verified artifacts into the external workspace's
+Promote download-verified artifacts into the ignored local workspace's
 `current/release/` and indexed current plugin locations. Update CURRENT-BUILDS.md
 with source commits, paths, hashes, companion requirements and validation limits.
 Retire superseded scratch builds and temporary gold/rollback copies after their
