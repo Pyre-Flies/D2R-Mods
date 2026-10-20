@@ -1,6 +1,6 @@
 > Historical 1.5.4 behavior, superseded by [MATERIALS-CUBE-ROUTING.md](MATERIALS-CUBE-ROUTING.md).
 
-# Embedded Cube routing — 1.5.4-cube
+# Embedded Cube routing â€” 1.5.4-cube
 
 ## Evidence and cause
 
@@ -8,7 +8,7 @@ The user reports the Horadric Cube is embedded in Materials. The installed contr
 
 Saved 1.5.3-runtime.log shows:
 
-- 18:27:48–52: focused SDK container 5 (Cube), code 0x206C676C, was intercepted by Materials while native BankTabs still reported tab 4. Resolve stage=slot-missing suppressed ordinary withdrawal. Cube contents are real items, not advanced counter proxies.
+- 18:27:48â€“52: focused SDK container 5 (Cube), code 0x206C676C, was intercepted by Materials while native BankTabs still reported tab 4. Resolve stage=slot-missing suppressed ordinary withdrawal. Cube contents are real items, not advanced counter proxies.
 - 18:27:59: the same Cube source successfully used an SDK transaction into Inventory after the ordinary stash tab became active.
 - 18:28:04: inventory item routed to PersonalStash with Stash=1, Cube=0. Legacy destination selection prioritized stash, and ExecuteMoveTask independently forced every inventory move through stash smart-deposit whenever stash mode was open. The latter also affected explicit LB+Y Cube requests.
 - The same run records advanced withdrawals followed by inventory quantity increases, including Um at 18:27:21. The panel-name correction reached the native withdrawal path successfully.

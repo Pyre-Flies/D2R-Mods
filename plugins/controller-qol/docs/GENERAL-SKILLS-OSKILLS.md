@@ -208,5 +208,5 @@ and showed an aim/snap reticle, but the user reports casting did not snap until
 an off/on R3 cycle. Save & Exit also crashed; dump inspection identifies a
 NVIDIA-module fault, with prior suspect plugins still loaded from the global
 folder. These are open issues, not complete validation of General Skills.
-See [the follow-up evidence](CRASH-TRIAGE-2026-10-10.md) for identities, limits,
+See [the follow-up evidence](history/CRASH-TRIAGE-2026-10-10.md) for identities, limits,
 user-corrected plugin isolation and the pending fresh-launch diagnostic sequence.

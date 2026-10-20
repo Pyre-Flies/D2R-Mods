@@ -10,7 +10,7 @@ lead estimates for arbitrary mod replacements.
 ## Rev.71 packaged baselines
 
 The user confirmed the rev.70 NPC first-press fix and Shock Web tuning.
-[Rev.71](LEADING-BASELINES-REV71.md) supersedes the earlier commented-only and
+[Rev.71](history/LEADING-BASELINES-REV71.md) supersedes the earlier commented-only and
 deferred-trial status below: 42 active estimates, a complete 240-ID ledger, and
 explicit zero-lead choices. Historical trial records remain for provenance.
 

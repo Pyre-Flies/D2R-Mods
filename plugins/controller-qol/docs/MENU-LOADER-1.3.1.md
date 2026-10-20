@@ -1,4 +1,4 @@
-# Menu restoration on D2RLoader 1.3.1 — 1.5.22
+# Menu restoration on D2RLoader 1.3.1 â€” 1.5.22
 
 The 1.5.21 startup repair was confirmed by the user; basic controls and ground loot also work. Main-menu remapping was disabled because game-only hooks unnecessarily required the old D2RCore file hash.
 

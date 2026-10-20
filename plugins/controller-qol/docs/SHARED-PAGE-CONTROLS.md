@@ -1,4 +1,4 @@
-# Shared stash page controls — 1.5.9-indicators
+# Shared stash page controls â€” 1.5.9-indicators
 
 ## 1.5.9 inward spacing correction
 

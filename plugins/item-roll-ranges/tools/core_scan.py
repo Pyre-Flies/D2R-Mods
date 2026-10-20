@@ -1,6 +1,8 @@
 import sys, struct
 from pathlib import Path
-sys.path.insert(0, str(Path(__file__).parent / 'python-libs'))
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]/'tools'))
+from local_workspace import add_python_dependencies
+add_python_dependencies()
 import pefile, capstone
 p=pefile.PE('D2RCore.dll'); base=p.OPTIONAL_HEADER.ImageBase
 for e in p.DIRECTORY_ENTRY_EXPORT.symbols:

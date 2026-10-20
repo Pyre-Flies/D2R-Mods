@@ -1,46 +1,44 @@
 # Contributing
 
-## Workflow
+Read [AGENTS.md](AGENTS.md) and the affected plugin's `DEVELOPMENT.md`.
+Use `Pyre/` for a new contribution branch and keep unrelated working changes intact.
+Current plugin versions and player behavior are documented in [README.md](README.md).
 
-1. Create a short-lived branch from `main`.
-2. Keep changes scoped to one plugin or one shared concern.
-3. Add or update automated tests where the behavior can be isolated.
-4. Build the affected plugin with MSVC and run its complete CTest suite.
-5. Record manual D2R validation separately from automated-test results.
-6. Add a concise entry to the affected plugin's `CHANGELOG.md`.
+## Build and validate
 
-## Reverse-engineering records
+Initialize the pinned SDK with `git submodule update --init --recursive`.
+From the repository root in a Visual Studio x64 Developer Prompt, build one plugin
+in the [external local workspace](docs/WORKSPACE.md), for example:
 
-Any newly discovered path, module, RVA, absolute address, byte signature,
-structure offset, ABI, call contract, or provider hash must be recorded under
-`docs/reverse-engineering/` or the relevant plugin's `docs/` directory in the
-same change. State:
+```powershell
+$work = if ($env:D2R_MODS_WORKSPACE) { $env:D2R_MODS_WORKSPACE } else { Join-Path (Split-Path (Get-Location) -Parent) 'D2R-Mods-Local' }
+$build = Join-Path $work 'scratch/controller-qol/build'
+cmake -S plugins/controller-qol -B $build -G "NMake Makefiles" -DCMAKE_BUILD_TYPE=Release
+cmake --build $build
+ctest --test-dir $build --output-on-failure
+```
 
-- the module and exact build/hash;
-- whether the value is an RVA or a process address;
-- expected bytes or another compatibility guard;
-- how the result was derived;
-- what was automated-test and live-game validated;
-- known failure behavior and whether the code fails open.
+Substitute the affected plugin. Its CMakeLists.txt defines any additional Python
+or artwork dependencies. Run its complete relevant test suite after behavior changes;
+for documentation-only changes, verify links and affected packaging checks instead.
+Record automated checks separately from installed and live-game validation.
+Update CHANGELOG.md for player-visible or compatibility changes.
 
-Do not generalize a result to untested builds. Do not commit proprietary game
-code or binaries; keep only the minimum derived evidence required to reproduce
-the finding.
+## Native findings
 
-## Pull requests
+Record each new native path, RVA, address, byte guard, signature, layout, offset,
+provider hash or ABI contract in the owning feature document or native registry.
+Include the exact module/build, evidence, guard, failure behavior and validation
+limits. Preserve uncertainty and fail open on a mismatch. See the
+[native registry](docs/reverse-engineering/README.md) for the record format.
 
-Complete the pull-request template. A successful transaction return code alone
-is not enough for stateful game operations: verify authoritative state, client
-publication, visible rendering, and persistence when applicable.
+## Review and publication
 
-## Release checklist
+Complete the pull-request template for the actual scope. Use plain language and
+honest validation; native implementation details belong in the feature record.
+Do not include game binaries, extracted assets, generated output, local logs,
+settings, saves or credentials. Reference configs in runtime packages belong under
+`defaults/`, preserving active user configuration.
 
-- Version metadata, README, and changelog agree.
-- Clean Release build and all tests pass.
-- Compatibility hashes and guards match the tested deployment.
-- Runtime ZIP contains only installable DLLs, reference defaults and user documentation.
-- Reference TOMLs live under `defaults/`; archives contain no live `d2rloader/config/` paths.
-- Configuration documentation explains migration, preserved values and rollback.
-- Run `python tools/test_package_runtime.py` and audit extraction/checksums.
-- Source ZIP excludes build output, logs, backups, and private game artifacts.
-- `SHA256SUMS` or the release manifest covers every published artifact.
+Use [RELEASING.md](docs/RELEASING.md) for publication and
+[WORKSPACE.md](docs/WORKSPACE.md) for promotion and cleanup.

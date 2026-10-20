@@ -39,8 +39,11 @@ Thumbs.db
 desktop.ini
 
 # Local task artifacts and independent companion repositories
+# New local work belongs in the sibling D2R-Mods-Local workspace.
 /outputs/
 /companions/
+/.local-tools/
+/d2r-reimagined-website/
 # Experimental source is maintained in D2R-Mods-Research.
 /plugins/native-damage-probe/
 /plugins/terrain-coverage-probe/

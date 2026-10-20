@@ -1,4 +1,4 @@
-# XInput hardening 1.3.1.1 — 2026-09-24
+# XInput hardening 1.3.1.1 â€” 2026-09-24
 
 ## Scope and rationale
 Controller QOL only. Production 1.3.1.0 and Item Roll Ranges unchanged. SDK upstream contribution remains a future option (SDK-CONTROLLER-OPTIONS.md).

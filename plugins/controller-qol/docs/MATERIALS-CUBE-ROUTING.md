@@ -1,4 +1,4 @@
-# Materials and Cube shared action — 1.5.5-materials
+# Materials and Cube shared action â€” 1.5.5-materials
 
 This supersedes the remembered Cube-return destination in 1.5.4. The user reported it still failed and clarified the desired rule: Materials contains both storage counters and the Cube; LB+X must reuse the existing send-to-storage and LB+Y Cube actions. No previous withdrawal or focus history is required.
 

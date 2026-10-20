@@ -7,8 +7,9 @@ Date: 2026-10-11. Candidate: `1.3.1+rev.76-beta.2`. Live validation pending.
 The user reports LT/RT changing the game panels behind an open Mod Information
 window and requested L1/R1 for the information tabs. The custom shell is
 `modinfo_aa`, with direct child `OptionsTabs`. Its seven content pages are
-separate panels. The prior softmod work is documented in the
-[panel investigation](../../../docs/reverse-engineering/controller-mod-information-softmod.md).
+separate panels. The prior softmod work is recorded in
+`controller-mod-information-softmod.md`, preserved with the external workspace's
+unpublished mod-data research records.
 No softmod files are changed by this plugin update.
 
 Controller QOL already maps LT/RT actions 7/8 to the main UISwitcher's cycle
@@ -121,8 +122,8 @@ control is available, and L1/R1 rotates through the pages. Screenshots exposed
 two remaining layout/input issues: both bumper indicators occupy the left edge,
 and controller scrolling cannot reach content below the initial viewport.
 This confirms page switching, not every input/lifecycle check below. The
-indicator placement and scrollbar focus follow-up is documented in
-[the softmod investigation](../../../docs/reverse-engineering/controller-mod-information-softmod.md).
+indicator placement and scrollbar focus follow-up is documented in that separate
+softmod investigation. Its original evidence remains preserved outside this plugin checkout.
 
 Remaining live checks after the layout follow-up:
 

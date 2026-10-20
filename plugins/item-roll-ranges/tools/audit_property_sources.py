@@ -1,7 +1,9 @@
 """Read-only native property audit; records disassembly and item affix metadata."""
 import ctypes as c,struct,sys,json
 from pathlib import Path
-sys.path.insert(0,str(Path(__file__).parent/'python-libs'))
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]/'tools'))
+from local_workspace import add_python_dependencies
+add_python_dependencies()
 import capstone
 k=c.WinDLL('kernel32');k.OpenProcess.restype=c.c_void_p;k.ReadProcessMemory.argtypes=[c.c_void_p,c.c_void_p,c.c_void_p,c.c_size_t,c.c_void_p];h=k.OpenProcess(0x410,0,int(sys.argv[1]))
 def read(a,n):

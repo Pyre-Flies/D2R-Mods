@@ -675,7 +675,7 @@ owned host/socket source capture, guarded numeric reconciliation, variable
 jewel ranges, scaled Life, consumed ED and flat-max leaves, socket-only scalar
 lines, context-specific active rune/gem definitions and fixed completed
 preserved-item corruption attribution. See
-[the canonical source/layout record](CONTRIBUTION-SOURCES-REV27.md) for all
+[the canonical source/layout record](history/CONTRIBUTION-SOURCES-REV27.md) for all
 new compiled table offsets, byte witnesses, public service ABI and limits.
 The earlier IAS-only revision26 candidate was not installed or published.
 
@@ -764,5 +764,5 @@ ED header reader's rejection of extended socket siblings. Read-only item49
 capture confirms stored intrinsic127, own ED94, actual246 and socket children
 before the host's permanent list. Revision28 reuses validated owned capture
 for that host operand; seven suites pass with a two-socket header regression.
-Canonical details: [source contracts](CONTRIBUTION-SOURCES-REV27.md#revision28-socketed-generated-ed-armor-header-repair).
+Canonical details: [source contracts](history/CONTRIBUTION-SOURCES-REV27.md#revision28-socketed-generated-ed-armor-header-repair).
 New header rendering remains pending the restart check; enchantments deferred.

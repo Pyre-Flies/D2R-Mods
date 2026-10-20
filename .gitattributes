@@ -8,6 +8,7 @@
 *.rc text eol=crlf
 *.toml text eol=lf
 *.md text eol=lf
+*.py text eol=lf
 *.json text eol=lf
 *.yml text eol=lf
 *.yaml text eol=lf
@@ -20,3 +21,4 @@
 /AGENTS.md export-ignore
 /skills export-ignore
 /docs/AI-HANDOFF.md export-ignore
+/docs/history/AI-HANDOFF-before-reorganization.md export-ignore

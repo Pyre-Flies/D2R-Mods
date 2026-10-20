@@ -5,6 +5,10 @@ import argparse
 import os
 from pathlib import Path
 import subprocess
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]/'tools'))
+from local_workspace import workspace_root
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--source', type=Path, default=Path(__file__).resolve().parents[1])
@@ -13,7 +17,8 @@ parser.add_argument('--vc', type=Path, default=Path(r'C:\Program Files\Microsoft
 parser.add_argument('--sdk-version', default='10.0.26100.0')
 args = parser.parse_args()
 source = args.source.resolve()
-build = args.build or source/'build-potions'
+workspace = workspace_root()
+build = (args.build or workspace/'scratch'/source.name/'build').resolve()
 kit = Path(r'C:\Program Files (x86)\Windows Kits\10')
 env = {k.upper(): v for k, v in os.environ.items()}  # Avoid duplicate Path/PATH in MSBuild.
 env['PATH'] = str(args.vc/'bin/Hostx64/x64')+';'+str(kit/'bin'/args.sdk_version/'x64')+';'+env.get('PATH','')

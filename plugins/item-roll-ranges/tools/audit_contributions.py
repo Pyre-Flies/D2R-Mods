@@ -4,7 +4,9 @@ Uses documented client unit buckets and native property dispatch; no writes.
 import ctypes as c
 import json, struct, sys
 from pathlib import Path
-sys.path.insert(0,str(Path(__file__).parent/'python-libs'))
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]/'tools'))
+from local_workspace import add_python_dependencies
+add_python_dependencies()
 try:
  import capstone
 except ModuleNotFoundError:

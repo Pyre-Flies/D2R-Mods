@@ -269,5 +269,5 @@ on an unavailable server, or independent host/guest persistence. Keep those
 entries marked unverified; the automated fixtures reduce the uncertainty but
 do not replace live network evidence.
 
-See [AUDIT-REPAIRS-REV76.md](AUDIT-REPAIRS-REV76.md) for the per-issue source
+See [AUDIT-REPAIRS-REV76.md](history/AUDIT-REPAIRS-REV76.md) for the per-issue source
 reassessment and automated evidence.

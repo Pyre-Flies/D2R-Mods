@@ -1,7 +1,7 @@
 # Controller aim native research history
 
 Archived prototype evidence, superseded for current ownership/configuration by
-[QOL rev.50](PRODUCTION-1.3.1-rev.50.md). Revision sections below are chronological;
+[QOL rev.50](history/PRODUCTION-1.3.1-rev.50.md). Revision sections below are chronological;
 old current/pending statements apply to their historical revision only.
 
 

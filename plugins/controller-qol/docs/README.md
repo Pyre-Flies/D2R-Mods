@@ -1,81 +1,21 @@
-# Controller QOL research map
+# Controller QOL topic map
 
-- [Beta.4 live-failure follow-up](AUDIT-LIVE-FOLLOWUP-BETA4.md): LB+X Cube
-  self-insertion, overlapping Shared triggers, targeted regressions and current
-  live-test status. Pickup reach/approach remain open.
+Start with the [developer guide](../DEVELOPMENT.md), current source guards and
+[player README](../README.md). Versions are maintained in the player README and changelog.
 
-This directory is the canonical durable research record for Controller QOL. Start here instead of searching old build directories, release archives, or the former Reimagined working tree.
+| Topic | Contract or evidence |
+| --- | --- |
+| Configuration, profiles and R3 saves | [Skill configuration](SKILL-DISCOVERY-CONFIG.md), [general skills](GENERAL-SKILLS-OSKILLS.md) |
+| Hook ownership and reusable native paths | [Hook inventory](HOOK-INVENTORY.md), [shared registry](../../../docs/reverse-engineering/controller-qol-native-contracts.md) |
+| Aim and casting | [Cast observer](AIM-CAST-OBSERVER-COMPATIBILITY.md), [skill catalog](SKILL-CATALOG.md) |
+| Cube and materials | [Cube routing](CUBE-ROUTING.md), [materials routing](MATERIALS-CUBE-ROUTING.md), [materials contract](MATERIALS-NATIVE-CONTRACT.md) |
+| Belt and vendors | [Belt contract](BELT-NATIVE-CONTRACT.md), [native selling](NPC-SELLING.md) |
+| Shared storage | [Shared deposits](SHARED-DEPOSIT.md), [page controls](SHARED-PAGE-CONTROLS.md) |
+| Ground loot and coexistence | [Portal priority](PORTAL-PRIORITY.md), [plugin coexistence](PLUGIN-COEXISTENCE.md), [UnHoarder opacity](UNHOARDER-OPACITY-COMPATIBILITY.md) |
+| Hosted input | [Ladder scheduling](LADDER-CONTROLLER-SCHEDULING.md) |
+| Validation | [Validation guide](VALIDATION.md), affected tests |
 
-Reusable native contracts and RVAs distilled from this work are indexed in
-[`../../../docs/reverse-engineering/controller-qol-native-contracts.md`](../../../docs/reverse-engineering/controller-qol-native-contracts.md).
-Keep detailed feature evidence here and cross-project summaries there.
-
-## Current status and validation
-
-- [AUDIT-REPAIRS-REV76.md](AUDIT-REPAIRS-REV76.md) - local beta.3 audit repairs, hosted ownership, native contract reuse, automated evidence and per-issue reassessment.
-- [AUDIT-REPAIRS-IN-GAME-TESTS.md](AUDIT-REPAIRS-IN-GAME-TESTS.md) - single-client acceptance cases, optional solo-host coverage and explicit automated-only peer limits; live results pending.
-
-- [MOD-INFORMATION-NAVIGATION.md](MOD-INFORMATION-NAVIGATION.md) - local rev.76-beta.2 bumper tabs and underlying panel lock, with validation limits.
-
-- [PRODUCTION-1.3.1-rev.75.md](PRODUCTION-1.3.1-rev.75.md) - current stable release, reticle changes and validation limits.
-- [SKILL-DISCOVERY-CONFIG.md](SKILL-DISCOVERY-CONFIG.md) - current shared/per-mod configuration, R3 saves, discovery, migration, backups and rollback.
-- [GENERAL-SKILLS-OSKILLS.md](GENERAL-SKILLS-OSKILLS.md) - dynamic equipment-granted skill buttons and guarded native evidence.
-- [CRASH-TRIAGE-2026-10-10.md](CRASH-TRIAGE-2026-10-10.md) - unresolved full-Ladder exit crashes and investigation limits.
-
-Older versioned records below document the behavior and evidence at that revision;
-their config/install paths may have been superseded by rev.75.
-
-- [LADDER-CONTROLLER-SCHEDULING.md](LADDER-CONTROLLER-SCHEDULING.md) - remote TCP/IP input/label scheduler mismatch and remaining authoritative item-action limitations.
-
-- [PRODUCTION-1.3.1-rev.60.md](PRODUCTION-1.3.1-rev.60.md) - historical rev.60 production release, skill settings, indicators and ZIP layout.
-
-- [SKILL-TREE-AIM-TOGGLE.md](SKILL-TREE-AIM-TOGGLE.md) - rev.56 R3 per-skill toggle, guarded focused skill ID and persistence.
-
-- [AIM-CAST-OBSERVER-COMPATIBILITY.md](AIM-CAST-OBSERVER-COMPATIBILITY.md) - rev.54 optional cast observer, guarded fallback and Whirlwind coexistence boundaries.
-
-- [SKILL-CATALOG.md](SKILL-CATALOG.md) - rev.53 full class skill catalog, review defaults and source/deployment validation.
-
-- [IMPLEMENTATION-1.3.1-rev.52.md](IMPLEMENTATION-1.3.1-rev.52.md) - right-stick intent, per-skill isolation and numeric custom skill configuration; live validation pending.
-
-- [PRODUCTION-1.3.1-rev.51.md](PRODUCTION-1.3.1-rev.51.md) - aim defaults enabled; explicit off remains supported.
-
-- [PRODUCTION-1.3.1-rev.50.md](PRODUCTION-1.3.1-rev.50.md) - opt-in integrated aim, configuration migration and validation boundary.
-
-- [VALIDATION.md](VALIDATION.md) - build, artifact, deployment, automated-test and live-test status. Keep automated and live evidence separate.
-- [HOOK-INVENTORY.md](HOOK-INVENTORY.md) - native hook ownership and compatibility map.
-- [PRODUCTION-1.3.1-rev.7.md](PRODUCTION-1.3.1-rev.7.md) - qualified production scope and remaining limits.
-- [VERSIONING.md](VERSIONING.md) - plugin/loader version policy.
-- [LEGACY-REIMAGINED-MIGRATION.md](LEGACY-REIMAGINED-MIGRATION.md) - extraction provenance, legacy Git lineage, and distilled evidence from intentionally excluded runtime logs.
-
-## Native controller and UI contracts
-
-- [NATIVE-INPUT-1.3.1-rev.5.md](NATIVE-INPUT-1.3.1-rev.5.md) - normalized controller input, build guards and fallback coverage.
-- [SDK-CONTROLLER-HANDOFF.md](SDK-CONTROLLER-HANDOFF.md) - earlier SDK probe conclusions and unresolved boundaries.
-- [GLYPH-CALLS-1.3.1.3.md](GLYPH-CALLS-1.3.1.3.md) - scoped controller-glyph call sites.
-- [SHARED-PAGE-CONTROLS.md](SHARED-PAGE-CONTROLS.md) - Shared-stash page navigation and input-routing failure evidence.
-- [LABEL-STASH-1.5.23.md](LABEL-STASH-1.5.23.md) - label and stash behavior.
-
-## Item and container behavior
-
-- [BELT-NATIVE-CONTRACT.md](BELT-NATIVE-CONTRACT.md) - stored-item belt placement and confirmation.
-- [MATERIALS-NATIVE-CONTRACT.md](MATERIALS-NATIVE-CONTRACT.md) - Reimagined Materials-tab withdrawal/refill.
-- [MATERIALS-CUBE-ROUTING.md](MATERIALS-CUBE-ROUTING.md) - Materials and embedded-Cube routing.
-- [CUBE-ROUTING.md](CUBE-ROUTING.md) - Cube visibility and quick-move context.
-- [SHARED-DEPOSIT.md](SHARED-DEPOSIT.md) - shared-page deposit and identity handling.
-- [NPC-SELLING.md](NPC-SELLING.md) - native vendor eligibility, pricing and sell transaction.
-- [REFILL-SELL-1.5.24.md](REFILL-SELL-1.5.24.md) and [FOCUSED-REFILL-1.5.25.md](FOCUSED-REFILL-1.5.25.md) - contextual refill and sell behavior.
-- [AUTOSORT-FEASIBILITY.md](AUTOSORT-FEASIBILITY.md) - relationship to exact-position transaction research.
-
-## Ground loot and portals
-
-- [PORTAL-PRIORITY.md](PORTAL-PRIORITY.md) - portal targeting, contact gates, RVAs and live evidence.
-- [PORTAL-CONTACT-1.3.1-rev.7.md](PORTAL-CONTACT-1.3.1-rev.7.md) - scoped portal-contact interception.
-- [LOOT-PORTAL-1.3.1.2.md](LOOT-PORTAL-1.3.1.2.md) - loot-modifier and neutral-interact separation.
-- [CHRONICLE-GROUND-FLAG-CONFLICT.md](CHRONICLE-GROUND-FLAG-CONFLICT.md) - coexistence diagnosis with Chronicle Ground Flag.
-- [PLUGIN-COEXISTENCE.md](PLUGIN-COEXISTENCE.md), [POTION-AUTO-PICKUP-COMPATIBILITY.md](POTION-AUTO-PICKUP-COMPATIBILITY.md), and [STASH-SEARCH-1.10.12-CONFLICT.md](STASH-SEARCH-1.10.12-CONFLICT.md) - third-party compatibility.
-
-## Evidence conventions
-
-JSON evidence and disassembly text beside these documents are build-specific witnesses, not portable APIs. The native signature headers under `src/` are the executable guards. Preserve module identity, hashes, RVA convention, byte windows, confidence and validation level when updating a claim.
-
-Local runtime logs, build trees, full game-memory images and old release packages are intentionally not stored in this repository. Distill durable conclusions into the relevant document and retain a source hash when the raw artifact remains outside version control.
+[History](history/README.md) contains dated fixes, version-specific qualification,
+crash investigations and superseded guides. JSON/disassembly witnesses remain
+build-specific; source guards determine current admission. Read a linked record
+for its exact topic rather than loading the whole history.

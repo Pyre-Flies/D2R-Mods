@@ -1,7 +1,9 @@
 """Read-only bounded disassembly of a user-requested live D2R code range."""
 import ctypes as c,sys
 from pathlib import Path
-sys.path.insert(0,str(Path(__file__).parent/'python-libs'))
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]/'tools'))
+from local_workspace import add_python_dependencies
+add_python_dependencies()
 import capstone
 pid,address,size=(int(x,0) for x in sys.argv[1:4])
 assert 0<size<=65536

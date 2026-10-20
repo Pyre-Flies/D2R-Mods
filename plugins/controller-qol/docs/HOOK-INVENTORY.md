@@ -1,13 +1,13 @@
 # Hook inventory â€” baseline plus revision updates
 
-The original table/count below is a historical rev.4 baseline; revision sections supersede affected rows. For current prioritization see [narrower-hook review](HOOK-SCOPE-REVIEW-2026-09-26.md).
+The original table/count below is a historical rev.4 baseline; revision sections supersede affected rows. For current prioritization see [narrower-hook review](history/HOOK-SCOPE-REVIEW-2026-09-26.md).
 
 Local rev.76-beta.3 supersedes the 18-entry ground observer/dispatch row: loot
 queues UI-owned local client requests, and only the existing Guided Arrow
 projection site (entry index 4) is installed by `GroundLoot::InstallHooks`.
 Local actor/session qualification protects guests. No new hook/RVA was added;
 other pickup CALL/placard/aim contracts remain guarded. See
-[the audit repair record](AUDIT-REPAIRS-REV76.md) for evidence and validation limits.
+[the audit repair record](history/AUDIT-REPAIRS-REV76.md) for evidence and validation limits.
 
 Reviewed source: Controller QOL1.3.1+rev.4 and Item Roll Ranges1.3.1+rev.1. Static inventory of installation paths, not a fresh live-process verification. Feature gates/failures can reduce actual installed counts. No DLL changes, rebuild, or new addresses discovered in this pass.
 
@@ -82,7 +82,7 @@ Locate installer and witness header; identify module before resolving RVA; compa
 
 ## Production 1.3.1+rev.5: native input provider
 
-Adds SDK inline hooks at game `0x13EDD0` (normalized key transition, 21-byte prefix) and `0x13DEF0` (per-controller reset, 14-byte prefix). Full code witnesses, exact Core hash and manager/getter/index slot checks precede installation. `0x13CA70` is a read-only seed helper; the query-only prototype was not deployed. No Core input slot writes. XInput hooks become fallback-only. [Evidence, RVAs, admission and runtime checklist](NATIVE-INPUT-1.3.1-rev.5.md). User-confirmed production matrix: Battle.net DualShock with Steam closed, Steam Controller on Steam, and DualShock on Steam; all with Stash Search and Potion Auto Pickup.
+Adds SDK inline hooks at game `0x13EDD0` (normalized key transition, 21-byte prefix) and `0x13DEF0` (per-controller reset, 14-byte prefix). Full code witnesses, exact Core hash and manager/getter/index slot checks precede installation. `0x13CA70` is a read-only seed helper; the query-only prototype was not deployed. No Core input slot writes. XInput hooks become fallback-only. [Evidence, RVAs, admission and runtime checklist](history/NATIVE-INPUT-1.3.1-rev.5.md). User-confirmed production matrix: Battle.net DualShock with Steam closed, Steam Controller on Steam, and DualShock on Steam; all with Stash Search and Potion Auto Pickup.
 
 ## Chronicle Ground Flag collision (2026-09-26)
 
@@ -90,22 +90,22 @@ Confirmed duplicate hook at game `0xCBEB0` (MH_ERROR_ALREADY_CREATED). Caller `0
 
 ## Candidate rev.6: scoped ground-label call
 
-Replaces QOL entry hook at `0xCBEB0` with SDK-owned CALL patch at `0x1FAA18` (30-byte argument-setup witness at `0x1FA9FF`). Shared builder remains available to Chronicle. Exact text ownership replaces heuristic prefix stripping. [Implementation evidence and pending runtime checks](CHRONICLE-COMPATIBILITY-1.3.1-rev.6.md).
+Replaces QOL entry hook at `0xCBEB0` with SDK-owned CALL patch at `0x1FAA18` (30-byte argument-setup witness at `0x1FA9FF`). Shared builder remains available to Chronicle. Exact text ownership replaces heuristic prefix stripping. [Implementation evidence and pending runtime checks](history/CHRONICLE-COMPATIBILITY-1.3.1-rev.6.md).
 
 ## Scope review, 2026-09-26
 
-[Prioritized narrower-interception review](HOOK-SCOPE-REVIEW-2026-09-26.md): portal contact has three confirmed direct callers in the previous capture; pickup needs coverage tracing; IRR call-site adapters remain a separate harder backlog. No DLLs changed by this review.
+[Prioritized narrower-interception review](history/HOOK-SCOPE-REVIEW-2026-09-26.md): portal contact has three confirmed direct callers in the previous capture; pickup needs coverage tracing; IRR call-site adapters remain a separate harder backlog. No DLLs changed by this review.
 
 ## 2026-09-26: rev.7 contact CALL migration
 
-Supersedes the historical shared-entry contact hook: QOL now patches calls at 0x191589, 0x1922CD and 0x192378; entry 0x34BC90 remains untouched. Other portal hooks are unchanged. See [evidence, ownership, admission and pending live checks](PORTAL-CONTACT-1.3.1-rev.7.md).
+Supersedes the historical shared-entry contact hook: QOL now patches calls at 0x191589, 0x1922CD and 0x192378; entry 0x34BC90 remains untouched. Other portal hooks are unchanged. See [evidence, ownership, admission and pending live checks](history/PORTAL-CONTACT-1.3.1-rev.7.md).
 
 ## 2026-09-27: rev.18 Shared Stash SDK candidate
 
 Normal Shared LB+X item movement now uses public ItemService transactions when
 SharedStashWrite is available. No new hooks. Read-only native selected-page
 resolution remains; old-loader and remove-only seasonal transfers retain their
-native route. [SDK pin, page witnesses and validation](SHARED-SDK-REV18.md).
+native route. [SDK pin, page witnesses and validation](history/SHARED-SDK-REV18.md).
 
 Rev.21 item headers reuse the existing scoped widget/text hooks. A guarded ordinary font-metrics call at game+0x903CD0 is not an additional hook. See CONTROLLER-HEADER-REV21.md for ancestry, ABI evidence, presentation scope and validation limits.
 
@@ -120,7 +120,7 @@ Rev.37 bulk stash adds no hooks or slot writes. Existing LB+X eligibility/deposi
 Adds five opt-in SDK inline hooks: 0x190440, 0x1919F0, 0x18AF30, 0x4FDB40,
 0x18DDE0. Source: src/aim/controller_aim.cpp and native_profile.h. Same sites as
 standalone aim.20, now owned by QOL. Exact guards, internal contact-relay ownership,
-configuration gating and live-validation limits: [rev.50](PRODUCTION-1.3.1-rev.50.md).
+configuration gating and live-validation limits: [rev.50](history/PRODUCTION-1.3.1-rev.50.md).
 
 
 ## Rev.54 optional Cast observer

@@ -625,7 +625,7 @@ preceding candidate. Broader item and persistence testing remains open; see the
   callback, stop sticky-slot log appends after truncation, and replace the
   unguarded Core UI-state fallback with the existing guarded game getter.
   All 24 automated suites pass; the new fixes await live validation. See
-  [review findings](docs/REVIEW-2026-10-06.md) for remaining remote scheduler and
+  [review findings](docs/history/REVIEW-2026-10-06.md) for remaining remote scheduler and
   session-cancellation issues.
 - Add an `Unavailable`-only client route for inventory potion-to-belt placement
   and inventory belt refill. Use UI-thread SDK snapshots, guarded client unit

@@ -1,6 +1,5 @@
 # Controller QOL beta history
 
-The tested beta.7 fixes and Unhoarder opacity compatibility are consolidated
-in **Controller QOL 1.3.1+rev.80** on main. Use the
-[latest stable release](https://github.com/Pyre-Flies/D2R-Mods/releases/latest).
-Older beta releases remain available for history and rollback.
+The beta.7 and UnHoarder opacity implementation is consolidated in Controller QOL
+**1.3.1+rev.81**. Use the [latest stable release](https://github.com/Pyre-Flies/D2R-Mods/releases/latest).
+Revision-specific evidence remains in the [plugin history](../plugins/controller-qol/docs/history/README.md).

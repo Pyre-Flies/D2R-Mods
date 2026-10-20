@@ -3,7 +3,9 @@ Candidates require manual semantic review; this never generates runtime profiles
 """
 import re,sys,json
 from pathlib import Path
-sys.path.insert(0,str(Path(__file__).parent/'python-libs'))
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]/'tools'))
+from local_workspace import add_python_dependencies
+add_python_dependencies()
 import capstone,pefile
 p=pefile.PE(sys.argv[1]); md=capstone.Cs(capstone.CS_ARCH_X86,capstone.CS_MODE_64);md.detail=True
 src=(Path(__file__).parents[1]/'src/provider_profile.h').read_text()

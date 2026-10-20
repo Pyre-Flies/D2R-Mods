@@ -1,7 +1,9 @@
 """Read-only audit of the exact D2RCore provider used by this plugin."""
 import hashlib, json, struct, sys
 from pathlib import Path
-sys.path.insert(0, str(Path(__file__).parent / 'python-libs'))
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]/'tools'))
+from local_workspace import add_python_dependencies
+add_python_dependencies()
 import pefile
 path=Path(sys.argv[1] if len(sys.argv)>1 else 'D2RCore.dll')
 data=path.read_bytes()

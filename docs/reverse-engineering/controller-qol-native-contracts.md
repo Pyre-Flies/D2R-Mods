@@ -11,7 +11,7 @@ ground requests instead of caching authoritative player/game pointers or
 observing every participant's packets. Lifecycle local ID/session generation
 qualify host interception; Shared Cube requests capture UI page/season and SDK
 local owner. No new native site was discovered. See
-[the owned repair evidence](../../plugins/controller-qol/docs/AUDIT-REPAIRS-REV76.md)
+[the owned repair evidence](../../plugins/controller-qol/docs/history/AUDIT-REPAIRS-REV76.md)
 for reused offsets/ABI, one-use permits and pending hosted validation.
 
 Local beta.4 adds semantic Cube guards before SDK/native moves and owns both
@@ -113,5 +113,5 @@ See `plugins/controller-qol/docs/PORTAL-PRIORITY.md`, `STASH-WAYPOINT-PRIORITY-R
 
 The former standalone aim.20 hooks now belong to opt-in Controller QOL. Exact
 internal contact-wrapper identity replaces prototype QOL-DLL hash admission;
-no new native sites. The canonical [integration record](../../plugins/controller-qol/docs/PRODUCTION-1.3.1-rev.50.md)
+no new native sites. The canonical [integration record](../../plugins/controller-qol/docs/history/PRODUCTION-1.3.1-rev.50.md)
 documents gates, configuration migration and live-validation limits.

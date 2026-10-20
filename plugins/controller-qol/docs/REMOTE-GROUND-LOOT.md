@@ -2,11 +2,11 @@
 
 The 2026-10-12 local candidate replaces the refresh/refill behavior below with
 one frozen assignment snapshot per modifier hold. See
-[the hosted investigation](HOSTED-QOL-2026-10-12.md) for evidence and test status.
+[the hosted investigation](history/HOSTED-QOL-2026-10-12.md) for evidence and test status.
 
 Historical route qualification below. Local rev.76-beta.3 reuses this guarded
 UI request for offline/host/client loot and retires the authoritative pending
-slot/packet observers. See [the repair record](AUDIT-REPAIRS-REV76.md) for current
+slot/packet observers. See [the repair record](history/AUDIT-REPAIRS-REV76.md) for current
 ownership, lifecycle/permit fences and pending live route-expansion tests.
 
 ## Evidence and scope

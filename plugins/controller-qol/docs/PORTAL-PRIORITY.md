@@ -1,7 +1,7 @@
 # Neutral interaction: portal priority (1.5.19)
 
 > Rev.43 extends this same guarded pipeline to the exact town Bank class and
-> waypoint SubClass. See [STASH-WAYPOINT-PRIORITY-REV43.md](STASH-WAYPOINT-PRIORITY-REV43.md).
+> waypoint SubClass. See [STASH-WAYPOINT-PRIORITY-REV43.md](history/STASH-WAYPOINT-PRIORITY-REV43.md).
 
 ## Behavior and scope
 
@@ -195,4 +195,4 @@ After a patch, re-find the candidate insertion writes and follow every object-sp
 
 ## 2026-09-26: rev.7 contact CALL migration
 
-Supersedes the historical shared-entry contact hook: QOL now patches calls at 0x191589, 0x1922CD and 0x192378; entry 0x34BC90 remains untouched. Other portal hooks are unchanged. See [evidence, ownership, admission and pending live checks](PORTAL-CONTACT-1.3.1-rev.7.md).
+Supersedes the historical shared-entry contact hook: QOL now patches calls at 0x191589, 0x1922CD and 0x192378; entry 0x34BC90 remains untouched. Other portal hooks are unchanged. See [evidence, ownership, admission and pending live checks](history/PORTAL-CONTACT-1.3.1-rev.7.md).

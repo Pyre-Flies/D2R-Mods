@@ -118,7 +118,7 @@
   placement and Ctrl release after restart; startup has no plugin guard refusal.
   Unattributed UI/object-pool shutdown assertions are recorded separately.
 - Preserve actual values, roll/source behavior, existing settings and the false
-  always-show default. See [the level contract](docs/ITEM-LEVELS-REV45.md).
+  always-show default. See [the level contract](docs/history/ITEM-LEVELS-REV45.md).
 
 ## [1.3.1+rev.44] - 2026-10-14
 
@@ -142,8 +142,8 @@
   hold/toggle behavior and Wake of Fire; subsequent vanilla smoke checks were
   also user-confirmed. These samples are distinct from catalog/automated coverage.
 - Always-show remains disabled by default. Existing user configuration is
-  preserved. See [property coverage](docs/PROPERTY-ROLLS-REV41.md) and
-  [random selector contracts](docs/RANDOM-SKILL-PROPERTIES-REV44.md).
+  preserved. See [property coverage](docs/history/PROPERTY-ROLLS-REV41.md) and
+  [random selector contracts](docs/history/RANDOM-SKILL-PROPERTIES-REV44.md).
 
 ## Development candidates included in rev.44
 
@@ -195,7 +195,7 @@ Those candidate versions were not published separately.
 - Permit direct unique properties with empty PropertyGroups; refuse numeric
   assumptions about ambiguous weighted groups and non-additive operations.
 - Nine suites and a private219-recipe replay pass; visible candidate validation
-  remains pending. See [coverage and native evidence](docs/PROPERTY-ROLLS-REV41.md).
+  remains pending. See [coverage and native evidence](docs/history/PROPERTY-ROLLS-REV41.md).
 
 ## 1.3.1+rev.40
 
@@ -224,7 +224,7 @@ Those candidate versions were not published separately.
   templates, absent-level fallbacks and duplicate refusals. All seven automated
   suites pass. The user confirmed the corrected placement in-game after
   installing revision34. Included in release-2026.10.12.2.
-  See [the revision34 correction](docs/SOURCE-CAPTURE-REV32.md#revision34-header-placement-correction).
+  See [the revision34 correction](docs/history/SOURCE-CAPTURE-REV32.md#revision34-header-placement-correction).
 
 ## [1.3.1+rev.33] - 2026-10-12 (local candidate)
 
@@ -241,7 +241,7 @@ Those candidate versions were not published separately.
   templates, header ordering, capacity refusals and publication retention.
   Read-only comparison confirms both new optional witnesses match the loaded
   build. Visible restart rendering remains pending. Not published.
-  See [the revision33 correction](docs/SOURCE-CAPTURE-REV32.md#revision33-header-correction).
+  See [the revision33 correction](docs/history/SOURCE-CAPTURE-REV32.md#revision33-header-correction).
 
 ## [1.3.1+rev.32] - 2026-10-12 (local candidate)
 
@@ -258,7 +258,7 @@ Those candidate versions were not published separately.
   so revision31's attempted suffix could never match it.
 - Seven automated suites pass with fixtures corrected to match the observed
   flags, property handlers and multi-property affix records. Visible restart
-  rendering remains pending. See [revision32 evidence](docs/SOURCE-CAPTURE-REV32.md).
+  rendering remains pending. See [revision32 evidence](docs/history/SOURCE-CAPTURE-REV32.md).
   Not published; enchantments remain deferred.
 
 ## [1.3.1+rev.31] - 2026-10-12 (local candidate)
@@ -282,7 +282,7 @@ Those candidate versions were not published separately.
   source coefficients/operands. Seven automated suites pass, including
   capacity, color, selector, duplicate-text, wrong-source, repeated-request,
   release and rounding-refusal fixtures. Restart rendering is pending.
-  See [revision31 evidence](docs/CLONELESS-TOOLTIPS-REV31.md). Not published.
+  See [revision31 evidence](docs/history/CLONELESS-TOOLTIPS-REV31.md). Not published.
 
 ## [1.3.1+rev.30] - 2026-10-12 (local candidate)
 

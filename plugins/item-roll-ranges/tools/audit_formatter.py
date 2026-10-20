@@ -1,7 +1,9 @@
 """Audit/generate native formatter witnesses from the prior read-only game capture."""
 import sys,hashlib,struct,json
 from pathlib import Path
-sys.path.insert(0,str(Path(__file__).parent/'python-libs'))
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]/'tools'))
+from local_workspace import add_python_dependencies
+add_python_dependencies()
 import pefile
 image=Path(sys.argv[1])
 p=pefile.PE(str(image))

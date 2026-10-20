@@ -200,7 +200,7 @@ All 28 suites pass for rev.66-beta.1. Verified game processes absent, backed up
 rev.65, and installed to the Ladder plugin directory. Built/deployed SHA256:
 `0A7BED9E97FB910EBB3070F5E6C10A7E1D1EA8995D9719D1B1206B3CBC89243D`.
 Speed configuration remains 8 / 48 / 0.35. The separate exit-crash investigation
-is recorded in [CRASH-TRIAGE-2026-10-08.md](CRASH-TRIAGE-2026-10-08.md); this
+is recorded in [CRASH-TRIAGE-2026-10-08.md](history/CRASH-TRIAGE-2026-10-08.md); this
 candidate makes no crash-fix claim. Live first-press validation remains pending.
 
 Subsequent user feedback on the deployed rev.66: "They both feel much better,

@@ -1,0 +1,2 @@
+# History is explicit: use rg --no-ignore when investigating an older record.
+**/docs/history/

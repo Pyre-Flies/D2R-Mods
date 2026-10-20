@@ -74,3 +74,11 @@ If you enjoy these plugins, you can support their development on Ko-fi.
 Source, tests and technical compatibility records are included in this repository.
 Contributor and release procedures are in [CONTRIBUTING.md](CONTRIBUTING.md)
 and [docs/RELEASING.md](docs/RELEASING.md).
+
+## Repository navigation
+
+Source and tests are in `plugins/`. Start with [the documentation map](docs/README.md)
+for development topics, [AGENTS.md](AGENTS.md) for agent instructions, and
+[the workspace guide](docs/WORKSPACE.md) for local builds and current artifacts.
+Historical evidence is kept under each plugin's `docs/history/`; current developer
+guides route to the relevant contracts.
