@@ -1,9 +1,17 @@
+> Current production source: Controller QOL rev.81, Item Roll Ranges rev.55,
+> Floating Damage and Inventory Deposit rev.13, Always Show Sockets rev.2,
+> and Map Assistance rev.1. The six plugins are maintained in `plugins/`.
+> Companion source belongs in the [UnHoarder and Buff HUD forks](COMPANION-SOURCES.md).
+> Experimental and diagnostic source belongs in the separate research repository.
+> Native evidence below retains its historical context; inspect current guards
+> before reusing a contract.
+
 # Research handoff for maintainers and AI agents
 
 This is an entry point to the tracked evidence, not a substitute for the feature
 records or executable guards. Read the linked document and current source before
-changing a hook, layout, controller action, or release. The stable release
-baseline is Controller QOL rev.75, Item Roll Ranges rev.23,
+changing a hook, layout, controller action, or release. The historical stable release
+baseline described below was Controller QOL rev.75, Item Roll Ranges rev.23,
 and Map Assistance rev.1. The five-plugin suite also includes Inventory Deposit
 `0.1.0-beta.13` and Floating Damage `0.1.0-beta.11`; both retain beta status.
 The detailed native summaries below retain historical evidence; follow the

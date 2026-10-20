@@ -1,5 +1,15 @@
 # Publishing releases
 
+## Current consolidated suite
+
+Publish the six production plugin packages plus the exact UnHoarder and Buff HUD
+companion packages listed in `release-companions.json`. The automated workflow
+builds/tests the six first-party plugins. After it succeeds, attach the verified
+companion ZIPs and regenerate the release `SHA256SUMS` for all eight ZIPs.
+Verify downloaded assets, tag commit, metadata, and internal checksums before
+retiring temporary gold/rollback builds. Generated output is never committed.
+Keep experimental plugins and their unpublished records in D2R-Mods-Research.
+
 ## Consolidated release and Unhoarder
 
 The current supported source is on main. Release the six D2R-Mods plugins
@@ -37,12 +47,13 @@ material. Documentation changes must preserve the tested DLL bytes.
 
 ## Current stable suite
 
-The staged suite contains Controller QOL rev.78, Item Roll Ranges rev.46,
+The current suite contains Controller QOL rev.81, Item Roll Ranges rev.55,
 Map Assistance rev.1, Inventory Deposit rev.13, Floating Damage rev.13 and
 Always Show Sockets rev.2. Every plugin uses `1.3.1+rev.N`; the revision is
 independent per plugin. Windows file/product versions use `1.3.1.N` and no
-prerelease flag. Full suite manifests cover six runtime ZIPs, plus one adjacent
-SHA256SUMS file. Historical beta tags remain channel-validated for reproduction.
+prerelease flag. Full suite manifests cover the six runtime ZIPs and two
+separately maintained companions, plus one adjacent SHA256SUMS file.
+Historical beta tags remain channel-validated for reproduction.
 
 ## Historical Inventory Deposit prerelease route
 

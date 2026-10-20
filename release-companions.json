@@ -6,5 +6,14 @@
     "sha256": "37abf060f7a927c4de6240e7a030652a912d9a474ca7c7d0a441363e41177d8d",
     "dllSha256": "1e102ef38b1d26c56bbe12a118d7f21ea75e9cb10f527fca70b856dc34d393ff",
     "soundsSha256": "b9303d841ebc26b22bfb2471c199659d880eac5d456b01c6859dac35c005a8a1"
+  },
+  "buffhud": {
+    "repository": "Pyre-Flies/d2rl-buff-hud",
+    "tag": "v1.1.1",
+    "asset": "Buff-HUD-1.1.1-PyreFly.zip",
+    "sha256": "e145facea38df7a4f067bbc603613ac488a74275ad22bf2654dfffc0cd60593a",
+    "dllSha256": "e496ba55b7a08222551cdf8a5e64785b75373c290c63b71cbd0ac862092c8e46",
+    "mpqSha256": "482f0b879b5a378aa2c6d8435fac5f40beb013f4c8f6a2b6667abfc53bf44ec0",
+    "sourceCommit": "e6e04cf0de38d19799b7bd403256ec52251971f2"
   }
 }

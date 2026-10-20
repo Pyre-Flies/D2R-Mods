@@ -6,7 +6,7 @@ Download individual runtime ZIPs from the
 
 | Plugin | Stable version | What it adds |
 | --- | --- | --- |
-| [Controller QOL Updates](plugins/controller-qol/README.md) | 1.3.1+rev.80 | Controller item shortcuts, menu navigation and right-stick aiming. |
+| [Controller QOL Updates](plugins/controller-qol/README.md) | 1.3.1+rev.81 | Controller item shortcuts, menu navigation and right-stick aiming. |
 | [Item Roll Ranges](plugins/item-roll-ranges/README.md) | 1.3.1+rev.55 | Roll/source breakdowns, Base damage/Defense, item and base quality levels. |
 | [Floating Damage](plugins/floating-damage/README.md) | 1.3.1+rev.13 | Local enemy HP-loss numbers with element colors and critical emphasis. |
 | [Always Show Sockets](plugins/always-show-sockets/README.md) | 1.3.1+rev.2 | Configurable socket visibility, size and opacity. |
@@ -17,6 +17,12 @@ Unhoarder 1.2.9 is available as a separate Reimagined upgrade asset in the
 same release, with its source maintained in the
 [Unhoarder fork](https://github.com/Pyre-Flies/d2rl-unhoarder). Use this release
 as the current download; older beta packages are historical.
+
+Buff HUD 1.1.1 is included as a separate DLL/MPQ companion package. Its
+[dedicated fork](https://github.com/Pyre-Flies/d2rl-buff-hud) releases the
+controller/keyboard switching fix from upstream PR #8. See
+[companion sources](docs/COMPANION-SOURCES.md) for both companion repositories.
+Experimental and diagnostic plugins are maintained separately in research.
 
 ## Install and update
 

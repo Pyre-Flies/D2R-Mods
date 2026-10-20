@@ -37,3 +37,12 @@ tools/python-libs/
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# Local task artifacts and independent companion repositories
+/outputs/
+/companions/
+# Experimental source is maintained in D2R-Mods-Research.
+/plugins/native-damage-probe/
+/plugins/terrain-coverage-probe/
+/plugins/terrain-room-supply-probe/
+/plugins/ultrawide-bars/

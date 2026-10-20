@@ -24,6 +24,14 @@ This branch preserves the matching source snapshot; it publishes no binaries.
 
 # Controller QOL changelog
 
+## 1.3.1+rev.81 - 2026-10-20
+
+- Publish the tested beta.7 opacity behavior as standard rev.81, including Cube
+  controls, controller pickup filtering, and UnHoarder 1.2.9 compatibility.
+- Preserve existing configurations and per-mod skill profiles.
+- This revision changes version metadata; the tested runtime implementation
+  matches rev.80. Automated tests pass; no additional live-game coverage is claimed.
+
 ## 1.3.1+rev.79-beta.4 - 2026-10-15
 
 - Fixed gem withdrawals with LB+X and LB+Y.

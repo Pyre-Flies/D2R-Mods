@@ -1,22 +1,21 @@
-# D2R Mods - 2026.10.18.1
+# D2R Mods - 2026.10.20.1
 
-- **Controller QOL rev.80:** Brings the tested controller fixes together,
-  improves cube controls and loot captions, and respects Unhoarder-hidden
-  loot in pickup shortcuts and configured controller pickup blocking.
-- **Item Roll Ranges rev.55:** Improves set-item, poison and controller
-  compatibility, and keeps useful annotations on crowded item tooltips.
-- **Unhoarder 1.2.9:** Fixes controller label styling, drop alerts and Item
-  volume routing. Supports varying label-background opacity and shares hidden
-  loot visibility with Controller QOL.
-- **Floating Damage rev.13, Inventory Deposit rev.13, Always Show Sockets
-  rev.2 and Map Assistance rev.1:** Retain their released behavior.
+- **Controller QOL rev.81:** Standardizes the tested beta.7 controller and
+  opacity fixes, including Cube controls and filtered-loot pickup behavior.
+- **Buff HUD 1.1.1:** Keeps buff icons, countdowns, and empty slots consistent
+  when switching between controller and keyboard/mouse. Includes the required
+  companion MPQ. This fork contains the fix submitted in upstream PR #8.
+- **UnHoarder 1.2.9:** Includes the current fork release with controller labels,
+  background opacity, drop alerts, sound routing, and shared hidden-loot state.
+- **Item Roll Ranges rev.55, Floating Damage rev.13, Inventory Deposit rev.13,
+  Always Show Sockets rev.2, and Map Assistance rev.1:** Retain their current
+  released behavior in this consolidated update.
 
-This is the current consolidated release. Existing settings and filters are
-preserved. Close the game before replacing DLLs and keep one active copy of
-each plugin. The Unhoarder Reimagined asset also updates both sound tables;
-extract that asset into mods/Reimagined and keep your existing filter.json.
+Install one copy of each plugin and close the game before replacing DLLs.
+Existing settings and filters are preserved; packaged defaults are references.
+Buff HUD requires both its DLL and MPQ. The UnHoarder Reimagined package also
+updates its sound tables; retain your existing filter.json.
 
-Builds and automated tests are verified. Focused controller, loot, sound and
-opacity behavior was user-tested. Some Item Roll Ranges combinations and
-hosted-server scenarios remain unverified; upcoming enchantment attribution
-is not included. Experimental probe plugins are excluded.
+Clean builds and automated checks are verified. This release carries forward
+previously tested behavior; it does not add new live-game or hosted coverage.
+Experimental and diagnostic plugins are maintained separately in research.
