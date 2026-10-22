@@ -106,20 +106,37 @@ bool Read(void* player,uint32_t guid,uint32_t radius,Candidate& out) noexcept {
         const auto code=reinterpret_cast<uint32_t(__fastcall*)(void*)>(base+0x36ef50)(unit);
         const auto data=*reinterpret_cast<const uint32_t* const*>(static_cast<const unsigned char*>(unit)+0x10);
         if(!data)return false;
-        if(QolLootVisibility::Hidden(context,unit,guid,code))return false;
+        if(!QolLootVisibility::CannotHideLabel(context,unit,guid) &&
+           QolLootVisibility::Hidden(context,unit,guid,code))return false;
         char text[5]{};std::memcpy(text,&code,4);
         out={guid,code,*data,distance,rankItem(text,*data)};
         return true;
     } __except(EXCEPTION_EXECUTE_HANDLER) {return false;}
 }
+bool HiddenUnit(const void* unit,uint32_t guid,uint32_t code,bool preflightChecked=false) noexcept {
+    __try {
+        if(!unit || !guid || !context)return false;
+        const auto* words=static_cast<const uint32_t*>(unit);
+        if(words[0]!=4 || words[2]!=guid || words[3]!=3)return false;
+        if(!preflightChecked && QolLootVisibility::CannotHideLabel(context,unit,guid)) {
+            QolPerf::Counters[QolPerf::LabelFastPath].Record(0,1);
+            return false;
+        }
+        return QolLootVisibility::Hidden(context,unit,guid,code);
+    } __except(EXCEPTION_EXECUTE_HANDLER) {return false;}
+}
 bool HiddenCandidate(const Candidate& item) noexcept {
     __try {
         if(!item.guid || !context)return false;
-        const auto unit=reinterpret_cast<void*(__fastcall*)(uint32_t,uint32_t)>(context->exeBase+0x9a5d0)(item.guid,4);
-        if(!unit)return false;
-        const auto* words=static_cast<const uint32_t*>(unit);
-        if(words[0]!=4 || words[2]!=item.guid || words[3]!=3)return false;
-        return QolLootVisibility::Hidden(context,unit,item.guid,item.code);
+        const bool fromLabel=QolLootVisibility::CurrentLabelUnit &&
+            QolLootVisibility::CurrentLabelGuid==item.guid;
+        const auto unit=fromLabel?QolLootVisibility::CurrentLabelUnit:
+            reinterpret_cast<const void*(__fastcall*)(uint32_t,uint32_t)>(context->exeBase+0x9a5d0)(item.guid,4);
+        if(fromLabel) {
+            QolLootVisibility::CurrentLabelGuid=0;
+            QolLootVisibility::CurrentLabelUnit=nullptr;
+        }
+        return HiddenUnit(unit,item.guid,item.code,fromLabel);
     } __except(EXCEPTION_EXECUTE_HANDLER) {return false;}
 }
 bool Session(void*& player) noexcept {
@@ -212,7 +229,9 @@ bool Invoke(uintptr_t base,void* player,uint32_t guid,bool approach) noexcept {
 }
 bool ReadPickupCode(uint32_t guid,uint32_t& code) noexcept {
     __try {
-        auto unit=reinterpret_cast<const uint32_t*(__fastcall*)(uint32_t,uint32_t)>(context->exeBase+0x9a5d0)(guid,4);
+        const auto* unit=(QolLootVisibility::CurrentLabelUnit && QolLootVisibility::CurrentLabelGuid==guid)?
+            static_cast<const uint32_t*>(QolLootVisibility::CurrentLabelUnit):
+            reinterpret_cast<const uint32_t*(__fastcall*)(uint32_t,uint32_t)>(context->exeBase+0x9a5d0)(guid,4);
         if(!unit || unit[0]!=4 || unit[2]!=guid || unit[3]!=3)return false;
         code=reinterpret_cast<uint32_t(__fastcall*)(const void*)>(context->exeBase+0x36ef50)(unit);
         return true;
@@ -314,7 +333,11 @@ bool HiddenForPickup(uint32_t guid) noexcept {
     std::lock_guard lock(mutex);
     uint32_t code{};
     if(!Ready() || !context || !guid || !Validate() || !ReadPickupCode(guid,code) ||
-       !HiddenCandidate(Candidate{guid,code})) {providerHidden.erase(guid);return false;}
+       !HiddenCandidate(Candidate{guid,code})) {
+        QolLootVisibility::CurrentLabelGuid=0;QolLootVisibility::CurrentLabelUnit=nullptr;
+        providerHidden.erase(guid);return false;
+    }
+    QolLootVisibility::CurrentLabelGuid=0;QolLootVisibility::CurrentLabelUnit=nullptr;
     if(providerHidden.size()<2048 || providerHidden.contains(guid))
         providerHidden[guid]={localSession.generation,GetTickCount64(),code};
     return true;

@@ -280,8 +280,8 @@ void InstallSharedPageHook() noexcept {
 }
 
 // Copies are synchronous borrowed views, never retained or destroyed by this hook.
-// Native handler reads action +0x10 and repeat flag +0x18 from the payload.
-int PrepareMenuMessage(void* message,MenuCopy& copy,bool subMenu=false,bool modInformation=false) noexcept {
+// Native handler reads action +0x10, repeat flag +0x18, and hold-complete +0x19 from the payload.
+int PrepareMenuMessage(void* message,MenuCopy& copy,bool subMenu=false,bool modInformation=false,bool skillsTree=false) noexcept {
     if(!message) return 0;
     __try {
         auto m=static_cast<const unsigned char*>(message);
@@ -290,14 +290,17 @@ int PrepareMenuMessage(void* message,MenuCopy& copy,bool subMenu=false,bool modI
         auto p=*reinterpret_cast<const unsigned char* const*>(m+0x110);
         if(!p) return 0;
         unsigned action=*reinterpret_cast<const unsigned*>(p+0x10);
-        int mapped=subMenu?Probe::SubMenuAction(true,action):Probe::MenuAction(true,action,modInformation);
+        bool setHoldComplete=false;
+        int mapped=skillsTree?Probe::SkillTreeAction(true,action,p[0x18]!=0,p[0x19]!=0,setHoldComplete):
+            subMenu?Probe::SubMenuAction(true,action):Probe::MenuAction(true,action,modInformation);
         if(mapped==-1) return -1;
-        if(mapped==static_cast<int>(action)) return 0;
+        if(mapped==static_cast<int>(action) && !setHoldComplete) return 0;
         std::memcpy(copy.message,m,sizeof(copy.message));
         std::memcpy(copy.payload,p,sizeof(copy.payload));
         *reinterpret_cast<unsigned*>(copy.payload+0x10)=static_cast<unsigned>(mapped);
+        if(setHoldComplete) copy.payload[0x19]=1;
         *reinterpret_cast<void**>(copy.message+0x110)=copy.payload;
-        return 1;
+        return setHoldComplete?2:1;
     } __except(EXCEPTION_EXECUTE_HANDLER) {return 0;}
 }
 bool SubMenusEnabled() noexcept;
@@ -332,12 +335,13 @@ void __fastcall HookSkillsMessage(void* panel,void* message) noexcept {
     {
         std::lock_guard lock(stateMutex);
         if(SubMenusEnabled() && (subPanels&2)) {
-            decision=PrepareMenuMessage(message,copy,true);
+            decision=PrepareMenuMessage(message,copy,true,false,true);
             if(decision<0) ++skillsReleased;
-            if(decision>0) ++skillsTranslated;
-            if(decision && trace) ctx->LogInfo(decision>0?
+            if(decision==1) ++skillsTranslated;
+            if(decision && trace) ctx->LogInfo(decision==2?
+                "[QOL/Submenu] Skills: A press promoted to immediate skill point allocation.":decision>0?
                 "[QOL/Submenu] Skills: bumper translated to skill tab navigation.":
-                "[QOL/Submenu] Skills: trigger released to main menu without marking input handled.");
+                "[QOL/Submenu] Skills: trigger released or A hold-repeat consumed.");
         }
     }
     if(decision>=0 && originalSkillsMessage) originalSkillsMessage(panel,decision>0?copy.message:message);

@@ -66,6 +66,19 @@ inline int SubMenuAction(bool enabled,unsigned action) noexcept {
     if(action==20) return 8;
     return static_cast<int>(action);
 }
+// Skill Tree A (action 0): activate on initial press (+0x18 repeat==0, +0x19 hold==0)
+// by setting the borrowed copy's hold-complete byte (+0x19 = 1), and consume
+// subsequent repeat/hold-completion events for action 0 to prevent double-spending.
+inline int SkillTreeAction(bool enabled,unsigned action,bool repeat,bool holdComplete,bool& setHoldComplete) noexcept {
+    setHoldComplete=false;
+    if(!enabled) return static_cast<int>(action);
+    if(action==0) {
+        if(repeat || holdComplete) return -1;
+        setHoldComplete=true;
+        return 0;
+    }
+    return SubMenuAction(true,action);
+}
 inline unsigned DedicatedPanelBit(std::string_view name) noexcept {
     if(name.starts_with("Bank")) return 1;
     if(name.starts_with("Vendor")) return 2;

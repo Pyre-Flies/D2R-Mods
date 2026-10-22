@@ -49,6 +49,10 @@ int main() {
     Check(!AdmitSharedEntryPrefix(detourPrefix,originalPrefix,false),"nonexecutable E9 target refused");
     Check(!AdmitSharedEntryPrefix(unknownPrefix,originalPrefix,true),"unknown detour form refused");
     static_assert(ClassifyPriorityObject(59,0x04)==PriorityKind::Portal);
+    static_assert(ClassifyPriorityObject(192,0)==PriorityKind::Portal); // Arcane Sanctuary TeleportPad1
+    static_assert(ClassifyPriorityObject(304,0)==PriorityKind::Portal); // Arcane Sanctuary TeleportPad2
+    static_assert(ClassifyPriorityObject(305,0)==PriorityKind::Portal); // Arcane Sanctuary TeleportPad3
+    static_assert(ClassifyPriorityObject(306,0)==PriorityKind::Portal); // Arcane Sanctuary TeleportPad4
     static_assert(ClassifyPriorityObject(267,0)==PriorityKind::Stash);
     static_assert(ClassifyPriorityObject(119,0x40)==PriorityKind::Waypoint);
     static_assert(ClassifyPriorityObject(159,0)==PriorityKind::None); // hidden stash is not town storage
@@ -58,7 +62,12 @@ int main() {
     static_assert(ClassifyPriorityObject(322,0x20)==PriorityKind::Well);
     static_assert(ClassifyPriorityObject(519,0)==PriorityKind::Well);
     static_assert(ClassifyPriorityObject(5,0x08)==PriorityKind::Chest);
-    static_assert(ClassifyPriorityObject(354,0x08)==PriorityKind::None); // quest chest excluded
+    static_assert(ClassifyPriorityObject(354,0x08)==PriorityKind::Chest); // HoradricCubeChest
+    static_assert(ClassifyPriorityObject(355,0x08)==PriorityKind::Chest); // HoradricScrollChest
+    static_assert(ClassifyPriorityObject(356,0x08)==PriorityKind::Chest); // StaffOfKingsChest
+    static_assert(ClassifyPriorityObject(405,0x08)==PriorityKind::Chest); // KhalimHeartChest
+    static_assert(ClassifyPriorityObject(406,0x08)==PriorityKind::Chest); // KhalimBrainChest
+    static_assert(ClassifyPriorityObject(407,0x08)==PriorityKind::Chest); // KhalimEyeChest
     static_assert(ClassifyPriorityObject(416,0x08)==PriorityKind::None); // StoneStash excluded
     static_assert(KindEnabled(PriorityKind::Portal,true,false,false));
     static_assert(KindEnabled(PriorityKind::Stash,false,true,false));

@@ -69,5 +69,7 @@ int main() {
     CHECK(HoldSnapshot(snapshot,replacement,false)[0].guid==1); // new drop cannot steal A
     CHECK(HoldSnapshot({},replacement,true)[0].guid==999); // release then next hold
     CHECK(!HoldSnapshot({},replacement,false)[0].guid); // empty initial snapshot remains empty
+    VisibilityProof hiddenProof{10,1000,123};
+    CHECK(hiddenProof.Current(10,1000) && hiddenProof.Current(10,1250) && !hiddenProof.Current(10,1251));
     std::puts("Client loot: hold snapshots, stale identities, eligibility, removal and bounded ordering passed.");
 }

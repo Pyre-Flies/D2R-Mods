@@ -5,8 +5,12 @@
 #include "ground_label_visibility_service.h"
 #include "loot_performance.h"
 namespace QolLootVisibility {
+inline thread_local uint32_t CurrentLabelGuid{};
+inline thread_local const void* CurrentLabelUnit{};
 inline bool CannotHideLabel(const D2RL::PluginContext* context,
     const void* unit,uint32_t guid) noexcept {
+    CurrentLabelGuid=guid;
+    CurrentLabelUnit=unit;
     QolPerf::Scope timing(QolPerf::Counters[QolPerf::LabelVisibility]);
     if(!context || !unit || !guid)return false;
     const D2RL::PluginCommunicationService* communication{};
@@ -17,7 +21,9 @@ inline bool CannotHideLabel(const D2RL::PluginContext* context,
         UnhoarderLabelVisibility::Name,UnhoarderLabelVisibility::Version,
         sizeof(UnhoarderLabelVisibility::Service),&lease)!=D2RL::PluginCommunication::Result::Success ||
        !lease || !UnhoarderLabelVisibility::Valid(lease.Get()))return false;
-    return lease->query(unit,guid)==UnhoarderLabelVisibility::Decision::CannotHide;
+    const bool cannotHide=lease->query(unit,guid)==UnhoarderLabelVisibility::Decision::CannotHide;
+    if(cannotHide) {CurrentLabelGuid=0;CurrentLabelUnit=nullptr;}
+    return cannotHide;
 }
 // Each call holds a broker lease through the callback. Never retain native
 // unit pointers or service tables after the call; late provider load is valid.

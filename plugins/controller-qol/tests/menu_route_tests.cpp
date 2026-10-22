@@ -55,6 +55,19 @@ int main() {
     Check(Probe::SubMenuAction(true,19)==7 && Probe::SubMenuAction(true,20)==8,"Options bumpers route to inner tabs");
     Check(Probe::SubMenuAction(true,7)==-1 && Probe::SubMenuAction(true,8)==-1,"Options triggers released to outer menu");
     Check(Probe::SubMenuAction(true,0)==0 && Probe::SubMenuAction(false,19)==19,"other controls and disabled mode preserved");
+    {
+        bool setHold=false;
+        Check(Probe::SkillTreeAction(true,0,false,false,setHold)==0 && setHold,"Skill Tree initial A press promotes hold-complete");
+        Check(Probe::SkillTreeAction(true,0,true,false,setHold)==-1 && !setHold,"Skill Tree A repeat is consumed");
+        Check(Probe::SkillTreeAction(true,0,false,true,setHold)==-1 && !setHold,"Skill Tree A hold-complete is consumed");
+        Check(Probe::SkillTreeAction(true,0,true,true,setHold)==-1 && !setHold,"Skill Tree A repeat+hold is consumed");
+        Check(Probe::SkillTreeAction(true,19,false,false,setHold)==7 && !setHold,"Skill Tree LB still translates to tab left");
+        Check(Probe::SkillTreeAction(true,20,false,false,setHold)==8 && !setHold,"Skill Tree RB still translates to tab right");
+        Check(Probe::SkillTreeAction(true,7,false,false,setHold)==-1 && !setHold,"Skill Tree LT still releases to outer menu");
+        Check(Probe::SkillTreeAction(true,8,false,false,setHold)==-1 && !setHold,"Skill Tree RT still releases to outer menu");
+        Check(Probe::SkillTreeAction(true,1,false,false,setHold)==1 && !setHold,"Skill Tree B passes through untouched");
+        Check(Probe::SkillTreeAction(false,0,false,false,setHold)==0 && !setHold,"disabled Skill Tree policy leaves A native");
+    }
     Check(Probe::ModInformationPanelBit==128,"Mod Information has an independent lifecycle bit");
     Check(Probe::SubPanelBit("modinfo_aa")==Probe::ModInformationPanelBit,"exact Mod Information shell classified");
     for(const auto name : {"", "modinfo_", "modinfo_aaa", "modinfo_aahd", "Modinfo_aa", "other_modinfo_aa"})

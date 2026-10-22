@@ -6,7 +6,7 @@ Download individual runtime ZIPs from the
 
 | Plugin | Stable version | What it adds |
 | --- | --- | --- |
-| [Controller QOL Updates](plugins/controller-qol/README.md) | 1.3.1+rev.89 | Controller item shortcuts, menu navigation and right-stick aiming. |
+| [Controller QOL Updates](plugins/controller-qol/README.md) | 1.3.1+rev.91 | Controller item shortcuts, menu navigation and right-stick aiming. |
 | [Item Roll Ranges](plugins/item-roll-ranges/README.md) | 1.3.1+rev.55 | Roll/source breakdowns, Base damage/Defense, item and base quality levels. |
 | [Floating Damage](plugins/floating-damage/README.md) | 1.3.1+rev.13 | Local enemy HP-loss numbers with element colors and critical emphasis. |
 | [Always Show Sockets](plugins/always-show-sockets/README.md) | 1.3.1+rev.2 | Configurable socket visibility, size and opacity. |

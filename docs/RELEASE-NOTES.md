@@ -1,7 +1,10 @@
-# D2R Mods - 2026.10.21.1
+# D2R Mods - 2026.10.22.1
 
-- **Controller QOL rev.89:** Improves performance around visible loot, especially
-  alongside UnHoarder. Adds supported settings reloads while playing.
+- **Controller QOL rev.91:** Fixes Arcane Sanctuary red teleporters and Act 2/3
+  quest chests (including Khalim's chests) so they can be reliably used with the
+  controller `A` button near ground items. Skill points on the Skill Tree now
+  allocate on a single `A` press instead of requiring a hold. Also speeds up
+  ground-loot label and held-shortcut checks alongside UnHoarder.
 - **UnHoarder 1.2.16:** Improves loot-label performance and avoids unnecessary
   inventory scans. Hold keyboard ALT to pick up filter-hidden items with the mouse.
 - **Gem Bag UI rev.1:** Adds a mouse/controller gem picker and Shift + right-click
@@ -16,6 +19,7 @@ Existing settings and filters are preserved; packaged defaults are references.
 Buff HUD needs both its DLL and MPQ. The UnHoarder Reimagined ZIP includes its
 sound tables; retain your existing filter.json.
 
-Automated checks pass. Loot performance, natural cycling and selected Gem Bag
-hosted operations were user-tested. The plugin guides describe remaining live-test
-limits, including fixed lighting controls and broader pickup/hosted coverage.
+Automated checks pass. Red portal and quest-chest interactions, single-press skill
+allocation, and ground-loot performance were user-tested in-game. The plugin guides
+describe remaining live-test limits, including fixed lighting controls and broader
+pickup/hosted coverage.

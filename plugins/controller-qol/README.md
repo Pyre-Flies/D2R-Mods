@@ -1,6 +1,6 @@
 # Controller QOL Updates
 
-**1.3.1+rev.89 · by PyreFly · Windows x64 / D2RLoader 1.3.1 / plugin ABI 4**
+**1.3.1+rev.91 · by PyreFly · Windows x64 / D2RLoader 1.3.1 / plugin ABI 4**
 
 Controller item shortcuts, direct ground looting, menu navigation and optional
 right-stick skill aiming. This README covers the default button combinations,
@@ -16,9 +16,10 @@ before and after a 30-60 second test. Supported main settings and skill profiles
 reload automatically or through `/qol reload`; invalid edits retain the last
 valid settings, and hook/binding changes still require a restart.
 
-Live loot performance improved in user testing. Automated checks pass; complete
-hosted, pickup and settings-reload acceptance remains open. See the
-[validation guide](docs/VALIDATION.md) for the tested scope.
+Live checks include the red portal and quest-chest interaction fixes, single-press
+skill allocation, and loot-label/held-shortcut performance alongside UnHoarder.
+Automated checks pass; complete hosted, pickup and settings-reload acceptance
+remains open. See the [validation guide](docs/VALIDATION.md) for the tested scope.
 
 - [Install and update](#installation-and-updates)
 - [All default controller shortcuts](#default-controller-shortcuts)
@@ -112,6 +113,7 @@ provides that storage.
 | --- | --- | --- |
 | LT / RT | Main menu pages | Previous / next main page. |
 | LB / RB | Skill Tree | Previous / next skill tab. |
+| A | Skill Tree | Allocate a skill point on press instead of hold. |
 | LB / RB | Quest Log | Previous / next act tab. |
 | LB / RB | Chronicle | Previous / next inner tab. |
 | LB / RB | Options | Previous / next inner tab. |
