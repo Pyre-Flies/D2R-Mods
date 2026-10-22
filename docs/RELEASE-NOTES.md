@@ -1,21 +1,21 @@
-# D2R Mods - 2026.10.20.1
+# D2R Mods - 2026.10.21.1
 
-- **Controller QOL rev.81:** Standardizes the tested beta.7 controller and
-  opacity fixes, including Cube controls and filtered-loot pickup behavior.
-- **Buff HUD 1.1.1:** Keeps buff icons, countdowns, and empty slots consistent
-  when switching between controller and keyboard/mouse. Includes the required
-  companion MPQ. This fork contains the fix submitted in upstream PR #8.
-- **UnHoarder 1.2.9:** Includes the current fork release with controller labels,
-  background opacity, drop alerts, sound routing, and shared hidden-loot state.
-- **Item Roll Ranges rev.55, Floating Damage rev.13, Inventory Deposit rev.13,
-  Always Show Sockets rev.2, and Map Assistance rev.1:** Retain their current
-  released behavior in this consolidated update.
+- **Controller QOL rev.89:** Improves performance around visible loot, especially
+  alongside UnHoarder. Adds supported settings reloads while playing.
+- **UnHoarder 1.2.16:** Improves loot-label performance and avoids unnecessary
+  inventory scans. Hold keyboard ALT to pick up filter-hidden items with the mouse.
+- **Gem Bag UI rev.1:** Adds a mouse/controller gem picker and Shift + right-click
+  deposits for compatible gems and clusters. Install the same version on client
+  and host for hosted games; shared-stash deposits need free inventory space.
+- **Day Night Cycle rev.1:** Restores natural day/night lighting and adds saved
+  controls for natural, daytime or nighttime lighting. Runs entirely on the client.
+- The other plugins retain their current released behavior.
 
-Install one copy of each plugin and close the game before replacing DLLs.
+Close the game before replacing DLLs and keep one active copy of each plugin.
 Existing settings and filters are preserved; packaged defaults are references.
-Buff HUD requires both its DLL and MPQ. The UnHoarder Reimagined package also
-updates its sound tables; retain your existing filter.json.
+Buff HUD needs both its DLL and MPQ. The UnHoarder Reimagined ZIP includes its
+sound tables; retain your existing filter.json.
 
-Clean builds and automated checks are verified. This release carries forward
-previously tested behavior; it does not add new live-game or hosted coverage.
-Experimental and diagnostic plugins are maintained separately in research.
+Automated checks pass. Loot performance, natural cycling and selected Gem Bag
+hosted operations were user-tested. The plugin guides describe remaining live-test
+limits, including fixed lighting controls and broader pickup/hosted coverage.

@@ -1,0 +1,55 @@
+{
+  "date": "2026-10-20",
+  "note": "Exact expected bytes are in src/profile.h; these hashes index the adopted windows.",
+  "witnesses": [
+    {
+      "name": "SetList",
+      "module": "Core",
+      "rva": "0x831ed0",
+      "length": 160,
+      "sha256": "fb3c38173eb15d84a36d162a67d9960f588b93851c11907f5f6351539c3097d1"
+    },
+    {
+      "name": "SetListInner",
+      "module": "Core",
+      "rva": "0x3d95c0",
+      "length": 720,
+      "sha256": "73004d16d7d8f30cd1476d7417207f45199903f33d913ccbccfc4354730478bf"
+    },
+    {
+      "name": "KeyTranslator",
+      "module": "Main",
+      "rva": "0x13d080",
+      "length": 61,
+      "sha256": "0db52ad329f1f7bb969829aaad7407ba8245f83f0e5b6d61cb34a4a4e5fe5360"
+    },
+    {
+      "name": "DeviceMapperPrefix",
+      "module": "Main",
+      "rva": "0x13e450",
+      "length": 96,
+      "sha256": "f9e8bdef0cd8ec7d4bbdf23ab3f041c9fc99321a44030fc4c3d933d81aa825d5"
+    },
+    {
+      "name": "PublishMove",
+      "module": "Core",
+      "rva": "0x429600",
+      "length": 227,
+      "sha256": "872240188cd003609899e639b996a5e15e6af21db92b6b6ccb0e5a1158de864a"
+    },
+    {
+      "name": "NativePublish",
+      "module": "Main",
+      "rva": "0x535f60",
+      "length": 1194,
+      "sha256": "cbe89e87e34ba43c508b937dcd4403b62ee1ef38267d103d34f12558dd4ea8dc"
+    },
+    {
+      "name": "PublishEdit",
+      "module": "Core",
+      "rva": "0x424fd0",
+      "length": 671,
+      "sha256": "807425e83d5bd335a6afdd78899e7383742d56c381c25cc492a1bd4b5ac067d9"
+    }
+  ]
+}

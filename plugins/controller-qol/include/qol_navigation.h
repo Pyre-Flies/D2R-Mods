@@ -2,6 +2,7 @@
 #include <D2RLPlugin/api.h>
 namespace QolNavigation {
 bool Initialize(const D2RL::PluginContext* context, bool featureEnabled, bool traceEnabled = false) noexcept;
+D2RL::ConsoleCommandResult HandleCommand(D2R::Game::Client*,const D2RL::ConsoleCommandContext*,void*) noexcept;
 void SetTrace(bool enabled) noexcept;
 void RefreshGroundLabels() noexcept;
 void PumpLabels(const D2RL::PluginContext*,const D2RL::ThreadService*) noexcept;

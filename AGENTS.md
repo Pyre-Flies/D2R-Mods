@@ -6,7 +6,7 @@ plugin's `src/` and `tests/` first; historical records are opt-in (`rg --no-igno
 
 ## Ownership and safety
 
-- `plugins/` contains the six production plugins listed in README.md. Keep
+- `plugins/` contains the eight production plugins listed in README.md. Keep
   experiments and diagnostics in the separate D2R-Mods-Research repository.
 - UnHoarder and Buff HUD have independent forks; see
   [companion sources](docs/COMPANION-SOURCES.md).

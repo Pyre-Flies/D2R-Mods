@@ -20,7 +20,7 @@ bool CachedHiddenForPickup(uint32_t guid) noexcept; // Owned IDs only; safe for 
 bool Ready() noexcept; // Lock-free admission check for the native input gate.
 uint64_t Epoch() noexcept;
 // Called by the existing filtered tooltip callback; stores IDs, never units/buffers.
-void Track(uint32_t guid,bool visible) noexcept;
+void Track(uint32_t guid,bool visible,const void* labelUnit=nullptr) noexcept;
 int SlotFor(uint32_t guid) noexcept;
 Candidate Slot(unsigned index) noexcept;
 Request Capture(unsigned index) noexcept;

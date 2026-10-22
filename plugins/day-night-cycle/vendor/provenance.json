@@ -1,0 +1,22 @@
+{
+  "src/native_commands.cpp": {
+    "source": "D2R-Mods/plugins/always-show-sockets/vendor/src/native_commands.cpp",
+    "sha256": "24e0b0fc61eb7904f89701bc657a79b6d4842fa71da88327c57dffb3f8616080"
+  },
+  "src/image_scan.cpp": {
+    "source": "D2R-Mods/plugins/always-show-sockets/vendor/src/image_scan.cpp",
+    "sha256": "e42adabd887937f994831f4305078a382ad80f60162dfd965ead711ae107c9be"
+  },
+  "include/D2RLChat/native_commands.h": {
+    "source": "D2R-Mods/plugins/always-show-sockets/vendor/include/D2RLChat/native_commands.h",
+    "sha256": "b0bbfe37484140266750ffa36793e33a2360b6a142a7c881d3cff01d75deb1cf"
+  },
+  "include/D2RLImage/image_scan.h": {
+    "source": "D2R-Mods/plugins/always-show-sockets/vendor/include/D2RLImage/image_scan.h",
+    "sha256": "99a2cb25a7806ee776271af0918c36c01e94d316cd53c27d3cc41c7c803d4683"
+  },
+  "include/ChatConfig/chat_config.h": {
+    "source": "D2R-Mods/plugins/shared/chat_config.h",
+    "sha256": "766f085cee9e068ae9932dc2cb0de650cdc011b6f785c7ba40edac41e761552a"
+  }
+}

@@ -28,7 +28,7 @@ static HMODULE s_PhysicalModules[3]{};
 static XInputGetStateFn s_PhysicalReaders[3]{};
 static XInputGetStateFn s_PrimaryExport = nullptr;
 static char s_ActiveModifierMode[32] = "any";
-static uint8_t s_ActiveTriggerThreshold = 30;
+static std::atomic<uint8_t> s_ActiveTriggerThreshold{30};
 static std::atomic<uint64_t> s_HookCallCount{0};
 // Gate drains active callbacks; this mutex serializes their mutable shortcut state.
 // Native callers acquire s_NativeMutex first. No state-locked path acquires it.
@@ -64,6 +64,7 @@ void SetActiveModifier(const char* mode, uint8_t triggerThreshold) noexcept {
     }
     s_ActiveTriggerThreshold = triggerThreshold;
 }
+void SetTriggerThreshold(uint8_t value) noexcept {s_ActiveTriggerThreshold.store(value);}
 
 uint64_t GetHookCallCount() noexcept {
     return s_HookCallCount.load();
@@ -235,10 +236,10 @@ bool IsGroundPickupActive(const char* button) noexcept {
         return IsControllerButtonPressed(XINPUT_GAMEPAD_RIGHT_THUMB);
     }
     if (_stricmp(button, "lt") == 0 || _stricmp(button, "l2") == 0 || _stricmp(button, "trigger") == 0) {
-        return IsLeftTriggerPressed();
+        return IsLeftTriggerPressed(s_ActiveTriggerThreshold.load());
     }
     if (_stricmp(button, "rt") == 0 || _stricmp(button, "r2") == 0) {
-        return IsRightTriggerPressed();
+        return IsRightTriggerPressed(s_ActiveTriggerThreshold.load());
     }
     // Support [ bracket key / L4 paddle
     if (std::strcmp(button, "[") == 0 || _stricmp(button, "l4") == 0 || _stricmp(button, "bracket") == 0 || _stricmp(button, "leftbracket") == 0) {
@@ -371,6 +372,17 @@ void CancelSyntheticHold() noexcept {
 bool IsSyntheticHoldActive() noexcept {
     std::lock_guard lock(s_InputStateMutex);
     return s_HoldEngine.active;
+}
+bool ApplyConfigurationWhenIdle(ConfigurationUpdate update,void* data) noexcept {
+    std::lock_guard lock(s_InputStateMutex);
+    // Native callbacks acquire their gate before this mutex. Inspect only
+    // published samples here; never acquire the native gate in reverse order.
+    if(!update || s_HoldEngine.active || s_HoldEngine.releaseFrames || s_CachedButtons.load() ||
+       (s_NativeSnapshot.load()&0xffff) || s_CachedLeftTrigger.load() || s_CachedRightTrigger.load())return false;
+    for(unsigned i=0;i<8;++i)if(s_PrevRawButtons[i])return false;
+    for(const int key:{VK_LBUTTON,VK_RBUTTON,VK_MENU,VK_SHIFT,VK_CONTROL,VK_OEM_4,VK_OEM_6})
+        if(GetAsyncKeyState(key)&0x8000)return false;
+    update(data);return true;
 }
 
 void SetVendorContextPredicate(VendorContextPredicate pred) noexcept {

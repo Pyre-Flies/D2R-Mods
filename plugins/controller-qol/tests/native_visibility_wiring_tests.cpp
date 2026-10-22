@@ -10,7 +10,8 @@ static std::string Source(const char* name){std::ifstream f(std::filesystem::pat
 int main(){
  const auto source=Source("plugin_main.cpp");
  auto a=source.find("static bool BlockClientPickup(");auto z=source.find("static bool ProjectGuidedArrowPacket(",a);auto client=source.substr(a,z-a);
- Check(client.find("!g_Settings.blockFilteredPickup")<client.find("QolClientLoot::HiddenForPickup(guid)"),"client setting checked before provider");
+ Check(client.find("const auto settingsSnapshot=ReadSettings();")<client.find("!settingsSnapshot.blockFilteredPickup") &&
+     client.find("!settingsSnapshot.blockFilteredPickup")<client.find("QolClientLoot::HiddenForPickup(guid)"),"current client setting checked before provider");
  Check(client.find("!ControllerQoL::IsControllerUiActive()")<client.find("QolClientLoot::HiddenForPickup(guid)"),"client controller scope retained");
  Check(client.find("QolClientLoot::IsGoldCode(code)")<client.find("QolClientLoot::HiddenForPickup(guid)"),"client gold exemption retained");
  Check(client.find("const bool blocked=!PlacardOverlay::IsPlacardActive(guid) ||\n            QolClientLoot::HiddenForPickup(guid);")!=std::string::npos,"client combines QOL and provider filtering");
@@ -25,7 +26,9 @@ int main(){
  a=loot.find("bool CachedHiddenForPickup(");z=loot.find("bool Ready()",a);auto cached=loot.substr(a,z-a);
  Check(cached.find("ReadPickupCode")==std::string::npos && cached.find("HiddenCandidate")==std::string::npos && cached.find("Validate()")==std::string::npos,"native server guard never calls UI/native visibility readers");
  Check(cached.find("found->second.Current(localSession.generation,GetTickCount64())")!=std::string::npos,"copied proof is session-scoped and recent");
- Check(loot.find("if(shown)(void)HiddenForPickup(guid);")!=std::string::npos,"UI label observations refresh copied proof");
+ Check(loot.find("else (void)HiddenForPickup(guid);")!=std::string::npos,"potentially hidden UI labels retain complete proof refresh");
+ Check(loot.find("QolLootVisibility::CannotHideLabel(context,labelUnit,guid)")!=std::string::npos,"only provider no-Hide proof avoids native query");
+ Check(source.find("QolClientLoot::Track(guid,true,unit);")!=std::string::npos,"only synchronous qualified label item passed to preflight");
  QolClientLoot::VisibilityProof proof{7,1000,123};
  Check(proof.Current(7,1000) && proof.Current(7,1250),"fresh proof accepted");
  Check(!proof.Current(7,1251) && !proof.Current(8,1001) && !proof.Current(7,999),"expired, old-session and future proof fail open");

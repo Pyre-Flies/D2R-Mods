@@ -6,6 +6,7 @@
 #include "bulk_stash.h"
 #include "bulk_stash_feedback.h"
 #include "aim/controller_aim.h"
+#include "config_reload.h"
 #include "aim/config_sections.h"
 #include <D2RLPlugin/api.h>
 #include "controller_input.h"
@@ -14,7 +15,6 @@
 #include "qol_glyphs.h"
 #include "item_dimensions.h"
 #include "d2r_defs.h"
-#include "d2r_memory.h"
 #include "native_d2r.h"
 #include "belt_actions.h"
 #include "materials_actions.h"
@@ -64,35 +64,11 @@
 namespace PlacardOverlay {void ForgetSession() noexcept;}
 namespace {
 
-struct PluginSettings {
-    bool enabled = true;
-    bool quickIdentify = true;
-    bool identifyAll = true;
-    bool nativeIdentify = false;
-    bool quickMove = true;
-    bool cubeTapOpen = true;
-    bool cubeTransmuteShortcut = true;
-    bool quickDeposit = true;
-    bool groundPickup = true;
-    uint32_t groundPickupDistance = 6;
-    uint32_t portalPriorityDistance = 10;
-    char groundPickupButton[16] = "lb";
-    bool requireTomeOrScroll = true;
-    bool consumeTomeOrScroll = true;
-    bool requireModifier = true;
-    char modifier[16] = "bumper";
-    uint8_t triggerThreshold = 30;
-    bool debugLogging = false;
-    bool blockFilteredPickup = true;
-    bool prioritizePortals = true;
-    bool prioritizeStashBoxes = true;
-    bool prioritizeWaypoints = true;
-    bool prioritizeShrines = true;
-    bool prioritizeChests = true;
-    bool portalDiagnostics = false;
-};
-
-static PluginSettings g_Settings{};
+using PluginSettings=QolConfig::Settings;
+static PluginSettings g_Settings{}; // Startup settings; never mutated by reload.
+static PluginSettings ReadSettings() noexcept {
+    const auto current=QolReload::Snapshot();return current?*current:g_Settings;
+}
 
 static const D2RL::ItemInteractionService* g_Interactions = nullptr;
 static const D2RL::ItemService*            g_Items        = nullptr;
@@ -165,123 +141,27 @@ static constexpr D2RL::PluginInfo ControllerQoLPluginInfo {
     .abiVersion  = D2RL_PLUGIN_ABI_VERSION,
     .id          = "controller-qol-updates",
     .name        = "Controller QOL Updates",
-    .version     = "1.3.1+rev.81",
+    .version     = "1.3.1+rev.89",
     .author      = "PyreFly",
     .description = "Direct controller looting with filtered labels, inventory shortcuts, and stash navigation.",
     .flags       = D2RL::PluginFlags::Shared | D2RL::PluginFlags::NativeHooks,
 };
 
 static void LoadConfiguration(const D2RL::PluginContext* context) noexcept {
-    if (!context) return;
-
-    char buffer[65536]{};
-    uint32_t reqSize = 0;
-    if (!context->ReadConfig(buffer, sizeof(buffer) - 1, &reqSize)) {
-        context->LogInfo("[ControllerQoL] Using default settings (no custom toml found).");
-        return;
-    }
-
-    std::string toml;
-    if(!QolAim::Section(buffer,"qol",toml)) {
-        context->LogWarn("[ControllerQoL] Duplicate qol section; using QOL defaults.");
-        return;
-    }
-    auto parseBool = [&toml](const char* key, bool& target) {
-        auto pos = toml.find(key);
-        if (pos != std::string::npos) {
-            auto eq = toml.find('=', pos);
-            if (eq != std::string::npos) {
-                auto val = toml.find_first_not_of(" \t", eq + 1);
-                if (val != std::string::npos) {
-                    if (toml.compare(val, 4, "true") == 0) target = true;
-                    else if (toml.compare(val, 5, "false") == 0) target = false;
-                }
-            }
+    if(!context)return;
+    try {
+        char buffer[65536]{};
+        if(!context->ReadConfig(buffer,sizeof(buffer)-1)) {
+            context->LogInfo("[ControllerQoL] Using default settings (no custom TOML found).");return;
         }
-    };
-
-    parseBool("enabled", g_Settings.enabled);
-    parseBool("quick_identify", g_Settings.quickIdentify);
-    parseBool("identify_all", g_Settings.identifyAll);
-    parseBool("native_identify", g_Settings.nativeIdentify);
-    parseBool("quick_move", g_Settings.quickMove);
-    parseBool("cube_tap_open", g_Settings.cubeTapOpen);
-    parseBool("cube_transmute_shortcut", g_Settings.cubeTransmuteShortcut);
-    parseBool("quick_deposit", g_Settings.quickDeposit);
-    parseBool("ground_pickup", g_Settings.groundPickup);
-    parseBool("require_tome_or_scroll", g_Settings.requireTomeOrScroll);
-    parseBool("consume_tome_or_scroll", g_Settings.consumeTomeOrScroll);
-    parseBool("require_modifier", g_Settings.requireModifier);
-    parseBool("debug_logging", g_Settings.debugLogging);
-    parseBool("block_filtered_pickup", g_Settings.blockFilteredPickup);
-    parseBool("prioritize_portals", g_Settings.prioritizePortals);
-    parseBool("prioritize_stash_boxes", g_Settings.prioritizeStashBoxes);
-    parseBool("prioritize_waypoints", g_Settings.prioritizeWaypoints);
-    parseBool("prioritize_shrines", g_Settings.prioritizeShrines);
-    parseBool("prioritize_chests", g_Settings.prioritizeChests);
-    parseBool("portal_diagnostics", g_Settings.portalDiagnostics);
-
-    // Parse modifier string
-    size_t searchPos = 0;
-    while ((searchPos = toml.find("modifier", searchPos)) != std::string::npos) {
-        if (searchPos == 0 || (toml[searchPos - 1] != '_' && !std::isalnum(static_cast<unsigned char>(toml[searchPos - 1])))) {
-            auto eq = toml.find('=', searchPos);
-            if (eq != std::string::npos) {
-                auto q1 = toml.find('"', eq);
-                if (q1 != std::string::npos) {
-                    auto q2 = toml.find('"', q1 + 1);
-                    if (q2 != std::string::npos && (q2 - q1 - 1) < sizeof(g_Settings.modifier)) {
-                        std::string m = toml.substr(q1 + 1, q2 - q1 - 1);
-                        std::strncpy(g_Settings.modifier, m.c_str(), sizeof(g_Settings.modifier) - 1);
-                        g_Settings.modifier[sizeof(g_Settings.modifier) - 1] = '\0';
-                        break;
-                    }
-                }
-            }
+        PluginSettings parsed;std::string error;
+        if(!QolConfig::Parse(buffer,parsed,error)) {
+            context->LogWarn(("[ControllerQoL] Invalid QOL settings; using startup defaults: "+error).c_str());return;
         }
-        searchPos += 8;
-    }
-
-    // Parse ground_pickup_button string
-    size_t gpbPos = toml.find("ground_pickup_button");
-    if (gpbPos != std::string::npos) {
-        auto eq = toml.find('=', gpbPos);
-        if (eq != std::string::npos) {
-            auto q1 = toml.find('"', eq);
-            if (q1 != std::string::npos) {
-                auto q2 = toml.find('"', q1 + 1);
-                if (q2 != std::string::npos && (q2 - q1 - 1) < sizeof(g_Settings.groundPickupButton)) {
-                    std::string btn = toml.substr(q1 + 1, q2 - q1 - 1);
-                    std::strncpy(g_Settings.groundPickupButton, btn.c_str(), sizeof(g_Settings.groundPickupButton) - 1);
-                    g_Settings.groundPickupButton[sizeof(g_Settings.groundPickupButton) - 1] = '\0';
-                }
-            }
-        }
-    }
-
-    g_Settings.portalPriorityDistance = QolPortal::ReadPriorityDistance(toml);
-
-    // Parse ground_pickup_distance
-    size_t gpdPos = toml.find("ground_pickup_distance");
-    if (gpdPos != std::string::npos) {
-        auto eq = toml.find('=', gpdPos);
-        if (eq != std::string::npos) {
-            auto numStart = toml.find_first_of("0123456789", eq + 1);
-            if (numStart != std::string::npos) {
-                g_Settings.groundPickupDistance = static_cast<uint32_t>(std::atoi(toml.c_str() + numStart));
-                if (g_Settings.groundPickupDistance < 1) g_Settings.groundPickupDistance = 1;
-                if (g_Settings.groundPickupDistance > 20) g_Settings.groundPickupDistance = 20;
-            }
-        }
-    }
-
-    char msg[256];
-    std::snprintf(msg, sizeof(msg),
-        "[ControllerQoL] Config loaded: quickIdentify=%d, groundPickup=%d, blockFiltered=%d, modifier=%s, dist=%u",
-        g_Settings.quickIdentify, g_Settings.groundPickup, g_Settings.blockFilteredPickup, g_Settings.modifier, g_Settings.groundPickupDistance);
-    context->LogInfo(msg);
-
-    ControllerQoL::SetActiveModifier(g_Settings.modifier, g_Settings.triggerThreshold);
+        g_Settings=parsed;
+        ControllerQoL::SetActiveModifier(parsed.modifier,parsed.triggerThreshold);
+        context->LogInfo("[ControllerQoL] Shared settings validated; runtime edits use automatic reload or /qol reload.");
+    }catch(...){context->LogWarn("[ControllerQoL] Config read failed; using startup defaults.");}
 }
 
 struct IdentifyRequest {
@@ -334,12 +214,12 @@ static void __cdecl ExecuteIdentifyTask(const D2RL::PluginContext* context,void*
     if(!s_IdentifyPending || reinterpret_cast<uintptr_t>(userData)!=s_IdentifyGeneration)return;
     const auto* req=&s_IdentifyRequest;
     const auto started=GetTickCount64();
-    if(context && g_Settings.enabled && started-req->queuedAt<=2000) {
-        const auto result=QolIdentify::Execute(context,g_Items,g_Inventory,req->action,QolIdentifyStat::Read,g_Settings.nativeIdentify?QolNativeIdentify::Request:nullptr);
+    if(context && ReadSettings().enabled && started-req->queuedAt<=2000) {
+        const auto result=QolIdentify::Execute(context,g_Items,g_Inventory,req->action,QolIdentifyStat::Read,ReadSettings().nativeIdentify?QolNativeIdentify::Request:nullptr);
         const auto elapsed=GetTickCount64()-started;
         // One bounded summary, never a synchronous per-item log dump. Failures
         // remain diagnosable with debug_logging=false; timings precede log I/O.
-        if(result.status!=QolIdentify::Status::Success || g_Settings.debugLogging || result.nativeReads || elapsed>=50) {
+        if(result.status!=QolIdentify::Status::Success || ReadSettings().debugLogging || result.nativeReads || elapsed>=50) {
             char message[512];
             std::snprintf(message,sizeof(message),
                 "[QOL/Identify] result=%s scan=%u operation=%u scanned=%u tomes=%u scrolls=%u maxTomeQty=%d consumed=%u sdkQty=%d stat70=%d remaining=%d readFailures=%u mismatches=%u queueMs=%llu workMs=%llu runtimeId=%u route=%s targetContainer=%u sourceContainer=%u.",
@@ -463,7 +343,7 @@ static void ReportSharedMove(const D2RL::PluginContext* ctx,const QolSharedSdk::
 static void ExecuteMove(const D2RL::PluginContext* context, MoveRequest* req) noexcept {
     if (!req) return;
 
-    if (!context || !g_Items || !g_Settings.enabled) return;
+    if (!context || !g_Items || !ReadSettings().enabled) return;
     if(req->cubeShortcut && (!QolCubeShortcut::Current(req->actionGeneration,s_ActionGeneration.load(),
         req->actionRequestedAt,GetTickCount64()) || !QolCubeShortcut::Context(req->sourceContainer,
         TestUiMode(UI_MODE_INVENTORY),TestUiMode(UI_MODE_STASH),TestUiMode(UI_MODE_CUBE))))return;
@@ -788,7 +668,7 @@ static D2RL::Threads::Result QueueMoveTask(const D2RL::PluginContext* ctx,MoveRe
 }
 
 static void QueueLegacyQuickMove(const D2RL::Items::ItemInfo& info,bool cubeDestination) noexcept {
-    if(!g_PluginContext || !g_Threads || !g_Settings.quickMove)return;
+    if(!g_PluginContext || !g_Threads || !ReadSettings().quickMove)return;
     const bool cube=cubeDestination || TestUiMode(UI_MODE_CUBE);
     const bool stash=TestUiMode(UI_MODE_STASH);
     if(!cube && !stash)return;
@@ -813,7 +693,7 @@ static void QueueQuickMoveToCube(bool materialsFirst,const D2RL::Items::ItemInfo
 static void TriggerQuickMoveToCubeOnFocusedItem() noexcept;
 
 static void TriggerQuickMoveOnFocusedItem() noexcept {
-    if (!g_PluginContext || !g_Threads || !g_Settings.enabled || !g_Settings.quickMove) return;
+    if (!g_PluginContext || !g_Threads || !ReadSettings().enabled || !ReadSettings().quickMove) return;
     static std::atomic<ULONGLONG> last{0};
     const auto now=GetTickCount64();
     if (now-last.exchange(now)<250) return;
@@ -922,7 +802,7 @@ static bool PlayerHasCube(const D2RL::PluginContext* context, D2RL::PlayerHandle
 
 // UI thread only: capture the source, local SDK owner and Shared page before dispatch.
 static void QueueQuickMoveToCube(bool materialsFirst,const D2RL::Items::ItemInfo* captured) noexcept {
-    if(!g_PluginContext || !g_Threads || !g_Settings.enabled || !g_Settings.quickMove || !s_IdentifySessionEvents)return;
+    if(!g_PluginContext || !g_Threads || !ReadSettings().enabled || !ReadSettings().quickMove || !s_IdentifySessionEvents)return;
     if(QolNativeIdentify::Busy() || QolClientTransfer::Busy())return;
     D2RL::Items::ItemInfo focused{};
     if(captured)focused=*captured;else if(!ReadFocusIdentity(focused))return;
@@ -950,7 +830,7 @@ static void QueueQuickMoveToCube(bool materialsFirst,const D2RL::Items::ItemInfo
 }
 
 static void TriggerQuickMoveToCubeOnFocusedItem() noexcept {
-    if(!g_PluginContext || !g_Threads || !g_Settings.enabled || !g_Settings.quickMove || !s_IdentifySessionEvents)return;
+    if(!g_PluginContext || !g_Threads || !ReadSettings().enabled || !ReadSettings().quickMove || !s_IdentifySessionEvents)return;
     if(QolBelt::Busy() || QolBulkStash::Busy() || QolNativeIdentify::Busy() || QolClientTransfer::Busy())return;
     if(QolMaterials::RequestFocusedCounter(true))return;
     // Copy at the physical press. A delayed UI callback must not substitute a new tooltip.
@@ -960,7 +840,7 @@ static void TriggerQuickMoveToCubeOnFocusedItem() noexcept {
     if(!token)return;
     const auto result=g_Threads->runOnUiThread(g_PluginContext,[](const D2RL::PluginContext* ctx,void* user) noexcept {
         auto pending=s_CubeRequests.Take(reinterpret_cast<uintptr_t>(user));
-        if(!pending || !g_Settings.enabled || !QolCubeShortcut::Current(pending->generation,s_ActionGeneration.load(),pending->requestedAt,GetTickCount64()))return;
+        if(!pending || !ReadSettings().enabled || !QolCubeShortcut::Current(pending->generation,s_ActionGeneration.load(),pending->requestedAt,GetTickCount64()))return;
         if(QolNativeIdentify::Busy() || QolClientTransfer::Busy() || QolBelt::Busy() || QolMaterials::Busy() || QolBulkStash::Busy())return;
         const auto& info=pending->info;
         D2RL::Items::ItemInfo current{};
@@ -975,7 +855,7 @@ static bool TriggerAdvancedSingleBelt() noexcept {
     const auto advancedStamp=s_AdvancedBeltFocusTick.load();
     const auto sharedStamp=s_SharedBeltFocusTick.load();
     const auto stamp=advancedStamp>sharedStamp?advancedStamp:sharedStamp;
-    if(!g_Settings.enabled || !g_Settings.quickMove || !stamp || GetTickCount64()-stamp>250 ||
+    if(!ReadSettings().enabled || !ReadSettings().quickMove || !stamp || GetTickCount64()-stamp>250 ||
        !TestUiMode(UI_MODE_STASH) || QolNativeIdentify::Busy() || QolClientTransfer::Busy() || QolBelt::Busy() || QolBulkStash::Busy())return false;
     D2RL::Items::ItemInfo info{};
     if(!ReadFocusIdentity(info))return false;
@@ -992,7 +872,7 @@ static bool VendorRefillContext() noexcept {
     return IsVendorPanelOpen() && !TestUiMode(UI_MODE_STASH) && !TestUiMode(UI_MODE_CUBE);
 }
 static void TriggerAutoFillBelt() noexcept {
-    if (!g_PluginContext || !g_Settings.enabled || !g_Settings.quickMove || !g_Threads) return;
+    if (!g_PluginContext || !ReadSettings().enabled || !ReadSettings().quickMove || !g_Threads) return;
     (void)g_Threads->runOnUiThread(g_PluginContext,[](const D2RL::PluginContext* ctx,void*) noexcept {
         if (QolBelt::Busy() || QolMaterials::Busy() || QolBulkStash::Busy() || QolNativeIdentify::Busy() || QolClientTransfer::Busy()) return;
         const bool stash=TestUiMode(UI_MODE_STASH);
@@ -1031,13 +911,14 @@ static auto __cdecl OnItemInteraction(
     const D2RL::ItemInteractions::ItemInteractionEvent* event,
     void* userData
 ) noexcept -> D2RL::ItemInteractions::Decision {
+    const auto settingsSnapshot=ReadSettings();
     (void)userData;
 
     if (!context || !event || event->structSize < D2RL::ItemInteractions::ItemInteractionEventRequiredSize) {
         return D2RL::ItemInteractions::Decision::Continue;
     }
 
-    if (QolNativeIdentify::Forwarding() || !g_Settings.enabled) {
+    if (QolNativeIdentify::Forwarding() || !settingsSnapshot.enabled) {
         return D2RL::ItemInteractions::Decision::Continue;
     }
 
@@ -1050,7 +931,7 @@ static auto __cdecl OnItemInteraction(
     // including advanced-stash deposits and ordinary keyboard item actions.
     if (!isController) return D2RL::ItemInteractions::Decision::Continue;
 
-    if (g_Settings.debugLogging) {
+    if (settingsSnapshot.debugLogging) {
         char logMsg[256];
         std::snprintf(logMsg, sizeof(logMsg),
             "[ControllerQoL] Item activated: item=%llu inputSource=%u (%s) mod=0x%X container=%u cell=(%d,%d)",
@@ -1080,7 +961,7 @@ static auto __cdecl OnItemInteraction(
     }
 
     const bool isUnidentified = (itemInfo.stateFlags & D2RL::Items::ItemStateIdentified) == 0;
-    if (g_Settings.debugLogging) {
+    if (settingsSnapshot.debugLogging) {
         char inspectLog[256];
         std::snprintf(inspectLog, sizeof(inspectLog),
             "[ControllerQoL] Item inspected: code=0x%08X, quality=%u, unidentified=%d",
@@ -1094,13 +975,13 @@ static auto __cdecl OnItemInteraction(
     const bool btnX = isController && ControllerQoL::IsButtonXPressed();
 
     if (isController) {
-        if (!g_Settings.requireModifier) {
+        if (!settingsSnapshot.requireModifier) {
             modifierActive = true;
         } else {
             const uint8_t ltVal = ControllerQoL::GetMaxLeftTriggerValue();
             const bool lbVal = ControllerQoL::IsLeftBumperPressed();
             const bool bracketVal = (GetAsyncKeyState(VK_OEM_4) & 0x8000) != 0;
-            modifierActive = ControllerQoL::IsControllerModifierActive(g_Settings.modifier, g_Settings.triggerThreshold);
+            modifierActive = ControllerQoL::IsControllerModifierActive(settingsSnapshot.modifier, settingsSnapshot.triggerThreshold);
 
             uint8_t cachedLT = 0, cachedRT = 0;
             uint16_t cachedBtns = 0;
@@ -1108,7 +989,7 @@ static auto __cdecl OnItemInteraction(
             ControllerQoL::GetCachedControllerState(cachedLT, cachedRT, cachedBtns, cacheAge);
             const uint64_t hookCalls = ControllerQoL::GetHookCallCount();
 
-            if (g_Settings.debugLogging) {
+            if (settingsSnapshot.debugLogging) {
                 const auto bridgeDiag = ControllerQoL::QueryNativeBridgeDiagnostics();
                 char modLog[384];
                 std::snprintf(modLog, sizeof(modLog),
@@ -1132,18 +1013,18 @@ static auto __cdecl OnItemInteraction(
     if(modifierActive && (QolNativeIdentify::Busy() || QolClientTransfer::Busy()))
         return D2RL::ItemInteractions::Decision::Consume;
 
-    if(g_Settings.quickMove && modifierActive && TestUiMode(UI_MODE_STASH) && QolBelt::BeltCandidate(itemInfo.code)) {
+    if(settingsSnapshot.quickMove && modifierActive && TestUiMode(UI_MODE_STASH) && QolBelt::BeltCandidate(itemInfo.code)) {
         if(QolMaterials::Busy() || QolBelt::Busy() || QolBulkStash::Busy())return D2RL::ItemInteractions::Decision::Consume;
         if(QolMaterials::TryWithdrawToBelt(context,itemInfo))return D2RL::ItemInteractions::Decision::Consume;
     }
 
-    if(Probe::BatchFeatureEnabled(g_Settings.quickIdentify,g_Settings.identifyAll) &&
+    if(Probe::BatchFeatureEnabled(settingsSnapshot.quickIdentify,settingsSnapshot.identifyAll) &&
        modifierActive && !btnX && QolIdentify::BulkTome(itemInfo)) {
         if(QolClientTransfer::Busy() || QolBelt::Busy() || QolMaterials::Busy() || QolBulkStash::Busy())return D2RL::ItemInteractions::Decision::Consume;
-        (void)QolNativeIdentify::RequestAll(context,event->player,itemInfo,g_Settings.nativeIdentify,isController && g_Settings.consumeTomeOrScroll);
+        (void)QolNativeIdentify::RequestAll(context,event->player,itemInfo,settingsSnapshot.nativeIdentify,isController && settingsSnapshot.consumeTomeOrScroll);
         return D2RL::ItemInteractions::Decision::Consume;
     }
-    if (isUnidentified && g_Settings.quickIdentify && modifierActive) {
+    if (isUnidentified && settingsSnapshot.quickIdentify && modifierActive) {
         // Prefer authoritative SDK work. Only an Unavailable scheduler permits
         // read-only client preparation and a native request on the UI thread.
         if(QolNativeIdentify::Busy() || QolClientTransfer::Busy() || QolBelt::Busy() || QolMaterials::Busy() || QolBulkStash::Busy())return D2RL::ItemInteractions::Decision::Consume;
@@ -1151,7 +1032,7 @@ static auto __cdecl OnItemInteraction(
         if(!s_IdentifySessionEvents)return D2RL::ItemInteractions::Decision::Continue;
         if(s_IdentifyPending.exchange(true))return D2RL::ItemInteractions::Decision::Consume;
         s_IdentifyRequest={
-            .action={event->player,itemInfo,g_Settings.requireTomeOrScroll,g_Settings.consumeTomeOrScroll,QolNativeIdentify::PersonalStashOpen()},
+            .action={event->player,itemInfo,settingsSnapshot.requireTomeOrScroll,settingsSnapshot.consumeTomeOrScroll,QolNativeIdentify::PersonalStashOpen()},
             .queuedAt=GetTickCount64(),
         };
 
@@ -1160,7 +1041,7 @@ static auto __cdecl OnItemInteraction(
             return D2RL::ItemInteractions::Decision::Consume;
         } else {
             s_IdentifyPending.store(false);
-            if(isController && scheduleResult==D2RL::Threads::Result::Unavailable && g_Settings.consumeTomeOrScroll &&
+            if(isController && scheduleResult==D2RL::Threads::Result::Unavailable && settingsSnapshot.consumeTomeOrScroll &&
                QolNativeIdentify::RequestRemote(context,event->player,itemInfo))return D2RL::ItemInteractions::Decision::Consume;
             char line[160];std::snprintf(line,sizeof(line),"[QOL/Identify] scheduling=%u remote request unavailable; preserving native input.",static_cast<unsigned>(scheduleResult));context->LogWarn(line);
             return D2RL::ItemInteractions::Decision::Continue;
@@ -1168,7 +1049,7 @@ static auto __cdecl OnItemInteraction(
     }
 
     // Consume accepted belt work; the module resolves this exact identity on the game thread.
-    if (g_Settings.quickMove && modifierActive && QolBelt::BeltCandidate(itemInfo.code) &&
+    if (settingsSnapshot.quickMove && modifierActive && QolBelt::BeltCandidate(itemInfo.code) &&
         QolBelt::SupportedSource(itemInfo.container)) {
         if (QolBelt::RequestSingle(event->player, itemInfo))
             return D2RL::ItemInteractions::Decision::Consume;
@@ -1195,11 +1076,12 @@ static void __cdecl OnItemTooltipCallback(
     D2RL::SharedEvents::ItemTooltipEvent* event,
     void* userData
 ) noexcept {
+    const auto settingsSnapshot=ReadSettings();
     (void)userData;
     QolGlyphs::PublishHeader(nullptr,nullptr,nullptr,nullptr,nullptr);
     s_AdvancedBeltFocusTick.store(0);
     s_SharedBeltFocusTick.store(0);
-    if (!g_Settings.enabled || !event) return;
+    if (!settingsSnapshot.enabled || !event) return;
 
     QolMaterials::ObserveControllerFocus(context,ControllerQoL::IsControllerUiActive());
 
@@ -1243,7 +1125,7 @@ static void __cdecl OnItemTooltipCallback(
             }
             const bool playerHasCube  = PlayerHasCube(context, player);
 
-            const bool canMove        = !vendorStock && g_Settings.quickMove && (
+            const bool canMove        = !vendorStock && settingsSnapshot.quickMove && (
                 (info.container == D2RL::Items::ItemContainer::Inventory && (isCubeOpen || isStashOpen || isVendorOpen || QolCustomPage::Visible(context))) ||
                 (info.container == D2RL::Items::ItemContainer::PersonalStash ||
                  info.container == D2RL::Items::ItemContainer::SharedStash ||
@@ -1255,7 +1137,7 @@ static void __cdecl OnItemTooltipCallback(
                 QolSharedSdk::Selected(context->exeBase):QolSharedSdk::Selection{};
             const bool cubeSourceSupported=info.container!=D2RL::Items::ItemContainer::SharedStash ||
                 (QolSharedSdk::Supported(g_Items) && cubeSharedSelection.valid && !cubeSharedSelection.previousSeason);
-            const bool canMoveToCube  = cubeSourceSupported && !vendorStock && g_Settings.quickMove && playerHasCube && !QolCubeShortcut::IsCube(info.code) && (!isCubeOpen) && (
+            const bool canMoveToCube  = cubeSourceSupported && !vendorStock && settingsSnapshot.quickMove && playerHasCube && !QolCubeShortcut::IsCube(info.code) && (!isCubeOpen) && (
                 info.container == D2RL::Items::ItemContainer::Inventory ||
                 info.container == D2RL::Items::ItemContainer::PersonalStash ||
                 info.container == D2RL::Items::ItemContainer::SharedStash || advancedFocus
@@ -1264,15 +1146,15 @@ static void __cdecl OnItemTooltipCallback(
             const bool isPotionItem   = QolBelt::BeltCandidate(info.code) && QolBelt::SupportedSource(info.container);
             const bool canMoveToBelt  = !vendorStock && (isPotionItem || advancedPotion);
             const bool canIdentifyAll = !vendorStock &&
-                Probe::BatchFeatureEnabled(g_Settings.quickIdentify,g_Settings.identifyAll) && QolIdentify::BulkTome(info);
-            const bool canIdentify    = !vendorStock && isUnidentified && g_Settings.quickIdentify;
+                Probe::BatchFeatureEnabled(settingsSnapshot.quickIdentify,settingsSnapshot.identifyAll) && QolIdentify::BulkTome(info);
+            const bool canIdentify    = !vendorStock && isUnidentified && settingsSnapshot.quickIdentify;
             const bool vendorScroll=vendorStock && QolVendor::TomeForScroll(info.code)!=0;
-            const bool canAutoFill    = g_Settings.quickMove && (vendorScroll || (IsPotionItem(info.code) && (vendorStock || isStashOpen || isCubeOpen || info.container == D2RL::Items::ItemContainer::Inventory ||
+            const bool canAutoFill    = settingsSnapshot.quickMove && (vendorScroll || (IsPotionItem(info.code) && (vendorStock || isStashOpen || isCubeOpen || info.container == D2RL::Items::ItemContainer::Inventory ||
                                          info.container == D2RL::Items::ItemContainer::PersonalStash ||
                                          info.container == D2RL::Items::ItemContainer::SharedStash)));
 
             const bool canBulkStash=isStashOpen &&
-                Probe::BatchFeatureEnabled(g_Settings.quickMove,g_Settings.quickDeposit);
+                Probe::BatchFeatureEnabled(settingsSnapshot.quickMove,settingsSnapshot.quickDeposit);
             if (canBulkStash || canIdentifyAll || canIdentify || canMoveToBelt || canMove || canMoveToCube || canAutoFill) {
                 char prompt[256]{};
                 const char* moveAction = "Transfer";
@@ -1281,24 +1163,24 @@ static void __cdecl OnItemTooltipCallback(
                 }
 
                 const char* modStr = "LT";
-                if (g_Settings.requireModifier) {
-                    if (std::strcmp(g_Settings.modifier, "[") == 0 || _stricmp(g_Settings.modifier, "l4") == 0 ||
-                        _stricmp(g_Settings.modifier, "bracket") == 0 || _stricmp(g_Settings.modifier, "leftbracket") == 0) {
+                if (settingsSnapshot.requireModifier) {
+                    if (std::strcmp(settingsSnapshot.modifier, "[") == 0 || _stricmp(settingsSnapshot.modifier, "l4") == 0 ||
+                        _stricmp(settingsSnapshot.modifier, "bracket") == 0 || _stricmp(settingsSnapshot.modifier, "leftbracket") == 0) {
                         modStr = "[";
-                    } else if (_stricmp(g_Settings.modifier, "lb") == 0 || _stricmp(g_Settings.modifier, "bumper") == 0) {
+                    } else if (_stricmp(settingsSnapshot.modifier, "lb") == 0 || _stricmp(settingsSnapshot.modifier, "bumper") == 0) {
                         modStr = "LB";
-                    } else if (_stricmp(g_Settings.modifier, "l3") == 0) {
+                    } else if (_stricmp(settingsSnapshot.modifier, "l3") == 0) {
                         modStr = "L3";
-                    } else if (_stricmp(g_Settings.modifier, "rb") == 0) {
+                    } else if (_stricmp(settingsSnapshot.modifier, "rb") == 0) {
                         modStr = "RB";
-                    } else if (_stricmp(g_Settings.modifier, "rt") == 0) {
+                    } else if (_stricmp(settingsSnapshot.modifier, "rt") == 0) {
                         modStr = "RT";
                     } else {
                         modStr = "LT";
                     }
                 }
 
-                QolGlyphs::PublishHeader(g_Settings.requireModifier?modStr:"",
+                QolGlyphs::PublishHeader(settingsSnapshot.requireModifier?modStr:"",
                     canIdentifyAll?"Identify All":canIdentify?"Identify":(canMoveToBelt?"To Belt":nullptr),
                     canMove?moveAction:nullptr,canMoveToCube?"To Cube":nullptr,
                     canAutoFill?(vendorScroll?"Fill Tome":vendorStock?"Refill / Buy":"Fill Belt"):nullptr,canBulkStash?"Stash All":nullptr);
@@ -1308,7 +1190,7 @@ static void __cdecl OnItemTooltipCallback(
                         prompt[promptLen++] = '\n';
                         prompt[promptLen] = '\0';
                     }
-                    if (g_Settings.requireModifier) {
+                    if (settingsSnapshot.requireModifier) {
                         if (std::strcmp(modStr, "[") == 0) {
                             promptLen += std::snprintf(prompt + promptLen, sizeof(prompt) - promptLen, "[ + %s] %s", btn, act);
                         } else {
@@ -1377,11 +1259,12 @@ namespace GroundLoot {
 
     static bool LocalActor(void* player,uint32_t& id) noexcept;
     static bool BlockClientPickup(uint32_t guid,uint32_t code) noexcept {
-        if(!g_Settings.enabled || !g_Settings.blockFilteredPickup ||
+    const auto settingsSnapshot=ReadSettings();
+        if(!settingsSnapshot.enabled || !settingsSnapshot.blockFilteredPickup ||
            !ControllerQoL::IsControllerUiActive() || QolClientLoot::IsGoldCode(code))return false;
         const bool blocked=!PlacardOverlay::IsPlacardActive(guid) ||
             QolClientLoot::HiddenForPickup(guid);
-        if(blocked && g_PluginContext && g_Settings.debugLogging) {
+        if(blocked && g_PluginContext && settingsSnapshot.debugLogging) {
             char message[128];std::snprintf(message,sizeof(message),"[QOL/ClientLoot] Suppressed filtered pickup GUID=%u before submission.",guid);
             g_PluginContext->LogInfo(message);
         }
@@ -1391,7 +1274,7 @@ namespace GroundLoot {
     static bool ProjectGuidedArrowPacket(void* player, const void* packet,
         int32_t size, std::array<uint8_t,5>& projectedPacket) noexcept {
         uint32_t actorId{};
-        if (!g_Settings.enabled || !LocalActor(player,actorId) || !ControllerQoL::IsControllerUiActive() ||
+        if (!ReadSettings().enabled || !LocalActor(player,actorId) || !ControllerQoL::IsControllerUiActive() ||
             !player || !packet || size != static_cast<int32_t>(projectedPacket.size()) ||
             !s_GetSelectedSkill)
             return false;
@@ -1443,17 +1326,18 @@ namespace GroundLoot {
     }
 
     __declspec(noinline) bool __fastcall HookPickup(void* player, uint32_t guid, bool arg3, uint32_t dist, bool arg5, bool arg6) {
+    const auto settingsSnapshot=ReadSettings();
         if (!s_Pickup) return false;
         if (!s_PickupCallsActive.load())
             return s_Pickup(player, guid, arg3, dist, arg5, arg6);
 
         uint32_t actorId{};
-        if(!g_Settings.enabled || !QolClientLoot::Ready() || !LocalActor(player,actorId) || QolClientLoot::TakeNativePickupPermit(actorId,guid))
+        if(!settingsSnapshot.enabled || !QolClientLoot::Ready() || !LocalActor(player,actorId) || QolClientLoot::TakeNativePickupPermit(actorId,guid))
             return s_Pickup(player,guid,arg3,dist,arg5,arg6);
-        const bool shortcutsEnabled = Probe::GroundShortcutsEnabled(g_Settings.enabled, g_Settings.groundPickup);
+        const bool shortcutsEnabled = Probe::GroundShortcutsEnabled(settingsSnapshot.enabled, settingsSnapshot.groundPickup);
         const bool modifierHeld = shortcutsEnabled &&
-            ControllerQoL::IsGroundPickupActive(g_Settings.groundPickupButton);
-        const bool blockFilteredPickup = g_Settings.blockFilteredPickup && ControllerQoL::IsControllerUiActive();
+            ControllerQoL::IsGroundPickupActive(settingsSnapshot.groundPickupButton);
+        const bool blockFilteredPickup = settingsSnapshot.blockFilteredPickup && ControllerQoL::IsControllerUiActive();
         const bool placardActive = !blockFilteredPickup ||
             (PlacardOverlay::IsPlacardActive(guid) && !QolClientLoot::CachedHiddenForPickup(guid));
         if (Probe::BlockNativePickup(shortcutsEnabled, modifierHeld,
@@ -1462,7 +1346,7 @@ namespace GroundLoot {
             // Native capacity/automatic-pickup settings still decide acceptance.
             if(QolGoldPickup::IsGold(g_PluginContext,player,guid))
                 return s_Pickup(player,guid,arg3,dist,arg5,arg6);
-            if (g_PluginContext && g_Settings.debugLogging) {
+            if (g_PluginContext && settingsSnapshot.debugLogging) {
                 char supMsg[128];
                 std::snprintf(supMsg, sizeof(supMsg),
                     "[ControllerQoL] Suppressed native game pickup for GUID=%u (%s)", guid,
@@ -1775,6 +1659,7 @@ namespace PlacardOverlay {
     // Runs after the native name writer, before the caller measures the label.
     // The native buffer has a four-byte prefix; only its 124-byte text is ours.
     void ObserveCompletedName(void* unit, void* output) {
+        QolPerf::Scope timing(QolPerf::Counters[QolPerf::Label]);
         ++s_HookCallCount;
         auto* textBuffer=static_cast<unsigned char*>(output)+4;
         constexpr size_t bufferSize=0x80-4;
@@ -1792,11 +1677,11 @@ namespace PlacardOverlay {
         }
 
         RegisterPlacard(guid, textBuffer, bufferSize, false);
-        QolClientLoot::Track(guid,true);
+        QolClientLoot::Track(guid,true,unit);
 
         // If ground pickup modifier is currently held down, apply the prefix immediately
-        if (Probe::GroundShortcutsEnabled(g_Settings.enabled,g_Settings.groundPickup) &&
-            ControllerQoL::IsGroundPickupActive(g_Settings.groundPickupButton)) {
+        if (Probe::GroundShortcutsEnabled(ReadSettings().enabled,ReadSettings().groundPickup) &&
+            ControllerQoL::IsGroundPickupActive(ReadSettings().groundPickupButton)) {
             for (size_t i = 0; i < GroundLoot::NUM_STICKY_SLOTS; ++i) {
                 if (QolClientLoot::SlotFor(guid)==static_cast<int>(i)) {
                     ApplyPlacardBuffer(s_TrackedPlacards.at(guid),
@@ -1849,6 +1734,7 @@ extern "C" void QolPlacardObserveCompletedName(void* unit,void* output) noexcept
 
 struct PickupTaskArgs {
     QolClientLoot::Request clientRequest{};
+    unsigned distance{};
 };
 
 static QolTasks::Payloads<PickupTaskArgs> s_PickupRequests;
@@ -1859,14 +1745,15 @@ static void CancelOwnedRequests() noexcept {
 }
 
 static bool ClientGroundHeld() noexcept {
-    return g_PollingRunning.load() && Probe::GroundShortcutsEnabled(g_Settings.enabled,g_Settings.groundPickup) &&
+    const auto settingsSnapshot=ReadSettings();
+    return g_PollingRunning.load() && Probe::GroundShortcutsEnabled(settingsSnapshot.enabled,settingsSnapshot.groundPickup) &&
         ControllerQoL::IsControllerUiActive() && QolNavigation::GroundInputActive() &&
-        ControllerQoL::IsGroundPickupActive(g_Settings.groundPickupButton);
+        ControllerQoL::IsGroundPickupActive(settingsSnapshot.groundPickupButton);
 }
 static void __cdecl RefreshClientGroundTask(const D2RL::PluginContext*,void* user) noexcept {
     if(QolClientLoot::Epoch()==reinterpret_cast<uintptr_t>(user) && g_PollingRunning.load() && QolClientLoot::Active()) {
         const bool held=ClientGroundHeld();
-        if(QolClientLoot::Refresh(std::max(g_Settings.groundPickupDistance,10U),held)) {
+        if(QolClientLoot::Refresh(std::max(ReadSettings().groundPickupDistance,10U),held)) {
             PlacardOverlay::ClearPlacardOverlays();
             if(held)PlacardOverlay::ApplyPlacardOverlays();
             QolNavigation::RefreshGroundLabels();
@@ -1886,7 +1773,7 @@ static void QueueClientGroundRefresh(const D2RL::PluginContext* context) noexcep
 static void __cdecl PickupClientGroundTask(const D2RL::PluginContext*,void* userData) noexcept {
     auto args=s_PickupRequests.Take(reinterpret_cast<uintptr_t>(userData));
     if(args) {
-        QolClientLoot::Submit(args->clientRequest,std::max(g_Settings.groundPickupDistance,10U),ClientGroundHeld());
+        QolClientLoot::Submit(args->clientRequest,args->distance,ClientGroundHeld());
     }
 }
 
@@ -1894,7 +1781,7 @@ static void QueueGroundPickup(const D2RL::PluginContext* context,unsigned slot) 
     if(!g_Threads || !g_Threads->runOnUiThread || !s_IdentifySessionEvents || !ClientGroundHeld())return;
     const auto request=QolClientLoot::Capture(slot);
     if(!request.item.guid)return;
-    const auto token=s_PickupRequests.Put(std::make_unique<PickupTaskArgs>(PickupTaskArgs{request}));
+    const auto token=s_PickupRequests.Put(std::make_unique<PickupTaskArgs>(PickupTaskArgs{request,std::max(ReadSettings().groundPickupDistance,10U)}));
     if(token && g_Threads->runOnUiThread(context,PickupClientGroundTask,reinterpret_cast<void*>(token))!=D2RL::Threads::Result::Success)
         (void)s_PickupRequests.Take(token);
 }
@@ -2122,7 +2009,7 @@ D2RL_PLUGIN_EXPORT auto D2RLoaderLoadPlugin(const D2RL::PluginContext* context) 
                 !layoutReadable ? "unreadable" : layoutMatch ? "original" : "modified");
             context->LogInfo(lblLog);
 
-            if (GroundLoot::s_Base) {
+            if (GroundLoot::s_Base && g_Settings.debugLogging) {
                 char dumpBuf[256];
                 int off = std::snprintf(dumpBuf, sizeof(dumpBuf), "[ControllerQoL] LabelCap asm [0x1516EB0]: ");
                 const uint8_t* pCode = GroundLoot::s_Base + 0x1516EB0;
@@ -2177,15 +2064,17 @@ D2RL_PLUGIN_EXPORT auto D2RLoaderLoadPlugin(const D2RL::PluginContext* context) 
         return TestUiMode(UI_MODE_STASH) && QolNavigation::SharedPageInputActive();
     });
     QolGlyphs::SetBulkHeaderContext(+[]() noexcept -> const char* {
-        if(!g_Settings.enabled || !Probe::BatchFeatureEnabled(g_Settings.quickMove,g_Settings.quickDeposit) || !TestUiMode(UI_MODE_STASH))return nullptr;
-        const auto* mode=g_Settings.modifier;
+        const auto live=ReadSettings();
+        if(!live.enabled || !Probe::BatchFeatureEnabled(live.quickMove,live.quickDeposit) || !TestUiMode(UI_MODE_STASH))return nullptr;
+        const auto* mode=live.modifier;
         if(_stricmp(mode,"bumper")==0 || _stricmp(mode,"lb")==0 || _stricmp(mode,"l1")==0)return "LB";
         if(_stricmp(mode,"l3")==0)return "L3";
         if(_stricmp(mode,"[")==0 || _stricmp(mode,"bracket")==0 || _stricmp(mode,"leftbracket")==0 || _stricmp(mode,"l4")==0)return "[";
         return "LT";
     });
     QolBulkStashFeedback::Initialize(context,+[]() noexcept {
-        return g_Settings.enabled && Probe::BatchFeatureEnabled(g_Settings.quickMove,g_Settings.quickDeposit) && ControllerQoL::IsControllerUiActive() &&
+        const auto live=ReadSettings();
+        return live.enabled && Probe::BatchFeatureEnabled(live.quickMove,live.quickDeposit) && ControllerQoL::IsControllerUiActive() &&
             TestUiMode(UI_MODE_STASH) && !QolBelt::Busy() && !QolMaterials::Busy() && !QolNativeIdentify::Busy() && !QolClientTransfer::Busy();
     });
     ControllerQoL::SetBulkStashCallback(QolBulkStash::Request);
@@ -2195,7 +2084,7 @@ D2RL_PLUGIN_EXPORT auto D2RLoaderLoadPlugin(const D2RL::PluginContext* context) 
     ControllerQoL::SetAutoFillBeltCallback(TriggerAutoFillBelt);
     ControllerQoL::SetVendorContextPredicate(nullptr); // Native LB+X sale; no synthetic X hold.
     ControllerQoL::SetCubeControlsCallbacks(+[](uint16_t buttons,bool modifier,uint64_t now) noexcept -> uint16_t {
-        if(!g_Settings.enabled)return 0;
+        if(!ReadSettings().enabled)return 0;
         return QolCubeControls::Input(buttons,modifier,now,QolNativeIdentify::Busy() || QolClientTransfer::Busy() || QolBelt::Busy() || QolMaterials::Busy() || QolBulkStash::Busy());
     },QolCubeControls::Cancel);
     const bool nativeInputOk=ControllerQoL::InstallNativeInputHook(context,g_Threads);
@@ -2206,9 +2095,9 @@ D2RL_PLUGIN_EXPORT auto D2RLoaderLoadPlugin(const D2RL::PluginContext* context) 
     if(!nativeInputOk) context->LogInfo(ControllerQoL::GetXInputHookReport());
 
     ControllerQoL::SetGroundPickupPredicate([]() noexcept {
-        return Probe::GroundShortcutsEnabled(g_Settings.enabled,g_Settings.groundPickup) &&
+        return Probe::GroundShortcutsEnabled(ReadSettings().enabled,ReadSettings().groundPickup) &&
             QolClientLoot::Ready() && ControllerQoL::NativeInputInstalled() && ControllerQoL::IsControllerUiActive() &&
-            QolNavigation::GroundInputActive() && ControllerQoL::IsGroundPickupActive(g_Settings.groundPickupButton);
+            QolNavigation::GroundInputActive() && ControllerQoL::IsGroundPickupActive(ReadSettings().groundPickupButton);
     });
     // Start background controller polling thread for ground item pickup & inspection
     if (g_Settings.enabled) {
@@ -2225,12 +2114,13 @@ D2RL_PLUGIN_EXPORT auto D2RLoaderLoadPlugin(const D2RL::PluginContext* context) 
 
             while (g_PollingRunning.load()) {
                 std::this_thread::sleep_for(std::chrono::milliseconds(33)); // 30 FPS
-                if (!g_Settings.enabled) continue;
+                const auto live=ReadSettings();
+                if (!live.enabled) continue;
 
                 QolBulkStashFeedback::Refresh();
                 ControllerQoL::PumpNativeInput();
                 QolNavigation::PumpLabels(context,g_Threads);
-                if(Probe::GroundShortcutsEnabled(g_Settings.enabled,g_Settings.groundPickup) && QolClientLoot::Ready())
+                if(Probe::GroundShortcutsEnabled(live.enabled,live.groundPickup) && QolClientLoot::Ready())
                     (void)QolClientLoot::Activate();
                 if(QolClientLoot::Active()) {
                     static ULONGLONG lastClientLootRefresh=0;
@@ -2240,7 +2130,7 @@ D2RL_PLUGIN_EXPORT auto D2RLoaderLoadPlugin(const D2RL::PluginContext* context) 
                         QueueClientGroundRefresh(context);
                     }
                 }
-                if(g_Settings.debugLogging) {
+                if(live.debugLogging) {
                     static ULONGLONG lastInputReport=0;
                     const auto now=GetTickCount64();
                     if(now-lastInputReport>=5000) {
@@ -2251,7 +2141,7 @@ D2RL_PLUGIN_EXPORT auto D2RLoaderLoadPlugin(const D2RL::PluginContext* context) 
                         char message[256];
                         std::snprintf(message,sizeof(message),"[QOL/RemoteTrace] nativeInstalled=%d controllerUi=%d valid=%d providers=0x%X buttons=0x%04X cached=0x%04X age=%llu ms modifier=%d",
                             ControllerQoL::NativeInputInstalled(),ControllerQoL::IsControllerUiActive(),input.valid,input.providers,input.buttons,buttons,
-                            static_cast<unsigned long long>(age),ControllerQoL::IsControllerModifierActive(g_Settings.modifier,g_Settings.triggerThreshold));
+                            static_cast<unsigned long long>(age),ControllerQoL::IsControllerModifierActive(live.modifier,live.triggerThreshold));
                         context->LogInfo(message);
                     }
                 }
@@ -2262,7 +2152,7 @@ D2RL_PLUGIN_EXPORT auto D2RLoaderLoadPlugin(const D2RL::PluginContext* context) 
                 const bool currentNativeAlt = ControllerQoL::IsNativeAltModifierActive();
                 if (currentNativeAlt != s_LastNativeAlt) {
                     s_LastNativeAlt = currentNativeAlt;
-                    if (g_Settings.debugLogging) {
+                    if (live.debugLogging) {
                         const auto diag = ControllerQoL::QueryNativeBridgeDiagnostics();
                         char valBuf[320];
                         std::snprintf(valBuf, sizeof(valBuf),
@@ -2283,14 +2173,14 @@ D2RL_PLUGIN_EXPORT auto D2RLoaderLoadPlugin(const D2RL::PluginContext* context) 
                     continue;
                 }
 
-                if (!Probe::GroundShortcutsEnabled(g_Settings.enabled,g_Settings.groundPickup)) {
+                if (!Probe::GroundShortcutsEnabled(live.enabled,live.groundPickup)) {
                     continue;
                 }
 
-                const bool modBtn = ControllerQoL::IsGroundPickupActive(g_Settings.groundPickupButton);
-                const bool lt = ControllerQoL::IsLeftTriggerPressed(30);
+                const bool modBtn = ControllerQoL::IsGroundPickupActive(live.groundPickupButton);
+                const bool lt = ControllerQoL::IsLeftTriggerPressed(live.triggerThreshold);
                 const bool rb = ControllerQoL::IsRightBumperPressed();
-                const bool rt = ControllerQoL::IsRightTriggerPressed(30);
+                const bool rt = ControllerQoL::IsRightTriggerPressed(live.triggerThreshold);
                 const bool btnA = ControllerQoL::IsButtonAPressed();
                 const bool btnX = ControllerQoL::IsButtonXPressed();
                 const bool btnY = ControllerQoL::IsButtonYPressed();
@@ -2328,11 +2218,11 @@ D2RL_PLUGIN_EXPORT auto D2RLoaderLoadPlugin(const D2RL::PluginContext* context) 
                 }
                 const ULONGLONG now = GetTickCount64();
 
-                if ((modDown || modUp) && g_Settings.debugLogging) {
+                if ((modDown || modUp) && live.debugLogging) {
                     auto physical=ControllerQoL::ReadControllerInput();
                     char diagnostic[160];
                     std::snprintf(diagnostic,sizeof(diagnostic),"[QOL/Loot] modifier=%s held=%d providers=0x%X buttons=0x%04X",
-                        g_Settings.groundPickupButton,modBtn,physical.providers,physical.buttons);
+                        live.groundPickupButton,modBtn,physical.providers,physical.buttons);
                     context->LogInfo(diagnostic);
                 }
                 if (modDown) {
@@ -2377,7 +2267,7 @@ D2RL_PLUGIN_EXPORT auto D2RLoaderLoadPlugin(const D2RL::PluginContext* context) 
                             std::snprintf(trigMsg, sizeof(trigMsg),
                                 "[ControllerQoL] Controller input: triggered pickup for slot [%s] (mod=%s)",
                                 (targetSlot < GroundLoot::NUM_STICKY_SLOTS) ? GroundLoot::s_SlotNames[targetSlot] : "?",
-                                g_Settings.groundPickupButton);
+                                live.groundPickupButton);
                         }
                         context->LogInfo(trigMsg);
                     }
@@ -2416,11 +2306,21 @@ D2RL_PLUGIN_EXPORT auto D2RLoaderLoadPlugin(const D2RL::PluginContext* context) 
         g_Settings.groundPickupButton, g_Settings.portalPriorityDistance);
     if(!QolAim::Initialize(context,g_Settings.enabled))
         context->LogWarn("[QOL/Aim] Aim unavailable; other QOL features remain loaded.");
-    context->LogInfo("[QOL] QOL v1.3.1+rev.81 loaded: controller item features and integrated v0.6 navigation/label hooks.");
+    if(!context->RegisterConsoleCommand("qol",&QolReload::Command,"QOL: perf, reload, status, trace, quiet, menu on/off, input on/off"))
+        context->LogWarn("[QOL/Reload] /qol command registration unavailable; automatic reload remains available.");
+    (void)QolReload::Start(context,g_Settings,+[]() noexcept {
+        return !s_IdentifyPending.load() && !QolNativeIdentify::Busy() && !QolClientTransfer::Busy() &&
+            !QolBelt::Busy() && !QolMaterials::Busy() && !QolBulkStash::Busy() && !ControllerQoL::IsSyntheticHoldActive() &&
+            s_MoveRequests.Empty() && s_CubeRequests.Empty() && s_PickupRequests.Empty();
+    },+[](const QolConfig::Settings& next) noexcept {
+        ControllerQoL::SetTriggerThreshold(next.triggerThreshold);
+    });
+    context->LogInfo("[QOL] QOL v1.3.1+rev.89 loaded: controller item features and integrated v0.6 navigation/label hooks.");
     return true;
 }
 
 D2RL_PLUGIN_EXPORT void D2RLoaderUnloadPlugin() noexcept {
+    QolReload::Stop(); // Join file work before tearing down any callback dependency.
     QolAim::Shutdown();
     g_PollingRunning.store(false);
     if (g_PollingThread.joinable()) {

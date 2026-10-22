@@ -1,0 +1,23 @@
+{
+  "target_host_sha256": "93021dad48533bcfca8a95c69a0cc00cdb9008a3ce6ceba1d04c7aca71985a10",
+  "source_capture_sha256": "02c32a05f182c3f1f1b29d58b2b8da735eadc080b5e13acf8ea721a0648ce60d",
+  "scope": "Read-only identification observations only; production uses public ItemCreateSpec.stateFlags and ItemInfo.stateFlags. No new native function call or flag write.",
+  "item_data_pointer_offset": "0x10",
+  "item_data_flags_offset": "0x18",
+  "native_identified_mask": "0x10",
+  "sdk_identified_mask": "0x1",
+  "witnesses": [
+    {
+      "rva": "0x36e2d0",
+      "bytes": "48895c2410574883ec208bfa488bd94885c9740ae8e7d6fdff83f8047419488d4c2430c644243000e84394ffff84c07401cc4885db742d488bcbe8c1d6fdff83f8047520488bcbe8e4c1fdff4885c07520488d4c243088442430e881bbffff84c07401cc33c0488b5c24384883c4205fc38b4018488b5c243823c74883c4205fc3cccccc",
+      "length": 132,
+      "sha256": "d208a1e97d3329659599976e0dc2a51bc4d0660287903328e0a6fb00963ee2f5"
+    },
+    {
+      "rva": "0x34a500",
+      "bytes": "40534883ec20488bd94885c9751d884c2430488d4c2430e874c4ffff84c07401cc488b43104883c4205bc3488b411048",
+      "length": 48,
+      "sha256": "2148c618bef2743d24d5625be344097e04b4a0d8bbb6eae4a590512bd5156570"
+    }
+  ]
+}

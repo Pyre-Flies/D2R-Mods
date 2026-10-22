@@ -1,0 +1,5 @@
+# Native lighting during normal gameplay. Changes save through /daynight.
+[day-night-cycle]
+enabled = true
+# auto follows the native clock; day or night holds a fixed lighting stage.
+mode = "auto"

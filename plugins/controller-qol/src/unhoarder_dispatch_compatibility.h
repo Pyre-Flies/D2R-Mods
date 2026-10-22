@@ -4,6 +4,7 @@
 #include "unhoarder_dispatch_controller_contract.h"
 #include "unhoarder_dispatch_drop_contract.h"
 #include "unhoarder_dispatch_socket_contract.h"
+#include "unhoarder_dispatch_socket_batch_alt_contract.h"
 #include "item_code_compatibility.h"
 #include "chat_forwarding_memory.h"
 #include "core_compatibility.h"
@@ -51,6 +52,10 @@ inline bool Check(const D2RL::PluginContext* context,const unsigned char* origin
     const auto module=GetModuleHandleW(L"unhoarder.dll");
     QolChatForwarding::ImageMemory image{};
     if(!module || !image.Open(module))return false;
+    namespace SocketBatchAlt=QolUnhoarderDispatchSocketBatchAlt;
+    if(QolItemCode::IdentifyArtifact(module)==QolItemCode::ArtifactProfile::SocketBatchAlt)return
+        ExecutableImageFor(image,SocketBatchAlt::TextRva,SocketBatchAlt::TextSize,SocketBatchAlt::TextHash) &&
+        SocketBatchAlt::Validate(image.Reader(),context->exeBase,reinterpret_cast<uintptr_t>(module),original,size);
     if(Artifact(module))return ExecutableImageFor(image,TextRva,TextSize,TextHash) &&
         Validate(image.Reader(),context->exeBase,reinterpret_cast<uintptr_t>(module),original,size);
     namespace Fixed=QolUnhoarderDispatchBackgroundFix;

@@ -1,5 +1,6 @@
 #include <D2RLPlugin/api.h>
 #include "aim/controller_aim.h"
+#include "aim/live_settings.h"
 #include <cstring>
 #include <cstdio>
 #include <cstdlib>
@@ -82,6 +83,18 @@ static void TestInstallation() {
     for(const auto kind:{D2RL::Lifecycle::GameplayEventKind::GameJoined,D2RL::Lifecycle::GameplayEventKind::LocalPlayerReady,D2RL::Lifecycle::GameplayEventKind::GameLeft})
         QolAim::TestLifecycle(static_cast<unsigned>(kind));
     Check(QolAim::TestInstall(&context,true,false) && installCount==startupCount,"successful startup and later joins retain one hook set");
+    const auto before=QolAim::TestMotionSettings();
+    QolAim::Reload reload;std::string error;
+    Check(QolAim::PrepareReload("[aim]\nenabled=false\ndeadzone=0.42\ncast_observer_enabled=false\nskill_tree_toggle_enabled=false\nground_reticle_color=\"#123456\"\n",reload,error),"valid aim reload prepares without native services");
+    Check(reload.restart.find("aim.enabled")!=reload.restart.npos && reload.restart.find("cast_observer_enabled")!=reload.restart.npos &&
+        reload.restart.find("skill_tree_toggle_enabled")!=reload.restart.npos,"startup-only aim changes are reported");
+    Check(QolAim::ApplyReload(reload),"prepared aim settings publish");
+    const auto after=QolAim::TestMotionSettings();
+    Check(after.deadzone==0.42f && after.castObserver==before.castObserver && after.skillTreeToggle==before.skillTreeToggle &&
+        installCount==startupCount,"live aim tuning preserves startup hooks and toggle admission");
+    const auto valid=reload.motion;
+    Check(!QolAim::PrepareReload("[aim]\nenabled=true\ndeadzone=nan",reload,error) && reload.motion==valid &&
+        QolAim::TestMotionSettings().deadzone==0.42f && installCount==startupCount,"bad aim reload retains the last valid snapshot without native calls");
     Check(warningLogs>0,"quiet mode retains compatibility warnings");
     QolAim::Shutdown();
     VirtualFree(image,0,MEM_RELEASE);
@@ -107,5 +120,9 @@ int main() {
     infoLogs=0;
     Check(QolAim::TestScoreLogging(&ctx,false) && infoLogs==0,"quiet native scoring preserves enemy/NPC behavior without trace counters or log writes");
     Check(QolAim::TestScoreLogging(&ctx,true) && infoLogs==8,"verbose scoring restores bounded diagnostics without changing targeting");
+    const auto beforeStatus=QolAim::TestMotionSettings();const auto logsBeforeStatus=infoLogs;
+    QolAim::ReportStatus(&ctx);
+    Check(infoLogs==logsBeforeStatus+1 && QolAim::TestMotionSettings().deadzone==beforeStatus.deadzone,
+        "read-only aim status reports a bounded snapshot without changing aim settings");
     std::puts("Aim configuration gates leave loader services untouched.");
 }

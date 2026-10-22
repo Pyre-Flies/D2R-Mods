@@ -1,0 +1,106 @@
+{
+  "schema": 1,
+  "verified_date": "2026-10-21",
+  "evidence": "Static witnesses and owned replay; beta.2 natural cycling user-confirmed with live normal-mode field progression. Beta.3 fixed modes still need live validation.",
+  "game_version": "3.3.93787",
+  "host": {
+    "name": "D2RLoader.exe",
+    "version": "1.3.1-beta",
+    "size": 23331160,
+    "sha256": "93021DAD48533BCFCA8A95C69A0CC00CDB9008A3CE6CEBA1D04C7ACA71985A10"
+  },
+  "core": {
+    "name": "D2RCore.dll",
+    "version": "1.3.1-beta",
+    "size": 18938712,
+    "sha256": "2A868D013D2E0830BD2D9E04B918B19E46A73CF726C833E70D089B948FDEB5A2"
+  },
+  "capture": {
+    "size": 90447900,
+    "sha256": "A09EA269F8FC10C538DC9A05E4E81E004EC6DFC84AA0F685D3527A974A542A87",
+    "purpose": "Private all-sections September 27 runtime analysis image; not executable, not distributable, not a current live capture. Relevant bytes are admitted separately at startup."
+  },
+  "constants": {
+    "CoreWrapperExport": 118,
+    "CoreBlockRva": "0x1f3850",
+    "CoreBranchRva": "0x1f3857",
+    "CoreSafetyFlagRva": "0x716a38",
+    "CoreNoDebugPointerRva": "0x7050c8",
+    "NativeNoDebugRva": "0x2a96102",
+    "CoreSetterPointerRva": "0x704e40",
+    "GameThunkSlotRva": "0x3e2a630",
+    "RendererEnvironmentOffset": "0x11760",
+    "RendererOverrideOffset": "0x11909",
+    "EnvironmentPeriodOffset": "0x190",
+    "EnvironmentBlendOffset": "0x194",
+    "RendererSlotRva": "0x34f6480"
+  },
+  "witnesses": {
+    "CoreWrapper": {
+      "module": "core",
+      "rva": "0x1f3830",
+      "bytes": "554883ec30488d6c243048c745f8feffffff0fb605ef315200a8017513488b05741851008038007507ff15e1155100904883c4305dc3",
+      "meaning": "Export 118 preserves Win64 RCX, XMM1 and R8D. Bit 0 of CoreSafetyFlag exits first. Nonzero native NoDebug byte exits second. Otherwise calls CoreSetterPointer exactly once."
+    },
+    "GameCaller": {
+      "module": "capture",
+      "rva": "0x7cd8f0",
+      "bytes": "40534883ec20488bdae84238650080b809190100007519448b4304488d8860170100f30f100b4883c4205be916d865034883c4205bc3",
+      "meaning": "Receives float blend then int32 period through RDX. Resolves renderer on its native thread, preserves renderer OverrideTimeOfDay, forwards environment pointer plus native blend and period through thunk."
+    },
+    "GameThunk": {
+      "module": "capture",
+      "rva": "0x3e2b136",
+      "bytes": "ff25f4f4ffff",
+      "meaning": "Indirect jump through GameThunkSlot; runtime binding must equal Core export 118."
+    },
+    "NativeSetter": {
+      "module": "capture",
+      "rva": "0xf5b190",
+      "bytes": "f30f11899401000044898190010000c3",
+      "meaning": "void __fastcall(void* environment, float blend, int32 period). Writes only environment+0x194 from XMM1 and environment+0x190 from R8D; returns."
+    },
+    "NoDebugDescriptor": {
+      "module": "core",
+      "rva": "0x7050d0",
+      "bytes": "0261a90200000000",
+      "meaning": "Build-specific resolver offset for native NoDebug pointer. Runtime pointer must equal host base + NativeNoDebugRva."
+    },
+    "SetterDescriptor": {
+      "module": "core",
+      "rva": "0x704e48",
+      "bytes": "90b1f50000000000",
+      "meaning": "Build-specific resolver offset for native time-of-day setter. Runtime pointer must equal host base + NativeSetterRva."
+    },
+    "RendererGetter": {
+      "module": "capture",
+      "rva": "0xe21140",
+      "bytes": "4883ec2865488b0425580000008b0d75337902ba6c120000488b0cc88b040a390523536d027f4c488b0512536d024885c0751a488d4c243088442430e8af89feff84c07401cc488b05f3526d024883c428c3488d0d57b8e600488905e0526d02e88ffe4a00488d0ddc526d02e8eb004b00ebb4488d0dce526d02e83d014b00833dc2526d02ff759fb9a0081400e8fe9d41004885c074bb488bc8e8618bfdffebb1",
+      "meaning": "Complete process-lifetime renderer singleton getter. Preview reads its published slot; never calls this allocating getter."
+    },
+    "RendererOverrideControl": {
+      "module": "capture",
+      "rva": "0x7cb650",
+      "bytes": "48895c2408574883ec20488bf9e8de5a6500488b0f488d15f88b5401488bd8e82cc1a50085c07425488b0f488d1552034f01e849c1a50085c07412c6830919010000488b5c24304883c4205fc3c6830919010001488b5c24304883c4205fc3",
+      "meaning": "Native OverrideTimeOfDay control clears or sets renderer+0x11909."
+    },
+    "ScriptSetterCall": {
+      "module": "capture",
+      "rva": "0xe250db",
+      "bytes": "e860c0ffff488d8860170100f30f2cc685c0780cba050000003bc20f4fc28bf0660f6ec60f57c90f5bc0c74424200000803ff30f5cf00f2fcef30f1174242477190f2f35e157e900488d442420488d542424480f46c2f30f1008448bc6e853601300",
+      "meaning": "Native SetTimeOfDay script path splits input into clamped integer stage 0..5 and float fraction 0..1, derives renderer+0x11760 and calls the guarded native setter."
+    },
+    "NormalCycleTable": {
+      "module": "capture",
+      "rva": "0x2376760",
+      "bytes": "40010000030000007d90f3005401000003000000d0b883000000000000000000ffffff00a000000001000000ffffff00b400000001000000c298c100c8000000020000007d90f300",
+      "meaning": "Native six-stage sequence: sunrise, morning, noon, afternoon, sunset, night. Preview chooses stage 2 or 5 with zero interpolation."
+    }
+  },
+  "change": {
+    "rva": "0x1f3857",
+    "expected": "7507",
+    "replacement": "9090",
+    "publication": "Atomic compare-exchange of the containing aligned 16 bytes at CoreBlockRva; only these two bytes differ. Restore only if that entire block is still ours. No callback, trampoline, global/debug setting or renderer field is installed or written."
+  }
+}

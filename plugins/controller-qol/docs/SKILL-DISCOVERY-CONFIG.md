@@ -1,6 +1,7 @@
 # Shared preferences and per-mod skill profiles
 
 Rev.75 separates general controller preferences from all per-skill choices.
+Rev.82 reloads those same files during play; it introduces no new config file.
 This is the current configuration guide for both fresh installs and upgrades.
 
 ## Which file to edit
@@ -32,14 +33,23 @@ if it should follow that move. Do not rely on filenames alone to identify a pack
 
 ## Everyday editing and updates
 
-1. Close the game before manual edits. Keep speed, deadzone, colors, logging and
+1. Keep speed, deadzone, colors, logging and
    display smoothing in the main file; these apply across profiles that use it.
 2. Start the game with the intended mod once to create/migrate its skill profile.
-   Close it, then find the `.overrides.toml` whose `# Mod:` header matches.
+   Find the `.overrides.toml` whose `# Mod:` header matches.
 3. Edit the existing numeric skill key in that profile, or use R3 on the focused
    supported skill in the class/General Skills tab. Do not add duplicate keys.
-4. Restart after manual edits. R3 saves and applies a successful toggle immediately.
-   Editing `.catalog.toml` or the ZIP's `defaults/` files does not change gameplay.
+4. Save to reload automatically, or request `/qol reload` in the loader console.
+   Release held controls and let pending item actions finish. R3 saves and applies
+   a successful toggle immediately. Editing `.catalog.toml` or the ZIP's
+   `defaults/` files does not change gameplay.
+
+See [reload settings](../README.md#reload-settings) for the live/restart-only
+setting table. Hook and binding changes, source discovery and migration stay
+restart-only. The [reload contract](CONFIG-RELOAD.md) describes file stability,
+validation and publication. A reload only reads the existing active files; it
+does not regenerate profiles or repeat migration. An intervening R3 save wins
+over a previously prepared reload.
 
 For example, shared `[aim] overlay_smoothing_ms = 60.0` smooths the displayed
 reticle as the character/camera moves. It does not change cast coordinates or
@@ -80,10 +90,11 @@ the catalog is not an effective-settings report and is never loaded as config.
 Commented examples also have no effect. Packs without readable source data can
 manually declare Warp's enable entry and ground mode in their skill profile.
 
-Edit files with the game closed and restart to reload manual changes. R3 takes
-effect immediately after a successful save. A failed save leaves runtime state
-unchanged. Profiles reject duplicate keys/IDs, unknown sections and invalid
-values. Invalid skill settings stop aim initialization with a warning; other QOL
+Manual profile edits reload after a stable save. R3 takes effect immediately
+after a successful save. A failed save leaves runtime state unchanged. Profiles
+reject duplicate keys/IDs, unknown sections and invalid values. An invalid or
+missing file during play retains the entire last valid settings set. Invalid
+skill settings at startup stop aim initialization with a warning; other QOL
 features remain available. No automatic reset to an empty profile is attempted.
 
 ## Migration and recovery

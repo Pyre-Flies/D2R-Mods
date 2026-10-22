@@ -1,16 +1,24 @@
 # Controller QOL Updates
 
-**1.3.1+rev.81 · by PyreFly · Windows x64 / D2RLoader 1.3.1 / plugin ABI 4**
+**1.3.1+rev.89 · by PyreFly · Windows x64 / D2RLoader 1.3.1 / plugin ABI 4**
 
 Controller item shortcuts, direct ground looting, menu navigation and optional
 right-stick skill aiming. This README covers the default button combinations,
-all shared settings and skill-profile editing. There are no chat commands.
+all shared settings and skill-profile editing. Use `/qol reload` in the loader
+console to request a settings reload.
 
-This beta fixes gem withdrawals, restores the aiming reticle and R3 skill
-toggles, and improves item transfer and identification compatibility with other
-plugins. Existing settings and controller mappings are preserved. Please test
-and report any issues. Broader item and save-persistence testing remains open.
-See the [beta release notes](https://github.com/Pyre-Flies/D2R-Mods/releases/tag/beta-controller-qol-2026.10.15.2).
+This release improves performance around visible loot, including when used with
+UnHoarder 1.2.16. Both plugins remain independent. Controller pickup settings
+and shortcuts are unchanged; UnHoarder's mouse pickup override uses keyboard ALT.
+
+Use `/qol perf` for a read-only performance report in the plugin log. Run it
+before and after a 30-60 second test. Supported main settings and skill profiles
+reload automatically or through `/qol reload`; invalid edits retain the last
+valid settings, and hook/binding changes still require a restart.
+
+Live loot performance improved in user testing. Automated checks pass; complete
+hosted, pickup and settings-reload acceptance remains open. See the
+[validation guide](docs/VALIDATION.md) for the tested scope.
 
 - [Install and update](#installation-and-updates)
 - [All default controller shortcuts](#default-controller-shortcuts)
@@ -31,13 +39,13 @@ See the [beta release notes](https://github.com/Pyre-Flies/D2R-Mods/releases/tag
    the active `d2rloader/config/` directory.
 
 Files under `defaults/` are references. Extracting an update preserves existing
-settings; editing a reference does not change gameplay. Edit the active file
-with the game closed, change existing keys instead of duplicating them, and
-restart to apply manual edits. TOML booleans are lowercase `true`/`false`,
+settings; editing a reference does not change gameplay. Edit the active file,
+changing existing keys instead of duplicating them. See [reload settings](#reload-settings)
+for changes that apply during play. TOML booleans are lowercase `true`/`false`,
 strings use quotes, and `#` starts a comment outside a quoted string.
 
 To uninstall or roll back, close the game, remove the DLL or restore its backup,
-then restart. Hot reload is unsupported.
+then restart. Replacing or unloading the DLL requires a closed game.
 
 ## Default controller shortcuts
 
@@ -153,15 +161,40 @@ All paths below are relative to the active `d2rloader/config/` directory.
 | `controller-qol-skills/<scope>.overrides.toml` | All skill enable states, targeting, leading and Whirlwind options for one mod or Vanilla. |
 | Matching `<scope>.catalog.toml` | Generated reference names/IDs/defaults. Editing it does not change settings. |
 
-Start the intended mod once to create its skill profile, then close the game.
+Start the intended mod once to create its skill profile.
 Find the `.overrides.toml` whose `# Mod:` header matches your pack or `Vanilla`.
 R3 saves to that same file. Profiles are shared by characters using that mod
 and config scope. Moving or renaming the mod directory can select a new profile.
 
-Manual edits require a restart. R3 takes effect after a successful save; a failed
+R3 takes effect after a successful save; a failed
 save retains the previous state. Existing choices survive updates. New keys can
 be added without replacing choices already present. Do not copy the generated
 catalog or the entire defaults file over your profile.
+
+### Reload settings
+
+Save the active main TOML or the active mod's `.overrides.toml`. Rev.82 checks
+for file changes every 200 ms and waits for 650 ms of unchanged file size and
+modification time before loading both files. `/qol reload` in the loader console
+requests an immediate read. Updates wait for held buttons/triggers, synthetic
+input and pending item actions to settle; release controls to let them apply.
+No additional configuration file is introduced.
+
+| Applies during play | Requires a game restart |
+| --- | --- |
+| `quick_identify`, `identify_all`, `quick_move`, `quick_deposit`, identify supply rules, `require_modifier`, `ground_pickup_distance`, `trigger_threshold`, item `debug_logging` | `[qol] enabled`, `native_identify`, Cube control switches, `ground_pickup`, `block_filtered_pickup`, both modifier/button bindings, all portal priority options and their diagnostics/radius |
+| Aim speed, deadzone, acceleration, snapping, reticle colors/opacity/thickness, overlay visibility/smoothing, projection rate, `verbose`, `debug_overlay` | `[aim] enabled`, `cast_observer_enabled`, `skill_tree_toggle_enabled`; activating aim that failed startup admission |
+| Active skill profile enable/lock states, targeting, leading/limits and Whirlwind options | Mod identity/source discovery, first-time profile creation and legacy migration |
+
+The log reports applied settings and any restart-required keys. A missing,
+unreadable, oversized or invalid active file refuses the whole reload and keeps
+the previous settings. Correct the file and save again, or use `/qol reload`.
+Unknown keys, duplicates, invalid types and out-of-range values are errors.
+Removing a valid key restores its normal default; keep customized keys you want.
+An R3 save takes priority over an older reload waiting to apply. Reload never
+rewrites your files or regenerates a profile. Generated catalogs, migration
+archives and `defaults/` references are not watched. See the
+[developer contract](docs/CONFIG-RELOAD.md) for implementation and validation.
 
 ## Shared settings reference
 
@@ -174,15 +207,17 @@ catalog or the entire defaults file over your profile.
 | `identify_all` | `true` | Enable Identify All on a focused Identify Tome. |
 | `native_identify` | `false` | Use the slower native hold-identify route instead of the default fast route. |
 | `quick_move` | `true` | Enable transfer, Cube, belt and vendor shortcuts. |
+| `cube_tap_open` | `true` | Tap A to open the focused Cube; restart required. |
+| `cube_transmute_shortcut` | `true` | Allow modifier+B to transmute; restart required. |
 | `quick_deposit` | `true` | Enable the stash Deposit All shortcut. |
 | `require_tome_or_scroll` | `true` | Require an eligible identify supply. |
 | `consume_tome_or_scroll` | `true` | Consume an identify charge for each successful identification. |
 | `require_modifier` | `true` | Require the modifier for A-button item actions; X/Y/stick chords remain explicit shortcuts. |
 | `modifier` | `"bumper"` | Item-action modifier; see aliases below. |
-| `trigger_threshold` | `30` | Reference/reserved setting; this version uses 30. |
+| `trigger_threshold` | `30` | LT/RT activation threshold, integer 1-255. |
 | `ground_pickup` | `true` | Enable labeled direct-loot assignments. |
 | `ground_pickup_button` | `"bumper"` | Independent modifier for ground-loot assignments; see aliases below. |
-| `ground_pickup_distance` | `6` | Nearby assignment distance, clamped 1-20; effective minimum is 10. Already mapped items may use native travel beyond it. |
+| `ground_pickup_distance` | `6` | Nearby assignment distance, integer 1-20; effective minimum is 10. Already mapped items may use native travel beyond it. |
 | `debug_logging` | `false` | General diagnostic logging; leave false for ordinary play. |
 | `block_filtered_pickup` | `true` | Block controller A pickup for hidden-label items. Gold and mouse/keyboard pickup retain native behavior. |
 | `prioritize_portals` | `true` | Prefer an eligible nearby portal for ordinary A interactions. |
@@ -190,7 +225,7 @@ catalog or the entire defaults file over your profile.
 | `prioritize_waypoints` | `true` | Prefer waypoints. |
 | `prioritize_shrines` | `true` | Prefer shrines and supported wells/fountains. |
 | `prioritize_chests` | `true` | Prefer supported ordinary chests. |
-| `portal_priority_distance` | `10` | Shared priority-object radius, clamped 1-20 game units. |
+| `portal_priority_distance` | `10` | Shared priority-object radius, integer 1-20 game units; restart required. |
 | `portal_diagnostics` | `false` | Targeted object-interaction diagnostics, independent of general logging. |
 
 For item `modifier`, common aliases are `"bumper"`/`"lb"`/`"l1"`,
@@ -258,7 +293,7 @@ can visibly lag moving targets without changing the cast destination.
 
 All examples in this section belong in the active `.overrides.toml` skill
 profile, not in `controller-qol-updates.toml`. Edit existing numeric keys and
-restart. A mod can replace the behavior behind an ID, so use the active
+save to reload. A mod can replace the behavior behind an ID, so use the active
 profile/catalog names to identify the right skill.
 
 ### Skill state and sections

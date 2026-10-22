@@ -12,6 +12,7 @@ std::filesystem::path profilePath;
 const D2RL::DataTableService* tables{};
 std::atomic<bool> active{}, stopped{true};
 std::mutex tableMutex;
+std::uint64_t profileRevision{};
 
 void ConfirmTables(const D2RL::PluginContext*,void*) noexcept {
     std::lock_guard guard(tableMutex);
@@ -119,8 +120,9 @@ bool QolSkillDiscovery::Prepare(const D2RL::PluginContext* ctx,const char* mainC
             (void)Aim::ConfigFile::Write(catalog,oldCatalog,generated,false);
         for(const auto& skill:candidate)if(!Aim::FindCatalogSkill(skill.id))skills.RequireConfirmation(skill.id);
         skills.baseline=effective;
+        skills.reloaded.store({});
         context=ctx;live=&skills;base=defaults;source=std::move(candidate);profilePath=std::move(profile);
-        stopped.store(false);active.store(true);
+        ++profileRevision;stopped.store(false);active.store(true);
         ctx->LogInfo(hasLegacy?"[QOL/Skills] Skill settings migrated and verified; shared controls unchanged. R3 now saves only to the active mod skill profile.":
             "[QOL/Skills] Skill profile ready in config/controller-qol-skills. Shared controls remain in the main TOML.");
         return true;
@@ -140,10 +142,41 @@ void QolSkillDiscovery::Register(const D2RL::PluginContext* ctx,const D2RL::Life
 void QolSkillDiscovery::Stop() noexcept {stopped.store(true);active.store(false);}
 bool QolSkillDiscovery::Active() noexcept {return active.load();}
 bool QolSkillDiscovery::Save(int id,bool enabled) noexcept {
-    if(!active.load() || stopped.load())return false;
     try {
+        std::lock_guard guard(tableMutex);
+        if(!active.load() || stopped.load())return false;
         std::string text,updated;
-        return Aim::ConfigFile::Read(profilePath,text,Aim::Discovery::MaxText) &&
+        const bool saved=Aim::ConfigFile::Read(profilePath,text,Aim::Discovery::MaxText) &&
             Aim::Discovery::RewriteOverride(text,base,id,enabled,updated) && Aim::ConfigFile::WriteRolling(profilePath,text,updated);
+        if(saved) {
+            // Publish under the same lock as the revision. A reload prepared
+            // before this R3 save must never replace the newer choice.
+            live->Publish(id,enabled?live->Targeting(id):Aim::TargetMode::Disabled);
+            ++profileRevision;
+        }
+        return saved;
     } catch(...) {return false;}
+}
+std::filesystem::path QolSkillDiscovery::ProfilePath() {
+    std::lock_guard guard(tableMutex);
+    return active.load() && !stopped.load()?profilePath:std::filesystem::path{};
+}
+bool QolSkillDiscovery::ReadReload(Aim::SkillSettings& result,std::uint64_t& revision,std::string& error) noexcept {
+    try {
+        std::lock_guard guard(tableMutex);
+        if(!active.load() || stopped.load() || !live){error="active skill profile unavailable";return false;}
+        std::string text;
+        if(!Aim::ConfigFile::Read(profilePath,text,Aim::Discovery::MaxText) || text.empty() ||
+           !Aim::Discovery::ProfileOnly(text) || !Aim::ParseSkills(text,result,&base)) {
+            error="missing, oversized or invalid active skill profile";return false;
+        }
+        revision=profileRevision;return true;
+    }catch(...){error="skill profile read failed";return false;}
+}
+bool QolSkillDiscovery::CommitReload(std::shared_ptr<const Aim::SkillSettings> settings,std::uint64_t revision) noexcept {
+    // Called under the input mutex: an R3 file write must never make input wait
+    // for disk access. The worker will prepare/retry after the profile is free.
+    std::unique_lock guard(tableMutex,std::try_to_lock);
+    if(!guard.owns_lock() || !active.load() || stopped.load() || !live || revision!=profileRevision || !settings)return false;
+    live->Replace(std::move(settings));++profileRevision;return true;
 }

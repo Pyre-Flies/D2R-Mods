@@ -21,6 +21,7 @@
 #include "physical_input.h"
 #include "core_compatibility.h"
 #include "controller_aim.h"
+#include "live_settings.h"
 #include "portal_priority.h"
 
 namespace {
@@ -68,13 +69,18 @@ Aim::Point retainedOffset{};
 bool retainedOffsetValid{};
 Aim::CursorMotion cursorMotion{};
 Aim::MotionSettings motionSettings{}; // immutable after plugin load
+std::atomic<std::shared_ptr<const Aim::MotionSettings>> reloadedMotion{};
+bool startupConfigured{};
+Aim::MotionSettings ReadMotionSettings() noexcept {
+    const auto settings=reloadedMotion.load();return settings?*settings:motionSettings;
+}
 Aim::SnapBook snapBook{}; // under stateLock
 bool whirlLockActive{}; // same lock; cannot inherit another skill's retained target
 
 struct View {
     bool valid{}, target{}, projectionValid{};
     int skill{-1}, activeSkill{-1};
-    unsigned playerId{}, targetId{}, projectionStatus{};
+    unsigned playerId{}, targetId{}, projectionStatus{},readStage{};
     float axis{}, distance{Aim::DefaultDistance};
     Aim::Point player{}, facing{}, center{}, destination{}, targetPosition{}, stick{};
     Aim::Projection projection{};
@@ -97,6 +103,7 @@ struct PendingTeleport {
 PendingTeleport pending{};
 float observedDisplacement{-1};
 std::atomic<std::uint64_t> lastUiTick{};
+std::atomic<std::uint64_t> frameCallbacks{},lastGroundDraw{};
 struct ScoringWindow { bool active{}, candidate{}; void* player{}; Aim::Point center{}; bool nativeUnits{}; };
 thread_local ScoringWindow scoringWindow{};
 
@@ -116,13 +123,18 @@ bool Foreground() noexcept {
 // All native calls are on their natural caller or the SDK UI thread. No unit
 // pointer is published to the render callback or retained between frames.
 bool ReadView(void* expectedPlayer, View& result, bool allowPreview=false) noexcept {
+    const auto settings=ReadMotionSettings();
+    result.readStage=1;
     if (!installed.load() || !enabled.load() || !inSession.load() || !inGame || !inGame() || !Foreground()) return false;
     __try {
+        result.readStage=2;
         const auto index=NativeFunction<unsigned(__fastcall*)()>(Native::IndexRva)();
         if(index>=8 || !NativeFunction<bool(__fastcall*)()>(Native::ControllerModeRva)()) return false;
+        result.readStage=3;
         void* const player=NativeFunction<GetPlayerFn>(Native::LocalPlayerRva)(index);
         if(!player || (expectedPlayer && player!=expectedPlayer) || Field<unsigned>(player,0)!=0) return false;
         controllerPlayerId.store(Field<unsigned>(player,8)); controllerTick.store(GetTickCount64());
+        result.readStage=4;
         void* const aim=NativeFunction<GetObjectFn>(Native::GetAimRva)();
         if(!aim) return false;
         int skill=NativeFunction<ActiveSkillFn>(Native::ActiveSkillRva)(aim,index);
@@ -131,6 +143,7 @@ bool ReadView(void* expectedPlayer, View& result, bool allowPreview=false) noexc
         // local game scheduler or a compulsory visit to the skill tree.
         skillSettings.Confirm(skill);
         result.activeSkill=skill;
+        result.readStage=5;
         // Active skill is -1 after release. UI-only distance adjustment may
         // retain the last test skill. Passive candidate observation may also use
         // it, but native scoring overrides and Lookup still require an active skill.
@@ -148,9 +161,11 @@ bool ReadView(void* expectedPlayer, View& result, bool allowPreview=false) noexc
                 for(const auto& entry:skillSettings.baseline.entries) if(skillSettings.Enabled(entry.id)) { skill=entry.id; break; }
             }
         }
+        result.readStage=6;
         if(!skillSettings.Enabled(skill)) return false;
         if(result.activeSkill>=0) previewSkill.store(skill);
         result.skill=skill;
+        result.readStage=7;
         result.playerId=Field<unsigned>(player,8);
         NativeFunction<ReadAimFn>(Native::ReadAimRva)(aim,player,&result.player.x,&result.facing.x);
         Aim::Point offset{};
@@ -170,6 +185,7 @@ bool ReadView(void* expectedPlayer, View& result, bool allowPreview=false) noexc
         result.center={result.player.x+offset.x,result.player.y+offset.y};
         result.distance=std::hypot(offset.x,offset.y);
         if(!Aim::ValidWorld(result.center)) return false;
+        result.readStage=8;
         Aim::Point axis{};
         void* const input=NativeFunction<GetObjectFn>(Native::InputRva)();
         if(!input) return false;
@@ -177,15 +193,17 @@ bool ReadView(void* expectedPlayer, View& result, bool allowPreview=false) noexc
         if(!Aim::Finite(axis) || std::abs(axis.x)>1.05f || std::abs(axis.y)>1.05f) return false;
         result.axis=axis.y;
         result.stick=axis;
-        const bool deliberate=Aim::DeliberateStick(axis,motionSettings.deadzone);
+        const bool deliberate=Aim::DeliberateStick(axis,settings.deadzone);
         if(!deliberate) requireStickRelease.store(false);
         if(deliberate && !requireStickRelease.load()) manualAim.store(true);
+        result.readStage=9;
         if(!allowPreview && !manualAim.load()) return false;
         result.destination=result.center;
         result.tick=GetTickCount64();
         result.valid=true;
+        result.readStage=10;
         return true;
-    } __except(EXCEPTION_EXECUTE_HANDLER) { return false; }
+    } __except(EXCEPTION_EXECUTE_HANDLER) {result.readStage=11;return false;}
 }
 
 bool ReadMonster(void* unit, Aim::Point& position, unsigned& id) noexcept {
@@ -212,35 +230,37 @@ bool ReadTargetIdentity(void* unit,unsigned& type,unsigned& id) noexcept {
 // Called with stateLock held. Facing and native selected-target caches are not
 // inputs: normal turn-to-cast cannot move the cursor or re-rank the same point.
 void ResolveSelection(View& view,bool allowPreview=false) noexcept {
+    const auto settings=ReadMotionSettings();
     // Telekinesis retains the game's selected unit. The monster-only coordinate
     // book must neither replace it nor display a different target as its lock.
     if(Aim::UsesNativeUnitTarget(view.skill)) { whirlLockActive=false; return; }
     const bool groundPreview=allowPreview && view.activeSkill==-1 && skillSettings.Enabled(view.skill) && !skillSettings.Snaps(view.skill);
-    if(!manualAim.load() || !motionSettings.snapping || (!skillSettings.Snaps(view.skill) && !groundPreview)) { whirlLockActive=false; return; }
+    if(!manualAim.load() || !settings.snapping || (!skillSettings.Snaps(view.skill) && !groundPreview)) { whirlLockActive=false; return; }
     const bool whirl=view.skill==Aim::Whirlwind;
-    if(whirl && (!whirlLockActive || std::hypot(view.stick.x,view.stick.y)>motionSettings.deadzone)) snapBook.retained={};
+    if(whirl && (!whirlLockActive || std::hypot(view.stick.x,view.stick.y)>settings.deadzone)) snapBook.retained={};
     whirlLockActive=whirl;
-    const auto chosen=snapBook.Choose(view.playerId,view.center,view.player,view.tick,&view.snapDiagnostics,motionSettings.snapRadius,motionSettings.switchAdvantage,whirl);
+    const auto chosen=snapBook.Choose(view.playerId,view.center,view.player,view.tick,&view.snapDiagnostics,settings.snapRadius,settings.switchAdvantage,whirl);
     if(chosen.valid) {
         Aim::Point endpoint=chosen.position;
         if(!whirl && view.activeSkill==view.skill && skillSettings.Snaps(view.skill))
             endpoint=chosen.motion.Destination(view.player,chosen.position,view.tick,skillSettings.LeadMillisecondsPerTile(view.skill),
                 skillSettings.LeadMaxMilliseconds(view.skill),skillSettings.LeadMaxTiles(view.skill));
-        if(whirl && !Aim::WhirlwindEndpoint(view.player,chosen.position,endpoint,motionSettings.whirlwindPassThrough?motionSettings.whirlwindPassThroughDistance:0)) return;
+        if(whirl && !Aim::WhirlwindEndpoint(view.player,chosen.position,endpoint,settings.whirlwindPassThrough?settings.whirlwindPassThroughDistance:0)) return;
         view.target=true; view.targetTick=chosen.tick;
         view.targetId=chosen.id; view.destination=endpoint; view.targetPosition=chosen.position;
     }
 }
 
 void* __fastcall Selected(void* controller,int skill) noexcept {
-    const int previousPreview=motionSettings.verbose?previewSkill.load():-1;
+    const auto settings=ReadMotionSettings();
+    const int previousPreview=settings.verbose?previewSkill.load():-1;
     void* const nativeTarget=originalSelected(controller,skill);
     View view{};
     // Active local controller skill only. Never use idle preview to suppress
     // native interactions, mouse targeting, or another skill's selected unit.
     if(!ReadView(nullptr,view,false)) return nativeTarget;
     if(Aim::UsesNativeUnitTarget(skill) && skill==view.activeSkill) {
-        if(motionSettings.verbose) {
+        if(settings.verbose) {
             unsigned type{}, id{};
             const bool readable=ReadTargetIdentity(nativeTarget,type,id);
             const auto now=GetTickCount64();
@@ -258,7 +278,7 @@ void* __fastcall Selected(void* controller,int skill) noexcept {
         return nativeTarget;
     }
     if(!Aim::CoordinateRoute(manualAim.load(),skill,view.activeSkill,skillSettings)) return nativeTarget;
-    if(motionSettings.verbose && nativeTarget) {
+    if(settings.verbose && nativeTarget) {
         const auto count=selectedSuppressionCount.fetch_add(1)+1;
         if(count<=32) {
             char message[160];
@@ -270,6 +290,7 @@ void* __fastcall Selected(void* controller,int skill) noexcept {
 }
 
 void __fastcall Lookup(void* controller,void* player,bool adjust,float* x,float* y) noexcept {
+    const auto settings=ReadMotionSettings();
     originalLookup(controller,player,adjust,x,y);
     View view{};
     if(!x || !y || !ReadView(player,view)) return;
@@ -279,13 +300,13 @@ void __fastcall Lookup(void* controller,void* player,bool adjust,float* x,float*
     if(Aim::UsesNativeUnitTarget(view.skill)) return;
     View preview{};
     AcquireSRWLockExclusive(&stateLock);
-    if(motionSettings.verbose) preview=published;
+    if(settings.verbose) preview=published;
     ResolveSelection(view);
     lastLookup=view;
     ReleaseSRWLockExclusive(&stateLock);
     __try { *x=view.destination.x; *y=view.destination.y; }
     __except(EXCEPTION_EXECUTE_HANDLER) { return; }
-    if(motionSettings.verbose) {
+    if(settings.verbose) {
         const auto count=lookupCount.fetch_add(1)+1;
         if(count<=128) {
             char trace[320];
@@ -329,16 +350,17 @@ void __fastcall Lookup(void* controller,void* player,bool adjust,float* x,float*
 }
 
 bool __fastcall UnitTest(void* controller,void* player,void* candidate) noexcept {
+    const auto settings=ReadMotionSettings();
     const ScoringWindow previous=scoringWindow;
     scoringWindow={};
     View view{};
     Aim::Point position{}; unsigned id{};
     const bool haveView=ReadView(player,view,true);
-    const auto mode=haveView && manualAim.load() && motionSettings.snapping?
+    const auto mode=haveView && manualAim.load() && settings.snapping?
         (skillSettings.Snaps(view.activeSkill)?Aim::ObservationMode::MeteorCircle:
         (view.activeSkill==-1?Aim::ObservationMode::MeteorPreviewCircle:Aim::ObservationMode::None)):Aim::ObservationMode::None;
     unsigned unitType{}, unitId{};
-    const bool nativeUnit=haveView && motionSettings.snapping &&
+    const bool nativeUnit=haveView && settings.snapping &&
         ReadTargetIdentity(candidate,unitType,unitId) &&
         Aim::NativeUnitScoring(manualAim.load(),view.activeSkill,view.skill,unitType,skillSettings);
     const bool observe=mode!=Aim::ObservationMode::None && !Aim::UsesNativeUnitTarget(view.skill) && ReadMonster(candidate,position,id);
@@ -352,7 +374,7 @@ bool __fastcall UnitTest(void* controller,void* player,void* candidate) noexcept
         const auto held=snapBook.retained;
         const bool whirlHeld=whirlLockActive;
         ReleaseSRWLockShared(&stateLock);
-        if(whirlHeld && view.skill==Aim::Whirlwind && std::hypot(view.stick.x,view.stick.y)<=motionSettings.deadzone &&
+        if(whirlHeld && view.skill==Aim::Whirlwind && std::hypot(view.stick.x,view.stick.y)<=settings.deadzone &&
             held.valid && held.playerId==view.playerId && held.id==id &&
             Aim::Fresh(view.tick,held.tick,Aim::SnapBook::Lifetime) &&
             Aim::DistanceSquared(view.player,position)<=Aim::MaximumDistance*Aim::MaximumDistance)
@@ -369,7 +391,7 @@ bool __fastcall UnitTest(void* controller,void* player,void* candidate) noexcept
     const auto trace=candidateTrace;
     candidateTrace=previousTrace;
     scoringWindow=previous;
-    if(motionSettings.verbose && nativeUnit && trace.calls && trace.returnedScore>=0 && nativeUnitCandidateReports.fetch_add(1)<64) {
+    if(settings.verbose && nativeUnit && trace.calls && trace.returnedScore>=0 && nativeUnitCandidateReports.fetch_add(1)<64) {
         char message[224];
         std::snprintf(message,sizeof(message),"[QOL/AimUnit] candidate active=%d preview=%d type=%u id=%u nativeResult=%u scoreCalls=%u native=%.3f returned=%.3f.",
             view.activeSkill,view.skill,unitType,unitId,result,trace.calls,trace.nativeScore,trace.returnedScore);
@@ -382,11 +404,11 @@ bool __fastcall UnitTest(void* controller,void* player,void* candidate) noexcept
         AcquireSRWLockExclusive(&stateLock);
         snapBook.Observe(view.playerId,id,position,GetTickCount64(),eligible);
         ReleaseSRWLockExclusive(&stateLock);
-        if(motionSettings.verbose) {
+        if(settings.verbose) {
             const auto count=candidateCount.fetch_add(1)+1;
-            const bool previewNear=mode==Aim::ObservationMode::MeteorPreviewCircle && Aim::Score(view.center,position,motionSettings.snapRadius)>=0;
+            const bool previewNear=mode==Aim::ObservationMode::MeteorPreviewCircle && Aim::Score(view.center,position,settings.snapRadius)>=0;
             auto& traceReports=view.activeSkill>=0?activeSnapTraceReports:idleSnapTraceReports;
-            if(Aim::Score(view.center,position,motionSettings.snapRadius)>=0 && traceReports.fetch_add(1)<128) {
+            if(Aim::Score(view.center,position,settings.snapRadius)>=0 && traceReports.fetch_add(1)<128) {
                 const float facingDot=(position.x-view.player.x)*view.facing.x+(position.y-view.player.y)*view.facing.y;
                 char detail[384];
                 std::snprintf(detail,sizeof(detail),"[QOL/AimTrace] candidate=%u active=%d previewSkill=%d override=%u eligible=%u scoreCalls=%u category=%d native=%.3f returned=%.3f facingDot=%.3f centerDistance=%.2f tick=%llu.",
@@ -408,12 +430,13 @@ bool __fastcall UnitTest(void* controller,void* player,void* candidate) noexcept
 }
 
 float __fastcall PointScore(void* controller,void* player,const float* position,int category,int profile) noexcept {
+    const auto settings=ReadMotionSettings();
     const float nativeScore=originalPointScore(controller,player,position,category,profile);
     if(candidateTrace.active) {
         // Category observation is functional: preserve the NPC/snap-cache gate
         // even when all diagnostic counters and score copies are disabled.
         candidateTrace.categories.Observe(category);
-        if(motionSettings.verbose) {
+        if(settings.verbose) {
             ++candidateTrace.calls; candidateTrace.nativeScore=nativeScore; candidateTrace.returnedScore=nativeScore;
             candidateTrace.category=category;
         }
@@ -427,10 +450,10 @@ float __fastcall PointScore(void* controller,void* player,const float* position,
     // visibility, hostility/category and skill validation still execute.
     float score=-1;
     __try {
-        if(scoringWindow.candidate && position) score=Aim::Score(scoringWindow.center,{position[0],position[1]},motionSettings.snapRadius);
+        if(scoringWindow.candidate && position) score=Aim::Score(scoringWindow.center,{position[0],position[1]},settings.snapRadius);
     } __except(EXCEPTION_EXECUTE_HANDLER) { return nativeScore; }
-    if(motionSettings.verbose && candidateTrace.active) candidateTrace.returnedScore=score;
-    if(motionSettings.verbose) {
+    if(settings.verbose && candidateTrace.active) candidateTrace.returnedScore=score;
+    if(settings.verbose) {
         const auto count=scoringCount.fetch_add(1)+1;
         if(count<=8) {
             char message[160];
@@ -472,14 +495,15 @@ bool CaptureCast(void* player,void* selectedSkill,unsigned x,unsigned y,int& ski
 }
 
 int __fastcall Cast(void* game,void* player,unsigned x,unsigned y,unsigned flag,void* selectedSkill) noexcept {
+    const auto settings=ReadMotionSettings();
     PendingTeleport sample{};
     int skill{};
     const bool observed=installed.load() && enabled.load() && castObserverInstalled.load() && CaptureCast(player,selectedSkill,x,y,skill,sample);
     // Pass-through observer: never rewrites packets, coordinates or server rules.
     const int result=originalCast(game,player,x,y,flag,selectedSkill);
     if(observed) {
-        sample.sequence=motionSettings.verbose?castCount.fetch_add(1)+1:0;
-        if(motionSettings.verbose && sample.sequence<=128) {
+        sample.sequence=settings.verbose?castCount.fetch_add(1)+1:0;
+        if(settings.verbose && sample.sequence<=128) {
             char message[224];
             std::snprintf(message,sizeof(message),"[QOL/Aim] cast #%u skill=%d start=(%.0f,%.0f) request=(%u,%u) distance=%.2f result=%d (source unclassified).",
                 sample.sequence,skill,sample.start.x,sample.start.y,x,y,std::sqrt(Aim::DistanceSquared(sample.start,sample.requested)),result);
@@ -491,7 +515,7 @@ int __fastcall Cast(void* game,void* player,unsigned x,unsigned y,unsigned flag,
             AcquireSRWLockExclusive(&stateLock);
             lastCastMarker={true,sample.playerId,sample.requested,sample.tick};
             ReleaseSRWLockExclusive(&stateLock);
-            if(motionSettings.verbose && sample.sequence<=128) {
+            if(settings.verbose && sample.sequence<=128) {
                 char alignment[224];
                 std::snprintf(alignment,sizeof(alignment),"[QOL/Aim] recent lookup comparison cast=%u target=%u snapped=%u age=%llu ms coordinateError=%.2f (temporal match, not transaction proof).",
                     sample.sequence,lookup.targetId,lookup.target,static_cast<unsigned long long>(sample.tick-lookup.tick),
@@ -642,13 +666,14 @@ int FocusedTreeSkill() noexcept {
     } __except(EXCEPTION_EXECUTE_HANDLER){return -1;}
 }
 void SkillTreeTick(std::uint64_t now) noexcept {
+    const auto settings=ReadMotionSettings();
     if(treeReset.exchange(false)){treePress={};treeSequence={};}
     const int id=FocusedTreeSkill();
     treeSkill.store(id);treeTick.store(now);
     const auto tree=ReadTreeLayout(now);
     AcquireSRWLockExclusive(&stateLock);treePublished=tree;ReleaseSRWLockExclusive(&stateLock);
     const auto input=ControllerQoL::ReadControllerInput();
-    const bool valid=motionSettings.skillTreeToggle && skillSettings.CanToggle(id);
+    const bool valid=settings.skillTreeToggle && skillSettings.CanToggle(id);
     std::uint64_t sequence{};
     const bool pressed=ControllerQoL::NativeRightStickPresses(sequence)?treeSequence.Update(sequence,valid):
         treePress.Update(valid,(input.buttons&0x80)!=0,input.valid);
@@ -661,18 +686,18 @@ void SkillTreeTick(std::uint64_t now) noexcept {
             treeSaveFailureUntil.store(now+3000);
             ctx->LogWarn("[QOL/Aim] Skill-tree toggle could not save configuration; setting unchanged.");return;
         }
-        skillSettings.Publish(id,value?skillSettings.Targeting(id):Aim::TargetMode::Disabled);
         AcquireSRWLockExclusive(&stateLock);
         snapBook={};whirlLockActive=false;lastLookup={};lastCastMarker={};
         ReleaseSRWLockExclusive(&stateLock);
         if(!value && previewSkill.load()==id)previewSkill.store(-1);
-        if(motionSettings.verbose) {
+        if(settings.verbose) {
             char message[192];std::snprintf(message,sizeof(message),"[QOL/Aim] Skill-tree R3: skill=%d aim=%s; saved numeric configuration.",id,value?"ON":"OFF");ctx->LogInfo(message);
         }
     } catch(...) {treeSaveFailureUntil.store(now+3000);ctx->LogWarn("[QOL/Aim] Skill-tree toggle failed; setting unchanged.");}
 }
 
 void __cdecl UiTick(const D2RL::PluginContext*,void*) noexcept {
+    const auto settings=ReadMotionSettings();
     queued.store(false);
     if(!ready.load()) return;
     View view{};
@@ -688,12 +713,12 @@ void __cdecl UiTick(const D2RL::PluginContext*,void*) noexcept {
         AcquireSRWLockShared(&stateLock);
         view.projection=published.projection; view.projectionTick=published.projectionTick; view.projectionValid=published.projectionValid;
         ReleaseSRWLockShared(&stateLock);
-        if(!Aim::Fresh(now,view.projectionTick,static_cast<std::uint64_t>(1000.0f/motionSettings.projectionHz))) {
+        if(!Aim::Fresh(now,view.projectionTick,static_cast<std::uint64_t>(1000.0f/settings.projectionHz))) {
             view.projectionValid=false; view.projectionTick=now;
             D2RL::Overlay::Metrics metrics{}; metrics.structSize=sizeof(metrics);
             if(overlay->getMetrics(ctx,&metrics)==D2RL::Overlay::Result::Success)
                 view.projectionValid=ProbeProjection(view,metrics.screenWidth,metrics.screenHeight);
-            if(motionSettings.verbose && lastProjectionStatus.exchange(view.projectionStatus)!=view.projectionStatus && projectionReports.load()<8) {
+            if(settings.verbose && lastProjectionStatus.exchange(view.projectionStatus)!=view.projectionStatus && projectionReports.load()<8) {
                 projectionReports.fetch_add(1);
                 char message[192];
                 std::snprintf(message,sizeof(message),"[QOL/Aim] projection status=%u (0=metrics unavailable,1=renderer unavailable,2=ray miss,3=world bounds,4=geometry check,5=singular,6=ready,7=exception,8=disabled).",view.projectionStatus);
@@ -702,7 +727,7 @@ void __cdecl UiTick(const D2RL::PluginContext*,void*) noexcept {
         }
         AcquireSRWLockExclusive(&stateLock);
         Aim::Point offset=retainedOffset;
-        const bool moved=view.projectionValid && cursorMotion.Advance(view.stick,view.projection,reverseY.load(),seconds,motionSettings,offset);
+        const bool moved=view.projectionValid && cursorMotion.Advance(view.stick,view.projection,reverseY.load(),seconds,settings,offset);
         const Aim::Point next{view.player.x+offset.x,view.player.y+offset.y};
         if(manualAim.load() && moved && Aim::ValidWorld(next)) {
             retainedOffset=offset;
@@ -726,7 +751,7 @@ void __cdecl UiTick(const D2RL::PluginContext*,void*) noexcept {
     }
     published=view;
     ReleaseSRWLockExclusive(&stateLock);
-    if(motionSettings.verbose && completed.active && completed.sequence<=128) {
+    if(settings.verbose && completed.active && completed.sequence<=128) {
         char message[200];
         std::snprintf(message,sizeof(message),"[QOL/Aim] Teleport sample #%u displacement=%.2f requested=%.2f elapsed=%llu ms (single-cast test; movement can affect measurement).",
             completed.sequence,displacement,std::sqrt(Aim::DistanceSquared(completed.start,completed.requested)),static_cast<unsigned long long>(now-completed.tick));
@@ -761,7 +786,8 @@ void ReticleStroke(D2RL::Overlay::CanvasHandle canvas,Aim::Point a,Aim::Point b,
     const ReticleSegment segment{a,b};ReticleShape(canvas,&segment,1,color,scale,thickness);
 }
 void GroundReticle(D2RL::Overlay::CanvasHandle canvas,const Aim::Projection& projection,Aim::Point world,float scale,float alpha,Aim::Point correction={}) noexcept {
-    const auto& configured=motionSettings.groundReticleColor;
+    const auto settings=ReadMotionSettings();
+    const auto& configured=settings.groundReticleColor;
     const D2RL::Overlay::Color color{configured.red,configured.green,configured.blue,configured.alpha*alpha};
     std::array<ReticleSegment,32> segments{};unsigned count=0;
     // Four broken ground-plane arcs: an aiming mark, not a skill-area outline.
@@ -776,10 +802,11 @@ void GroundReticle(D2RL::Overlay::CanvasHandle canvas,const Aim::Projection& pro
             previous=point; havePrevious=valid;
         }
     }
-    ReticleShape(canvas,segments.data(),count,color,scale,motionSettings.reticleThickness);
+    ReticleShape(canvas,segments.data(),count,color,scale,settings.reticleThickness);
 }
 void EnemyReticle(D2RL::Overlay::CanvasHandle canvas,Aim::Point point,float scale) noexcept {
-    const auto& configured=motionSettings.lockReticleColor;
+    const auto settings=ReadMotionSettings();
+    const auto& configured=settings.lockReticleColor;
     const D2RL::Overlay::Color color{configured.red,configured.green,configured.blue,configured.alpha};
     std::array<ReticleSegment,8> segments{};unsigned count=0;
     // Four open diamond corners around the enemy's ground position.
@@ -792,7 +819,7 @@ void EnemyReticle(D2RL::Overlay::CanvasHandle canvas,Aim::Point point,float scal
         segments[count++]={{tip.x+(a.x-tip.x)*0.34f,tip.y+(a.y-tip.y)*0.34f},tip};
         segments[count++]={tip,{tip.x+(b.x-tip.x)*0.34f,tip.y+(b.y-tip.y)*0.34f}};
     }
-    ReticleShape(canvas,segments.data(),count,color,scale,motionSettings.reticleThickness);
+    ReticleShape(canvas,segments.data(),count,color,scale,settings.reticleThickness);
 }
 void Label(D2RL::Overlay::CanvasHandle canvas,Aim::Point p,const char* text,D2RL::Overlay::Color color) noexcept {
     const D2RL::Overlay::TextRequest request{sizeof(request),0,canvas,{p.x,p.y},color,18,0,text,
@@ -828,12 +855,15 @@ struct ReticleDisplayState {
     unsigned playerId{},targetId{};int skill{-1};float step{};bool valid{};
 };
 void __cdecl Frame(const D2RL::PluginContext*,const D2RL::Overlay::Frame* frame,void*) noexcept {
+    const auto settings=ReadMotionSettings();
     static ReticleDisplayState display{};
-    if(!frame || frame->structSize<D2RL::Overlay::FrameRequiredSize || !installed.load() || !inSession.load()) {display={};return;}
+    if(!frame || frame->structSize<D2RL::Overlay::FrameRequiredSize) {display={};return;}
+    frameCallbacks.fetch_add(1,std::memory_order_relaxed);
+    if(!installed.load() || !inSession.load()) {display={};return;}
     if(!queued.exchange(true) && threads->runOnUiThread(ctx,&UiTick,nullptr)!=D2RL::Threads::Result::Success) queued.store(false);
     View view{}; float actual{}; CastMarker castMarker{};TreeView tree{};
     AcquireSRWLockShared(&stateLock); view=published; actual=observedDisplacement; castMarker=lastCastMarker;tree=treePublished; ReleaseSRWLockShared(&stateLock);
-    if(!Foreground() || !motionSettings.overlay) {display={};return;}
+    if(!Foreground() || !settings.overlay) {display={};return;}
     const DrawingClip clip{BeginDrawingClip(frame->screenWidth,frame->screenHeight)};
     const bool fresh=view.valid && Aim::Fresh(GetTickCount64(),view.tick);
     // Status must not depend on a successfully resolved aim or projection.
@@ -856,7 +886,7 @@ void __cdecl Frame(const D2RL::PluginContext*,const D2RL::Overlay::Frame* frame,
             ReticleStroke(frame->canvas,{center.x,center.y-radius*1.3f},{center.x,center.y+radius*1.3f},brass,0.90f);
         }
         const char* hint=GetTickCount64()<treeSaveFailureUntil.load()?"Auto-aim: save failed":
-            (focused>0?(!skillSettings.CanToggle(focused)?"Auto-aim: DISABLED":skillSettings.Enabled(focused)?(motionSettings.skillTreeToggle?"Auto-aim: ON | R3 to toggle":"Auto-aim: ON"):(motionSettings.skillTreeToggle?"Auto-aim: OFF | R3 to toggle":"Auto-aim: OFF")):"Auto-aim: highlight a skill");
+            (focused>0?(!skillSettings.CanToggle(focused)?"Auto-aim: DISABLED":skillSettings.Enabled(focused)?(settings.skillTreeToggle?"Auto-aim: ON | R3 to toggle":"Auto-aim: ON"):(settings.skillTreeToggle?"Auto-aim: OFF | R3 to toggle":"Auto-aim: OFF")):"Auto-aim: highlight a skill");
         if(tree.stripValid) {
             const float font=std::clamp(tree.strip.height*0.30f,12.0f,20.0f);
             const D2RL::Overlay::TextRequest request{sizeof(request),0,frame->canvas,
@@ -866,7 +896,7 @@ void __cdecl Frame(const D2RL::PluginContext*,const D2RL::Overlay::Frame* frame,
         }
         return; // Hide gameplay reticles/debug while configuring the tree.
     }
-    if(motionSettings.debugOverlay) {
+    if(settings.debugOverlay) {
     char status[144];
     std::snprintf(status,sizeof(status),"AIM TEST %s | %.1f tiles | F8 toggle | %s",active?"ON":"OFF",
         requestedDistance.load(),fresh?"controller preview":"cast a supported skill with controller");
@@ -879,7 +909,7 @@ void __cdecl Frame(const D2RL::PluginContext*,const D2RL::Overlay::Frame* frame,
     const auto lineResult=overlay->drawLine(ctx,&bar);
     // One diagnostic per session plus explicit failures (capped) makes missing
     // presentation distinguishable from missing callbacks or invalid aim.
-    if(motionSettings.verbose && (overlayReports.load()==0 || ((textResult!=D2RL::Overlay::Result::Success || lineResult!=D2RL::Overlay::Result::Success) && overlayReports.load()<4))) {
+    if(settings.verbose && (overlayReports.load()==0 || ((textResult!=D2RL::Overlay::Result::Success || lineResult!=D2RL::Overlay::Result::Success) && overlayReports.load()<4))) {
         overlayReports.fetch_add(1);
         char message[224];
         std::snprintf(message,sizeof(message),"[QOL/Aim] overlay frame=%llu size=%.0fx%.0f textResult=%u lineResult=%u fresh=%u projection=%u rendererGuard=%u clipCorrection=%u (0=success).",
@@ -892,24 +922,24 @@ void __cdecl Frame(const D2RL::PluginContext*,const D2RL::Overlay::Frame* frame,
     Label(frame->canvas,{barEnd-18,barY+8},"30",{1,1,1,1});
     }
     if(!active || !fresh) {display={};return;}
-    if(motionSettings.debugOverlay) {
+    if(settings.debugOverlay) {
     char text[320];
     const int length=std::snprintf(text,sizeof(text),"AIM CURSOR | %s | range %.1f / 30 | stick %+.2f,%+.2f%s\nSnap radius %.1f | %s | Teleport sample %.1f | F8 toggle  F9 recenter  F10 invert Y\nGround marker: %s",
         Aim::CatalogSkillName(view.skill),view.distance,view.stick.x,view.stick.y,reverseY.load()?" (inverted)":"",
-        motionSettings.snapRadius,view.target?"TARGET LOCK":"GROUND",actual,view.projectionValid?"native XY wrapper":"unavailable (see projection status in log)");
+        settings.snapRadius,view.target?"TARGET LOCK":"GROUND",actual,view.projectionValid?"native XY wrapper":"unavailable (see projection status in log)");
     D2RL::Overlay::TextRequest request{sizeof(request),0,frame->canvas,{24,100},{1,0.9f,0.3f,1},18,0,text,
         static_cast<unsigned>(std::min(length,static_cast<int>(sizeof(text)-1))),0};
     overlay->drawText(ctx,&request);
     }
     if(!view.projectionValid) {display={};return;}
-    if(motionSettings.debugOverlay && castMarker.valid && castMarker.playerId==view.playerId && Aim::Fresh(GetTickCount64(),castMarker.tick,2500)) {
+    if(settings.debugOverlay && castMarker.valid && castMarker.playerId==view.playerId && Aim::Fresh(GetTickCount64(),castMarker.tick,2500)) {
         Aim::Point castScreen{};
         if(view.projection.Project(castMarker.position,castScreen)) {
             Cross(frame->canvas,castScreen,{1,0.3f,1,1});
             Label(frame->canvas,{castScreen.x+10,castScreen.y-40},"LAST CAST",{1,0.3f,1,1});
         }
     }
-    if(!motionSettings.debugOverlay) {
+    if(!settings.debugOverlay) {
         const float scale=std::clamp(frame->screenHeight/1080.0f,0.75f,2.0f);
         const auto now=GetTickCount64();
         if(display.playerId!=view.playerId || display.skill!=view.skill ||
@@ -920,19 +950,20 @@ void __cdecl Frame(const D2RL::PluginContext*,const D2RL::Overlay::Frame* frame,
             Aim::Point immediate{},oldOffsetScreen{};
             if(display.valid && view.projection.Project({view.player.x+display.offset.x,view.player.y+display.offset.y},oldOffsetScreen))
                 immediate={center.x-oldOffsetScreen.x,center.y-oldOffsetScreen.y};
-            const auto smooth=display.ground.Update(center,now,motionSettings.overlaySmoothingMs,immediate,128*scale);
+            const auto smooth=display.ground.Update(center,now,settings.overlaySmoothingMs,immediate,128*scale);
             GroundReticle(frame->canvas,view.projection,view.center,scale,1.0f,{smooth.x-center.x,smooth.y-center.y});
+            lastGroundDraw.store(now,std::memory_order_relaxed);
         } else display.ground={};
         if(display.targetId!=view.targetId){display.target={};display.landing={};}
         if(view.target) {
             Aim::Point enemy{};
             if(view.projection.Project(view.targetPosition,enemy))
-                EnemyReticle(frame->canvas,display.target.Update(enemy,now,motionSettings.overlaySmoothingMs,{},128*scale),scale);
+                EnemyReticle(frame->canvas,display.target.Update(enemy,now,settings.overlaySmoothingMs,{},128*scale),scale);
             else display.target={};
             // Whirlwind's landing point is separate from the enemy lock.
             Aim::Point landing{};
             if(view.skill==Aim::Whirlwind && Aim::DistanceSquared(view.destination,view.targetPosition)>0.01f && view.projection.Project(view.destination,landing)) {
-                const auto smooth=display.landing.Update(landing,now,motionSettings.overlaySmoothingMs,{},128*scale);
+                const auto smooth=display.landing.Update(landing,now,settings.overlaySmoothingMs,{},128*scale);
                 GroundReticle(frame->canvas,view.projection,view.destination,scale,0.9f,{smooth.x-landing.x,smooth.y-landing.y});
             } else display.landing={};
         } else {display.target={};display.landing={};}
@@ -950,13 +981,13 @@ void __cdecl Frame(const D2RL::PluginContext*,const D2RL::Overlay::Frame* frame,
         char distanceLabel[48];
         std::snprintf(distanceLabel,sizeof(distanceLabel),"%.1f tiles",view.distance);
         Label(frame->canvas,{aimScreen.x+10,aimScreen.y-20},distanceLabel,color);
-        for(float distance=5;motionSettings.debugOverlay && distance<view.distance;distance+=5) {
+        for(float distance=5;settings.debugOverlay && distance<view.distance;distance+=5) {
             const float fraction=distance/view.distance;
             Cross(frame->canvas,{playerScreen.x+(aimScreen.x-playerScreen.x)*fraction,
                 playerScreen.y+(aimScreen.y-playerScreen.y)*fraction},color);
         }
     }
-    if(motionSettings.debugOverlay) {
+    if(settings.debugOverlay) {
     Aim::Point previous{};
     bool havePrevious=false;
     for(unsigned i=0;i<=48;++i) {
@@ -969,19 +1000,19 @@ void __cdecl Frame(const D2RL::PluginContext*,const D2RL::Overlay::Frame* frame,
         previous=screen; havePrevious=true;
     }
     }
-    if(motionSettings.snapping && skillSettings.Snaps(view.skill)) {
+    if(settings.snapping && skillSettings.Snaps(view.skill)) {
         Aim::Point prior{}; bool priorValid=false;
         for(unsigned i=0;i<=48;++i) {
             const float angle=static_cast<float>(i)*(6.28318530718f/48);
             Aim::Point point{};
-            const bool valid=view.projection.Project({view.center.x+motionSettings.snapRadius*std::cos(angle),view.center.y+motionSettings.snapRadius*std::sin(angle)},point);
+            const bool valid=view.projection.Project({view.center.x+settings.snapRadius*std::cos(angle),view.center.y+settings.snapRadius*std::sin(angle)},point);
             if(valid && priorValid) Line(frame->canvas,prior,point,{1,0.8f,0.2f,0.8f});
             prior=point; priorValid=valid;
         }
         Aim::Point snapped{};
         if(view.target && view.projection.Project(view.center,aimScreen) && view.projection.Project(view.destination,snapped)) {
             Line(frame->canvas,aimScreen,snapped,{0.3f,1,0.3f,1});
-            Label(frame->canvas,{snapped.x+10,snapped.y+10},view.skill==Aim::Whirlwind && motionSettings.whirlwindPassThrough && motionSettings.whirlwindPassThroughDistance>0?"PASS THROUGH":"SNAP",{0.3f,1,0.3f,1});
+            Label(frame->canvas,{snapped.x+10,snapped.y+10},view.skill==Aim::Whirlwind && settings.whirlwindPassThrough && settings.whirlwindPassThroughDistance>0?"PASS THROUGH":"SNAP",{0.3f,1,0.3f,1});
         }
     }
     Aim::Point center{};
@@ -990,14 +1021,15 @@ void __cdecl Frame(const D2RL::PluginContext*,const D2RL::Overlay::Frame* frame,
 }
 
 D2RL::Input::ActionResult __cdecl Control(const D2RL::PluginContext*,const D2RL::Input::ActionEvent* event,void* user) noexcept {
+    const auto settings=ReadMotionSettings();
     if(!ready.load() || !event || event->kind!=D2RL::Input::ActionEventKind::Pressed) return D2RL::Input::ActionResult::Ignored;
     switch(reinterpret_cast<std::uintptr_t>(user)) {
         case 1: enabled.store(!enabled.load()); manualAim.store(false); requireStickRelease.store(false);
-            AcquireSRWLockExclusive(&stateLock); snapBook={}; whirlLockActive=false; lastLookup={}; lastCastMarker={}; ReleaseSRWLockExclusive(&stateLock); if(motionSettings.verbose) ctx->LogInfo(enabled.load()?"[QOL/Aim] Enabled.":"[QOL/Aim] Disabled; native aim restored."); break;
+            AcquireSRWLockExclusive(&stateLock); snapBook={}; whirlLockActive=false; lastLookup={}; lastCastMarker={}; ReleaseSRWLockExclusive(&stateLock); if(settings.verbose) ctx->LogInfo(enabled.load()?"[QOL/Aim] Enabled.":"[QOL/Aim] Disabled; native aim restored."); break;
         case 2:
             AcquireSRWLockExclusive(&stateLock); retainedOffsetValid=false; cursorMotion={}; snapBook={}; whirlLockActive=false; lastLookup={}; lastCastMarker={}; ReleaseSRWLockExclusive(&stateLock);
-            requestedDistance.store(Aim::DefaultDistance); if(motionSettings.verbose) ctx->LogInfo("[QOL/Aim] Recenter pending: 20 tiles along current facing."); break;
-        case 3: reverseY.store(!reverseY.load()); if(motionSettings.verbose) ctx->LogInfo(reverseY.load()?"[QOL/Aim] Y inverted.":"[QOL/Aim] Y normal."); break;
+            requestedDistance.store(Aim::DefaultDistance); if(settings.verbose) ctx->LogInfo("[QOL/Aim] Recenter pending: 20 tiles along current facing."); break;
+        case 3: reverseY.store(!reverseY.load()); if(settings.verbose) ctx->LogInfo(reverseY.load()?"[QOL/Aim] Y inverted.":"[QOL/Aim] Y normal."); break;
     }
     return D2RL::Input::ActionResult::Handled;
 }
@@ -1094,6 +1126,7 @@ bool QolAim::Initialize(const D2RL::PluginContext* context,bool qolEnabled) noex
         ctx->LogWarn("[QOL/Aim] Invalid/unavailable aim configuration; aim disabled.");
         return false;
     }
+    startupConfigured=configured;
     if(!configured) { ctx->LogInfo("[QOL/Aim] Disabled by configuration."); return true; }
     if(GetModuleHandleW(L"Controller Aim Test.dll")) {
         ctx->LogWarn("[QOL/Aim] Standalone aim module loaded; integrated aim disabled to avoid duplicate hooks.");
@@ -1101,7 +1134,7 @@ bool QolAim::Initialize(const D2RL::PluginContext* context,bool qolEnabled) noex
     }
     if(motionSettings.verbose) {
         char configMessage[224];
-        std::snprintf(configMessage,sizeof(configMessage),"[QOL/Aim] Cursor settings: deadzone=%.2f initial_speed=%.2f maximum_speed=%.2f acceleration_seconds=%.2f (restart to reload).",
+        std::snprintf(configMessage,sizeof(configMessage),"[QOL/Aim] Cursor settings: deadzone=%.2f initial_speed=%.2f maximum_speed=%.2f acceleration_seconds=%.2f (automatic reload /qol reload).",
             motionSettings.deadzone,motionSettings.initialSpeed,motionSettings.maximumSpeed,motionSettings.accelerationSeconds);
         ctx->LogInfo(configMessage);
         char featureMessage[256];
@@ -1145,7 +1178,7 @@ bool QolAim::Initialize(const D2RL::PluginContext* context,bool qolEnabled) noex
     motionSettings.whirlwindPassThroughDistance=skillSettings.baseline.whirlwindPassThroughDistance;
     if(motionSettings.verbose) {
         char message[224];
-        std::snprintf(message,sizeof(message),"[QOL/Aim] Whirlwind profile: pass_through_enabled=%u pass_through_distance=%.2f (restart to reload).",motionSettings.whirlwindPassThrough,motionSettings.whirlwindPassThroughDistance);
+        std::snprintf(message,sizeof(message),"[QOL/Aim] Whirlwind profile: pass_through_enabled=%u pass_through_distance=%.2f (automatic reload /qol reload).",motionSettings.whirlwindPassThrough,motionSettings.whirlwindPassThroughDistance);
         ctx->LogInfo(message);
     }
     QolSkillDiscovery::Register(ctx,lifecycle,threads);
@@ -1178,6 +1211,35 @@ bool QolAim::Initialize(const D2RL::PluginContext* context,bool qolEnabled) noex
     ctx->LogInfo(motionSettings.verbose?"[QOL/Aim] Ready; verbose diagnostics enabled.":"[QOL/Aim] Ready; verbose diagnostics disabled (aim.verbose=false).");
     return true;
 }
+bool QolAim::PrepareReload(std::string_view main,Reload& output,std::string& error) noexcept {
+    try {
+        Reload next;
+        Aim::MotionSettings parsed;bool configured{};
+        if(!Aim::ParseQolSettings(main,parsed,configured)) {error="invalid or duplicate aim settings";return false;}
+        auto restart=[&](const char* name){if(!next.restart.empty())next.restart+=", ";next.restart+=name;};
+        if(configured!=startupConfigured)restart("aim.enabled");
+        if(parsed.castObserver!=motionSettings.castObserver)restart("cast_observer_enabled");
+        if(parsed.skillTreeToggle!=motionSettings.skillTreeToggle)restart("skill_tree_toggle_enabled");
+        if(configured && !ready.load())restart("aim activation (not admitted at startup)");
+        parsed.castObserver=motionSettings.castObserver;
+        parsed.skillTreeToggle=motionSettings.skillTreeToggle;
+        if(QolSkillDiscovery::Active()) {
+            auto skills=std::make_shared<Aim::SkillSettings>();
+            if(!QolSkillDiscovery::ReadReload(*skills,next.profileRevision,error))return false;
+            parsed.whirlwindPassThrough=skills->whirlwindPassThrough;
+            parsed.whirlwindPassThroughDistance=skills->whirlwindPassThroughDistance;
+            next.skills=std::move(skills);
+        }
+        next.motion=std::make_shared<const Aim::MotionSettings>(parsed);
+        output=std::move(next);return true;
+    }catch(...){error="aim settings preparation failed";return false;}
+}
+bool QolAim::ApplyReload(const Reload& next) noexcept {
+    if(!next.motion)return false;
+    if(next.skills && !QolSkillDiscovery::CommitReload(next.skills,next.profileRevision))return false;
+    reloadedMotion.store(next.motion,std::memory_order_release);
+    return true;
+}
 void QolAim::Shutdown() noexcept {
     QolSkillDiscovery::Stop();
     ready.store(false);
@@ -1190,6 +1252,21 @@ void QolAim::Shutdown() noexcept {
 // Atomic state only: safe from QOL's controller action thread, no native reads.
 bool QolAim::OwnsGuidedArrow() noexcept {
     return installed.load() && enabled.load() && inSession.load() && manualAim.load() && skillSettings.Enabled(Aim::GuidedArrow);
+}
+void QolAim::ReportStatus(const D2RL::PluginContext* logger) noexcept {
+    if(!logger)return;
+    View view{};
+    AcquireSRWLockShared(&stateLock);view=published;ReleaseSRWLockShared(&stateLock);
+    const auto settings=ReadMotionSettings();
+    const auto now=GetTickCount64(),draw=lastGroundDraw.load(),ui=lastUiTick.load();
+    char message[640]{};
+    std::snprintf(message,sizeof(message),
+        "QOL_AIM_STATE ready=%u installed=%u enabled=%u session=%u overlay=%u manual=%u releaseRequired=%u frames=%llu uiAge_ms=%llu viewStage=%u viewValid=%u nativeSkill=%d previewSkill=%d stickX=%.3f stickY=%.3f projection=%u projectionStatus=%u renderer=%u drawSeen=%u drawAge_ms=%llu",
+        ready.load(),installed.load(),enabled.load(),inSession.load(),settings.overlay,manualAim.load(),requireStickRelease.load(),
+        static_cast<unsigned long long>(frameCallbacks.load()),static_cast<unsigned long long>(ui && now>=ui?now-ui:0),
+        view.readStage,view.valid,view.activeSkill,view.skill,view.stick.x,view.stick.y,view.projectionValid,view.projectionStatus,
+        rendererAdmitted.load(),draw!=0,static_cast<unsigned long long>(draw && now>=draw?now-draw:0));
+    logger->LogInfo(message);logger->WriteConsoleMessage(message,D2RL::ConsoleMessageKind::Output);
 }
 #ifdef QOL_AIM_TEST_INSTALL
 bool QolAim::TestInactiveWrappers() noexcept {
@@ -1214,7 +1291,7 @@ bool QolAim::TestInactiveWrappers() noexcept {
     return ok && nativeCalls==12;
 }
 bool QolAim::TestScoreLogging(const D2RL::PluginContext* context,bool verbose) noexcept {
-    ctx=context; motionSettings={}; motionSettings.verbose=verbose;
+    ctx=context; reloadedMotion.store({}); motionSettings={}; motionSettings.verbose=verbose;
     installed.store(true); enabled.store(true); inSession.store(true); manualAim.store(true);
     scoringCount.store(0);
     float position[]{101,100};
@@ -1235,10 +1312,11 @@ bool QolAim::TestScoreLogging(const D2RL::PluginContext* context,bool verbose) n
 }
 bool QolAim::TestInstall(const D2RL::PluginContext* context,bool observer,bool fresh) noexcept {
     ctx=context;
-    if(fresh){installAttempted.store(false);installed.store(false);castObserverInstalled.store(false);}
+    if(fresh){installAttempted.store(false);installed.store(false);castObserverInstalled.store(false);reloadedMotion.store({});startupConfigured=true;}
     motionSettings={}; motionSettings.castObserver=observer;
     return Install();
 }
+Aim::MotionSettings QolAim::TestMotionSettings() noexcept {return ReadMotionSettings();}
 void QolAim::TestLifecycle(unsigned kind) noexcept {
     ready.store(true);
     D2RL::Lifecycle::GameplayEvent event{};event.kind=static_cast<D2RL::Lifecycle::GameplayEventKind>(kind);

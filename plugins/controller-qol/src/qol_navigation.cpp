@@ -885,7 +885,7 @@ bool QolNavigation::Initialize(const D2RL::PluginContext* context,bool featureEn
         .structSize=D2RL::SharedEvents::ItemTooltipListenerSize,.callback=OnTooltip};
     if(events->registerItemTooltipListener(ctx,&tooltip,&tooltipHandle)!=D2RL::SharedEvents::Result::Success)
         ctx->LogWarn("[QOL/Input] Tooltip sampling unavailable; UI/console sampling remains enabled.");
-    if(!ctx->RegisterConsoleCommand("qol",Command,"QOL: status, trace, quiet, menu on/off, input on/off")) {Cleanup();return false;}
+    // The root plugin registers /qol, including reload when native admission fails.
     InstallNativeHook();
     InstallLabelHooks();
     InstallMenuHook();
@@ -907,6 +907,9 @@ bool QolNavigation::Initialize(const D2RL::PluginContext* context,bool featureEn
 void QolNavigation::SetTrace(bool traceEnabled) noexcept {
     std::lock_guard lock(stateMutex);
     trace = traceEnabled;
+}
+D2RL::ConsoleCommandResult QolNavigation::HandleCommand(D2R::Game::Client* client,const D2RL::ConsoleCommandContext* command,void* data) noexcept {
+    return Command(client,command,data);
 }
 void QolNavigation::Shutdown() noexcept {
     std::lock_guard lock(stateMutex);

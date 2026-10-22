@@ -1,0 +1,131 @@
+{
+  "version": "1.3.1+rev.1",
+  "native_profile": "D2R 3.3.93787 and the exact D2RLoader/Core artifacts recorded in NATIVE-CONTRACT.md",
+  "source": "Public SDK DataTableService v1, existing Item Roll Ranges/rune-downgrade compiled-layout records, and qualified read-only normal-package capture on 2026-10-21",
+  "tables": [
+    {
+      "id": 59,
+      "name": "Items",
+      "stride": 448,
+      "max_rows": 65536,
+      "fields": {
+        "code_u32": "0x80",
+        "name_string_u16": "0xFC",
+        "width_u8": "0x11E",
+        "height_u8": "0x11F",
+        "primary_type_i16": "0x12E",
+        "secondary_type_i16": "0x130"
+      }
+    },
+    {
+      "id": 41,
+      "name": "ItemTypes",
+      "stride": 232,
+      "max_rows": 4096,
+      "fields": {
+        "code_u32": "0x00",
+        "parents_i16": [
+          "0x04",
+          "0x06"
+        ]
+      }
+    },
+    {
+      "id": 62,
+      "name": "Gems",
+      "stride": 192,
+      "max_rows": 65536,
+      "fields": {
+        "item_class_u32": "0x28"
+      }
+    },
+    {
+      "id": 16,
+      "name": "Properties",
+      "stride": 48,
+      "max_rows": 65536,
+      "fields": {
+        "id_u32": "0x00",
+        "functions_u8": "0x18..0x1E",
+        "stats_u16": "0x20..0x2C"
+      }
+    },
+    {
+      "id": 35,
+      "name": "ItemStatCost",
+      "stride": 324,
+      "max_rows": 512,
+      "fields": {
+        "id_u16": "0x00",
+        "flat_encoding_prefix": "0x02..0x2F",
+        "value_shift_u8": "0x14",
+        "operation_u8": "0x50",
+        "operation_shift_u8": "0x51"
+      }
+    },
+    {
+      "id": 57,
+      "name": "CubeMain",
+      "stride": 364,
+      "max_rows": 100000,
+      "fields": {
+        "enabled_u8": "0x00",
+        "ladder_u8": "0x01",
+        "difficulty_u8": "0x02",
+        "operation_u8": "0x03",
+        "stat_u32": "0x04",
+        "threshold_i32": "0x08",
+        "input_count_u8": "0x0C",
+        "class_u8": "0x0D",
+        "version_u16": "0x0E",
+        "season_u32": "0x10",
+        "inputs": {
+          "start": "0x14",
+          "stride": 10,
+          "count": 7
+        },
+        "outputs": {
+          "start": "0x5A",
+          "stride": 91,
+          "count": 3,
+          "kind_u8": 13,
+          "modifier_start": 29,
+          "modifier_stride": 12,
+          "modifier_count": 5
+        }
+      }
+    }
+  ],
+  "limits": {
+    "type_ancestry_nodes": 64,
+    "gem_families": 8,
+    "max_credit": 65535,
+    "request_bytes": 72,
+    "reply_bytes": 224,
+    "channel_compatibility": "0x47454D4241470003"
+  },
+  "model": "Unrestricted exact two-input grabber recipe; preserved bag, returned grabber, one normal 1x1 gem, one deterministic flat 16-bit credit debit; unknown fields/effects and ambiguous choices refuse",
+  "runtime_claim": "Release preserves beta19 behavior. Loose shared-stash deposit and hosted save/rejoin were live verified; shared cluster staging and full-inventory refusal remain automated-only.",
+  "presentation": {
+    "item_name_reference": "Items WORD 0xFC; beta15 0xBC was a rejected offset",
+    "fingerprint_excluded_bytes": {
+      "Items": [
+        "0xFC",
+        "0xFD"
+      ]
+    },
+    "local_witness_recheck": "All original bytes remain required, including name references",
+    "localization": "Client-only public LocalizationService v2 getStringById; unavailable/unsupported custom namespaced references hide labels without disabling the picker",
+    "headless_host_localization_required": false
+  },
+  "deposits": {
+    "gesture": "Shift + right-click",
+    "scope": "same container, inventory page and shared stash page as bag",
+    "recipe": "one-unit unrestricted operation 0; preserved bag and one positive flat property range",
+    "max_items": 256,
+    "max_units": 4096,
+    "random": "server-only independent uniform roll per logical unit; max range preflight",
+    "native_contract": "DEPOSITS.md",
+    "live_validated": false
+  }
+}

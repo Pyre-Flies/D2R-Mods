@@ -6,14 +6,17 @@ Download individual runtime ZIPs from the
 
 | Plugin | Stable version | What it adds |
 | --- | --- | --- |
-| [Controller QOL Updates](plugins/controller-qol/README.md) | 1.3.1+rev.81 | Controller item shortcuts, menu navigation and right-stick aiming. |
+| [Controller QOL Updates](plugins/controller-qol/README.md) | 1.3.1+rev.89 | Controller item shortcuts, menu navigation and right-stick aiming. |
 | [Item Roll Ranges](plugins/item-roll-ranges/README.md) | 1.3.1+rev.55 | Roll/source breakdowns, Base damage/Defense, item and base quality levels. |
 | [Floating Damage](plugins/floating-damage/README.md) | 1.3.1+rev.13 | Local enemy HP-loss numbers with element colors and critical emphasis. |
 | [Always Show Sockets](plugins/always-show-sockets/README.md) | 1.3.1+rev.2 | Configurable socket visibility, size and opacity. |
 | [Map Assistance](plugins/map-assistance/README.md) | 1.3.1+rev.1 | Editable map-reading advice on Keys tooltips. |
 | [Inventory Deposit](plugins/inventory-deposit/README.md) | 1.3.1+rev.13 | Mouse Deposit All button for eligible advanced-storage items. |
 
-Unhoarder 1.2.9 is available as a separate Reimagined upgrade asset in the
+| [Gem Bag UI](plugins/gem-bag-ui/README.md) | 1.3.1+rev.1 | Withdraw gems from a picker and deposit compatible gems with Shift + right-click. |
+| [Day Night Cycle](plugins/day-night-cycle/README.md) | 1.3.1+rev.1 | Natural day/night lighting and persistent day/night controls. |
+
+Unhoarder 1.2.16 is available as a separate Reimagined upgrade asset in the
 same release, with its source maintained in the
 [Unhoarder fork](https://github.com/Pyre-Flies/d2rl-unhoarder). Use this release
 as the current download; older beta packages are historical.
@@ -53,8 +56,14 @@ Enter slash commands in game chat; feedback appears in the loader console.
 | `/sockets always` | Show styled sockets continuously and save the mode. |
 | `/sockets default` | Return to styled sockets on normal hover/selection. |
 | `/sockets size 65` | Set inserted artwork size to 65% and save the appearance setting. |
+| `/qol perf` or `/unhoarder perf` | Write a read-only performance report. |
+| `/daynight auto` or `/daynight night` | Use natural or fixed night lighting and save the setting. |
+| Right-click a Gem Bag / controller LB+B | Open its gem picker; Shift + right-click deposits compatible items. |
 | Hover Keys outside town | Read Map Assistance's tip for the current area. |
 | Click Deposit All with stash open | Store eligible inventory materials, gems, runes and rejuvenation potions. |
+
+Gem Bag UI requires matching client and host versions for hosted games.
+Day Night Cycle and UnHoarder run on the client.
 
 Each guide explains its full controls, settings, requirements and validation
 limits. Floating Damage supports local single player. Native integrations are

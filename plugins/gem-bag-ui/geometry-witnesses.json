@@ -1,0 +1,19 @@
+{
+  "capture_sha256": "02c32a05f182c3f1f1b29d58b2b8da735eadc080b5e13acf8ea721a0648ce60d",
+  "witnesses": [
+    {
+      "name": "Origin",
+      "module": "Main",
+      "rva": "0x8562f0",
+      "length": 391,
+      "sha256": "de2f2a2fcd80e8bf9f49e7b186ab2d30554ebd7e9bf43890174ce8941b65deab"
+    },
+    {
+      "name": "Scale",
+      "module": "Main",
+      "rva": "0x1e6750",
+      "length": 59,
+      "sha256": "26b81efc0f2a731af7103473507414f6e4b766bb1ac54f7ea4f4647dacd9c272"
+    }
+  ]
+}

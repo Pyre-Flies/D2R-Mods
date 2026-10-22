@@ -87,6 +87,22 @@ void PauseThrottle(){std::this_thread::sleep_for(std::chrono::milliseconds(260))
 }
 int main() {
     using namespace Audit;using C=D2RL::Items::ItemContainer;using Kind=D2RL::Lifecycle::GameplayEventKind;
+    // Exercise the production input gate, independently of coordinator mocks.
+    unsigned reloadCalls{};
+    const auto update=+[](void* value) noexcept {++*static_cast<unsigned*>(value);};
+    ControllerQoL::s_CachedButtons=1;
+    Check(!ControllerQoL::ApplyConfigurationWhenIdle(update,&reloadCalls),"reload waits for physical buttons");
+    ControllerQoL::s_CachedButtons=0;ControllerQoL::s_NativeSnapshot=1;
+    Check(!ControllerQoL::ApplyConfigurationWhenIdle(update,&reloadCalls),"reload waits for native held buttons");
+    ControllerQoL::s_NativeSnapshot=0;ControllerQoL::s_CachedLeftTrigger=1;
+    Check(!ControllerQoL::ApplyConfigurationWhenIdle(update,&reloadCalls),"reload waits for physical triggers");
+    ControllerQoL::s_CachedLeftTrigger=0;ControllerQoL::s_PrevRawButtons[7]=1;
+    Check(!ControllerQoL::ApplyConfigurationWhenIdle(update,&reloadCalls),"reload waits for every raw input slot");
+    ControllerQoL::s_PrevRawButtons[7]=0;ControllerQoL::s_HoldEngine.active=true;
+    Check(!ControllerQoL::ApplyConfigurationWhenIdle(update,&reloadCalls),"reload waits for synthetic holds");
+    ControllerQoL::s_HoldEngine.active=false;ControllerQoL::s_HoldEngine.releaseFrames=1;
+    Check(!ControllerQoL::ApplyConfigurationWhenIdle(update,&reloadCalls) && !reloadCalls,"pending release never runs reload callback");
+    ControllerQoL::s_HoldEngine.releaseFrames=0;
     image=static_cast<unsigned char*>(VirtualAlloc(nullptr,0x4000000,MEM_RESERVE,PAGE_NOACCESS));Check(image!=nullptr,"private image reservation");
     D2RL::PluginApi api{};api.apiSize=D2RL::PluginApiSize;
     api.checkExpectedBytes=+[](const D2RL::PluginContext*,uintptr_t,const void*,uint32_t) noexcept {return guard;};

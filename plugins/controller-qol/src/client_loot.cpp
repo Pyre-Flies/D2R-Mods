@@ -327,11 +327,17 @@ bool CachedHiddenForPickup(uint32_t guid) noexcept {
 }
 bool Ready() noexcept {return ready.load() && lifecycleAvailable.load() && localPlayerReady.load();}
 uint64_t Epoch() noexcept {std::lock_guard lock(mutex);return epoch;}
-void Track(uint32_t guid,bool shown) noexcept {
+void Track(uint32_t guid,bool shown,const void* labelUnit) noexcept {
     std::lock_guard lock(mutex);
     if(!Ready() || !guid)return;
-    if(shown)(void)HiddenForPickup(guid);
-    else providerHidden.erase(guid);
+    if(shown) {
+        // Only a proof that NO Hide action can match avoids the original query.
+        // Potentially hidden/unknown items retain every native admission check.
+        if(QolLootVisibility::CannotHideLabel(context,labelUnit,guid)) {
+            providerHidden.erase(guid);
+            QolPerf::Counters[QolPerf::LabelFastPath].Record(0,1);
+        } else (void)HiddenForPickup(guid);
+    } else providerHidden.erase(guid);
     if(!shown)visible.erase(guid);
     else if(visible.size()<2048 || visible.contains(guid))visible[guid]=GetTickCount64();
 }
@@ -350,6 +356,9 @@ Request Capture(unsigned index) noexcept {
     return {Slot(index),epoch,GetTickCount64()};
 }
 bool Refresh(uint32_t radius,bool held) noexcept {
+    QolPerf::Scope timing(QolPerf::Counters[QolPerf::Refresh]);
+    uint64_t candidateReads{};
+    timing.Items(0);
     std::lock_guard lock(mutex);
     if(!active || !Ready())return false;
     const auto old=slots;
@@ -363,11 +372,17 @@ bool Refresh(uint32_t radius,bool held) noexcept {
         const auto now=GetTickCount64();
         for(auto it=visible.begin();it!=visible.end();) {
             if(now-it->second>=1500) {it=visible.erase(it);continue;}
-            Candidate c{};
-            if(Read(player,it->first,radius,c))candidates.push_back(c);
+            // Only the first refresh assigns candidates. Keep observation TTL
+            // cleanup below active throughout a hold, without repeating native
+            // reads and sorting a replacement snapshot that cannot be used.
+            if(firstRefresh) {
+                timing.Items(++candidateReads);
+                Candidate c{};
+                if(Read(player,it->first,radius,c))candidates.push_back(c);
+            }
             ++it;
         }
-        slots=HoldSnapshot(slots,Assign({},std::move(candidates)),firstRefresh);
+        if(firstRefresh)slots=Assign({},std::move(candidates));
         std::vector<uint32_t> hidden;
         for(const auto& slot:slots)if(HiddenCandidate(slot))hidden.push_back(slot.guid);
         slots=PruneHiddenSlots(slots,hidden);

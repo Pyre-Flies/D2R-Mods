@@ -128,6 +128,31 @@ def package_floating_damage(dll: Path, verifier: Path, output: Path,
     return archive
 
 
+def package_verified_plugin(plugin_name: str, display_name: str, dll: Path,
+                            verifier: Path, output: Path,
+                            repository: Path = REPOSITORY) -> Path:
+    """Package a standalone plugin only after verifying its exact artifact."""
+    plugin = repository / "plugins" / plugin_name
+    version = read_version(plugin / "src/plugin.cpp", r'\.version\s*=\s*"([^"]+)"')
+    if not re.fullmatch(r"\d+\.\d+\.\d+\+rev\.\d+", version):
+        raise SystemExit(f"Expected a numeric {display_name} release version: {version}")
+    payload = require_file(dll)
+    if not verifier.is_file():
+        raise SystemExit(f"Artifact verifier does not exist: {verifier}")
+    subprocess.run([str(verifier.resolve()), str(dll.resolve())], check=True)
+    if require_file(dll) != payload:
+        raise SystemExit("DLL changed while its artifact verification was running")
+    files = {f"d2rloader/plugins/{display_name}.dll": payload,
+             "README.md": runtime_readme(plugin, repository)}
+    config = plugin / f"{plugin_name}.toml"
+    if config.is_file():
+        files[f"defaults/{config.name}"] = require_file(config)
+    output.mkdir(parents=True, exist_ok=True)
+    archive = output / f"{display_name.replace(' ', '-')}-{version}-PyreFly.zip"
+    make_archive(archive, files)
+    return archive
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--controller-dll", type=Path, required=True)
@@ -139,6 +164,10 @@ def main() -> None:
     parser.add_argument("--floating-damage-artifact-verifier", type=Path)
     parser.add_argument("--always-show-sockets-dll", type=Path)
     parser.add_argument("--always-show-sockets-artifact-verifier", type=Path)
+    parser.add_argument("--gem-bag-dll", type=Path)
+    parser.add_argument("--gem-bag-artifact-verifier", type=Path)
+    parser.add_argument("--day-night-dll", type=Path)
+    parser.add_argument("--day-night-artifact-verifier", type=Path)
     parser.add_argument("--unhoarder-runtime-zip", type=Path)
     parser.add_argument("--controller-only", action="store_true",
                         help="Package only Controller QOL (for focused prereleases).")
@@ -149,6 +178,8 @@ def main() -> None:
         "inventory_deposit_artifact_verifier", "floating_damage_dll",
         "floating_damage_artifact_verifier", "always_show_sockets_dll",
         "always_show_sockets_artifact_verifier",
+        "gem_bag_dll", "gem_bag_artifact_verifier",
+        "day_night_dll", "day_night_artifact_verifier",
     )
     if not args.controller_only:
         missing = ["--" + name.replace("_", "-") for name in required_suite_args
@@ -222,8 +253,13 @@ def main() -> None:
     from package_always_show_sockets import package as package_sockets
     sockets_zip = package_sockets(args.always_show_sockets_dll,
         args.always_show_sockets_artifact_verifier, args.output, root=REPOSITORY)
+    gem_bag_zip = package_verified_plugin("gem-bag-ui", "Gem Bag UI",
+        args.gem_bag_dll, args.gem_bag_artifact_verifier, args.output, REPOSITORY)
+    day_night_zip = package_verified_plugin("day-night-cycle", "Day Night Cycle",
+        args.day_night_dll, args.day_night_artifact_verifier, args.output, REPOSITORY)
     archives = (controller_zip, ranges_zip, map_assistance_zip,
-                inventory_deposit_zip, floating_damage_zip, sockets_zip)
+                inventory_deposit_zip, floating_damage_zip, sockets_zip,
+                gem_bag_zip, day_night_zip)
     if args.unhoarder_runtime_zip:
         from release_companion import stage
         archives += (stage(args.unhoarder_runtime_zip, args.output, REPOSITORY),)
@@ -245,6 +281,8 @@ def main() -> None:
     print(inventory_deposit_zip)
     print(floating_damage_zip)
     print(sockets_zip)
+    print(gem_bag_zip)
+    print(day_night_zip)
     print(args.output / "SHA256SUMS")
 
 

@@ -110,6 +110,28 @@ int main(int argc,char** argv) {
     Check(!restarted->Enabled(429) && restarted->Targeting(429)==TargetMode::Ground,"profile survives restart");
     Check(ConfigFile::Read(overridePath,preserved,65535) && preserved==before,"restart does not regenerate user profile");
     Check(!restarted->baseline.whirlwindPassThrough && restarted->baseline.whirlwindPassThroughDistance==2.1234567f,"R3 and restart preserve Whirlwind options");
+    // Reload the existing active profile without migration or regeneration.
+    Check(QolSkillDiscovery::ProfilePath()==overridePath,"reload identifies the existing active profile");
+    const std::string edited="# external edit\n[aim.custom]\n\"429\"=true\n[aim.targeting]\n\"429\"=\"ground\"\n"
+        "[aim.leading]\n\"429\"=25\n[aim.whirlwind]\nwhirlwind_pass_through_enabled=true\nwhirlwind_pass_through_distance=4.5\n";
+    Check(ConfigFile::Write(overridePath,before,edited),"external profile edit fixture");
+    auto reload=std::make_shared<SkillSettings>();std::uint64_t revision{};std::string error;
+    restarted->RequireConfirmation(501);
+    Check(QolSkillDiscovery::ReadReload(*reload,revision,error) && !restarted->Enabled(429),"profile preparation does not change active skills");
+    Check(QolSkillDiscovery::CommitReload(reload,revision) && restarted->Enabled(429) && restarted->Targeting(429)==TargetMode::Ground &&
+        restarted->LeadMillisecondsPerTile(429)==25 && restarted->NeedsConfirmation(501) && restarted->CanToggle(429),"reload publishes targeting and leading while retaining discovery admission");
+    Check(reload->whirlwindPassThrough && reload->whirlwindPassThroughDistance==4.5f,"profile reload includes Whirlwind options");
+    Check(ConfigFile::Read(overridePath,preserved,65535) && preserved==edited,"reload never rewrites the active profile");
+    Check(QolSkillDiscovery::ReadReload(*reload,revision,error),"prepare before an intervening R3 write");
+    Check(QolSkillDiscovery::Save(429,false) && !restarted->Enabled(429) && !QolSkillDiscovery::CommitReload(reload,revision),"newer saved R3 choice defeats a stale staged reload");
+    reload=std::make_shared<SkillSettings>();
+    Check(QolSkillDiscovery::ReadReload(*reload,revision,error) && QolSkillDiscovery::CommitReload(reload,revision) && !restarted->Enabled(429),"retry uses the newer R3 profile");
+    Check(ConfigFile::Read(overridePath,preserved,65535),"read latest R3 file");
+    Check(ConfigFile::Write(overridePath,preserved,"[aim.typo]\n\"429\"=true\n"),"invalid reload fixture");
+    Check(!QolSkillDiscovery::ReadReload(*reload,revision,error) && !restarted->Enabled(429) && restarted->LeadMillisecondsPerTile(429)==25,"invalid reload retains every active skill setting");
+    Check(std::filesystem::remove(overridePath) && !QolSkillDiscovery::ReadReload(*reload,revision,error) && !restarted->Enabled(429),"missing profile retains last valid settings");
+    Check(ConfigFile::Write(overridePath,"",before),"restore fixture profile");
+    Check(ConfigFile::Read(config,preserved,65535) && preserved==sharedText,"reload does not migrate or rewrite shared settings");
     const auto another=folder/L"Another";Check(ConfigFile::Write(another/L"data/global/excel/skills.txt","",sourceText),"second source fixture");
     ctx.activeMod="Another";ctx.modDirectory=another.c_str();QolSkillDiscovery::Stop();
     auto other=std::make_unique<LiveSkills>();ParseSkills(mainText,other->baseline);Check(QolSkillDiscovery::Prepare(&ctx,sharedText.c_str(),*other),"new mod seeded from legacy migration archive");

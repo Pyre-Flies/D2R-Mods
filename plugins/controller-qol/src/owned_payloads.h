@@ -25,5 +25,10 @@ public:
         return {};
     }
     void Reset() noexcept {std::lock_guard lock(mutex);cancelledThrough=next;for(auto& entry:entries)entry.value.reset();}
+    bool Empty() noexcept {
+        std::lock_guard lock(mutex);
+        for(const auto& entry:entries)if(entry.value)return false;
+        return true;
+    }
 };
 }

@@ -24,8 +24,11 @@ jobs:
       - name: Install Inventory Deposit artwork converter dependency
         run: python -m pip install -r plugins/inventory-deposit/requirements-build.txt
 
+      - name: Fetch reviewed UnHoarder for compatibility tests
+        run: python tools/release_companion.py --output companions
+
       - name: Configure Controller QOL Updates
-        run: cmake -S plugins/controller-qol -B build/controller-qol -A x64
+        run: cmake -S plugins/controller-qol -B build/controller-qol -A x64 -DQOL_UNHOARDER_SOCKET_BATCH_ALT_DLL="${{ github.workspace }}/companions/unhoarder.dll"
 
       - name: Build Controller QOL Updates
         run: cmake --build build/controller-qol --config Release --parallel
@@ -78,6 +81,24 @@ jobs:
       - name: Test Always Show Sockets
         run: ctest --test-dir build/always-show-sockets -C Release --output-on-failure
 
+      - name: Configure Gem Bag UI
+        run: cmake -S plugins/gem-bag-ui -B build/gem-bag-ui -A x64
+
+      - name: Build Gem Bag UI
+        run: cmake --build build/gem-bag-ui --config Release --parallel
+
+      - name: Test Gem Bag UI
+        run: ctest --test-dir build/gem-bag-ui -C Release --output-on-failure
+
+      - name: Configure Day Night Cycle
+        run: cmake -S plugins/day-night-cycle -B build/day-night-cycle -A x64
+
+      - name: Build Day Night Cycle
+        run: cmake --build build/day-night-cycle --config Release --parallel
+
+      - name: Test Day Night Cycle
+        run: ctest --test-dir build/day-night-cycle -C Release --output-on-failure
+
       - name: Test update-safe archive layout
         run: python -m unittest discover -s tools -p "test_package*.py" -v
 
@@ -93,6 +114,10 @@ jobs:
           --floating-damage-artifact-verifier "build/floating-damage/Release/floating-damage-artifact-tests.exe"
           --always-show-sockets-dll "build/always-show-sockets/Release/Always Show Sockets.dll"
           --always-show-sockets-artifact-verifier "build/always-show-sockets/Release/socket-artifact-tests.exe"
+          --gem-bag-dll "build/gem-bag-ui/Release/Gem Bag UI.dll"
+          --gem-bag-artifact-verifier "build/gem-bag-ui/Release/gem-bag-artifact-tests.exe"
+          --day-night-dll "build/day-night-cycle/Release/Day Night Cycle.dll"
+          --day-night-artifact-verifier "build/day-night-cycle/Release/day-night-artifact-tests.exe"
           --output dist
 
       - name: Upload workflow artifacts

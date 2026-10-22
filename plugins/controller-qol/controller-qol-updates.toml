@@ -2,7 +2,10 @@
 # Skill enable/disable, targeting and leading belong in a separate profile:
 #   d2rloader/config/controller-qol-skills/<scope>.overrides.toml
 # Open the profile whose # Mod line matches your active pack, or Vanilla.
-# R3 saves there immediately. Edit files with the game closed; restart to reload.
+# R3 saves there immediately. Rev.82 reloads active files automatically after save,
+# or use /qol reload in the loader console. No extra configuration file is needed.
+# Invalid edits retain the last valid settings. Release held controls to apply.
+# Hook switches, bindings, Cube controls and portal priorities require restart.
 # The matching .catalog.toml is generated reference data, NOT your active settings.
 # Existing skill sections from older configs are migrated with backups; do not
 # copy skill sections back here. See docs/SKILL-DISCOVERY-CONFIG.md for recovery.
@@ -24,7 +27,7 @@ require_tome_or_scroll = true
 consume_tome_or_scroll = true
 require_modifier = true
 modifier = "bumper"
-trigger_threshold = 30
+trigger_threshold = 30 # integer 1..255; applies to LT/RT activation
 ground_pickup = true
 ground_pickup_button = "bumper"
 ground_pickup_distance = 6
@@ -44,7 +47,7 @@ portal_diagnostics = false
 # Controller cursor/snapping enabled by default; requires restart.
 enabled = true
 # Detailed aim diagnostics (file logging); keep false for normal play/handhelds.
-# Warnings remain visible. Independent of debug_overlay; requires restart.
+# Warnings remain visible. Independent of debug_overlay; reloads after save.
 verbose = false
 # Radial dead zone, fraction of full stick travel (0.0..0.9).
 deadzone = 0.22
@@ -56,7 +59,8 @@ maximum_speed = 48
 # Higher = gentler acceleration. Zero = immediate maximum speed.
 acceleration_seconds = 0.35
 
-# Manual file edits load on restart; R3 skill changes apply immediately. Disabling the overlay does not disable aiming.
+# Tuning/appearance edits reload after save; R3 changes apply immediately.
+# Disabling the overlay does not disable aiming.
 snapping_enabled = true
 snap_radius = 6.0 # world tiles, 0.5..15
 switch_advantage = 1.5 # closer by this many tiles to steal the target, 0..15
@@ -68,6 +72,7 @@ reticle_thickness = 2.0 # colored line-width multiplier, 0.5..4; dark border sta
 debug_overlay = false # verbose HUD, outer range circle, ticks and LAST CAST
 # Optional cast diagnostics and Teleport measurements.
 # true keeps full functionality when available; conflicts auto-skip only this hook.
+# Changing cast_observer_enabled or skill_tree_toggle_enabled requires restart.
 cast_observer_enabled = true
 # R3 on a supported class/General Skills button toggles aim in the active skill profile.
 skill_tree_toggle_enabled = true

@@ -1,3 +1,37 @@
+# Controller QOL changelog
+
+## 1.3.1+rev.89 - 2026-10-21
+
+- Improve performance around visible loot, especially alongside UnHoarder.
+- Reload supported settings while playing and retain `/qol perf` for diagnostics.
+- Support UnHoarder 1.2.16 while preserving independent operation and controller pickup behavior.
+
+Live loot performance improved in user testing. Automated checks pass; complete
+hosted and settings-reload acceptance remains open. Detailed performance records
+are in [the development contract](docs/LOOT-PERFORMANCE.md).
+
+## 1.3.1+rev.82 - unreleased
+
+- Reload the existing main settings and active skill profile automatically after
+  saving, or with `/qol reload` in the loader console. No new config file is needed.
+- Keep the last valid settings if either file has an error. Apply changes after
+  held controls and pending item actions settle; preserve newer R3 saves.
+- Apply aim tuning, reticle appearance and per-skill preferences during play.
+  Hook switches, button bindings and startup-only modules still require restart;
+  the log identifies those changes.
+- Honor the configured trigger threshold and validate complete setting values.
+  Keep the startup memory scan behind debug logging and retire unused legacy code.
+- Automated checks are documented in [validation](docs/VALIDATION.md).
+  Live-game acceptance of rev.82 remains pending.
+
+## 1.3.1+rev.81 - 2026-10-20
+
+- Publish the tested beta.7 opacity behavior as standard rev.81, including Cube
+  controls, controller pickup filtering, and UnHoarder 1.2.9 compatibility.
+- Preserve existing configurations and per-mod skill profiles.
+- This revision changes version metadata; the tested runtime implementation
+  matches rev.80. Automated tests pass; no additional live-game coverage is claimed.
+
 ## 1.3.1+rev.80 - consolidated release
 
 - Consolidate the tested beta.7 controller fixes and Unhoarder 1.2.9
@@ -21,16 +55,6 @@ Automated checks and focused user testing do not cover every hosted setup.
 Validation: all 63 QOL tests pass with the reviewed companion fixtures;
 the user confirmed the background fix and earlier visibility/pickup behavior.
 This branch preserves the matching source snapshot; it publishes no binaries.
-
-# Controller QOL changelog
-
-## 1.3.1+rev.81 - 2026-10-20
-
-- Publish the tested beta.7 opacity behavior as standard rev.81, including Cube
-  controls, controller pickup filtering, and UnHoarder 1.2.9 compatibility.
-- Preserve existing configurations and per-mod skill profiles.
-- This revision changes version metadata; the tested runtime implementation
-  matches rev.80. Automated tests pass; no additional live-game coverage is claimed.
 
 ## 1.3.1+rev.79-beta.4 - 2026-10-15
 

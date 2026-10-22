@@ -1,12 +1,15 @@
 #pragma once
 #include "skill_settings.h"
 #include <atomic>
+#include <memory>
 #include <string>
 
 namespace Aim {
-// Baseline stays immutable after load; UI changes publish one atomic mode.
+// Startup baseline stays immutable. File reloads publish a complete replacement;
+// UI changes publish one atomic mode and retain discovery-confirmation bits.
 struct LiveSkills {
     SkillSettings baseline{};
+    std::atomic<std::shared_ptr<const SkillSettings>> reloaded{};
     std::array<std::atomic<unsigned char>,65535> overrides{};
     // Share the existing byte per ID; no second large per-ID table or hot-path scan.
     static constexpr unsigned char PendingConfirmation=0x80;
@@ -17,20 +20,25 @@ struct LiveSkills {
         if(id<=0 || id>=65535) return TargetMode::Disabled;
         if(!CanToggle(id)) return TargetMode::Disabled;
         const auto value=overrides[id].load()&~PendingConfirmation;
-        return value?static_cast<TargetMode>(value-1):baseline.Mode(id);
+        const auto current=reloaded.load();
+        return value?static_cast<TargetMode>(value-1):(current?current->Mode(id):baseline.Mode(id));
     }
-    TargetMode Targeting(int id) const noexcept { return baseline.Targeting(id); }
-    unsigned LeadMaxMilliseconds(int id) const noexcept { return baseline.LeadMaxMilliseconds(id); }
-    unsigned LeadMaxTiles(int id) const noexcept { return baseline.LeadMaxTiles(id); }
-    unsigned LeadMillisecondsPerTile(int id) const noexcept { return baseline.LeadMillisecondsPerTile(id); }
-    bool CanToggle(int id) const noexcept { return id>0 && id<65535 && !NeedsConfirmation(id) && baseline.CanToggle(id); }
-    bool Contains(int id) const noexcept { return baseline.Contains(id); }
+    TargetMode Targeting(int id) const noexcept { const auto p=reloaded.load();return p?p->Targeting(id):baseline.Targeting(id); }
+    unsigned LeadMaxMilliseconds(int id) const noexcept { const auto p=reloaded.load();return p?p->LeadMaxMilliseconds(id):baseline.LeadMaxMilliseconds(id); }
+    unsigned LeadMaxTiles(int id) const noexcept { const auto p=reloaded.load();return p?p->LeadMaxTiles(id):baseline.LeadMaxTiles(id); }
+    unsigned LeadMillisecondsPerTile(int id) const noexcept { const auto p=reloaded.load();return p?p->LeadMillisecondsPerTile(id):baseline.LeadMillisecondsPerTile(id); }
+    bool CanToggle(int id) const noexcept { const auto p=reloaded.load();return id>0 && id<65535 && !NeedsConfirmation(id) && (p?p->CanToggle(id):baseline.CanToggle(id)); }
+    bool Contains(int id) const noexcept { const auto p=reloaded.load();return p?p->Contains(id):baseline.Contains(id); }
     bool Enabled(int id) const noexcept { return Mode(id)!=TargetMode::Disabled; }
     bool Snaps(int id) const noexcept { return Mode(id)==TargetMode::Snap; }
     void Publish(int id,TargetMode mode) noexcept {
         if(id<=0 || id>=65535)return;
         auto previous=overrides[id].load();
         while(!overrides[id].compare_exchange_weak(previous,static_cast<unsigned char>((previous&PendingConfirmation)|(static_cast<unsigned char>(mode)+1)))){}
+    }
+    void Replace(std::shared_ptr<const SkillSettings> settings) noexcept {
+        reloaded.store(std::move(settings));
+        for(auto& value:overrides)value.fetch_and(PendingConfirmation);
     }
 };
 struct TreePress {

@@ -8,8 +8,9 @@ plugin. Source in `src/` and `include/`, plus `tests/`, is authoritative.
 | Find a feature contract | [Topic map](docs/README.md) |
 | Build and test | [Contributor workflow](../../CONTRIBUTING.md), CMakeLists.txt |
 | Native hooks and ownership | [Hook inventory](docs/HOOK-INVENTORY.md), current source guards |
-| Shared/per-mod configuration | [Configuration contract](docs/SKILL-DISCOVERY-CONFIG.md) |
+| Shared/per-mod configuration | [Configuration contract](docs/SKILL-DISCOVERY-CONFIG.md), [live reload](docs/CONFIG-RELOAD.md) |
 | Companion coexistence | [UnHoarder opacity contract](docs/UNHOARDER-OPACITY-COMPATIBILITY.md) |
+| Ground-loot cost and exact companion selection | [Performance contract](docs/LOOT-PERFORMANCE.md) |
 | Validation scope | [Validation guide](docs/VALIDATION.md) |
 
 Preserve exact-build guards, native semantics, ownership and teardown. Input
