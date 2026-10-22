@@ -2,7 +2,7 @@
 
 The repository checkout contains the files tracked on GitHub: source, tests,
 documentation, build tooling and the pinned SDK submodule. It is the editable
-authority for the six first-party plugins.
+authority for the eight first-party plugins.
 
 Keep all machine-specific data in the single ignored `outputs/` directory inside
 the checkout. GitHub shows the tracked project; `outputs/` holds local data only.
