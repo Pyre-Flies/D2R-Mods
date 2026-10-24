@@ -12,6 +12,7 @@
 #include "belt_signatures.h"
 #include "vendor_signatures.h"
 #include "identify_probe_profile.h"
+#include "item_code_compatibility.h"
 #include "shared_page_signatures.h"
 #include "shared_owner_compatibility.h"
 #include "storage_focus_profile.h"
@@ -66,8 +67,7 @@ bool Guard() noexcept {
         {0x2ef880, SharedOwnerIdBytes, sizeof(SharedOwnerIdBytes)},
     };
     for (const auto& site : helpers) {
-        if (site.size > UINT32_MAX ||
-            !pluginContext->CheckExpectedBytes(site.rva, site.bytes, static_cast<uint32_t>(site.size))) return false;
+        if (!QolItemCode::Check(pluginContext, site.rva, site.bytes, site.size)) return false;
     }
     return QolShared::ValidateOwner(pluginContext->exeBase) &&
         QolClientRequest::Guard(pluginContext->exeBase, coreBase);

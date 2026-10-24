@@ -1,0 +1,40 @@
+[ultrawide]
+# Remove the 19:9 black vignette bars during active gameplay (bars remain active in menus).
+enable_bars_removal = true
+
+# Unclamp horizontal mouse coordinates past 19:9 during active gameplay (clamped in menus).
+enable_mouse_unclamp = true
+
+# Unclamp ground loot item placards/labels horizontally across the full ultrawide viewport.
+enable_placard_unclamp = true
+
+# Unclamp full-screen Automap overlay across the full ultrawide viewport.
+enable_automap_unclamp = true
+
+# HUD layout mode during active gameplay (menus always remain centered at 19:9):
+#   false = Centered HUD (keeps the bottom HUD bar and left/right inventory/stash panels inside 19:9).
+#   true  = Full Length HUD (expands UIRootWidget across the full ultrawide width during gameplay).
+# (Also accepts hud_mode = "centered" or hud_mode = "full".)
+enable_full_length_hud = false
+
+# Top-corner HUD element anchoring (push top-corner elements to the true ultrawide screen corners,
+# even when enable_full_length_hud = false / Centered HUD is active):
+enable_corner_minimap = true
+enable_corner_mercenary = true
+enable_corner_game_info = true
+
+# Expand the HD terrain cache from 18x18 to 22x22 cells using the paired tc22sh shaders.
+enable_terrain_expansion = true
+
+# Expand the local-server active D2Room1 neighborhood so monsters spawn, replicate to
+# the client, and remain AI-awake across ultrawide edges and long-distance Teleports.
+# monster_pop_in_radius = 1 (3x3 vanilla), 2 (5x5), or 3 (7x7 default).
+enable_monster_pop_in_fix = true
+monster_pop_in_radius = 3
+
+# Increase monster AI target-perception radius (in subtiles; vanilla default is 35).
+enable_monster_ai_range = true
+monster_ai_range = 65
+
+# Also scale friendly/summon/mercenary target scan radius to monster_ai_range.
+scale_friendly_ai_range = false

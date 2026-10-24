@@ -11,7 +11,7 @@ namespace QolConfig {
 struct Settings {
     bool enabled=true,quickIdentify=true,identifyAll=true,nativeIdentify=false;
     bool quickMove=true,cubeTapOpen=true,cubeTransmuteShortcut=true,quickDeposit=true,groundPickup=true;
-    std::uint32_t groundPickupDistance=6,portalPriorityDistance=10;
+    std::uint32_t groundPickupDistance=14,portalPriorityDistance=10;
     char groundPickupButton[16]="lb";
     bool requireTomeOrScroll=true,consumeTomeOrScroll=true,requireModifier=true;
     char modifier[16]="bumper";

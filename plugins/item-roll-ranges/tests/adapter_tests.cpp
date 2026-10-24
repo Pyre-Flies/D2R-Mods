@@ -100,11 +100,11 @@ void TestTooltipVisibilitySnapshots() {
     std::memcpy(unit,&type,4);std::memcpy(unit+0x10,&itemData,8);
     std::memcpy(data,&quality,4);std::memcpy(data+0x34,&record,4);
     std::memcpy(bank.data()+0x13a8,&tableRows,8);std::memcpy(bank.data()+0x13b0,&count,8);
-    rows[0x1cc+0x2c]=9;rows[0x1cc+0x98]=27;const auto originalRows=rows;
+    rows[0x98]=99;rows[0x1cc+0x2c]=9;rows[0x1cc+0x98]=27;const auto originalRows=rows;
     SetVisibilityView view;auto* result=VisibleSetTables(bank.data(),unit,view);
     check(result!=bank.data() && rows==originalRows);
     auto* copied=Affixes::Read<const unsigned char*>(result,0x13a8);
-    check(copied[0x1cc+0x2c]==1 && copied[0x1cc+0x98]==27);
+    check(copied[0x98]==99 && copied[0x1cc+0x2c]==1 && copied[0x1cc+0x98]==27);
     data[0]=7;check(VisibleSetTables(bank.data(),unit,view)==bank.data());data[0]=5;
     const int invalid=2;std::memcpy(data+0x34,&invalid,4);check(VisibleSetTables(bank.data(),unit,view)==bank.data());
     unsigned char stack[0x138]{};const auto* oldBase=coreBase;coreBase=reinterpret_cast<const unsigned char*>(0x10000000);

@@ -1,5 +1,15 @@
 # Ground-loot performance
 
+## Rev.91: synchronous label-unit reuse and held-slot `CannotHideLabel` preflight
+
+In rev.89/rev.90, two remaining QOL-side hot paths still performed avoidable native and broker work during label rendering and `LB` hold refreshes:
+
+1. **Duplicate `0x9A5D0` unit lookups in `Track -> HiddenForPickup`:** When `QolLootVisibility::CannotHideLabel(context, labelUnit, guid)` returned `false` (potentially hidden equipment), `Track` called `HiddenForPickup(guid)` without forwarding `labelUnit`. `HiddenForPickup` then called `ReadPickupCode` (`0x9A5D0` lookup #1) and `HiddenCandidate` (`0x9A5D0` lookup #2) for the same unit already passed into `ObserveCompletedName`. Rev.91 retains `CurrentLabelGuid`/`CurrentLabelUnit` in `thread_local` scope across the synchronous fallback call so `ReadPickupCode` and `HiddenCandidate` reuse the verified `labelUnit` without changing `HiddenForPickup(uint32_t)`'s signature or running `CannotHideLabel` twice.
+2. **Held-slot & candidate-read `CannotHideLabel` preflight (`Read` & `HiddenUnit`):** During `LB` holds, `Refresh` (10 Hz across up to 7 slots) and initial `Read` previously called `QolLootVisibility::Hidden` unconditionally, running full socket/property evaluations on every held slot even for runes, gems, and charms that `CannotHideLabel` can prove non-hideable in ~2 us. Rev.91 checks `CannotHideLabel` first in `Read` and `HiddenUnit` (when not already checked on the synchronous label path) and records `LabelFastPath` skips.
+3. **Next-release backlog note:** Default `ground_pickup_distance` (`10` minimum floor in `RefreshClientGroundTask`/`QueueGroundPickup`, `6` in default TOML) is planned to be raised to **`14`** in the next Controller QOL release (`rev.92+`).
+
+Live in-game verification (`1.3.1+rev.91` + UnHoarder `1.2.16`, 20.8s window with 12 ground items and 5 held `LB` slots): `label-visibility-preflight` averaged `0.002074 ms` (`37,042` calls, `19,414` skipped via `CannotHideLabel`), `completed-label` averaged `0.037152 ms` at `1,751.09 calls/sec`, `held-refresh` averaged `0.105003 ms` (`0.892 ms/sec`), and `fallbackSinceLoad` remained `0`.
+
 ## Rev.89: paired socket observations and keyboard pickup
 
 UnHoarder 1.2.16 reduces socket guard cost for its own labels and the visibility

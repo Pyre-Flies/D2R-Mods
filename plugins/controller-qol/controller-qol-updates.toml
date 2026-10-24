@@ -30,7 +30,7 @@ modifier = "bumper"
 trigger_threshold = 30 # integer 1..255; applies to LT/RT activation
 ground_pickup = true
 ground_pickup_button = "bumper"
-ground_pickup_distance = 6
+ground_pickup_distance = 14
 debug_logging = false
 # Controller UI only; gold is exempt and mouse/keyboard pickup is unaffected.
 block_filtered_pickup = true

@@ -18,7 +18,7 @@ struct ContributionFixture {
     std::array<unsigned char,0xc0> root{},modifier{},socketRoot{};
     std::array<unsigned char,0x20> inventory{};
     std::array<Affixes::Row,2> rows{};
-    std::array<Affixes::Property,6> props{};
+    std::array<Affixes::Property,8> props{};
     std::vector<unsigned char> statRows=std::vector<unsigned char>(400*0x144);
     Contributions::Stats own,total,socket;
     unsigned char* Data(){return allocation.data()+28;}
@@ -43,7 +43,7 @@ struct ContributionFixture {
         put(statRows.data()+7*0x144,0x14,std::uint8_t{8});
         put(fakeTables,0x15e8,rows.data());put(fakeTables,0x15f0,std::uint64_t{2});
         put(fakeTables,0x1600,rows.data());put(fakeTables,0x1608,rows.data()+2);put(fakeTables,0x1610,rows.data()+2);
-        put(fakeTables,0x240,props.data());put(fakeTables,0x248,std::uint64_t{6});
+        put(fakeTables,0x240,props.data());put(fakeTables,0x248,std::uint64_t{props.size()});
         put(fakeTables,0x1258,statRows.data());put(fakeTables,0x1260,std::uint64_t{400});
         getTables=FakeTables;eligibleAffix=FakeEligible;contributionsReady.store(true);
         contributionContext=nullptr;contributionTables=nullptr;contributionFixtureTables={};
@@ -66,6 +66,7 @@ struct ContributionFixture {
     std::string Render(unsigned stat,const char* actual){return RangeText::Merge(actual,actual,4096,Labels(stat,actual)).text;}
 };
 bool __fastcall FixtureScalingSingle(void*,const void* metadata,int value,int layer,bool grouped,char* output,int mode) {
+    if(grouped && Affixes::Read<std::uint16_t>(static_cast<const unsigned char*>(metadata),0)>=329)return false;
     check(!grouped && mode==1);
     const auto stat=Affixes::Read<std::uint16_t>(static_cast<const unsigned char*>(metadata),0);
     check(!layer || (stat==83 && layer==3));
@@ -133,6 +134,26 @@ void TestSocketCapacityAdapter(){
     fixtureSocketMaximum=7;check(AnnotateSocketHeader(f.host.data(),body)==body);
     primary[0].value=0;check(AnnotateSocketHeader(f.host.data(),body)==body);
     primary[0].value=2;nativeSocketCapacity=nullptr;check(AnnotateSocketHeader(f.host.data(),body)==body);
+    // Unique and Set items clamp Max Sockets to their innate sock(194) property.
+    nativeSocketCapacity=FixtureSocketCapacity;lookupHeader=FixtureSocketLookup;fixtureSocketMaximum=6;
+    f.Property(0,14,194);
+    std::array<unsigned char,348> uniqueRow{};for(unsigned k=0;k<12;++k)put(uniqueRow.data(),0x98+k*16,UINT32_MAX);
+    put(uniqueRow.data(),0x98,0u);put(uniqueRow.data(),0xa0,1);put(uniqueRow.data(),0xa4,2);
+    put(fakeTables,0x13c8,uniqueRow.data());put(fakeTables,0x13d0,std::uint64_t{1});
+    put(f.Data(),0,7u);put(f.Data(),0x34,0);
+    check(ItemSocketCapacity(f.host.data(),1)==2);
+    check(AnnotateSocketHeader(f.host.data(),body)==modifiers+"\xee\x81\xbe" "0Max Sockets: 2\n"+headers);
+    // Unsocketed Set/Unique items replace Core's base Max Sockets line via PublishSocketOverride.
+    originalAssign=RecordHeader;
+    const std::string unsocketed="Max Sockets: 6\n"+headers;
+    NativeText unsocketedReceiver{unsocketed.data(),unsocketed.size()};
+    std::string capKey,capLabel;
+    check(FormatSocketCapacityLabel(ItemSocketCapacity(f.host.data(),0),capKey,capLabel));
+    pendingSocketOverride={&unsocketedReceiver,capKey,capLabel};
+    PublishSocketOverride(true,&unsocketedReceiver,unsocketed.data(),unsocketed.size());
+    check(publishedHeader=="\xee\x81\xbe" "0Max Sockets: 2\n"+headers);
+    originalAssign=nullptr;
+    put(f.Data(),0,6u);fixtureSocketMaximum=4;
     nativeSocketCapacity=nullptr;lookupHeader=nullptr;
 }
 void TestScalingAffixAdapter(){
@@ -304,6 +325,463 @@ void TestLevelHeaderAdapter(){
     lookupHeader=nullptr;
     std::puts("Level header fields, complete weapon/armor order, no-requirement/empty bodies, publication and refusal pass.");
 }
+void TestRandomizedItemAffixCombinations(){
+    // Comprehensive validation of newly fixed rule gaps + 2,500 randomized multi-affix items
+    // covering combining/non-combining damage endpoints, dgrp grouping/splitting, op=11 stats,
+    // fn=[21,3] elemental skill stats, layered skills, procs, per-level stats, sockets,
+    // corruptions, crafts, enchantments, and runewords.
+    ContributionFixture f;
+    f.statRows.assign(440*0x144,0);
+    for(unsigned stat=0;stat<440;++stat){
+        put(f.statRows.data()+stat*0x144,0,static_cast<std::uint16_t>(stat));
+        put(f.statRows.data()+stat*0x144,0x32,std::uint16_t{19});
+        put(f.statRows.data()+stat*0x144,0x30,static_cast<std::uint16_t>(10+stat));
+    }
+    // Distinct priorities for composite damage families:
+    put(f.statRows.data()+21*0x144,0x30,std::uint16_t{120});
+    put(f.statRows.data()+23*0x144,0x30,std::uint16_t{118});
+    put(f.statRows.data()+48*0x144,0x30,std::uint16_t{102});
+    put(f.statRows.data()+50*0x144,0x30,std::uint16_t{99});
+    put(f.statRows.data()+52*0x144,0x30,std::uint16_t{97});
+    put(f.statRows.data()+54*0x144,0x30,std::uint16_t{96});
+    put(f.statRows.data()+57*0x144,0x30,std::uint16_t{92});
+    // ValShift = 8 on Life (7) and Mana (9)
+    put(f.statRows.data()+7*0x144,0x14,std::uint8_t{8});
+    put(f.statRows.data()+9*0x144,0x14,std::uint8_t{8});
+    // op = 8/9 on attributes (0..3), op = 11 on hp%/mana%/str%/dex%/vit%/enr% (76,77,413..416), op = 13 on 16,17,18,75
+    f.statRows[1*0x144+0x50]=8;f.statRows[3*0x144+0x50]=9;
+    for(unsigned s:{76u,77u,413u,414u,415u,416u})f.statRows[s*0x144+0x50]=11;
+    for(unsigned s:{16u,17u,18u,75u})f.statRows[s*0x144+0x50]=13;
+    // dgrp groups: 1 (0..3), 2 (39,41,43,45), 3 (329..332), 4 (333..336)
+    for(unsigned s:{0u,1u,2u,3u})put(f.statRows.data()+s*0x144,0x3a,std::uint16_t{1});
+    for(unsigned s:{39u,41u,43u,45u})put(f.statRows.data()+s*0x144,0x3a,std::uint16_t{2});
+    for(unsigned s:{329u,330u,331u,332u})put(f.statRows.data()+s*0x144,0x3a,std::uint16_t{3});
+    for(unsigned s:{333u,334u,335u,336u})put(f.statRows.data()+s*0x144,0x3a,std::uint16_t{4});
+    // Layered skill descfuncs:
+    put(f.statRows.data()+83*0x144,0x32,std::uint16_t{13});
+    put(f.statRows.data()+188*0x144,0x32,std::uint16_t{14});
+    put(f.statRows.data()+107*0x144,0x32,std::uint16_t{27});
+    put(f.statRows.data()+387*0x144,0x32,std::uint16_t{28});
+    put(f.statRows.data()+97*0x144,0x32,std::uint16_t{0});
+    put(f.statRows.data()+126*0x144,0x32,std::uint16_t{0});
+    put(fakeTables,0x1258,f.statRows.data());put(fakeTables,0x1260,std::uint64_t{440});
+    put(fakeTables,0x14d0,6u);put(fakeTables,0x14d4,63u);
+
+    // Build a comprehensive property table (48 properties)
+    std::vector<Affixes::Property> props(48);
+    auto setProp1=[&](unsigned id,unsigned fn,unsigned stat,unsigned val=0){
+        props[id]={};props[id].bytes[0x18]=static_cast<unsigned char>(fn);
+        put(props[id].bytes.data(),0x20,static_cast<std::uint16_t>(stat));
+        if(val)put(props[id].bytes.data(),0x0a,static_cast<std::uint16_t>(val));
+    };
+    setProp1(0,1,0);   // str
+    setProp1(1,1,1);   // enr
+    setProp1(2,1,2);   // dex
+    setProp1(3,1,3);   // vit
+    // 4: all-stats (0,1,2,3)
+    setProp1(4,1,0);for(unsigned k=1;k<4;++k){props[4].bytes[0x18+k]=3;put(props[4].bytes.data(),0x20+k*2,static_cast<std::uint16_t>(k));}
+    setProp1(5,1,7);   // hp (shift 8)
+    setProp1(6,1,9);   // mana (shift 8)
+    setProp1(7,1,76);  // hp% (op 11)
+    setProp1(8,1,77);  // mana% (op 11)
+    setProp1(9,1,413); // str% (op 11)
+    setProp1(10,1,414);// dex% (op 11)
+    setProp1(11,2,16); // ac% (op 13)
+    setProp1(12,7,17); // dmg% (17,18 op 13)
+    setProp1(13,1,19); // att
+    setProp1(14,5,21); // dmg-min (21/23)
+    setProp1(15,6,22); // dmg-max (22/24)
+    // 16: dmg-norm (fn 15 stat 21, fn 16 stat 22)
+    setProp1(16,15,21);props[16].bytes[0x19]=16;put(props[16].bytes.data(),0x22,std::uint16_t{22});
+    setProp1(17,1,39); // res-fire
+    setProp1(18,1,41); // res-ltng
+    setProp1(19,1,43); // res-cold
+    setProp1(20,1,45); // res-pois
+    // 21: res-all (39,41,43,45)
+    setProp1(21,1,39);
+    props[21].bytes[0x19]=3;put(props[21].bytes.data(),0x22,std::uint16_t{41});
+    props[21].bytes[0x1a]=3;put(props[21].bytes.data(),0x24,std::uint16_t{43});
+    props[21].bytes[0x1b]=3;put(props[21].bytes.data(),0x26,std::uint16_t{45});
+    // 22: dmg-fire (fn 15 stat 48, fn 16 stat 49), 23: fire-min (48), 24: fire-max (49)
+    setProp1(22,15,48);props[22].bytes[0x19]=16;put(props[22].bytes.data(),0x22,std::uint16_t{49});
+    setProp1(23,1,48);
+    setProp1(24,1,49);
+    // 25: dmg-cold (fn 15 stat 54, fn 16 stat 55), 26: cold-min (54), 27: cold-max (55)
+    setProp1(25,15,54);props[25].bytes[0x19]=16;put(props[25].bytes.data(),0x22,std::uint16_t{55});
+    setProp1(26,1,54);
+    setProp1(27,1,55);
+    // 28..31: extra-fire/ltng/cold/pois (329..332), 32: extra-elem (329..332)
+    for(unsigned k=0;k<4;++k)setProp1(28+k,1,329+k);
+    setProp1(32,1,329);for(unsigned k=1;k<4;++k){props[32].bytes[0x18+k]=3;put(props[32].bytes.data(),0x20+k*2,static_cast<std::uint16_t>(329+k));}
+    // 33..36: pierce-fire/ltng/cold/pois (333..336), 37: pierce-elem (333..336)
+    for(unsigned k=0;k<4;++k)setProp1(33+k,1,333+k);
+    setProp1(37,1,333);for(unsigned k=1;k<4;++k){props[37].bytes[0x18+k]=3;put(props[37].bytes.data(),0x20+k*2,static_cast<std::uint16_t>(333+k));}
+    // 38: fireskill (fn 21 val 1 stat 126, fn 3 stat 399), 39: coldskill (fn 21 val 2 stat 126, fn 3 stat 400)
+    setProp1(38,21,126,1);props[38].bytes[0x19]=3;put(props[38].bytes.data(),0x22,std::uint16_t{399});
+    setProp1(39,21,126,2);props[39].bytes[0x19]=3;put(props[39].bytes.data(),0x22,std::uint16_t{400});
+    // 40: allskills (127), 41: paladin skills (fn 21 val 3 stat 83), 42: oskill (fn 22 stat 387, fn 24 stat 97)
+    setProp1(40,1,127);
+    setProp1(41,21,83,3);
+    setProp1(42,22,387);props[42].bytes[0x19]=24;put(props[42].bytes.data(),0x22,std::uint16_t{97});
+    // 43: swing1 (93), 44: cast1 (102), 45: mag% (80), 46: upgrade/minor (fn 17 stat 392), 47: skill (fn 22 stat 107)
+    setProp1(43,8,93);
+    setProp1(44,8,102);
+    setProp1(45,1,80);
+    setProp1(46,17,392);
+    setProp1(47,22,107);
+
+    put(fakeTables,0x240,props.data());put(fakeTables,0x248,static_cast<std::uint64_t>(props.size()));
+    propertySourcesReady.store(true);scalingReady.store(true);randomSkillsReady.store(true);
+
+    D2RL::DataTableService service{.serviceSize=D2RL::DataTableServiceRequiredSize,.serviceVersion=D2RL::DataTableService::AbiVersion,.getTable=FixtureTable};
+    D2RL::PluginContext context{};contributionContext=&context;contributionTables=&service;
+    std::array<unsigned char,448*2> items{};std::array<unsigned char,232*2> types{};
+    put(items.data(),0x12e,std::int16_t{0});put(items.data(),0x130,std::int16_t{-1});
+    put(types.data(),0,ContributionDefinitions::Code("weap"));put(types.data()+232,0,ContributionDefinitions::Code("armo"));
+    contributionFixtureTables[static_cast<unsigned>(D2RL::DataTables::TableId::Properties)]={reinterpret_cast<const unsigned char*>(props.data()),props.size(),sizeof(Affixes::Property)};
+    contributionFixtureTables[static_cast<unsigned>(D2RL::DataTables::TableId::Items)]={items.data(),2,448};
+    contributionFixtureTables[static_cast<unsigned>(D2RL::DataTables::TableId::ItemTypes)]={types.data(),2,232};
+
+    // 1. Verify Real CubeMain Enchantment format (param=0, min=1, max=1) + op=11 (hp%) + fn=[21,3] (fireskill):
+    std::array<unsigned char,364> enchCube{};
+    enchCube[0]=1;enchCube[2]=0xff;enchCube[3]=16;enchCube[12]=2;put(enchCube.data(),4,392u);enchCube[0x67]=0xfe;
+    put(enchCube.data(),0x14,std::uint16_t{2});put(enchCube.data(),0x16,0u);
+    put(enchCube.data(),0x1e,std::uint16_t{1});put(enchCube.data(),0x20,1u);
+    for(unsigned n=0;n<5;++n)put(enchCube.data(),0x77+n*12,UINT32_MAX);
+    // mod 1: upgrade/minor (prop 46) with param=0, min=1, max=1 (real Reimagined CubeMain format)
+    put(enchCube.data()+0x77,0,46u);put(enchCube.data()+0x77,4,std::int16_t{0});
+    put(enchCube.data()+0x77,6,std::int16_t{1});put(enchCube.data()+0x77,8,std::int16_t{1});enchCube[0x77+10]=100;
+    // mod 2: hp% (prop 7, stat 76, op 11) 5..10
+    put(enchCube.data()+0x77+12,0,7u);put(enchCube.data()+0x77+12,6,std::int16_t{5});put(enchCube.data()+0x77+12,8,std::int16_t{10});enchCube[0x77+12+10]=100;
+    // mod 3: fireskill (prop 38, fn=[21,3] stat 399) 1..2
+    put(enchCube.data()+0x77+24,0,38u);put(enchCube.data()+0x77+24,6,std::int16_t{1});put(enchCube.data()+0x77+24,8,std::int16_t{2});enchCube[0x77+24+10]=100;
+    contributionFixtureTables[static_cast<unsigned>(D2RL::DataTables::TableId::CubeMain)]={enchCube.data(),1,364};
+
+    // Build affix pool for randomized item generation (16 suffixes, 16 prefixes, 2 automagic [Base])
+    std::vector<Affixes::Row> affixPool(34);
+    auto defAffix=[&](unsigned idx,const char* name,unsigned p1,int l1,int h1,int p2=-1,int l2=0,int h2=0){
+        auto* r=affixPool[idx].bytes.data();std::memset(r,0,sizeof(Affixes::Row));
+        std::memcpy(r,name,std::strlen(name));
+        r[0x54]=r[0x64]=r[0x82]=1;put(r,0x58,static_cast<int>(idx+1));put(r,0x5c,1);
+        put(r,0x24,static_cast<int>(p1));put(r,0x2c,l1);put(r,0x30,h1);
+        put(r,0x34,p2);put(r,0x3c,l2);put(r,0x40,h2);
+        put(r,0x44,-1);
+    };
+    // Suffixes (0..15):
+    defAffix(0,"of the Titan",0,15,20);          // str 15-20
+    defAffix(1,"of Precision",2,10,15);          // dex 10-15
+    defAffix(2,"of the Whale",5,80,100);         // hp 80-100 (ValShift 8)
+    defAffix(3,"of Vitality",7,5,10);            // hp% 5-10 (op 11)
+    defAffix(4,"of Maiming",15,10,15);           // dmg-max 10-15 (stat 22/24)
+    defAffix(5,"of Craftsmanship",15,2,4);       // dmg-max 2-4
+    defAffix(6,"of Transcendence",14,12,16);     // dmg-min 12-16 (stat 21/23)
+    defAffix(7,"of Incineration",24,25,40);      // fire-max 25-40 (stat 49)
+    defAffix(8,"of Burning",23,15,20);           // fire-min 15-20 (stat 48)
+    defAffix(9,"of the Glacier",25,10,30);       // dmg-cold 10-30 (stat 54=10, 55=30)
+    defAffix(10,"of Readiness",43,10,20);        // ias 10-20 (stat 93)
+    defAffix(11,"of the Magus",44,15,25);        // fcr 15-25 (stat 102)
+    defAffix(12,"of Good Luck",45,20,35);        // mf 20-35 (stat 80)
+    defAffix(13,"of Perfection",4,5,10);         // all-stats 5-10 (dgrp 1)
+    defAffix(14,"of StrengthPercent",9,5,12);    // str% 5-12 (stat 413, op 11)
+    defAffix(15,"of Frostbite",27,20,35);        // cold-max 20-35 (stat 55)
+    // Prefixes (16..31):
+    defAffix(16,"Merciless",12,100,150);         // dmg% 100-150 (17,18)
+    defAffix(17,"Saintly",11,80,120);            // ac% 80-120 (16)
+    defAffix(18,"Strange",13,150,250);           // att 150-250 (19)
+    defAffix(19,"Sharp",16,5,12);                // dmg-norm 5-12 (21=5, 22=12)
+    defAffix(20,"Ruby",17,31,40);                // res-fire 31-40 (39)
+    defAffix(21,"Amber",18,31,40);               // res-ltng 31-40 (41)
+    defAffix(22,"Sapphire",19,31,40);            // res-cold 31-40 (43)
+    defAffix(23,"Emerald",20,31,40);             // res-pois 31-40 (45)
+    defAffix(24,"Scintillating",21,12,15);       // res-all 12-15 (dgrp 2)
+    defAffix(25,"Fiery",22,8,20);                // dmg-fire 8-20 (48=8, 49=20)
+    defAffix(26,"Volcanic",38,1,3);              // fireskill 1-3 (stat 399, fn=[21,3])
+    defAffix(27,"Glacial",39,1,3);               // coldskill 1-3 (stat 400, fn=[21,3])
+    defAffix(28,"Priest's",41,1,2);              // paladin skills 1-2 (stat 83, layer 3)
+    defAffix(29,"Arch-Angel's",40,1,2);          // allskills 1-2 (stat 127)
+    defAffix(30,"Pyromancer's",28,5,10,33,5,10); // extra-fire 5-10 (329) + pierce-fire 5-10 (333)
+    defAffix(31,"Elementalist's",32,5,8,37,5,8); // extra-elem 5-8 (329..332) + pierce-elem 5-8 (333..336)
+    // Automagic [Base] (32..33):
+    defAffix(32,"PaladinRes",21,20,30);          // [Base] res-all 20-30
+    defAffix(33,"OrbFireSkill",38,1,2);          // [Base] fireskill 1-2
+
+    put(fakeTables,0x15e8,affixPool.data());put(fakeTables,0x15f0,static_cast<std::uint64_t>(affixPool.size()));
+    put(fakeTables,0x1600,affixPool.data());
+    put(fakeTables,0x1608,affixPool.data()+16);
+    put(fakeTables,0x1610,affixPool.data()+32);
+
+    // Quick check of Enchanted item with CubeMain recipe (param=0, min=1, max=1) + op=11 (hp%) + fn=[21,3] (fireskill):
+    put(f.Data(),0,6u);put(f.Data()-28,0,0u);
+    for(unsigned i=0;i<6;++i)put(f.Data()-24+i*4,0,0u);
+    put(f.Data()-24,0,4u); // suffix 3 ("of Vitality", hp% 5-10)
+    put(f.Data()-20,0,27u); // prefix 26 ("Volcanic", fireskill 1-3)
+    put(f.modifier.data(),0x68,static_cast<unsigned char*>(nullptr));
+    f.own={
+        {std::uint64_t{76}<<32,16},  // 8 from suffix + 8 from [E]
+        {(std::uint64_t{126}<<32)|1,4},
+        {std::uint64_t{392}<<32,1},
+        {std::uint64_t{399}<<32,4}   // 2 from prefix + 2 from [E]
+    };
+    f.total=f.own;f.Bind();
+    const auto hpPctOut=f.Render(76,"Increase Maximum Life 16%");
+    check(hpPctOut.find("[5% - 10%]")!=std::string::npos && hpPctOut.find("[S] [of Vitality]")!=std::string::npos);
+    check(hpPctOut.find("[5% - 10%]")!=std::string::npos && hpPctOut.find("[E]")!=std::string::npos);
+    check(hpPctOut.find("[10% - 20%]")!=std::string::npos && hpPctOut.find("[Combined]")!=std::string::npos);
+    const auto fireSkillOut=f.Render(399,"+4 to Fire Skills");
+    check(fireSkillOut.find("[+1 - +3]")!=std::string::npos && fireSkillOut.find("[P] [Volcanic]")!=std::string::npos);
+    check(fireSkillOut.find("[+1 - +2]")!=std::string::npos && fireSkillOut.find("[E]")!=std::string::npos);
+    check(fireSkillOut.find("[+2 - +5]")!=std::string::npos && fireSkillOut.find("[Combined]")!=std::string::npos);
+
+    // 2. Check residual [E] synthesis on multi-upgraded item with oskill (387), skill (107), hp (7, shift 8), dmg% (17):
+    f.own={
+        {std::uint64_t{7}<<32,50*256},
+        {std::uint64_t{17}<<32,30},{std::uint64_t{18}<<32,30},
+        {(std::uint64_t{97}<<32)|429,1},
+        {(std::uint64_t{107}<<32)|262,2},
+        {(std::uint64_t{387}<<32)|429,1},
+        {std::uint64_t{392}<<32,3}
+    };
+    for(unsigned i=0;i<6;++i)put(f.Data()-24+i*4,0,0u);
+    f.total=f.own;f.Bind();
+    check(f.Render(7,"+50 to Life").find("[+50]")!=std::string::npos);
+    check(f.Render(7,"+50 to Life").find("[E]")!=std::string::npos);
+    check(f.Render(17,"+30% Enhanced Damage").find("[+30%]")!=std::string::npos);
+    const char* oskillTxt="+1 to Teleport";
+    const auto oskillLbl=AffixLabels(f.host.data(),{{RangeText::Analyze(oskillTxt).key,387,429,false}},oskillTxt);
+    check(RangeText::Merge(oskillTxt,oskillTxt,4096,oskillLbl).text.find("[+1]")!=std::string::npos);
+    const char* sskillTxt="+2 to Wake of Fire (Assassin Only)";
+    const auto sskillLbl=AffixLabels(f.host.data(),{{RangeText::Analyze(sskillTxt).key,107,262,false}},sskillTxt);
+    check(RangeText::Merge(sskillTxt,sskillTxt,4096,sskillLbl).text.find("[+2]")!=std::string::npos);
+
+    // 3. Deterministic PRNG Fuzz Suite: 2,500 randomly generated multi-affix / multi-source items!
+    std::uint64_t rngState=0xD2B00B1E55A17EULL;
+    auto nextRand=[&]()->std::uint32_t{
+        rngState ^= rngState >> 12;
+        rngState ^= rngState << 25;
+        rngState ^= rngState >> 27;
+        return static_cast<std::uint32_t>((rngState * 0x2545F4914F6CDD1DULL) >> 32);
+    };
+    auto randRange=[&](int lo,int hi)->int{
+        return lo + static_cast<int>(nextRand() % static_cast<unsigned>(hi - lo + 1));
+    };
+
+    for(unsigned iter=0;iter<2500;++iter){
+        const bool isRare=(nextRand()&1)!=0;
+        put(f.Data(),0,isRare?6u:4u);
+        for(unsigned i=0;i<6;++i)put(f.Data()-24+i*4,0,0u);
+        const bool hasBase=(nextRand()%4)==0;
+        const unsigned baseIdx=hasBase?(32u+(nextRand()%2)):0u;
+        put(f.Data()-28,0,hasBase?(baseIdx+1):0u);
+
+        // Pick 1..3 unique suffixes (0..15) and 1..3 unique prefixes (16..31)
+        const unsigned numSuf=isRare?static_cast<unsigned>(randRange(1,3)):1u;
+        const unsigned numPre=isRare?static_cast<unsigned>(randRange(1,3)):1u;
+        std::vector<unsigned> chosen;
+        while(chosen.size()<numSuf){
+            const unsigned c=nextRand()%16;
+            if(std::find(chosen.begin(),chosen.end(),c)==chosen.end())chosen.push_back(c);
+        }
+        while(chosen.size()<numSuf+numPre){
+            const unsigned c=16+(nextRand()%16);
+            if(std::find(chosen.begin(),chosen.end(),c)==chosen.end())chosen.push_back(c);
+        }
+        for(std::size_t i=0;i<chosen.size();++i)put(f.Data()-24+i*4,0,chosen[i]+1);
+
+        // Attach a socketed jewel (75% chance) or multi-enchantment residual [E] (remaining 25%)
+        // so GatherSourceGroups + AddLinkedSourceLabels + AddOwnedSourceLabels are exercised on every combination,
+        // and ALSO test clone-ranged Merge when neither socket nor enchant is active!
+        const unsigned mode=iter%4;
+        const bool hasSocket=(mode==0 || mode==1);
+        const bool hasEnchant=(mode==1 || mode==2);
+        const unsigned jewelAffix=nextRand()%32;
+        if(hasSocket){
+            put(f.modifier.data(),0x68,f.socketRoot.data());
+            for(unsigned i=0;i<6;++i)put(f.JewelData()-24+i*4,0,0u);
+            put(f.JewelData()-24,0,jewelAffix+1);
+        }else{
+            put(f.modifier.data(),0x68,static_cast<unsigned char*>(nullptr));
+        }
+
+        // Simulate exact stat rolls and bounds for host (own) and socket (socket), then sum into total:
+        std::map<std::uint64_t,int> ownMap,sockMap,totalMap,minBoundMap,maxBoundMap;
+        auto applyAffix=[&](unsigned idx,std::map<std::uint64_t,int>& target,bool addBounds){
+            const auto& row=affixPool[idx];
+            for(unsigned slotBlock=0;slotBlock<2;++slotBlock){
+                const int pid=row.Number(0x24+slotBlock*16);
+                if(pid<0)continue;
+                const int lo=row.Number(0x2c+slotBlock*16),hi=row.Number(0x30+slotBlock*16);
+                const int rollVal=randRange(lo,hi);
+                const auto& p=props[static_cast<std::size_t>(pid)].bytes;
+                for(unsigned s=0;s<7;++s){
+                    const unsigned fn=p[0x18+s];if(!fn)continue;
+                    const unsigned st=Affixes::Read<std::uint16_t>(p.data(),0x20+s*2);
+                    if(fn==7){
+                        target[std::uint64_t{17}<<32]+=rollVal;target[std::uint64_t{18}<<32]+=rollVal;
+                        if(addBounds){minBoundMap[std::uint64_t{17}<<32]+=lo;maxBoundMap[std::uint64_t{17}<<32]+=hi;}
+                    }else if(fn==5){
+                        target[std::uint64_t{21}<<32]+=rollVal;
+                        if(addBounds){minBoundMap[std::uint64_t{21}<<32]+=lo;maxBoundMap[std::uint64_t{21}<<32]+=hi;}
+                    }else if(fn==6){
+                        target[std::uint64_t{22}<<32]+=rollVal;
+                        if(addBounds){minBoundMap[std::uint64_t{22}<<32]+=lo;maxBoundMap[std::uint64_t{22}<<32]+=hi;}
+                    }else if(fn==15){
+                        target[std::uint64_t{st}<<32]+=lo;
+                        if(addBounds){minBoundMap[std::uint64_t{st}<<32]+=lo;maxBoundMap[std::uint64_t{st}<<32]+=lo;}
+                    }else if(fn==16){
+                        target[std::uint64_t{st}<<32]+=hi;
+                        if(addBounds){minBoundMap[std::uint64_t{st}<<32]+=hi;maxBoundMap[std::uint64_t{st}<<32]+=hi;}
+                    }else if(fn==21){
+                        const unsigned lay=Affixes::Read<std::uint16_t>(p.data(),0x0a+s*2);
+                        target[(std::uint64_t{st}<<32)|lay]+=rollVal;
+                        if(addBounds){minBoundMap[(std::uint64_t{st}<<32)|lay]+=lo;maxBoundMap[(std::uint64_t{st}<<32)|lay]+=hi;}
+                    }else{
+                        const unsigned shift=(st==7||st==9)?8u:0u;
+                        target[std::uint64_t{st}<<32]+=(rollVal<<shift);
+                        if(addBounds){minBoundMap[std::uint64_t{st}<<32]+=lo;maxBoundMap[std::uint64_t{st}<<32]+=hi;}
+                    }
+                }
+            }
+        };
+        for(unsigned idx:chosen)applyAffix(idx,ownMap,true);
+        if(hasBase)applyAffix(baseIdx,ownMap,true);
+        if(hasSocket)applyAffix(jewelAffix,sockMap,true);
+        if(hasEnchant){
+            ownMap[std::uint64_t{392}<<32]=2;
+            ownMap[std::uint64_t{127}<<32]+=2;
+            ownMap[std::uint64_t{45}<<32]+=15;
+            minBoundMap[std::uint64_t{127}<<32]+=2;maxBoundMap[std::uint64_t{127}<<32]+=2;
+            minBoundMap[std::uint64_t{45}<<32]+=15;maxBoundMap[std::uint64_t{45}<<32]+=15;
+        }
+        totalMap=ownMap;
+        for(const auto& [k,v]:sockMap)totalMap[k]+=v;
+
+        f.own.clear();for(const auto& [k,v]:ownMap)f.own.push_back({k,v});
+        f.socket.clear();for(const auto& [k,v]:sockMap)f.socket.push_back({k,v});
+        f.total.clear();for(const auto& [k,v]:totalMap)f.total.push_back({k,v});
+        f.Bind();
+
+        // Build the native tooltip lines (actual & ranged) and observed CapturedLines:
+        std::vector<std::string> actualLines,rangedLines;
+        std::vector<CapturedLine> observedAll,observedNoComposite;
+        const std::string m="\xee\x81\xbe";
+        auto span=[&](unsigned st,unsigned lay=0)->std::string{
+            const auto key=(std::uint64_t{st}<<32)|lay;
+            const int lo=minBoundMap[key],hi=maxBoundMap[key];
+            if(lo==hi)return std::to_string(lo);
+            return m+"U("+std::to_string(lo)+"-"+std::to_string(hi)+")"+m+"3";
+        };
+        auto addLine=[&](std::string act,std::string rng,int stat,int layer,bool grouped,std::uint16_t grp,bool isComposite=false){
+            const auto key=RangeText::Analyze(act).key;
+            actualLines.push_back(std::move(act));
+            rangedLines.push_back(std::move(rng));
+            observedAll.push_back({key,stat,layer,grouped,grp});
+            if(!isComposite)observedNoComposite.push_back({key,stat,layer,grouped,grp});
+        };
+
+        auto getTot=[&](unsigned st,unsigned lay=0)->int{
+            const auto it=totalMap.find((std::uint64_t{st}<<32)|lay);
+            if(it==totalMap.end())return 0;
+            return (st==7||st==9)?(it->second>>8):it->second;
+        };
+
+        // 1. Check dgrp=1 (0,1,2,3)
+        if(getTot(0)>0 && getTot(0)==getTot(1) && getTot(0)==getTot(2) && getTot(0)==getTot(3) &&
+           minBoundMap[0]==minBoundMap[std::uint64_t{1}<<32] && maxBoundMap[0]==maxBoundMap[std::uint64_t{1}<<32]){
+            addLine("+"+std::to_string(getTot(0))+" to All Attributes","+"+span(0)+" to All Attributes",0,0,true,1);
+        }else{
+            if(getTot(0)>0)addLine("+"+std::to_string(getTot(0))+" to Strength","+"+span(0)+" to Strength",0,0,false,0);
+            if(getTot(1)>0)addLine("+"+std::to_string(getTot(1))+" to Energy","+"+span(1)+" to Energy",1,0,false,0);
+            if(getTot(2)>0)addLine("+"+std::to_string(getTot(2))+" to Dexterity","+"+span(2)+" to Dexterity",2,0,false,0);
+            if(getTot(3)>0)addLine("+"+std::to_string(getTot(3))+" to Vitality","+"+span(3)+" to Vitality",3,0,false,0);
+        }
+        // 2. Check dgrp=2 (39,41,43,45)
+        if(getTot(39)>0 && getTot(39)==getTot(41) && getTot(39)==getTot(43) && getTot(39)==getTot(45) &&
+           minBoundMap[std::uint64_t{39}<<32]==minBoundMap[std::uint64_t{41}<<32] &&
+           maxBoundMap[std::uint64_t{39}<<32]==maxBoundMap[std::uint64_t{41}<<32]){
+            addLine("All Resistances +"+std::to_string(getTot(39)),"All Resistances +"+span(39),39,0,true,2);
+        }else{
+            if(getTot(39)>0)addLine("Fire Resist +"+std::to_string(getTot(39))+"%","Fire Resist +"+span(39)+"%",39,0,false,0);
+            if(getTot(41)>0)addLine("Lightning Resist +"+std::to_string(getTot(41))+"%","Lightning Resist +"+span(41)+"%",41,0,false,0);
+            if(getTot(43)>0)addLine("Cold Resist +"+std::to_string(getTot(43))+"%","Cold Resist +"+span(43)+"%",43,0,false,0);
+            if(getTot(45)>0)addLine("Poison Resist +"+std::to_string(getTot(45))+"%","Poison Resist +"+span(45)+"%",45,0,false,0);
+        }
+        // 3. Check dgrp=3 (329..332) and dgrp=4 (333..336)
+        const char* elemNames[4]={"Fire","Lightning","Cold","Poison"};
+        for(unsigned k=0;k<4;++k){
+            if(getTot(329+k)>0)addLine("+"+std::to_string(getTot(329+k))+"% to "+elemNames[k]+" Skill Damage",
+                "+"+span(329+k)+"% to "+elemNames[k]+" Skill Damage",static_cast<int>(329+k),0,false,0);
+            if(getTot(333+k)>0)addLine("-"+std::to_string(getTot(333+k))+"% to Enemy "+elemNames[k]+" Resistance",
+                "-"+span(333+k)+"% to Enemy "+elemNames[k]+" Resistance",static_cast<int>(333+k),0,false,0);
+        }
+        // 4. Composite & single-endpoint damage in ascending descpriority order (Cold 94, Fire 102, Physical 126):
+        const int pMin=getTot(21),pMax=getTot(22);
+        const bool DropComposite=(iter%2)==1 && !(pMin>0 && pMax>0 && pMin>=pMax);
+        const int cMin=getTot(54),cMax=getTot(55);
+        if(cMin>0 && cMax>0 && cMin<cMax){
+            addLine("Adds "+std::to_string(cMin)+"-"+std::to_string(cMax)+" Cold Damage",
+                "Adds "+span(54)+"-"+span(55)+" Cold Damage",54,0,false,0,DropComposite);
+        }else{
+            if(cMin>0)addLine("+"+std::to_string(cMin)+" to Minimum Cold Damage","+"+span(54)+" to Minimum Cold Damage",54,0,false,0);
+            if(cMax>0)addLine("+"+std::to_string(cMax)+" to Maximum Cold Damage","+"+span(55)+" to Maximum Cold Damage",55,0,false,0);
+        }
+        const int fMin=getTot(48),fMax=getTot(49);
+        if(fMin>0 && fMax>0 && fMin<fMax){
+            addLine("Adds "+std::to_string(fMin)+"-"+std::to_string(fMax)+" Fire Damage",
+                "Adds "+span(48)+"-"+span(49)+" Fire Damage",48,0,false,0,DropComposite);
+        }else{
+            if(fMin>0)addLine("+"+std::to_string(fMin)+" to Minimum Fire Damage","+"+span(48)+" to Minimum Fire Damage",48,0,false,0);
+            if(fMax>0)addLine("+"+std::to_string(fMax)+" to Maximum Fire Damage","+"+span(49)+" to Maximum Fire Damage",49,0,false,0);
+        }
+        if(pMin>0 && pMax>0 && pMin<pMax){
+            addLine("Adds "+std::to_string(pMin)+"-"+std::to_string(pMax)+" Damage",
+                "Adds "+span(21)+"-"+span(22)+" Damage",21,0,false,0,DropComposite);
+        }else{
+            if(pMin>0)addLine("+"+std::to_string(pMin)+" to Minimum Damage","+"+span(21)+" to Minimum Damage",21,0,false,0);
+            if(pMax>0)addLine("+"+std::to_string(pMax)+" to Maximum Damage","+"+span(22)+" to Maximum Damage",22,0,false,0);
+        }
+        // 6. Scalar & layered stats:
+        if(getTot(7)>0)addLine("+"+std::to_string(getTot(7))+" to Life","+"+span(7)+" to Life",7,0,false,0);
+        if(getTot(76)>0)addLine("Increase Maximum Life "+std::to_string(getTot(76))+"%","Increase Maximum Life "+span(76)+"%",76,0,false,0);
+        if(getTot(413)>0)addLine("+"+std::to_string(getTot(413))+"% to Strength","+"+span(413)+"% to Strength",413,0,false,0);
+        if(getTot(16)>0)addLine("+"+std::to_string(getTot(16))+"% Enhanced Defense","+"+span(16)+"% Enhanced Defense",16,0,false,0);
+        if(getTot(17)>0)addLine("+"+std::to_string(getTot(17))+"% Enhanced Damage","+"+span(17)+"% Enhanced Damage",17,0,false,0);
+        if(getTot(19)>0)addLine("+"+std::to_string(getTot(19))+" to Attack Rating","+"+span(19)+" to Attack Rating",19,0,false,0);
+        if(getTot(80)>0)addLine(std::to_string(getTot(80))+"% Better Chance of Getting Magic Items",span(80)+"% Better Chance of Getting Magic Items",80,0,false,0);
+        if(getTot(93)>0)addLine("+"+std::to_string(getTot(93))+"% Increased Attack Speed","+"+span(93)+"% Increased Attack Speed",93,0,false,0);
+        if(getTot(102)>0)addLine("+"+std::to_string(getTot(102))+"% Faster Cast Rate","+"+span(102)+"% Faster Cast Rate",102,0,false,0);
+        if(getTot(127)>0)addLine("+"+std::to_string(getTot(127))+" to All Skills","+"+span(127)+" to All Skills",127,0,false,0);
+        if(getTot(83,3)>0)addLine("+"+std::to_string(getTot(83,3))+" to Paladin Skill Levels","+"+span(83,3)+" to Paladin Skill Levels",83,3,false,0);
+        if(getTot(399)>0)addLine("+"+std::to_string(getTot(399))+" to Fire Skills","+"+span(399)+" to Fire Skills",399,0,false,0);
+        if(getTot(400)>0)addLine("+"+std::to_string(getTot(400))+" to Cold Skills","+"+span(400)+" to Cold Skills",400,0,false,0);
+
+        std::string actualTooltip,rangedTooltip;
+        for(std::size_t i=0;i<actualLines.size();++i){
+            if(i){actualTooltip+='\n';rangedTooltip+='\n';}
+            actualTooltip+=actualLines[i];
+            rangedTooltip+=(hasSocket || hasEnchant)?actualLines[i]:rangedLines[i];
+        }
+        const auto& obs=DropComposite?observedNoComposite:observedAll;
+        const auto labels=AffixLabels(f.host.data(),obs,actualTooltip);
+        const auto merged=RangeText::Merge(actualTooltip,rangedTooltip,8192,labels);
+
+        check(merged.labeled==actualLines.size());
+        check(merged.text.find("(?)")==std::string::npos);
+        check(merged.text.find("Range Unavailable")==std::string::npos);
+        for(const auto& line:actualLines){
+            check(merged.text.find(line)!=std::string::npos);
+        }
+        // Also verify tight buffer capacity fallback never truncates original lines or crashes:
+        const auto compactMerged=RangeText::Merge(actualTooltip,rangedTooltip,actualTooltip.size()+48,labels);
+        for(const auto& line:actualLines){
+            check(compactMerged.text.find(line)!=std::string::npos);
+        }
+    }
+
+    propertySourcesReady.store(false);scalingReady.store(false);randomSkillsReady.store(false);
+    contributionContext=nullptr;contributionTables=nullptr;contributionFixtureTables={};
+    std::puts("Passed 2,500 randomized multi-affix / multi-source item combinations and all 6 newly validated rule families.");
+}
+
 void TestOwnedContributionAdapter(){
     TestScalingAffixAdapter();
     TestSocketCapacityAdapter();
@@ -516,10 +994,12 @@ void TestLinkedProduction(){
     put(fakeTables,0x1868,std::uint64_t{2});check(!ReadWordDefinitions(*snapshot,f.props,{}));put(fakeTables,0x1868,std::uint64_t{1});
     put(f.Data()+0x18,0,0u);
     check(!CaptureItemContributions(f.host.data()));propertySourcesReady.store(false);quantityRateReady.store(false);
+    contributionContext=nullptr;contributionTables=nullptr;contributionFixtureTables={};
     std::puts("Production shared-resist reverse inference, grouped unique attributes, quantity rates and active-table runeword sources pass.");
 }
 bool __fastcall FixtureRandomSkillSingle(void*,const void* metadata,int value,int layer,bool grouped,char* output,int mode) {
     if(Affixes::Read<std::uint16_t>(static_cast<const unsigned char*>(metadata),0)!=107 || layer!=262)return false;
+    if(grouped && Affixes::Read<std::uint16_t>(static_cast<const unsigned char*>(metadata),0)>=329)return false;
     check(!grouped && mode==1);
     std::snprintf(output,256,"+%d to Wake of Fire (Assassin Only)",value);return true;
 }
@@ -626,7 +1106,138 @@ void TestOwnedDurabilityPhysical(){
     check(render(21,"Adds 5-10 Weapon Damage").find("[5 / 10]")==std::string::npos);
     f.props[0].bytes[0x19]=16;f.props[0].bytes[2]=1;
     check(render(21,"Adds 5-10 Weapon Damage").find("[5 / 10]")==std::string::npos);
+    // Corrupted + Enchanted Unique/Set items: Frost Wyrm / Knight's Dawn / Ragnarok patterns.
+    ContributionFixture u;propertySourcesReady.store(true);scalingReady.store(true);originalSingle=FixtureScalingSingle;
+    put(u.modifier.data(),0x68,static_cast<unsigned char*>(nullptr));
+    put(u.Data(),0,7u);put(u.Data(),0x34,0);put(u.Data()-24,0,0u);
+    u.Property(0,7,0xffff); // dmg% (stat 17/18, op 13)
+    u.Property(1,11,198);   // proc on striking
+    u.Property(2,1,91);     // Requirements % (descfunc 20)
+    u.Property(3,1,39);     // Fire resist
+    u.Property(4,17,394);   // Enchantment marker (+1 to stat 394)
+    u.statRows[17*0x144+0x50]=13;u.statRows[18*0x144+0x50]=13;
+    put(u.statRows.data()+91*0x144,0x32,std::uint16_t{20});
+    put(fakeTables,0x14d0,6u);put(fakeTables,0x14d4,63u);
+    std::array<unsigned char,348> uRow{};for(unsigned k=0;k<12;++k)put(uRow.data(),0x98+k*16,UINT32_MAX);
+    put(uRow.data(),0x98,0u);put(uRow.data(),0xa0,300);put(uRow.data(),0xa4,350);
+    put(uRow.data(),0xa8,1u);put(uRow.data(),0xac,64);put(uRow.data(),0xb0,15);put(uRow.data(),0xb4,20); // 15% lvl 20 Frozen Orb
+    put(uRow.data(),0xb8,2u);put(uRow.data(),0xc0,50);put(uRow.data(),0xc4,100);
+    put(fakeTables,0x13c8,uRow.data());put(fakeTables,0x13d0,std::uint64_t{1});
+    const int orbLayer=(64<<6)|20;
+    // Corrupted (361=2, 362=168) and multi-enchanted (392=2, 393=3, 394=5):
+    // host stats (dmg% 344%, proc 15%, Requirements +52%) still resolve cleanly without (?) warnings.
+    u.own={{std::uint64_t{17}<<32,344},{std::uint64_t{18}<<32,344},{std::uint64_t{91}<<32,52},
+           {(std::uint64_t{198}<<32)|static_cast<unsigned>(orbLayer),15},
+           {std::uint64_t{361}<<32,2},{std::uint64_t{362}<<32,168},
+           {std::uint64_t{392}<<32,2},{std::uint64_t{393}<<32,3},{std::uint64_t{394}<<32,5}};
+    u.total={{std::uint64_t{91}<<32,52},{(std::uint64_t{198}<<32)|static_cast<unsigned>(orbLayer),15},
+             {std::uint64_t{361}<<32,2},{std::uint64_t{362}<<32,168},
+             {std::uint64_t{392}<<32,2},{std::uint64_t{393}<<32,3},{std::uint64_t{394}<<32,5}};
+    u.Bind();
+    const auto edText=u.Render(17,"+344% Enhanced Weapon Damage");
+    check(edText.find("[+300% - +350%]")!=std::string::npos && edText.find("[U]")!=std::string::npos && edText.find("(?)")==std::string::npos);
+    const auto reqText=u.Render(91,"Requirements +52%");
+    check(reqText.find("[+50% - +100%]")!=std::string::npos && reqText.find("[U]")!=std::string::npos && reqText.find("(?)")==std::string::npos);
+    const char* orbProc="15% Chance to cast level 20 Frozen Orb on striking";
+    const auto orbLabels=AffixLabels(u.host.data(),{{RangeText::Analyze(orbProc).key,198,orbLayer,false}},orbProc);
+    const auto orbRendered=RangeText::Merge(orbProc,orbProc,4096,orbLabels).text;
+    check(orbRendered.find("[15%]")!=std::string::npos && orbRendered.find("[U]")!=std::string::npos);
+    // No-clone path (corrupted/enchanted item with observed={}): proc lines and 2-number
+    // composite damage (Cold Damage) both recover without proc lines polluting composite candidates.
+    u.Property(5,15,54);u.props[5].bytes[0x19]=16;put(u.props[5].bytes.data(),0x22,std::uint16_t{55});
+    put(uRow.data(),0xc8,5u);put(uRow.data(),0xd0,200);put(uRow.data(),0xd4,300);
+    u.own.insert(u.own.begin()+2,{std::uint64_t{54}<<32,200});
+    u.own.insert(u.own.begin()+3,{std::uint64_t{55}<<32,300});
+    u.total.insert(u.total.begin(),{std::uint64_t{54}<<32,200});
+    u.total.insert(u.total.begin()+1,{std::uint64_t{55}<<32,300});
+    u.Bind();
+    const std::string noCloneFrost=std::string(orbProc)+"\nAdds 200-300 Cold Damage";
+    const auto noCloneLabels=AffixLabels(u.host.data(),{},noCloneFrost);
+    const auto noCloneRendered=RangeText::Merge(noCloneFrost,noCloneFrost,4096,noCloneLabels).text;
+    check(noCloneRendered.find("[15%]")!=std::string::npos && noCloneRendered.find(orbProc)!=std::string::npos);
+    check(noCloneRendered.find("[200 / 300]")!=std::string::npos && noCloneRendered.find("Adds 200-300 Cold Damage")!=std::string::npos);
+    // Singular CubeMain enchantment candidate resolves as [E] when present in CubeMain.
+    D2RL::DataTableService service{.serviceSize=D2RL::DataTableServiceRequiredSize,.serviceVersion=D2RL::DataTableService::AbiVersion,.getTable=FixtureTable};
+    D2RL::PluginContext context{};contributionContext=&context;contributionTables=&service;
+    std::array<unsigned char,448*2> items{};std::array<unsigned char,232*2> types{};std::array<unsigned char,364> cube{};
+    put(items.data(),0x12e,std::int16_t{0});put(items.data(),0x130,std::int16_t{-1});
+    put(types.data(),0,ContributionDefinitions::Code("weap"));put(types.data()+232,0,ContributionDefinitions::Code("orb "));
+    cube[0]=1;cube[2]=0xff;cube[3]=18;cube[12]=2;put(cube.data(),4,394u);cube[0x67]=0xfe;
+    put(cube.data(),0x14,std::uint16_t{2});put(cube.data(),0x16,0u);
+    put(cube.data(),0x1e,std::uint16_t{1});put(cube.data(),0x20,1u);
+    for(unsigned n=0;n<5;++n)put(cube.data(),0x77+n*12,UINT32_MAX);
+    put(cube.data()+0x77,0,3u);put(cube.data()+0x77,6,std::int16_t{10});put(cube.data()+0x77,8,std::int16_t{15});cube[0x77+10]=100;
+    put(cube.data()+0x77+12,0,4u);put(cube.data()+0x77+12,4,std::int16_t{1});
+    contributionFixtureTables[static_cast<unsigned>(D2RL::DataTables::TableId::Properties)]={reinterpret_cast<const unsigned char*>(u.props.data()),u.props.size(),sizeof(Affixes::Property)};
+    contributionFixtureTables[static_cast<unsigned>(D2RL::DataTables::TableId::Items)]={items.data(),2,448};
+    contributionFixtureTables[static_cast<unsigned>(D2RL::DataTables::TableId::ItemTypes)]={types.data(),2,232};
+    contributionFixtureTables[static_cast<unsigned>(D2RL::DataTables::TableId::CubeMain)]={cube.data(),1,364};
+    u.own={{std::uint64_t{39}<<32,12},{std::uint64_t{394}<<32,1}};u.total=u.own;u.Bind();
+    const auto enchText=u.Render(39,"Fire Resist +12%");
+    check(enchText.find("[+10% - +15%]")!=std::string::npos && enchText.find("[E]")!=std::string::npos);
+    // Multi-enchanted residual [E] attribution and fixed fn=3 (extra-elem) independence:
+    u.Property(6,1,329);
+    for(unsigned k=1;k<4;++k){u.props[6].bytes[0x18+k]=3;put(u.props[6].bytes.data(),0x20+k*2,std::uint16_t(329+k));}
+    u.Property(7,1,329);
+    put(uRow.data(),0xd8,6u);put(uRow.data(),0xe0,5);put(uRow.data(),0xe4,5); // fixed +5% all elem
+    u.own={{std::uint64_t{48}<<32,63},{std::uint64_t{49}<<32,511},
+           {std::uint64_t{329}<<32,13},{std::uint64_t{330}<<32,5},{std::uint64_t{331}<<32,5},{std::uint64_t{332}<<32,5},
+           {std::uint64_t{394}<<32,5}};
+    u.total=u.own;u.Bind();
+    check(u.Render(329,"+13% to Fire Skill Damage").find("[Combined]")!=std::string::npos);
+    check(u.Render(330,"+5% to Cold Skill Damage").find("[+5%]")!=std::string::npos);
+    // Crafted items (quality=8): Shadow Gorget Amulet (+2 Paladin Skills [E], +2 All Skills [Craft], +10% Skill Damage [Craft])
+    // and Havoc Mark Vortex Shield (+10-15% Skill Damage [Craft], -10-15% Enemy Resistance [Craft] with dgrp=3/4 individual lines).
+    put(u.Data(),0,8u);
+    u.Property(0,1,127); // allskills
+    u.Property(1,1,333); // pierce-elem
+    for(unsigned k=1;k<4;++k){u.props[1].bytes[0x18+k]=3;put(u.props[1].bytes.data(),0x20+k*2,std::uint16_t(333+k));}
+    u.Property(2,21,83);put(u.props[2].bytes.data(),0x0a,std::uint16_t{3}); // pal (stat 83, layer 3)
+    put(u.statRows.data()+83*0x144,0x32,std::uint16_t{13});
+    for(unsigned k=0;k<4;++k){
+        put(u.statRows.data()+(329+k)*0x144,0x3a,std::uint16_t{3});
+        put(u.statRows.data()+(333+k)*0x144,0x3a,std::uint16_t{4});
+    }
+    std::array<unsigned char,364*2> craftCube{};
+    // Row 0: Crafted Amulet / Weapon recipe: allskills 2..2, extra-elem 10..10
+    craftCube[0]=1;craftCube[2]=0xff;craftCube[3]=0;craftCube[12]=2;craftCube[0x64]=8;craftCube[0x67]=0xff;
+    put(craftCube.data(),0x14,std::uint16_t{2});put(craftCube.data(),0x16,0u);
+    for(unsigned n=0;n<5;++n)put(craftCube.data(),0x77+n*12,UINT32_MAX);
+    put(craftCube.data()+0x77,0,0u);put(craftCube.data()+0x77,6,std::int16_t{2});put(craftCube.data()+0x77,8,std::int16_t{2});craftCube[0x77+10]=100;
+    put(craftCube.data()+0x77+12,0,6u);put(craftCube.data()+0x77+12,6,std::int16_t{10});put(craftCube.data()+0x77+12,8,std::int16_t{10});craftCube[0x77+12+10]=100;
+    // Row 1: Crafted Shield recipe: allskills 2..2, extra-elem 10..15, pierce-elem 10..15
+    auto* craftRow2=craftCube.data()+364;
+    craftRow2[0]=1;craftRow2[2]=0xff;craftRow2[3]=0;craftRow2[12]=2;craftRow2[0x64]=8;craftRow2[0x67]=0xff;
+    put(craftRow2,0x14,std::uint16_t{2});put(craftRow2,0x16,0u);
+    for(unsigned n=0;n<5;++n)put(craftRow2,0x77+n*12,UINT32_MAX);
+    put(craftRow2+0x77,0,0u);put(craftRow2+0x77,6,std::int16_t{2});put(craftRow2+0x77,8,std::int16_t{2});craftRow2[0x77+10]=100;
+    put(craftRow2+0x77+12,0,6u);put(craftRow2+0x77+12,6,std::int16_t{10});put(craftRow2+0x77+12,8,std::int16_t{15});craftRow2[0x77+12+10]=100;
+    put(craftRow2+0x77+24,0,1u);put(craftRow2+0x77+24,6,std::int16_t{10});put(craftRow2+0x77+24,8,std::int16_t{15});craftRow2[0x77+24+10]=100;
+    contributionFixtureTables[static_cast<unsigned>(D2RL::DataTables::TableId::CubeMain)]={craftCube.data(),2,364};
+    // Shadow Gorget Amulet state:
+    u.own={{(std::uint64_t{83}<<32)|3,2},{std::uint64_t{127}<<32,2},
+           {std::uint64_t{329}<<32,10},{std::uint64_t{330}<<32,10},{std::uint64_t{331}<<32,10},{std::uint64_t{332}<<32,10},
+           {std::uint64_t{392}<<32,2}};
+    u.total=u.own;u.Bind();
+    const char* palSkills="+2 to Paladin Skill Levels";
+    const auto palLabels=AffixLabels(u.host.data(),{{RangeText::Analyze(palSkills).key,83,3,false}},palSkills);
+    const auto palRendered=RangeText::Merge(palSkills,palSkills,4096,palLabels).text;
+    check(palRendered.find("[+2]")!=std::string::npos && palRendered.find("[E]")!=std::string::npos);
+    check(u.Render(127,"+2 to All Skills").find("[Craft]")!=std::string::npos);
+    check(u.Render(329,"+10% to Fire Skill Damage").find("[Craft]")!=std::string::npos);
+    // Havoc Mark Vortex Shield state:
+    u.own={{std::uint64_t{127}<<32,2},
+           {std::uint64_t{329}<<32,15},{std::uint64_t{330}<<32,15},{std::uint64_t{331}<<32,15},{std::uint64_t{332}<<32,15},
+           {std::uint64_t{333}<<32,10},{std::uint64_t{334}<<32,10},{std::uint64_t{335}<<32,10},{std::uint64_t{336}<<32,10}};
+    u.total=u.own;u.Bind();
+    const auto coldDmg=u.Render(331,"+15% to Cold Skill Damage");
+    check(coldDmg.find("[+10% - +15%]")!=std::string::npos && coldDmg.find("[Craft]")!=std::string::npos);
+    const auto coldPierce=u.Render(335,"-10% to Enemy Cold Resistance");
+    check(coldPierce.find("[-10% - -15%]")!=std::string::npos && coldPierce.find("[Craft]")!=std::string::npos);
+    propertySourcesReady.store(false);scalingReady.store(false);originalSingle=nullptr;
+    contributionContext=nullptr;contributionTables=nullptr;contributionFixtureTables={};
     std::puts("Verified owned durability and physical endpoint rendering, base exclusion, mismatches and operation guards.");
+    TestRandomizedItemAffixCombinations();
 }
 }
 
@@ -648,6 +1259,25 @@ void TestChargeSourceOnly(){
     const auto suppressed=RangeText::Merge(actual,native,4096,labels);
     check(suppressed.text==rendered.text && suppressed.annotated==0);
     check(RangeText::Merge(actual,native,10,labels).text==actual);
+    // RangeHelperAdapter wraps the charge fraction in one U span, emitting key
+    // "Level#IronGolem#Charges" while actual has "Level#IronGolem(#/#Charges)".
+    const char* golemActual="Level 2 Iron Golem (34/35 Charges)";
+    const std::string golemRanged="Level 35 Iron Golem "+marker+"U(5/35)"+marker+"3 Charges";
+    put(f.rows[0].bytes.data(),0x28,94);
+    const int golemLayer=(94<<6)|2;
+    f.own={{(std::uint64_t{204}<<32)|static_cast<unsigned>(golemLayer),(35<<8)|34}};f.total=f.own;f.Bind();
+    const std::vector<CapturedLine> golemObserved={CapturedLine{RangeText::Analyze(golemRanged).key,204,golemLayer,false}};
+    const auto golemLabels=AffixLabels(f.host.data(),golemObserved,golemActual);
+    check(golemLabels.size()==1 && golemLabels[0].key==RangeText::Analyze(golemActual).key && golemLabels[0].sourceOnly);
+    const auto golemMerged=RangeText::Merge(golemActual,golemRanged,4096,golemLabels);
+    check(golemMerged.text.starts_with(golemActual) && golemMerged.text.find("Level 35")==std::string::npos);
+    check(golemMerged.text.find("[S] [of Miasma Bolt] [T1]")!=std::string::npos);
+    // No-clone recovery also identifies stat204 directly from owned charge state.
+    scalingReady.store(true);
+    const auto golemNoClone=AffixLabels(f.host.data(),{},golemActual);
+    scalingReady.store(false);
+    check(golemNoClone.size()==1 && golemNoClone[0].key==RangeText::Analyze(golemActual).key && golemNoClone[0].sourceOnly);
+    put(f.rows[0].bytes.data(),0x28,395);
     const Affixes::Rolled affix{1,f.rows[0],false,2};const Affixes::LayerEncoding encoding{6,63};
     check(!Affixes::Contributes(affix.row,f.props,204,layer,encoding)); // Numeric matching not relaxed.
     check(Affixes::ChargeSourceLabel({&affix,1},f.props,layer,encoding)=="[S] [of Miasma Bolt] [T2]");

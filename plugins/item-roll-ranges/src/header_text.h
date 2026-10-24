@@ -37,6 +37,21 @@ inline std::string SocketCapacity(std::string_view text,std::string_view capacit
     if(!text.ends_with('\n') && !result.empty())result.pop_back();
     return result;
 }
+inline std::string ReplaceSocketCapacity(std::string_view text,std::string_view capacityKey,std::string_view label) {
+    if(capacityKey.empty() || label.empty())return std::string(text);
+    const auto lines=RangeText::Lines(text);
+    unsigned matches=0;
+    for(const auto line:lines)if(RangeText::Analyze(line).key==capacityKey)++matches;
+    if(matches!=1)return std::string(text);
+    std::string result;
+    for(std::size_t n=0;n<lines.size();++n){
+        if(RangeText::Analyze(lines[n]).key==capacityKey)result+="\xee\x81\xbe" "0"+std::string(label);
+        else result+=lines[n];
+        result+='\n';
+    }
+    if(!text.ends_with('\n') && !result.empty())result.pop_back();
+    return result;
+}
 // Use the same localized requirement/header anchors as capacity, after capacity
 // has been inserted. This displays Required Level / levels / Max Sockets / speed.
 // Jewelry and other items can have no native numeric header at all; use the

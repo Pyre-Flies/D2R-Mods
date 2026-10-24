@@ -103,6 +103,94 @@ inline std::optional<Corruption> ResolveCorruption(const Table& cube,const Table
     }
     return {};
 }
+struct EnchantmentCandidate {unsigned upgradeStat{};std::vector<Spec> specs;};
+inline std::optional<std::vector<EnchantmentCandidate>> ResolveEnchantmentCandidates(
+    const Table& cube,const Table& items,const Table& types,std::span<const Affixes::Property> properties,
+    unsigned classId,unsigned quality,unsigned upgradeStat) {
+    if(cube.stride!=364||items.stride!=448||types.stride!=232)return {};
+    const auto* host=items.Row(classId);if(!host)return {};
+    const int first=Affixes::Read<std::int16_t>(host,0x12e),second=Affixes::Read<std::int16_t>(host,0x130);
+    std::vector<EnchantmentCandidate> out;
+    for(std::size_t n=0;n<cube.count;++n){
+        const auto* row=cube.Row(n);
+        if(row[0]!=1||row[1]||(row[2]!=0xff&&row[2]>=8)||row[0x67]!=0xfe||row[0x64]||row[12]<2)continue;
+        const auto isUpgradeStat=[&](unsigned s){return s==upgradeStat || (upgradeStat>=392 && upgradeStat<=395 && s>=392 && s<=395);};
+        if((row[3]==16||row[3]==18) && !isUpgradeStat(Affixes::Read<unsigned>(row,4)))continue;
+        bool applicable=false,otherInput=false;
+        for(unsigned input=0;input<row[12]&&input<7;++input){
+            const auto* p=row+0x14+input*10;const unsigned flags=Affixes::Read<std::uint16_t>(p,0),id=Affixes::Read<unsigned>(p,2);
+            if(p[8]||p[9])continue;
+            bool matchesHost=false;
+            if(flags==1 && id==classId && (!p[6]||p[6]==quality))matchesHost=true;
+            else if(flags==2 && (!p[6]||p[6]==quality)){
+                const auto match=Type(types,first,second,id);if(!match)return {};
+                matchesHost=*match;
+            }
+            if(matchesHost && !applicable)applicable=true;
+            else otherInput=true;
+        }
+        if(!applicable||!otherInput)continue;
+        bool markerFound=false,valid=true;std::vector<Spec> specs;
+        for(unsigned mod=0;mod<5;++mod){
+            const auto* p=row+0x77+mod*12;const unsigned id=Affixes::Read<unsigned>(p,0);
+            if(id==0xffffffffu)continue;
+            if(id>=properties.size()){valid=false;break;}
+            const int param=Affixes::Read<std::int16_t>(p,4),lo=Affixes::Read<std::int16_t>(p,6),hi=Affixes::Read<std::int16_t>(p,8);
+            const auto& prop=properties[id].bytes;
+            if(prop[0x18]==17 && !prop[0x19] && isUpgradeStat(Affixes::Read<std::uint16_t>(prop.data(),0x20))){
+                if(!((param==1&&!lo&&!hi)||(!param&&lo==1&&hi==1))){valid=false;break;}
+
+                markerFound=true;continue;
+            }
+            if(p[10]!=100||p[11]){valid=false;break;}
+            specs.push_back({id,param,lo,hi});
+        }
+        if(!valid||!markerFound||specs.empty()||specs.size()>3)continue;
+        out.push_back({upgradeStat,std::move(specs)});
+    }
+    return out;
+}
+struct CraftCandidate {std::vector<Spec> specs;};
+inline std::optional<std::vector<CraftCandidate>> ResolveCraftCandidates(
+    const Table& cube,const Table& items,const Table& types,std::span<const Affixes::Property> properties,
+    unsigned classId,unsigned quality) {
+    if(cube.stride!=364||items.stride!=448||types.stride!=232||(quality!=4&&quality!=6&&quality!=8))return {};
+    const auto* host=items.Row(classId);if(!host)return {};
+    const int first=Affixes::Read<std::int16_t>(host,0x12e),second=Affixes::Read<std::int16_t>(host,0x130);
+    std::vector<CraftCandidate> out;
+    for(std::size_t n=0;n<cube.count;++n){
+        const auto* row=cube.Row(n);
+        if(row[0]!=1||row[1]||(row[2]!=0xff&&row[2]>=8)||row[3]||row[12]<2)continue;
+        if(row[0x67]!=0xff||row[0x64]!=quality||Affixes::Read<std::uint16_t>(row,0x5e)!=0)continue;
+        const auto* p0=row+0x14;const unsigned flags=Affixes::Read<std::uint16_t>(p0,0),id=Affixes::Read<unsigned>(p0,2);
+        if(p0[8]||p0[9])continue;
+        bool applicable=false;
+        if(flags==1)applicable=id==classId;
+        else if(flags==2){
+            const auto match=Type(types,first,second,id);if(!match)return {};
+            applicable=*match;
+        }
+        if(!applicable)continue;
+        bool valid=true;std::vector<Spec> specs;
+        for(unsigned mod=0;mod<5;++mod){
+            const auto* p=row+0x77+mod*12;const unsigned modId=Affixes::Read<unsigned>(p,0);
+            if(modId==0xffffffffu)continue;
+            if(modId>=properties.size()||p[10]!=100||p[11]){valid=false;break;}
+            const int param=Affixes::Read<std::int16_t>(p,4),lo=Affixes::Read<std::int16_t>(p,6),hi=Affixes::Read<std::int16_t>(p,8);
+            specs.push_back({modId,param,lo,hi});
+        }
+        if(!valid||specs.empty())continue;
+        const bool duplicate=std::any_of(out.begin(),out.end(),[&](const CraftCandidate& c){
+            if(c.specs.size()!=specs.size())return false;
+            for(std::size_t k=0;k<specs.size();++k)
+                if(c.specs[k].property!=specs[k].property||c.specs[k].parameter!=specs[k].parameter||
+                   c.specs[k].low!=specs[k].low||c.specs[k].high!=specs[k].high)return false;
+            return true;
+        });
+        if(!duplicate)out.push_back({std::move(specs)});
+    }
+    return out;
+}
 inline Affixes::Rolled Rolled(const Spec& spec,const char* label) {
     Affixes::Rolled out{};out.source=label;
     std::memcpy(out.row.bytes.data()+0x24,&spec.property,4);

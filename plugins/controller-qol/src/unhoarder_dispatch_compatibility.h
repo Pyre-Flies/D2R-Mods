@@ -46,12 +46,50 @@ inline bool ExecutableImageFor(QolChatForwarding::ImageMemory& image,uintptr_t t
         return result>=0 && std::memcmp(digest,textHash,sizeof(digest))==0;
     } catch(...) {return false;}
 }
+inline bool ValidateStructural(const QolChatForwarding::Memory& memory,uintptr_t game,uintptr_t companion,
+    const unsigned char* original,size_t size) noexcept {
+    using namespace QolChatForwarding;
+    if(!memory.read || !original || size<32 || size>4096 || !game || !companion ||
+       game>UINTPTR_MAX-Rva-size)return false;
+    unsigned char entry[4096]{},relay[14]{},wrapper[160]{},trampoline[19]{};
+    uintptr_t relayAddress{},destination{},slotAddress{},previous{},resume{};int32_t displacement{};
+    const auto address=game+Rva;
+    if(!memory.read(memory.user,address,entry,size,Kind::Trampoline) || entry[0]!=0xe9 ||
+       std::memcmp(entry+5,original+5,size-5))return false;
+    std::memcpy(&displacement,entry+1,4);
+    if(!Relative(address+5,displacement,relayAddress) ||
+       !memory.read(memory.user,relayAddress,relay,sizeof(relay),Kind::Trampoline) ||
+       std::memcmp(relay,QolItemCode::Jump,6))return false;
+    std::memcpy(&destination,relay+6,8);
+    if(!memory.read(memory.user,destination,wrapper,sizeof(wrapper),Kind::Code))return false;
+    // Locate RIP-indirect call (FF 15 disp32) or RIP-relative load (48 8B 05 disp32) for the original trampoline slot
+    bool matchedTrampoline=false;
+    for(size_t i=0;i+7<=sizeof(wrapper);++i) {
+        slotAddress=0;
+        if(wrapper[i]==0xff && wrapper[i+1]==0x15) {
+            int32_t slotDisp{};std::memcpy(&slotDisp,wrapper+i+2,4);
+            (void)Relative(destination+i+6,slotDisp,slotAddress);
+        } else if(wrapper[i]==0x48 && wrapper[i+1]==0x8b && wrapper[i+2]==0x05) {
+            int32_t slotDisp{};std::memcpy(&slotDisp,wrapper+i+3,4);
+            (void)Relative(destination+i+7,slotDisp,slotAddress);
+        }
+        if(slotAddress && memory.read(memory.user,slotAddress,&previous,8,Kind::Data) && previous &&
+           memory.read(memory.user,previous,trampoline,sizeof(trampoline),Kind::Trampoline) &&
+           !std::memcmp(trampoline,original,5) && !std::memcmp(trampoline+5,QolItemCode::Jump,6)) {
+            std::memcpy(&resume,trampoline+11,8);
+            if(resume==address+5) {matchedTrampoline=true;break;}
+        }
+    }
+    return matchedTrampoline && QolItemCode::ValidateStructural(memory,game,companion);
+}
 inline bool Check(const D2RL::PluginContext* context,const unsigned char* original,size_t size) noexcept {
     if(!context || !original || size>UINT32_MAX)return false;
     if(context->CheckExpectedBytes(Rva,original,static_cast<uint32_t>(size)))return true;
     const auto module=GetModuleHandleW(L"unhoarder.dll");
     QolChatForwarding::ImageMemory image{};
     if(!module || !image.Open(module))return false;
+    if(QolItemCode::IdentifyArtifact(module)==QolItemCode::ArtifactProfile::Structural)return
+        ValidateStructural(image.Reader(),context->exeBase,reinterpret_cast<uintptr_t>(module),original,size);
     namespace SocketBatchAlt=QolUnhoarderDispatchSocketBatchAlt;
     if(QolItemCode::IdentifyArtifact(module)==QolItemCode::ArtifactProfile::SocketBatchAlt)return
         ExecutableImageFor(image,SocketBatchAlt::TextRva,SocketBatchAlt::TextSize,SocketBatchAlt::TextHash) &&

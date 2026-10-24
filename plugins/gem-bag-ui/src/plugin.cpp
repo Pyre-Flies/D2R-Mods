@@ -47,7 +47,7 @@ Gesture gesture[8]{};
 HHOOK mouseHook{};
 uint64_t mouseSerial{},mouseUsed{},mouseTick{};bool rightMouse{};
 std::atomic<bool> uiQueued{};
-enum class UiAction { OpenFocused, OpenHovered, DepositHovered, Close, Withdraw, ClickAt, HoverAt, Up, Down, Left, Right };
+enum class UiAction { OpenFocused, DepositFocused, OpenHovered, DepositHovered, Close, Withdraw, ClickAt, HoverAt, Up, Down, Left, Right };
 struct UiCommand { UiAction action; uint64_t generation,serial; uint32_t id{},cls{}; Info hovered{}; uint64_t tick{}; POINT point{}; };
 std::deque<UiCommand> uiCommands;
 bool commandQueued{};
@@ -226,12 +226,18 @@ Inventory::IterationAction __cdecl FindItem(const PluginContext*,const Info* i,v
     if(i&&i->runtimeId==f.id&&i->classId==f.cls&&Catalog::Candidate(*i)){f.item=*i;f.found=true;return Inventory::IterationAction::Stop;}
     return Inventory::IterationAction::Continue;
 }
-bool OpenFocused() {
-    Find f{};PlayerHandle local{};
+bool FocusedBag(Find& f) {
+    PlayerHandle local{};
     if(!Native::Focus(ctx,f.id,f.cls)||inventory->getLocalPlayer(ctx,&local)!=Inventory::Result::Success)return false;
     const Inventory::ItemFilter filter{.structSize=Inventory::ItemFilterSize,.containerMask=StorageMask};
-    if(inventory->forEachInventoryItem(ctx,local,&filter,FindItem,&f)!=Inventory::Result::Success||!f.found)return false;
-    return Open(f.item.handle,f.item,{},true);
+    return inventory->forEachInventoryItem(ctx,local,&filter,FindItem,&f)==Inventory::Result::Success&&f.found;
+}
+bool OpenFocused() {
+    Find f{};return FocusedBag(f)&&Open(f.item.handle,f.item,{},true);
+}
+bool DepositFocused() {
+    Find f{};if(!FocusedBag(f))return false;
+    StartDeposit(f.item);return true;
 }
 void MoveSelection(UiAction action) {
     const auto definition=Catalog::Find(snapshot.bank,chosen);if(!definition)return;
@@ -250,9 +256,12 @@ void __cdecl Commands(const PluginContext*,void*) noexcept {
         while(!uiCommands.empty()) {
             const auto command=uiCommands.front();uiCommands.pop_front();
             if(stopping||command.generation!=generation)continue;
-            if(command.action==UiAction::OpenFocused) {
+            if(command.action==UiAction::OpenFocused||command.action==UiAction::DepositFocused) {
                 uint32_t id{},cls{};
-                if(!open&&Native::Focus(ctx,id,cls)&&id==command.id&&cls==command.cls)OpenFocused();
+                if(!open&&Native::Focus(ctx,id,cls)&&id==command.id&&cls==command.cls) {
+                    if(command.action==UiAction::DepositFocused)DepositFocused();
+                    else OpenFocused();
+                }
                 continue;
             }
             if(command.action==UiAction::OpenHovered||command.action==UiAction::DepositHovered) {
@@ -317,7 +326,7 @@ bool HandleController(void* event) {
         uint32_t id{},cls{};
         // Only discovered bag classes can own this press. Re-resolve the
         // complete item identity in the queued SDK UI callback.
-        if(key==0x2000&&edge&&lb&&Native::Focus(ctx,id,cls)&&Catalog::CandidateClass(cls)&&QueueCommand(UiAction::OpenFocused,id,cls)){state.owned|=key;return true;}
+        if((key==0x1000||key==0x2000)&&edge&&lb&&Native::Focus(ctx,id,cls)&&Catalog::CandidateClass(cls)&&QueueCommand(key==0x1000?UiAction::OpenFocused:UiAction::DepositFocused,id,cls)){state.owned|=key;return true;}
         return false;
     }
     // A release for a key already delivered before this modal opened must
@@ -433,7 +442,7 @@ void __cdecl Tooltip(const PluginContext*,SharedEvents::ItemTooltipEvent* e,void
         if(!ReadInfo(e->item,info)||!Supported(info)||!Catalog::Candidate(info)){hover.valid=false;return;}
         hover={info,GetTickCount64(),{},true};GetCursorPos(&hover.point);
         if(!tipLogged){tipLogged=true;ctx->LogInfo("[GemBag] Bag tooltip received; right-click target is ready.");}
-        const char* text=Native::Controller(ctx)?"LB+B: Choose gem":"Right-click: Choose gem\nShift+right-click: Deposit gems + clusters";
+        const char* text=Native::Controller(ctx)?"LB+A: Choose gem\nLB+B: Deposit gems + clusters":"Right-click: Choose gem\nShift+right-click: Deposit gems + clusters";
         const size_t n=std::strlen(text);
         if(n+1<=e->capacity){std::memcpy(e->text,text,n+1);e->length=static_cast<uint32_t>(n);}
     }catch(...){ }
@@ -526,7 +535,7 @@ bool Load(const PluginContext* c,bool dedicated=DedicatedLaunch()) {
         c->CheckExpectedBytes(QolNativeProfile::InputRva,QolNativeProfile::InputBytes,sizeof(QolNativeProfile::InputBytes))) {
         inputInstalled=c->InstallInlineHook<Caller>(QolNativeProfile::EventCallerRva,QolNativeProfile::EventCallerBytes,18,&ControllerCaller,&originalCaller);
     }
-    c->LogInfo(inputInstalled?"[GemBag] Eight-gem selector loaded: right-click bag or LB+B; withdrawals use the bag's exact storage page.":"[GemBag] Eight-gem mouse selector loaded; controller caller unavailable, existing controller input retained.");
+    c->LogInfo(inputInstalled?"[GemBag] Eight-gem selector loaded: right-click/LB+A to choose gem, Shift+right-click/LB+B to deposit; uses the bag's exact storage page.":"[GemBag] Eight-gem mouse selector loaded; controller caller unavailable, existing controller input retained.");
     return true;
 }
 void Unload() {
@@ -546,7 +555,7 @@ void Unload() {
     for(auto h:ownedPanels)if(panels&&h)panels->unregisterPanel(ctx,h);
     for(auto h:resource)if(resources&&h)resources->unregisterResource(ctx,h);
 }
-constexpr PluginInfo InfoBlock{.infoSize=PluginInfoSize,.abiVersion=D2RL_PLUGIN_ABI_VERSION,.id="gem-bag-ui",.name="Gem Bag UI",.version="1.3.1+rev.1",
+constexpr PluginInfo InfoBlock{.infoSize=PluginInfoSize,.abiVersion=D2RL_PLUGIN_ABI_VERSION,.id="gem-bag-ui",.name="Gem Bag UI",.version="1.3.1+rev.2",
     .author="PyreFly",.description="Choose any gem from a Gem Bag with server-authoritative withdrawal.",.flags=PluginFlags::Shared|PluginFlags::NativeHooks};
 }
 extern "C" __declspec(dllexport) const D2RL::PluginInfo* D2RLoaderGetPluginInfo() noexcept {return &InfoBlock;}

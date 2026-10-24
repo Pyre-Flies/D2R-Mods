@@ -1,6 +1,6 @@
 # Controller QOL Updates
 
-**1.3.1+rev.91 · by PyreFly · Windows x64 / D2RLoader 1.3.1 / plugin ABI 4**
+**1.3.1+rev.92 · by PyreFly · Windows x64 / D2RLoader 1.3.1 / plugin ABI 4**
 
 Controller item shortcuts, direct ground looting, menu navigation and optional
 right-stick skill aiming. This README covers the default button combinations,
@@ -219,7 +219,7 @@ archives and `defaults/` references are not watched. See the
 | `trigger_threshold` | `30` | LT/RT activation threshold, integer 1-255. |
 | `ground_pickup` | `true` | Enable labeled direct-loot assignments. |
 | `ground_pickup_button` | `"bumper"` | Independent modifier for ground-loot assignments; see aliases below. |
-| `ground_pickup_distance` | `6` | Nearby assignment distance, integer 1-20; effective minimum is 10. Already mapped items may use native travel beyond it. |
+| `ground_pickup_distance` | `14` | Nearby assignment distance, integer 1-20; effective minimum is 10. Already mapped items may use native travel beyond it. |
 | `debug_logging` | `false` | General diagnostic logging; leave false for ordinary play. |
 | `block_filtered_pickup` | `true` | Block controller A pickup for hidden-label items. Gold and mouse/keyboard pickup retain native behavior. |
 | `prioritize_portals` | `true` | Prefer an eligible nearby portal for ordinary A interactions. |

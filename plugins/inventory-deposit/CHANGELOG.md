@@ -19,10 +19,12 @@
 
 - Promote 0.1.0-beta.13 to the shared loader-version plus independent revision format.
   Plugin metadata, Windows resources, package names and documentation agree.
+- Admit UnHoarder's item-code forwarding detour (`0x36EF50`) in `deposit_native.cpp`
+  via `QolItemCode::Check` so Inventory Deposit and UnHoarder coexist in either
+  plugin load order, with regression coverage in `inventory-deposit-item-code`.
 - Keep the previously released behavior, native guards and saved settings.
-  This promotion adds no native hook or gameplay behavior. Existing live
-  coverage and documented limitations are unchanged; rebuild/artifact and
-  package checks qualify the new stable artifact separately.
+  Existing live coverage and documented limitations are unchanged; rebuild/artifact
+  and package checks qualify the stable artifact separately.
 
 ## 0.1.0-beta.13 - 2026-10-11
 

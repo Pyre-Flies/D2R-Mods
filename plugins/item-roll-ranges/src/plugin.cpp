@@ -149,9 +149,9 @@ const unsigned char* VisibleSetTables(const unsigned char* tables,const unsigned
     if (record<0 || count>32768 || static_cast<std::uint64_t>(record)>=count || !Readable(rows,count*0x1cc)) return tables;
     const auto* row=rows+static_cast<std::size_t>(record)*0x1cc;
     if (!(row[0x2c]&8) || (row[0x2c]&4)) return tables;
-    // Only this qualified selector reads this view, and it reads this record only.
+    // Copy the full SetItems table so no adjacent record in the temporary view is zeroed.
     snapshot.rows.resize(static_cast<std::size_t>(count)*0x1cc);
-    std::memcpy(snapshot.rows.data()+static_cast<std::size_t>(record)*0x1cc,row,0x1cc);
+    std::memcpy(snapshot.rows.data(),rows,snapshot.rows.size());
     snapshot.rows[static_cast<std::size_t>(record)*0x1cc+0x2c]&=~8u;
     std::memcpy(snapshot.tables.data(),tables,snapshot.tables.size());
     const auto* copied=snapshot.rows.data();std::memcpy(snapshot.tables.data()+0x13a8,&copied,sizeof(copied));
@@ -190,9 +190,13 @@ LookupFn lookupHeader{};
 using SocketCapacityFn=unsigned char(__fastcall*)(void*);
 SocketCapacityFn nativeSocketCapacity{};
 void** builderSlot{}; void** assignSlot{};
-std::uintptr_t builderReturn{},assignReturn{};
+std::uintptr_t builderReturn{},assignReturn{},socketAssignReturn{};
 struct HeaderProof { NativeText* receiver{}; std::string actual,annotated; };
 thread_local HeaderProof pendingHeader;
+struct SocketOverrideProof { NativeText* receiver{}; std::string key,label; };
+thread_local SocketOverrideProof pendingSocketOverride;
+struct PropertyOverflowProof { const void* source{}; std::string bounded,full; };
+thread_local PropertyOverflowProof pendingPropertyOverflow;
 using DamageFn=std::uint64_t(__fastcall*)(unsigned char,void*,char*,void*);
 DamageFn originalDamage{};
 void** damageSlot{};
@@ -244,6 +248,7 @@ bool AddUnobservedCompositeIdentities(std::vector<CapturedLine>& lines,std::stri
         // two-number matching rule; unrelated scalar lines stay excluded.
         const auto numbers=std::count(key.begin(),key.end(),'#');
         if (numbers!=2 && !(numbers==3 && poisonPossible)) continue;
+        if (key.find('/')!=std::string::npos) continue;
         bool observed=false;
         for (const auto& line:lines) if (line.key==key) { observed=true; break; }
         if (!observed) candidates.push_back(key);
@@ -273,12 +278,19 @@ bool AddUnobservedCompositeIdentities(std::vector<CapturedLine>& lines,std::stri
         std::string familyLabel;
         int familyStat=-1;
         for (const int stat:family) {
-            if (stat<0) continue;
+            if (stat<0 || stat==56 || stat==59) continue;
             const auto label=Affixes::Label(rolled,properties,stat,0,encoding,groups);
             if (label.empty()) continue;
             if (std::find(observedSources.begin(),observedSources.end(),label)!=observedSources.end()) continue;
-            if (familyLabel.empty()) { familyLabel=label; familyStat=stat; }
-            else if (familyLabel!=label) return false;
+            if (familyStat<0) familyStat=stat;
+            for (const auto& affix:rolled) {
+                if (!Affixes::Contributes(affix.row,properties,stat,0,encoding,groups)) continue;
+                const auto named=Affixes::NamedLabel(affix);
+                if (familyLabel.find(named)==std::string::npos) {
+                    if (!familyLabel.empty()) familyLabel+=' ';
+                    familyLabel+=named;
+                }
+            }
         }
         if (familyStat<0) continue;
         if (!itemStats || familyStat>=static_cast<int>(itemStatCount)) return false;
@@ -409,9 +421,9 @@ std::string UniqueRange(void* source,const CapturedLine& line,const std::vector<
     const auto count=Affixes::Read<std::uint64_t>(tables,0x1260);
     if (line.stat<0 || count>4096 || static_cast<std::uint64_t>(line.stat)>=count || !Readable(stats,count*0x144)) return {};
     const auto* row=stats+static_cast<std::size_t>(line.stat)*0x144;
-    // Reviewed descfunc19 formats the supplied display-unit integer through
-    // its native template (including inverted signs such as enemy resistance).
-    if (row[0x32]!=19) return {};
+    // Reviewed descfunc19/20 format the supplied display-unit integer through
+    // their native template (including inverted signs such as enemy resistance).
+    if (row[0x32]!=19 && row[0x32]!=20) return {};
     char lower[256]{},upper[256]{};
     if (!originalSingle(source,row,low,0,false,lower,1) || !originalSingle(source,row,high,0,false,upper,1)) return {};
     const auto ln=strnlen(lower,256),hn=strnlen(upper,256);
@@ -510,33 +522,88 @@ void AddOwnedScalarIdentities(void* source,const Contributions::Snapshot& snapsh
     std::span<const Affixes::Property> properties,Affixes::LayerEncoding encoding,
     std::span<const Affixes::PropertyGroup> groups,const unsigned char* metadata,std::size_t count,
     std::vector<CapturedLine>& observed) {
-    if(!originalSingle || snapshot.own.size()>256)return;
+    if(snapshot.own.size()>256 || snapshot.total.size()>256)return;
+    Contributions::Stats combined=snapshot.total;
+    for(const auto& ownVal:snapshot.own){
+        const auto s=static_cast<unsigned>(ownVal.key>>32);
+        const bool ownOnly=(ownVal.key&0xffffffffu)==0 && (s==16 || s==17 || s==18 || (s>=21 && s<=24) || s==75);
+        auto it=std::find_if(combined.begin(),combined.end(),[&](const auto& c){return c.key==ownVal.key;});
+        if(it==combined.end())combined.push_back(ownVal);
+        else if(ownOnly || it->value==0)it->value=ownVal.value;
+    }
     std::vector<CapturedLine> candidates;std::set<unsigned> seenGroups;
-    for(const auto& value:snapshot.own){
+    for(const auto& value:combined){
         const auto stat=static_cast<unsigned>(value.key>>32),layer=static_cast<unsigned>(value.key);
-        if(stat>=count || layer>INT_MAX)continue;const auto* row=metadata+stat*0x144;
+        if(stat>=count || layer>INT_MAX)continue;
+        if(stat==204 && encoding.skillBits>0 && encoding.skillBits<16 && encoding.skillMask==((1u<<encoding.skillBits)-1)){
+            if(Affixes::ChargeSourceLabel(definitions,properties,static_cast<int>(layer),encoding,groups).empty())continue;
+            const auto skillLevel=static_cast<long long>(layer&encoding.skillMask);
+            const auto remaining=static_cast<long long>(value.value&0xff),maximum=static_cast<long long>((value.value>>8)&0xff);
+            if(skillLevel<=0 || maximum<=0)continue;
+            std::string matchedKey;unsigned matches=0;
+            for(const auto line:RangeText::Lines(actual)){
+                const auto key=RangeText::Analyze(line).key;
+                if(key.find("(#/#")==std::string::npos)continue;
+                const auto numbers=HeaderText::Numbers(line);
+                if(numbers.size()==3 && numbers[0]==skillLevel && numbers[1]==remaining && numbers[2]==maximum){
+                    matchedKey=key;++matches;
+                }
+            }
+            if(matches==1)candidates.push_back({std::move(matchedKey),204,static_cast<int>(layer),false,0});
+            continue;
+        }
+        if(stat>=195 && stat<=201 && layer){
+            if(encoding.skillBits>0 && encoding.skillBits<16 && value.value>0 && value.value<=100000){
+                const int skillLevel=static_cast<int>(layer&encoding.skillMask);
+                if(skillLevel>0){
+                    std::string matchedKey;unsigned matches=0;
+                    for(const auto line:RangeText::Lines(actual))if(!RangeText::FixedProcChance(line,static_cast<int>(value.value),skillLevel).empty()){
+                        matchedKey=RangeText::Analyze(line).key;++matches;}
+                    if(matches==1)candidates.push_back({std::move(matchedKey),static_cast<int>(stat),static_cast<int>(layer),false,0});
+                }
+            }
+            continue;
+        }
+        if(!originalSingle)continue;
+        const auto* row=metadata+stat*0x144;
         const auto desc=Affixes::Read<std::uint16_t>(row,0x32);
         if(!desc || ((desc!=19 || layer) && !(stat==83 && desc==13 && layer<8) && !propertySourcesReady.load()))continue;
+        if(layer && (stat>=195 && stat<=204))continue;
         if(Affixes::Read<std::uint16_t>(row,0)!=stat)continue;
         const auto group=Affixes::Read<std::uint16_t>(row,0x3a);
+        bool useGroup=false;
         if(group){
-            if(!propertySourcesReady.load() || seenGroups.contains(group) || layer)continue;
+            if(!propertySourcesReady.load() || layer)continue;
+            if(seenGroups.contains(group))continue;
             bool same=true;unsigned members=0;
             for(std::size_t member=0;member<count;++member)if(Affixes::Read<std::uint16_t>(metadata+member*0x144,0x3a)==group){
-                ++members;same&=Contributions::Value(snapshot.own,static_cast<unsigned>(member))==value.value && metadata[member*0x144+0x14]==row[0x14];
+                ++members;same&=Contributions::Value(combined,static_cast<unsigned>(member))==value.value && metadata[member*0x144+0x14]==row[0x14];
             }
-            if(!same || members<2 || members>7)continue;
-            seenGroups.insert(group);
+            if(same && members>=2 && members<=7){
+                // Defer seenGroups insertion until the grouped line matches actual.
+                useGroup=true;
+            }
         }
         if(Affixes::Label(definitions,properties,static_cast<int>(stat),static_cast<int>(layer),encoding,groups).empty())continue;
         const auto normalized=Contributions::Normalize(value.value,row[0x14]);if(!normalized)continue;
         char text[256]{};
-        if(!originalSingle(source,row,*normalized,static_cast<int>(layer),group!=0,text,1))continue;
+        if(!originalSingle(source,row,*normalized,static_cast<int>(layer),useGroup,text,1))continue;
         const auto size=strnlen(text,256);if(!size || size==256)continue;
         const auto key=RangeText::Analyze({text,size}).key;
         unsigned matches=0;
         for(const auto line:RangeText::Lines(actual))if(RangeText::Analyze(line).key==key)++matches;
-        if(matches==1)candidates.push_back({key,static_cast<int>(stat),static_cast<int>(layer),group!=0,group});
+        if(matches==1){
+            if(useGroup)seenGroups.insert(group);
+            candidates.push_back({key,static_cast<int>(stat),static_cast<int>(layer),useGroup,useGroup?group:0u});
+        }else if(useGroup && originalSingle(source,row,*normalized,static_cast<int>(layer),false,text,1)){
+            const auto singleSize=strnlen(text,256);
+            if(singleSize && singleSize<256){
+                const auto singleKey=RangeText::Analyze({text,singleSize}).key;
+                unsigned singleMatches=0;
+                for(const auto line:RangeText::Lines(actual))if(RangeText::Analyze(line).key==singleKey)++singleMatches;
+                if(singleMatches==1)candidates.push_back({singleKey,static_cast<int>(stat),static_cast<int>(layer),false,0u});
+            }
+        }
     }
     for(auto& candidate:candidates){
         if(std::count_if(candidates.begin(),candidates.end(),[&](const CapturedLine& other){return other.key==candidate.key;})!=1)continue;
@@ -594,7 +661,7 @@ std::vector<RangeText::Label> AffixLabels(void* source,const std::vector<Capture
             const auto& row=rows[autoId-1];
             // Automagic is an inherent base-item modifier, not a rolled prefix
             // or suffix. Keep its internal table term out of the player UI.
-            rolled.push_back({autoId,row,false,0,"[Base]"});
+            rolled.push_back({autoId,row,false,0,"[Base]",true});
         }
         if (quality==7) {
             const int record=Affixes::Read<int>(data,0x34);
@@ -634,24 +701,59 @@ std::vector<RangeText::Label> AffixLabels(void* source,const std::vector<Capture
             const auto word=ReadWordDefinitions(*scalingSnapshot,properties,groups);
             if(word)rolled.insert(rolled.end(),word->begin(),word->end());
         }
+        const auto gatheredSources=itemStatsValid?GatherSourceGroups(source,rolled,{rows,static_cast<std::size_t>(rowCount)},prefixIndex,autoIndex,properties):std::optional<SourceGroups>{};
+        auto allDefinitions=rolled;
+        auto identityDefinitions=rolled;
+        if(gatheredSources){
+            allDefinitions.insert(allDefinitions.end(),gatheredSources->corruption.begin(),gatheredSources->corruption.end());
+            allDefinitions.insert(allDefinitions.end(),gatheredSources->craft.begin(),gatheredSources->craft.end());
+            allDefinitions.insert(allDefinitions.end(),gatheredSources->enchantment.begin(),gatheredSources->enchantment.end());
+            identityDefinitions=allDefinitions;
+            for(std::size_t g=1;g<gatheredSources->groups.size();++g)
+                identityDefinitions.insert(identityDefinitions.end(),gatheredSources->groups[g].definitions.begin(),gatheredSources->groups[g].definitions.end());
+        }
         std::vector<CapturedLine> observed=lines;
         auto identityEncoding=encoding;identityEncoding.randomSkills=randomSkillsReady.load();
-        if(scalingSnapshot && itemStatsValid)AddOwnedScalarIdentities(source,*scalingSnapshot,actual,rolled,properties,
+        if(scalingSnapshot && itemStatsValid)AddOwnedScalarIdentities(source,*scalingSnapshot,actual,identityDefinitions,properties,
             identityEncoding,groups,itemStats,static_cast<std::size_t>(itemStatCount),observed);
         // Composite damage lines can bypass both native identity observers.
         // Require an exact line/family count; loaded native display priorities
         // provide the locale-independent mapping for different source labels.
-        if (itemStatsValid) AddUnobservedCompositeIdentities(observed,actual,rolled,properties,
+        if (itemStatsValid) AddUnobservedCompositeIdentities(observed,actual,identityDefinitions,properties,
             encoding,groups,itemStats,static_cast<std::size_t>(itemStatCount));
         std::vector<RangeText::Label> labels;
         const auto levelCap=ActiveLevelCap(tables);
         for (const auto& line:observed) {
             if(line.stat==204 && !line.grouped){
-                if(std::none_of(labels.begin(),labels.end(),[&](const auto& old){return old.key==line.key;})){
-                    RangeText::Label label{line.key,Affixes::ChargeSourceLabel(rolled,properties,line.layer,encoding,groups)};
+                std::string key=line.key;
+                if(!actual.empty()){
+                    unsigned exact=0;
+                    for(const auto text:RangeText::Lines(actual))if(RangeText::Analyze(text).key==key)++exact;
+                    if(!exact){
+                        std::string candidate;unsigned matches=0;
+                        for(const auto text:RangeText::Lines(actual)){
+                            const auto actualKey=RangeText::Analyze(text).key;
+                            const auto open=actualKey.find("(#/#");
+                            if(open==std::string::npos || !actualKey.ends_with(')'))continue;
+                            const auto normalized=actualKey.substr(0,open)+"#"+actualKey.substr(open+4,actualKey.size()-open-5);
+                            if(normalized==key){candidate=actualKey;++matches;}
+                        }
+                        if(matches==1)key=std::move(candidate);
+                    }
+                }
+                if(std::none_of(labels.begin(),labels.end(),[&](const auto& old){return old.key==key;})){
+                    RangeText::Label label{std::move(key),Affixes::ChargeSourceLabel(allDefinitions,properties,line.layer,encoding,groups)};
                     label.sourceOnly=true;labels.push_back(std::move(label));
                 }
                 continue;
+            }
+            int endpointMin=-1,endpointMax=-1;
+            const bool twoNumberDamage=!line.grouped && !line.layer &&
+                ((line.stat>=21 && line.stat<=24) || (line.stat>=48 && line.stat<=55)) &&
+                std::count(line.key.begin(),line.key.end(),'#')==2;
+            if (twoNumberDamage) {
+                endpointMin=(line.stat>=21 && line.stat<=24)?((line.stat&1)?line.stat:line.stat-1):(line.stat&~1);
+                endpointMax=endpointMin+1;
             }
             std::string text;
             if (line.grouped) {
@@ -662,32 +764,40 @@ std::vector<RangeText::Label> AffixLabels(void* source,const std::vector<Capture
                     if (Affixes::Read<std::uint16_t>(row,0x3a)==line.group)
                         members.push_back(Affixes::Read<std::uint16_t>(row,0));
                 }
-                text=Affixes::GroupLabel(rolled,properties,members,line.layer,encoding,groups);
-            } else text=Affixes::Label(rolled,properties,line.stat,line.layer,encoding,groups);
+                text=Affixes::GroupLabel(allDefinitions,properties,members,line.layer,encoding,groups);
+            } else if (twoNumberDamage) {
+                for (const auto& affix:allDefinitions) {
+                    if (!Affixes::Contributes(affix.row,properties,endpointMin,0,encoding,groups) &&
+                        !Affixes::Contributes(affix.row,properties,endpointMax,0,encoding,groups)) continue;
+                    if (affix.source && text.find(affix.source)!=std::string::npos) continue;
+                    if (!text.empty()) text+=' ';
+                    text+=Affixes::NamedLabel(affix);
+                }
+            } else text=Affixes::Label(allDefinitions,properties,line.stat,line.layer,encoding,groups);
             if (!text.empty()) {
                 RangeText::Label label{line.key,std::move(text)};
-                bool complete=!line.grouped && (quality==4 || quality==6);
+                bool complete=!line.grouped && (quality==4 || quality==6 || quality==8);
                 const bool compositeDamage=!line.layer &&
                     ((line.stat>=21 && line.stat<=24) || (line.stat>=48 && line.stat<=59));
-                int endpointMin=-1,endpointMax=-1;
-                if (line.stat>=48 && line.stat<=55) {
-                    endpointMin=line.stat&~1;
-                    endpointMax=endpointMin+1;
-                }
-                bool completePaired=endpointMin>=0 && (quality==4 || quality==6);
-                for (const auto& affix:rolled) {
-                    if (!Affixes::Contributes(affix.row,properties,line.stat,line.layer,encoding,groups)) continue;
+                bool completePaired=endpointMin>=0 && (quality==4 || quality==6 || quality==8);
+                for (const auto& affix:allDefinitions) {
+                    const bool contributes=Affixes::Contributes(affix.row,properties,line.stat,line.layer,encoding,groups) ||
+                        (endpointMin>=0 && (Affixes::Contributes(affix.row,properties,endpointMin,0,encoding,groups) ||
+                                            Affixes::Contributes(affix.row,properties,endpointMax,0,encoding,groups)));
+                    if (!contributes) continue;
                     if (compositeDamage) {
                         const auto named=Affixes::NamedLabel(affix);
                         if (std::find(label.unknownSources.begin(),label.unknownSources.end(),named)==label.unknownSources.end())
                             label.unknownSources.push_back(named);
                     }
+                    auto plain=affix;
+                    if (plain.source && plain.uniqueScalar && std::string_view(plain.source)=="[Base]") plain.source=nullptr;
                     int low{},high{};
-                    if (!Affixes::ScalarBounds(affix,properties,line.stat,line.layer,low,high)) complete=false;
+                    if (!Affixes::ScalarBounds(plain,properties,line.stat,line.layer,low,high)) complete=false;
                     else label.parts.push_back({low,high,Affixes::NamedLabel(affix)});
                     int minLow{},minHigh{},maxLow{},maxHigh{};
-                    if (!completePaired || !Affixes::DamageEndpointBounds(affix,properties,
-                            endpointMin,endpointMax,minLow,minHigh,maxLow,maxHigh)) completePaired=false;
+                    if (!completePaired || !Affixes::DamageEndpointBounds(plain,properties,
+                            endpointMin,endpointMax,minLow,minHigh,maxLow,maxHigh,true)) completePaired=false;
                     else label.pairedParts.push_back({minLow,minHigh,maxLow,maxHigh,
                         Affixes::NamedLabel(affix)});
                 }
@@ -700,22 +810,24 @@ std::vector<RangeText::Label> AffixLabels(void* source,const std::vector<Capture
                 label.allowPartialNativeRange=complete && label.parts.size()>1 &&
                     (line.stat==17 || line.stat==18) && line.layer==0;
                 if (quality==7) {
-                    label.fallbackRange=UniqueRange(source,line,rolled,properties,tables,actual);
-                    for (const auto& affix:rolled) {
-                        int lo{},hi{};
-                        if (Affixes::UniqueScalarBounds(affix,properties,line.stat,line.layer,lo,hi))
-                            label.rangeExpected=true;
+                    label.fallbackRange=UniqueRange(source,line,allDefinitions,properties,tables,actual);
+                    if (!scalingSnapshot || !HasRecipeExtras(*scalingSnapshot)) {
+                        for (const auto& affix:rolled) {
+                            int lo{},hi{};
+                            if (Affixes::UniqueScalarBounds(affix,properties,line.stat,line.layer,lo,hi))
+                                label.rangeExpected=true;
+                        }
                     }
                 }
                 if(scalingSnapshot && !line.grouped){
                     if(line.stat>=0 && itemStatsValid && static_cast<std::uint64_t>(line.stat)<itemStatCount && levelCap){
-                        const auto range=ScalingRange(source,line,rolled,properties,itemStats+static_cast<std::size_t>(line.stat)*0x144,
+                        const auto range=ScalingRange(source,line,allDefinitions,properties,itemStats+static_cast<std::size_t>(line.stat)*0x144,
                             *scalingSnapshot,*levelCap,actual);
                         if(!range.empty()){label.fallbackRange=range;label.replaceNativeRange=true;}
-                        ScalingParts(line,rolled,properties,itemStats+static_cast<std::size_t>(line.stat)*0x144,*levelCap,actual,label);
+                        ScalingParts(line,allDefinitions,properties,itemStats+static_cast<std::size_t>(line.stat)*0x144,*levelCap,actual,label);
                     }
                     if(label.fallbackRange.empty()){
-                        label.fallbackRange=FixedProcRange(line,rolled,properties,encoding,*scalingSnapshot,actual);
+                        label.fallbackRange=FixedProcRange(line,allDefinitions,properties,encoding,*scalingSnapshot,actual);
                         // Native ranges can describe the proc level rather than
                         // its chance. A verified chance prefix takes precedence.
                         if(!label.fallbackRange.empty())label.replaceNativeRange=true;
@@ -730,7 +842,7 @@ std::vector<RangeText::Label> AffixLabels(void* source,const std::vector<Capture
                 if (!duplicate) labels.push_back(std::move(label));
             }
         }
-        if(scalingSnapshot && itemStatsValid && (quality==4 || quality==6)){
+        if(scalingSnapshot && itemStatsValid && (quality==4 || quality==6 || quality==8)){
             const std::array<ContributionModel::Group,1> own={ContributionModel::Group{scalingSnapshot->own,rolled,""}};
             for(auto& label:labels){
                 if(!label.ownedParts.empty() || label.parts.empty())continue;
@@ -744,15 +856,13 @@ std::vector<RangeText::Label> AffixLabels(void* source,const std::vector<Capture
                 if(proven){label.ownedParts=proven->ownedParts;label.ownedTotal=proven->ownedTotal;}
             }
         }
-        if(itemStatsValid){
-            const auto sources=GatherSourceGroups(source,rolled,{rows,static_cast<std::size_t>(rowCount)},prefixIndex,autoIndex,properties);
-            if(sources)AddOwnedSourceLabels(*sources,observed,actual,properties,itemStats,static_cast<std::size_t>(itemStatCount),encoding,groups,labels);
+        if(gatheredSources){
+            AddOwnedSourceLabels(*gatheredSources,observed,actual,properties,itemStats,static_cast<std::size_t>(itemStatCount),encoding,groups,labels);
         }
         if(itemStatsValid && propertySourcesReady.load()){
-            const auto sources=GatherSourceGroups(source,rolled,{rows,static_cast<std::size_t>(rowCount)},prefixIndex,autoIndex,properties);
-            if(sources)AddLinkedSourceLabels(*sources,observed,actual,properties,itemStats,static_cast<std::size_t>(itemStatCount),labels,groups);
+            if(gatheredSources)AddLinkedSourceLabels(*gatheredSources,observed,actual,properties,itemStats,static_cast<std::size_t>(itemStatCount),labels,groups);
             else if(scalingSnapshot && scalingSnapshot->sockets.empty() && !(scalingSnapshot->identity.flags&0x04000000u) &&
-                    (quality==4 || quality==5 || quality==6 || quality==7) && !HasRecipeExtras(*scalingSnapshot)){
+                    (quality==4 || quality==5 || quality==6 || quality==7 || quality==8) && !HasRecipeExtras(*scalingSnapshot)){
                 SourceGroups own;own.capture=*scalingSnapshot;PermanentSetTotals(own.capture);own.groups.push_back({own.capture.own,rolled,""});
                 AddLinkedSourceLabels(own,observed,actual,properties,itemStats,static_cast<std::size_t>(itemStatCount),labels,groups);
             }
@@ -918,24 +1028,80 @@ std::string SocketHeaderAnchorKey(const char* name) {
     }
     return count?RangeText::Analyze(pattern).key:std::string{};
 }
+unsigned char ItemSocketCapacity(void* source,std::int64_t current) {
+    if(!nativeSocketCapacity)return 0;
+    const auto baseCap=nativeSocketCapacity(source);
+    if(!baseCap || baseCap>6 || !getTables || !Readable(source,0x1be))return baseCap;
+    const auto* unit=static_cast<const unsigned char*>(source);
+    if(Affixes::Read<unsigned>(unit,0)!=4 || unit[0x1bd]>=4)return baseCap;
+    const auto* data=Affixes::Read<const unsigned char*>(unit,0x10);
+    if(!Readable(data,0x38))return baseCap;
+    const int quality=Affixes::Read<int>(data,0),record=Affixes::Read<int>(data,0x34);
+    if((quality!=5 && quality!=7) || record<0)return baseCap;
+    const auto* tables=getTables(unit[0x1bd]);
+    if(!Readable(tables,0x13d8))return baseCap;
+    const auto* props=Affixes::Read<const Affixes::Property*>(tables,0x240);
+    const auto propCount=Affixes::Read<std::uint64_t>(tables,0x248);
+    if(!propCount || propCount>32768 || !Readable(props,static_cast<std::size_t>(propCount)*sizeof(Affixes::Property)))return baseCap;
+    const auto* groupRows=Affixes::Read<const unsigned char*>(tables,0x258);
+    const auto groupCount=Affixes::Read<std::uint64_t>(tables,0x260);
+    if(groupCount>32768 || (groupCount && !Readable(groupRows,static_cast<std::size_t>(groupCount)*sizeof(Affixes::PropertyGroup))))return baseCap;
+    std::vector<Affixes::Rolled> defs;
+    if(quality==7){
+        const auto* unique=Affixes::Read<const unsigned char*>(tables,0x13c8);
+        const auto count=Affixes::Read<std::uint64_t>(tables,0x13d0);
+        if(count>=32768 || static_cast<std::uint64_t>(record)>=count || !Readable(unique,static_cast<std::size_t>(count)*0x15c))return baseCap;
+        const auto* row=unique+static_cast<std::size_t>(record)*0x15c;
+        for(unsigned n=0;n<12;++n)AddUniqueSource(row+0x98+n*16,groupRows,static_cast<std::size_t>(groupCount),static_cast<std::size_t>(propCount),defs);
+    } else {
+        const auto* sets=Affixes::Read<const unsigned char*>(tables,0x13a8);
+        const auto count=Affixes::Read<std::uint64_t>(tables,0x13b0);
+        if(count>32768 || static_cast<std::uint64_t>(record)>=count || !Readable(sets,static_cast<std::size_t>(count)*0x1cc))return baseCap;
+        const auto* row=sets+static_cast<std::size_t>(record)*0x1cc;
+        for(unsigned n=0;n<9;++n)AddUniqueSource(row+0x98+n*16,groupRows,static_cast<std::size_t>(groupCount),static_cast<std::size_t>(propCount),defs,0,true,"[Set]");
+    }
+    int specMax=0;
+    for(const auto& d:defs){
+        if(!d.unconditionalScalar)continue;
+        const int id=d.row.Number(0x24);
+        if(id<0 || static_cast<std::uint64_t>(id)>=propCount)continue;
+        const auto* p=props[static_cast<std::size_t>(id)].bytes.data();
+        for(unsigned slot=0;slot<7;++slot){
+            if(p[0x18+slot]==14 && Affixes::Read<std::uint16_t>(p,0x20+slot*2)==194){
+                const int hi=d.row.Number(0x30),par=d.row.Number(0x28);
+                const int candidate=hi>0?hi:par;
+                if(candidate>specMax)specMax=candidate;
+            }
+        }
+    }
+    if(specMax<=0 || specMax>6)return baseCap;
+    const int floor=current>0 && current<=6?static_cast<int>(current):1;
+    return static_cast<unsigned char>(std::clamp(specMax,floor,static_cast<int>(baseCap)));
+}
+bool FormatSocketCapacityLabel(unsigned char maximum,std::string& key,std::string& label) {
+    if(!lookupHeader || !maximum || maximum>6)return false;
+    NativeText group{reinterpret_cast<const char*>(HeaderProfile::ResourceGroup),3},
+        name{HeaderProfile::SocketLabel,sizeof(HeaderProfile::SocketLabel)-1};
+    const auto* format=lookupHeader(&group,&name,true);if(!Readable(format,128))return false;
+    const auto size=strnlen(format,128);if(size==128)return false;
+    const std::string_view pattern(format,size);const auto at=pattern.find('%');
+    if(at==pattern.npos || at+1>=pattern.size() ||
+       (pattern[at+1]!='d' && pattern[at+1]!='i' && pattern[at+1]!='u') ||
+       pattern.find('%',at+2)!=pattern.npos)return false;
+    key=RangeText::Analyze(std::string(pattern.substr(0,at))+"0"+std::string(pattern.substr(at+2))).key;
+    if(key.empty())return false;
+    label=std::string(pattern.substr(0,at))+std::to_string(maximum)+std::string(pattern.substr(at+2));
+    return true;
+}
 std::string AnnotateSocketHeader(void* source,std::string_view text) {
     if(!nativeSocketCapacity || !lookupHeader)return std::string(text);
     const auto snapshot=CaptureItemContributions(source);if(!snapshot)return std::string(text);
     const auto current=Contributions::Value(snapshot->primary,194);
     if(current<1 || current>6)return std::string(text);
-    NativeText group{reinterpret_cast<const char*>(HeaderProfile::ResourceGroup),3},
-        name{HeaderProfile::SocketLabel,sizeof(HeaderProfile::SocketLabel)-1};
-    const auto* format=lookupHeader(&group,&name,true);if(!Readable(format,128))return std::string(text);
-    const auto size=strnlen(format,128);if(size==128)return std::string(text);
-    const std::string_view pattern(format,size);const auto at=pattern.find('%');
-    if(at==pattern.npos || at+1>=pattern.size() ||
-       (pattern[at+1]!='d' && pattern[at+1]!='i' && pattern[at+1]!='u') ||
-       pattern.find('%',at+2)!=pattern.npos)return std::string(text);
-    const auto key=RangeText::Analyze(std::string(pattern.substr(0,at))+"0"+std::string(pattern.substr(at+2))).key;
-    if(key.empty())return std::string(text);
+    const auto maximum=ItemSocketCapacity(source,current);if(maximum<current || maximum>6)return std::string(text);
+    std::string key,label;
+    if(!FormatSocketCapacityLabel(maximum,key,label))return std::string(text);
     for(const auto line:RangeText::Lines(text))if(RangeText::Analyze(line).key==key)return std::string(text);
-    const auto maximum=nativeSocketCapacity(source);if(maximum<current || maximum>6)return std::string(text);
-    const auto label=std::string(pattern.substr(0,at))+std::to_string(maximum)+std::string(pattern.substr(at+2));
     std::vector<std::string> anchors;
     for(const auto* anchorName:{"ItemStats1p","ItemStats1e","ItemStats1f","ItemStats1d","ItemStats1i",
                          "ItemStats1h","ItemStats1l","ItemStats1m","strItemStatThrowDamageRange"})
@@ -992,12 +1158,15 @@ extern "C" void ObserveHeaderRequest(std::uint64_t buttons,std::uintptr_t caller
 }
 extern "C" __declspec(noinline) NativeText* __fastcall HeaderBuilderAdapter(void* a,void* b,void* c,void* item,
     int flags,unsigned char d,unsigned char e,void* f,void* g) noexcept {
-    const bool scoped=reinterpret_cast<std::uintptr_t>(_ReturnAddress())==builderReturn && (Held() || fixedHeaderRequested || AlwaysRequested());
+    const bool fromBuilder=reinterpret_cast<std::uintptr_t>(_ReturnAddress())==builderReturn;
+    const bool scoped=fromBuilder && (Held() || fixedHeaderRequested || AlwaysRequested());
     fixedHeaderRequested=false;
     // Properties are built later in this same qualified Core tooltip operation.
     // Keep only request/source identity, and consume it at that caller once.
-    if(reinterpret_cast<std::uintptr_t>(_ReturnAddress())==builderReturn){
+    if(fromBuilder){
         BeginPropertyRequest(item,scoped);
+        pendingSocketOverride={};
+        pendingPropertyOverflow={};
     }
     if (scoped) pendingHeader={};
     // Frame is qualified byte-for-byte; derive its address before the native
@@ -1012,6 +1181,17 @@ extern "C" __declspec(noinline) NativeText* __fastcall HeaderBuilderAdapter(void
             ~CaptureGuard(){captureDamage=previous;}
         } guard(scoped?&damage:nullptr);
         result=originalBuilder(a,b,c,item,flags,d,e,f,g);
+    }
+    if(fromBuilder && result && Allowed() && nativeSocketCapacity){
+        try {
+            const auto baseCap=nativeSocketCapacity(item);
+            const auto itemCap=ItemSocketCapacity(item,0);
+            if(itemCap && itemCap!=baseCap){
+                std::string key,label;
+                if(FormatSocketCapacityLabel(itemCap,key,label))
+                    pendingSocketOverride={result,std::move(key),std::move(label)};
+            }
+        } catch (...) { }
     }
     if (!scoped || !TextReadable(result,true) || !Readable(frame+0x18b0,1)) return result;
     try {
@@ -1031,7 +1211,21 @@ extern "C" __declspec(noinline) NativeText* __fastcall HeaderBuilderAdapter(void
         const auto baseRange=ArmorBaseRange(unit,data,armor);
         const auto value=key.empty()?std::optional<long long>{}:HeaderText::Value(actual,key);
         const auto fixed=key.empty()?std::string(actual):HeaderText::Fixed(actual,key,baseRange.has_value(),baseRange);
-        const auto changed=AnnotateLevelHeader(AnnotateSocketHeader(item,fixed),data,armor);
+        auto changed=AnnotateLevelHeader(AnnotateSocketHeader(item,fixed),data,armor);
+        auto propOverflow=std::move(pendingPropertyOverflow); pendingPropertyOverflow={};
+        if(propOverflow.source==item && !propOverflow.bounded.empty() && !propOverflow.full.empty()){
+            std::string_view needle=propOverflow.bounded;
+            auto pos=changed.find(needle);
+            if(pos==std::string::npos && needle.size()>16){
+                for(std::size_t trim=1;trim<=8 && pos==std::string::npos;++trim){
+                    const auto candidate=needle.substr(0,needle.size()-trim);
+                    pos=changed.find(candidate);
+                    if(pos!=std::string::npos)needle=candidate;
+                }
+            }
+            if(pos!=std::string::npos && changed.find(needle,pos+1)==std::string::npos)
+                changed.replace(pos,needle.size(),propOverflow.full);
+        }
         if (frame[0x18b0]) {
             // Core will publish its range replacement next. Keep only an owned
             // text proof and receiver identity; no item/stat/table pointers.
@@ -1058,9 +1252,26 @@ void* PublishHeader(bool permitted,NativeText* text,const char* data,std::size_t
     }
     return originalAssign(text,data,size);
 }
+void* PublishSocketOverride(bool permitted,NativeText* text,const char* data,std::size_t size) noexcept {
+    if(permitted && TextReadable(text,true) && size<=65536 && (!size || Readable(data,size))){
+        try {
+            auto proof=std::move(pendingSocketOverride); pendingSocketOverride={};
+            if(proof.receiver==text && !proof.key.empty() && !proof.label.empty()){
+                const std::string_view input{size?data:"",size};
+                const auto changed=HeaderText::ReplaceSocketCapacity(input,proof.key,proof.label);
+                if(changed.size()<=65536 && changed!=input)
+                    return originalAssign(text,changed.data(),changed.size());
+            }
+        } catch (...) { }
+    }
+    return originalAssign(text,data,size);
+}
 __declspec(noinline) void* __fastcall HeaderAssignAdapter(NativeText* text,const char* data,std::size_t size) noexcept {
+    const auto caller=reinterpret_cast<std::uintptr_t>(_ReturnAddress());
+    if(caller==socketAssignReturn && socketAssignReturn)
+        return PublishSocketOverride(Allowed(),text,data,size);
     // Core has restored TLS by this point; pendingHeader owns the earlier proof.
-    return PublishHeader(reinterpret_cast<std::uintptr_t>(_ReturnAddress())==assignReturn && Allowed(),text,data,size);
+    return PublishHeader(caller==assignReturn && Allowed(),text,data,size);
 }
 void* SourceFromOverlay(const void* overlay,void* item) noexcept {
     if (!Readable(overlay,16)) return nullptr;
@@ -1208,7 +1419,9 @@ std::uint64_t RenderProperties(void* source,void* item,char* output,int capacity
         const auto cap=static_cast<std::size_t>(capacity);
         const auto initial=strnlen(output,cap);
         if (initial==cap) return originalProperties(item,output,capacity,mode,state1,state2,flags,extra,definitions,count);
-        actual.assign(cap,0);ranged.assign(cap,0);
+        const std::size_t internalCap=(mode==1 && state1==2 && state2==3 && flags==4 && extra==5)?cap:std::max<std::size_t>(cap,16384);
+        const int internalCapacity=static_cast<int>(internalCap);
+        actual.assign(internalCap,0);ranged.assign(internalCap,0);
         std::memcpy(actual.data(),output,initial+1);
         std::memcpy(ranged.data(),output,initial+1);
         struct OptionalCount { std::uint64_t value{}; bool present{}; unsigned char pad[7]{}; } none;
@@ -1220,7 +1433,7 @@ std::uint64_t RenderProperties(void* source,void* item,char* output,int capacity
                 explicit CaptureGuard(std::vector<CapturedLine>& lines):previous(captureLines) { captureLines=&lines; }
                 ~CaptureGuard() { captureLines=previous; }
             } capture(captured);
-            actualResult=originalProperties(source,actual.data(),capacity,mode,state1,state2,flags,extra,
+            actualResult=originalProperties(source,actual.data(),internalCapacity,mode,state1,state2,flags,extra,
                 source==item?definitions:nullptr,source==item?count:&none);
         }
         completedResult=actualResult;completed=true;
@@ -1237,12 +1450,13 @@ std::uint64_t RenderProperties(void* source,void* item,char* output,int capacity
                 explicit RangeCaptureGuard(std::vector<CapturedLine>& lines):previous(captureLines) { captureLines=&lines; }
                 ~RangeCaptureGuard() { captureLines=previous; }
             } capture(captured);
-            result=originalProperties(item,ranged.data(),capacity,mode,state1,state2,flags,extra,definitions,count);
+            result=originalProperties(item,ranged.data(),internalCapacity,mode,state1,state2,flags,extra,definitions,count);
             completedResult=result;
         }
-        const auto actualLength=strnlen(actual.data(),cap), rangedLength=strnlen(ranged.data(),cap);
-        if (actualLength==cap || rangedLength==cap) {
-            std::memcpy(output,actualLength<cap?actual.data():ranged.data(),cap); output[cap-1]=0; return result;
+        const auto actualLength=strnlen(actual.data(),internalCap), rangedLength=strnlen(ranged.data(),internalCap);
+        if (actualLength==internalCap || rangedLength==internalCap || actualLength>=cap) {
+            const auto copyLen=std::min<std::size_t>(actualLength<internalCap?actualLength:rangedLength,cap-1);
+            std::memcpy(output,actualLength<internalCap?actual.data():ranged.data(),copyLen); output[copyLen]=0; return result;
         }
         // Native callers append several passes to one tooltip. Never parse an
         // earlier pass's generated range/source markup a second time.
@@ -1257,8 +1471,18 @@ std::uint64_t RenderProperties(void* source,void* item,char* output,int capacity
             ((state1>=165 && state1<=170)||(state2>=165 && state2<=170));
         if(setBonus){std::memcpy(output,actual.data(),actualLength+1);return result;}
         const auto propertyActual=std::string_view(actual.data()+initial,actualLength-initial);
+        const auto propertyRanged=std::string_view(ranged.data()+initial,rangedLength-initial);
         const auto sourceLabels=AffixLabels(source,captured,propertyActual);
-        auto merged=RangeText::Merge(propertyActual,{ranged.data()+initial,rangedLength-initial},cap-initial,sourceLabels);
+        const std::size_t nativeBudget=(cap-initial)>16?(cap-initial-16):(cap-initial);
+        auto merged=RangeText::Merge(propertyActual,propertyRanged,nativeBudget,sourceLabels);
+        if(cap-initial<16384 && !merged.text.empty()){
+            auto full=RangeText::Merge(propertyActual,propertyRanged,16384,sourceLabels,
+                RangeText::Lines(propertyActual).size()>14);
+            if(RangeText::Lines(full.text).size()>26)
+                full=RangeText::Merge(propertyActual,propertyRanged,16384,sourceLabels,true);
+            if(full.text!=merged.text && full.text.size()<=16384)
+                pendingPropertyOverflow={source,merged.text,std::move(full.text)};
+        }
         std::memcpy(output+initial,merged.text.c_str(),merged.text.size()+1);
         TraceProperties(merged.annotated,merged.unmatched,actual.data(),output,ranged.data(),merged.labeled,
             static_cast<unsigned>(captured.size()),&captured,&sourceLabels);
@@ -1276,7 +1500,8 @@ __declspec(noinline) std::uint64_t __fastcall PropertiesAdapter(void* item,char*
     int state1,int state2,int flags,int extra,const void* definitions,void* count) noexcept {
     const bool callerMatches=reinterpret_cast<std::uintptr_t>(_ReturnAddress())==propertiesReturn;
     const auto request=TakePropertyRequest(callerMatches,rendering);
-    void* source=callerMatches && !rendering?SourceItem(item):nullptr;
+    void* rawSource=callerMatches && !rendering?SourceItem(item):nullptr;
+    void* source=rawSource;
     const bool scoped=callerMatches && !rendering && Allowed() &&
         (Held() || (scalingReady.load() && MatchingPropertyRequest(request,source)));
     if(!scoped)source=nullptr;
@@ -1285,8 +1510,14 @@ __declspec(noinline) std::uint64_t __fastcall PropertiesAdapter(void* item,char*
     const auto* itemData=Readable(source,0x18)?Affixes::Read<const unsigned char*>(sourceBytes,0x10):nullptr;
     const bool identified=Readable(source,4) && Affixes::Read<unsigned>(sourceBytes,0)==4 &&
         Readable(itemData,0x1c) && (Affixes::Read<unsigned>(itemData,0x18)&0x10)!=0;
-    if (!identified || !output || capacity<=1 || capacity>65536 || !Readable(output,static_cast<std::size_t>(capacity)))
+    if (!identified || !output || capacity<=1 || capacity>65536 || !Readable(output,static_cast<std::size_t>(capacity))) {
+        if (!scoped && rawSource && rawSource!=item && Readable(rawSource,4) &&
+            Affixes::Read<unsigned>(static_cast<const unsigned char*>(rawSource),0)==4) {
+            struct OptionalCount { std::uint64_t value{}; bool present{}; unsigned char pad[7]{}; } none{};
+            return originalProperties(rawSource,output,capacity,mode,state1,state2,flags,extra,nullptr,&none);
+        }
         return originalProperties(item,output,capacity,mode,state1,state2,flags,extra,definitions,count);
+    }
     return RenderProperties(source,item,output,capacity,mode,state1,state2,flags,extra,definitions,count);
 }
 bool Executable(const void* address) noexcept {
@@ -1428,7 +1659,7 @@ void LoadDisplaySettings(const D2RL::PluginContext* context) noexcept {
 void Restore() noexcept {
     RestoreAlways();
     levelsReady.store(false,std::memory_order_release);
-    nativeSocketCapacity=nullptr;pendingPropertyRequest={};
+    nativeSocketCapacity=nullptr;socketAssignReturn=0;pendingPropertyRequest={};pendingSocketOverride={};
     active.store(false, std::memory_order_release);
     contributionsReady.store(false);
     scalingReady.store(false);
@@ -1547,6 +1778,8 @@ bool Install(const D2RL::PluginContext* context) noexcept {
     }
     builderReturn=reinterpret_cast<std::uintptr_t>(base)+0x81a360;
     assignReturn=reinterpret_cast<std::uintptr_t>(base)+0x81a6bd;
+    socketAssignReturn=nativeSocketCapacity && Match(base,HeaderProfile::SocketAssignCallerRva,HeaderProfile::SocketAssignCaller,sizeof(HeaderProfile::SocketAssignCaller))?
+        reinterpret_cast<std::uintptr_t>(base)+HeaderProfile::SocketAssignReturnRva:0;
     for (const auto& witness:AffixProfile::Witnesses)
         if (!Match(game,witness.rva,witness.bytes,witness.size)) { context->LogError("Item Roll Ranges: game affix/formatter instruction witness mismatch."); return false; }
     for (const auto& witness:SourceProfile::Witnesses)
@@ -1644,8 +1877,9 @@ D2RL_PLUGIN_EXPORT bool __cdecl D2RLoaderLoadPlugin(const D2RL::PluginContext* c
         }catch(...){context->LogWarn("Item Roll Ranges: chat registration failed; config still applies.");}
         return true;
     }
+    loaded.store(false);
     context->LogError("Item Roll Ranges: unsupported/unavailable provider or slot conflict; adapters not activated. See NATIVE-CONTRACT.md.");
     return false;
 }
-D2RL_PLUGIN_EXPORT void __cdecl D2RLoaderUnloadPlugin() noexcept { rollCommands.Stop(); alwaysEnabled.store(false); Restore(); }
+D2RL_PLUGIN_EXPORT void __cdecl D2RLoaderUnloadPlugin() noexcept { rollCommands.Stop(); alwaysEnabled.store(false); Restore(); loaded.store(false); }
 

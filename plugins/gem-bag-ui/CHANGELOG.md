@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.3.1+rev.2 - 2026-10-22
+
+- Swap controller Gem Bag shortcuts so `LB+A` opens the gem picker and `LB+B` deposits compatible gems and clusters from the bag's current storage page.
+- Show `LB+A: Choose gem` and `LB+B: Deposit gems + clusters` in the controller tooltip footer.
+
 ## 1.3.1+rev.1 - 2026-10-21
 
 - Withdraw gems through a mouse, keyboard or controller picker.

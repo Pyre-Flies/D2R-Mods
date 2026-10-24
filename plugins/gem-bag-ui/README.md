@@ -1,17 +1,17 @@
 # Gem Bag UI
 
 Withdraw gems directly from a compatible Gem Bag, or deposit eligible gems and
-gem clusters with Shift + right-click. Version **1.3.1+rev.1** supports mouse,
-keyboard and controller use with D2RLoader.
+gem clusters with Shift + right-click or LB+B. Version **1.3.1+rev.2** supports
+mouse, keyboard and controller use with D2RLoader.
 
 ## Controls
 
 | Action | Control |
 | --- | --- |
-| Open the gem picker | Right-click the bag, or focus it and press LB+B. |
+| Open the gem picker | Right-click the bag, or focus it and press LB+A. |
 | Choose a gem | Click its icon, use arrows and Enter, or D-pad and A. |
 | Close the picker | X, Escape, B, right-click or click outside. |
-| Deposit compatible gems and clusters | Shift + right-click the bag. |
+| Deposit compatible gems and clusters | Shift + right-click the bag, or focus it and press LB+B. |
 
 Each withdrawal spends one bag credit and creates one identified gem in a free
 cell beside the bag, in the same inventory, Cube, personal stash or normal

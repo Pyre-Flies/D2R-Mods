@@ -2,6 +2,17 @@ Revision45 item/base level field witnesses and validation: [ITEM-LEVELS-REV45.md
 
 Revision41 active property-roll constraints, runeword state171/table binding, selector and quantity witnesses: [PROPERTY-ROLLS-REV41.md](history/PROPERTY-ROLLS-REV41.md).
 
+## Socket capacity assignment witness (`Core+0x81C49D..0x81C4B0`)
+
+When an item is unsocketed (`stat 194 <= 0` at `Core+0x81B253`) and `item_max_sockets` is enabled (`[rbp+0x18BC] != 0`), `BuildItemTooltipWithStatRanges` (`Core+0x81B234..0x81C4B5`) queries `nativeSocketCapacity` (`Core+0x3763A0`), formats `d2rloader:D2RLoaderMaximumSockets` (`Core+0x62BC90`), splices that line into `[rbp+0x1900]` via `Core+0x37FC20`, and publishes the updated `NativeText*` through slot `Core+0x6FDBD8` (`HeaderAssignAdapter`) at:
+- `Core+0x81C49D`: `48 8B 8D 00 19 00 00 48 89 DA 4C 89 F0 FF 15 28 17 EE FF` (`SocketAssignCallerRva = 0x81C49D`, return RVA `SocketAssignReturnRva = 0x81C4B0`).
+Because `Core+0x3763A0` evaluates `CubeMain` `stat 194` outputs (`Core+0x37F6E0`) including generic `input.quality == 0` weapon/armor socketing recipes, it returns the base item's socket cap rather than a Set (`quality == 5`) or Unique (`quality == 7`) item's innate `sock` (`func == 14`, `stat == 194`) property cap. `ItemSocketCapacity` clamps to the active `SetItems`/`UniqueItems` `sock` specification when present, and `HeaderAssignAdapter` replaces the base line at `SocketAssignReturnRva` using the receiver proof captured in `HeaderBuilderAdapter`.
+
+## Charged-skill (`stat 204`) clone protection and range-key normalization
+
+1. **Non-scoped overlay fallback:** `FormatItemPropertiesWithTooltipOverlay` (`Core+0x81D4B0`) substitutes `overlay->clone` for `overlay->source` at `Core+0x81D505..0x81D511` before calling `PropertiesAdapter` at `Core+0x81D538` (`propertiesReturn = Core+0x81D53B`). When `D2RCore` constructs a range clone for `stat 204` (`func == 19`, `Core+0x37EF90`), it stores `(minLevel & 0xFFFF) | (maxLevel << 16)` in the clone's stat value (`+0x08`) and sets the skill-level bits in `layer` (`+0x00`) to `maxLevel`, which `Game+0x2DC4B0` (`descfunc == 24`, `ModStre10d`) formats as `Level <max> <Skill> (<min>/<max>) Charges`. When `PropertiesAdapter` is called with `!scoped` while a range clone is active on the thread, it renders `rawSource` (`overlay->source`) with cleared range definitions instead of forwarding `overlay->clone`.
+2. **Range-helper key normalization:** During the clone range pass, `Core+0x3E807C..0x3E80B2` (`RangeHelperAdapter`) wraps the parenthesized charge fraction in a single `U` color span (`\xee\x81\xbeU(min/max)\xee\x81\xbe3 Charges`), producing key `Level#<Skill>#Charges`, whereas the actual pass (`Game+0x2DC4B0`, bypassing `SingleAdapter` at `Core+0x3E8111` for `descfunc == 24`) produces key `Level#<Skill>(#/#Charges)`. `AffixLabels` normalizes `(#/#...)` to `#...` when matching `stat 204` range identities and recovers `stat 204` directly from `snapshot.own` on clone-less items.
+
 ## Rev.37 property formatter contract
 
 Core slot 0x704490 must target game+0x2DC4B0, with entry bytes
@@ -411,3 +422,28 @@ activates the existing range path. The keyboard query still gates Core's Ctrl
 bit to eligible foreground panels and preserves unrelated modifier bits/callers.
 Controller remains selected-user XInput RIGHT_SHOULDER (R1/RB). No new addresses,
 ABIs or hook surfaces. Prior ALT references describe historical releases.
+
+## 1.3.1+rev.55 native property buffer color-prefixing contract
+
+Inside `originalBuilder` (`D2R.exe+0x2BD480`, called from `D2RCore.dll+0x81A35E` -> `0x81A360`),
+the property block is formatted into stack buffer `[rbp+0x9f0]` (`0x400` = `1024` bytes) via
+`D2R.exe+0x2DA0E0` (`call 0x2DA0E0` at `0x2BE23F`). Immediately afterward, at `D2R.exe+0x2BE254`,
+`D2R.exe` calls `0x0CD6E0([rbp+0x9f0], 3)`, which prepends the 4-byte property color introducer
+`"\xee\x81\xbe3"` into `[rbp+0x9f0]` using `0x12276A0` (`strncat_s` with max `0x3ff` = `1023`
+characters + NUL) before appending `[rbp+0x9f0]` to the heap-allocated `NativeText` tooltip at
+`0x2BE259..0x2BE27F`.
+
+| D2R.exe RVA | Verified evidence |
+|---|---|
+| `0x2BD480` | `originalBuilder` (`[rbp+0x9f0]` is the `0x400`-byte property stack buffer) |
+| `0x2DA0E0` | Property block wrapper called at `0x2BE23F`; forwards `0x400` capacity to `D2RCore.dll+0x81D4D0` |
+| `0x2BE254` | `call 0x0CD6E0` with `rcx = [rbp+0x9f0]`, `edx = 3` |
+| `0x0CD6E0..0x0CD7A0` | Prepends 4-byte color code `"\xee\x81\xbe3"` in-place inside a `0x400`-byte buffer via `0x12276A0` |
+| `0x2BE27A` | `call 0x080CF0` (`originalAssign`) appends `[rbp+0x9f0]` into the `NativeText` tooltip |
+
+Because `0x0CD6E0` prepends 4 bytes into the 1024-byte stack buffer (`max 1023` chars), any
+`PropertiesAdapter` output of `1020..1023` bytes has its final `1..4` bytes truncated at `1019`
+bytes before reaching `HeaderBuilderAdapter`. Reserving 16 bytes of headroom in `RenderProperties`
+(`nativeBudget = cap - initial - 16`) and matching trimmed prefixes in `HeaderBuilderAdapter`
+ensures `pendingPropertyOverflow` always replaces the bounded 1024-byte block with the full
+`16384`-byte property merge on dense items (such as 6-socketed corrupted/enchanted uniques).

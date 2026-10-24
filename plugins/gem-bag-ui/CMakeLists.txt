@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.29)
-project(gem-bag-ui VERSION 1.3.1.1 LANGUAGES CXX RC)
+project(gem-bag-ui VERSION 1.3.1.2 LANGUAGES CXX RC)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")

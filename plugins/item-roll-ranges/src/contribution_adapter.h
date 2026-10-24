@@ -96,7 +96,7 @@ std::optional<std::vector<Affixes::Rolled>> ReadWordDefinitions(const Contributi
     return out.empty()?std::optional<std::vector<Affixes::Rolled>>{}:out;
 }
 bool HasRecipeExtras(const Contributions::Snapshot& capture){
-    for(unsigned stat:{361u,362u,392u,393u,394u,395u})if(Contributions::Value(capture.own,stat))return true;
+    for(unsigned stat:{361u,362u,392u,393u,394u,395u,419u,420u})if(Contributions::Value(capture.own,stat))return true;
     return false;
 }
 // The permanent set formatter displays owned modifiers separately from both
@@ -109,17 +109,27 @@ bool PermanentSetTotals(Contributions::Snapshot& capture) {
 }
 struct SourceGroups {
     Contributions::Snapshot capture;std::vector<ContributionModel::Group> groups;
-    std::vector<Affixes::Rolled> corruption;std::deque<std::string> names;
+    std::vector<Affixes::Rolled> corruption;std::vector<Affixes::Rolled> craft;std::vector<Affixes::Rolled> enchantment;
+    std::deque<std::string> names;bool enchanted{},unresolvedCorruption{};
 };
 std::optional<SourceGroups> GatherSourceGroups(void* source,std::span<const Affixes::Rolled> hostDefinitions,
     std::span<const Affixes::Row> rows,std::size_t prefixIndex,std::size_t autoIndex,
     std::span<const Affixes::Property> properties) {
     auto capture=CaptureItemContributions(source);
     if(!capture || !PermanentSetTotals(*capture))return {};
-    for(unsigned stat:{392u,393u,394u,395u})if(Contributions::Value(capture->own,stat))return {};
+    long long upgradeTotal=0;unsigned activeUpgradeStat=0;
+    for(unsigned stat:{392u,393u,394u,395u,419u,420u}){
+        const auto count=Contributions::Value(capture->own,stat);
+        if(count<0)return {};
+        if(count>0){upgradeTotal+=count;activeUpgradeStat=stat;}
+    }
+    const bool enchanted=upgradeTotal>0;
+    if(enchanted && !propertySourcesReady.load())return {};
     const bool corrupted=Contributions::Value(capture->own,361)||Contributions::Value(capture->own,362);
-    if(capture->sockets.empty()&&!corrupted)return {};
-    SourceGroups out;out.capture=std::move(*capture);out.groups.reserve(8);
+    const bool maybeCraft=(capture->identity.quality==4||capture->identity.quality==6||capture->identity.quality==8)&&
+        !(capture->identity.flags&0x04000000u)&&propertySourcesReady.load();
+    if(capture->sockets.empty()&&!corrupted&&!enchanted&&!maybeCraft)return {};
+    SourceGroups out;out.capture=std::move(*capture);out.groups.reserve(8);out.enchanted=enchanted;
     out.groups.push_back({out.capture.own,{hostDefinitions.begin(),hostDefinitions.end()},""});
     if(out.capture.identity.flags&0x04000000u){
         std::vector<Affixes::Rolled> word;
@@ -137,19 +147,324 @@ std::optional<SourceGroups> GatherSourceGroups(void* source,std::span<const Affi
     const auto types=metadata?ContributionTable(D2RL::DataTables::TableId::ItemTypes,out.capture.identity.bank,232,revision):std::optional<DefinitionTable>{};
     const auto gems=metadata?ContributionTable(D2RL::DataTables::TableId::Gems,out.capture.identity.bank,192,revision):std::optional<DefinitionTable>{};
     if(corrupted){
-        if(!items||!types)return {};
-        const auto cube=ContributionTable(D2RL::DataTables::TableId::CubeMain,out.capture.identity.bank,364,revision);if(!cube)return {};
-        unsigned flag=UINT_MAX,dummy=UINT_MAX;
-        for(std::size_t n=0;n<properties.size();++n){const auto& p=properties[n];if(p.bytes[0x18]!=1)continue;
-            const auto target=Affixes::Read<std::uint16_t>(p.bytes.data(),0x20);
-            if(target==361){if(flag!=UINT_MAX)return {};flag=static_cast<unsigned>(n);}
-            if(target==362){if(dummy!=UINT_MAX)return {};dummy=static_cast<unsigned>(n);}}
-        if(flag==UINT_MAX||dummy==UINT_MAX)return {};
-        const auto outcome=ContributionDefinitions::ResolveCorruption(*cube,*items,*types,out.capture.identity.classId,
-            out.capture.identity.quality,Contributions::Value(out.capture.own,361),Contributions::Value(out.capture.own,362),flag,dummy);
-        if(!outcome||!outcome->recognized||outcome->conversion||outcome->specs.size()>3)return {};
-        if(!outcome->specs.empty())out.corruption.push_back(SpecBlock(outcome->specs,"[C]"));
+        bool resolved=false;
+        if(items&&types){
+            if(const auto cube=ContributionTable(D2RL::DataTables::TableId::CubeMain,out.capture.identity.bank,364,revision)){
+                unsigned flag=UINT_MAX,dummy=UINT_MAX;
+                for(std::size_t n=0;n<properties.size();++n){const auto& p=properties[n];if(p.bytes[0x18]!=1)continue;
+                    const auto target=Affixes::Read<std::uint16_t>(p.bytes.data(),0x20);
+                    if(target==361)flag=flag==UINT_MAX?static_cast<unsigned>(n):UINT_MAX-1;
+                    if(target==362)dummy=dummy==UINT_MAX?static_cast<unsigned>(n):UINT_MAX-1;}
+                if(flag<UINT_MAX-1 && dummy<UINT_MAX-1){
+                    const auto outcome=ContributionDefinitions::ResolveCorruption(*cube,*items,*types,out.capture.identity.classId,
+                        out.capture.identity.quality,Contributions::Value(out.capture.own,361),Contributions::Value(out.capture.own,362),flag,dummy);
+                    if(outcome && outcome->recognized && !outcome->conversion && outcome->specs.size()<=3){
+                        resolved=true;
+                        if(!outcome->specs.empty()){
+                            auto block=SpecBlock(outcome->specs,"[C]");
+                            block.uniqueScalar=true;block.unconditionalScalar=true;
+                            out.corruption.push_back(block);
+                        }
+                    }
+                }
+            }
+        }
+        if(!resolved){
+            if(!propertySourcesReady.load())return {};
+            out.unresolvedCorruption=true;
+        }
     }
+    auto defStatBounds=[&](const Affixes::Rolled& d,unsigned stat,unsigned layer,int& lo,int& hi)->bool{
+        if(layer || stat==83){
+            const auto b=PropertyRolls::LayerBounds(d,properties,stat,layer);
+            if(!b)return false;
+            lo=b->first;hi=b->second;return true;
+        }
+        if(ContributionModel::Bounds(d,properties,static_cast<int>(stat),lo,hi))return true;
+        if((stat>=21 && stat<=24) || (stat>=48 && stat<=55)){
+            if(!d.unconditionalScalar || (d.source&&(std::string_view(d.source)=="[U]"||std::string_view(d.source)=="[RW]")&&!d.uniqueScalar))return false;
+            auto plain=d;plain.source=nullptr;
+            const int minStat=(stat>=21 && stat<=24)?((stat<=22)?21:23):static_cast<int>(stat&~1u);
+            const int maxStat=minStat+1;
+            int mnLo{},mnHi{},mxLo{},mxHi{};
+            if(!Affixes::DamageEndpointBounds(plain,properties,minStat,maxStat,mnLo,mnHi,mxLo,mxHi,true))return false;
+            lo=(static_cast<int>(stat)==minStat)?mnLo:mxLo;
+            hi=(static_cast<int>(stat)==minStat)?mnHi:mxHi;
+            return true;
+        }
+        return false;
+    };
+    auto sumStatBounds=[&](std::span<const Affixes::Rolled> defs,unsigned stat,unsigned layer,long long& totalLo,long long& totalHi)->bool{
+        totalLo=0;totalHi=0;
+        for(const auto& d:defs){
+            if(!Affixes::Contributes(d.row,properties,static_cast<int>(stat),static_cast<int>(layer)))continue;
+            int lo{},hi{};
+            if(!defStatBounds(d,stat,layer,lo,hi))return false;
+            totalLo+=lo;totalHi+=hi;
+        }
+        return true;
+    };
+    if(maybeCraft && items && types){
+        std::vector<Affixes::Rolled> baseDefs=out.groups[0].definitions;
+        baseDefs.insert(baseDefs.end(),out.corruption.begin(),out.corruption.end());
+        bool hasUnexplained=out.capture.identity.quality==8;
+        if(!hasUnexplained){
+            for(const auto& entry:out.groups[0].values){
+                if(entry.value<=0)continue;
+                const unsigned stat=static_cast<unsigned>(entry.key>>32);
+                const unsigned layer=static_cast<unsigned>(entry.key&0xffffffffu);
+                if(stat==83 && layer<8){
+                    long long bLo=0,bHi=0;
+                    if(sumStatBounds(baseDefs,83,layer,bLo,bHi) && entry.value>bHi){hasUnexplained=true;break;}
+                    continue;
+                }
+                if(layer!=0 || stat==7 || stat==9 || stat==11 || stat==20 || (stat>=21 && stat<=24) || stat==31 ||
+                   (stat>=48 && stat<=59) || (stat>=216 && stat<=250) ||
+                   (stat>=72 && stat<=75) || stat==194 || (stat>=359 && stat<=363) || (stat>=391 && stat<=398) || (stat>=404 && stat<=412) || (stat>=417 && stat<=420))continue;
+                long long bLo=0,bHi=0;
+                if(sumStatBounds(baseDefs,stat,layer,bLo,bHi) && entry.value>bHi){hasUnexplained=true;break;}
+            }
+        }
+        if(hasUnexplained){
+            if(const auto cube=ContributionTable(D2RL::DataTables::TableId::CubeMain,out.capture.identity.bank,364,revision)){
+                if(const auto candidates=ContributionDefinitions::ResolveCraftCandidates(*cube,*items,*types,properties,
+                    out.capture.identity.classId,out.capture.identity.quality)){
+                    std::vector<Affixes::Rolled> bestCand;unsigned bestExplained=0,bestCount=0;
+                    for(const auto& candidate:*candidates){
+                        std::vector<Affixes::Rolled> candDefs;
+                        for(std::size_t i=0;i<candidate.specs.size();i+=3){
+                            std::vector<ContributionDefinitions::Spec> chunk(
+                                candidate.specs.begin()+static_cast<std::ptrdiff_t>(i),
+                                candidate.specs.begin()+static_cast<std::ptrdiff_t>(std::min(candidate.specs.size(),i+3)));
+                            auto block=SpecBlock(chunk,"[Craft]");
+                            block.uniqueScalar=true;block.unconditionalScalar=true;
+                            candDefs.push_back(block);
+                        }
+                        bool valid=true;unsigned explained=0;
+                        std::set<std::uint64_t> checkedKeys;
+                        for(const auto& spec:candidate.specs){
+                            if(spec.property>=properties.size()){valid=false;break;}
+                            const auto& p=properties[spec.property].bytes;
+                            const bool groupFn3=p[0x18]==1 && p[0x19]==3;
+                            std::optional<long long> groupResidual;
+                            bool specHasTarget=false;
+                            for(unsigned slot=0;slot<7;++slot){
+                                const unsigned fn=p[0x18+slot];if(!fn)continue;
+                                if(fn==17 && slot>0 && Affixes::Read<std::uint16_t>(p.data(),0x20+slot*2)==160)continue;
+                                std::vector<unsigned> targets;unsigned layer=0;
+                                if(fn==7)targets={17u,18u};
+                                else if(fn==5)targets={21u};
+                                else if(fn==6)targets={22u};
+                                else{
+                                    const unsigned t=Affixes::Read<std::uint16_t>(p.data(),0x20+slot*2);
+                                    if(t>=4096){valid=false;break;}
+                                    targets={t};
+                                    if(fn==21)layer=Affixes::Read<std::uint16_t>(p.data(),0x0a+slot*2);
+                                    else if(fn==10 && spec.parameter>=0 && spec.parameter<24)layer=static_cast<unsigned>(spec.parameter/3*8+spec.parameter%3);
+                                    else if((fn==22 || fn==24) && spec.parameter>=0 && spec.parameter<=65535)layer=static_cast<unsigned>(spec.parameter);
+                                    else if(fn!=1 && fn!=2 && fn!=3 && fn!=8 && fn!=15 && fn!=16 && fn!=17){valid=false;break;}
+                                }
+                                for(unsigned target:targets){
+                                    specHasTarget=true;
+                                    const unsigned shift=(target==7 || target==9)?8u:0u;
+                                    const auto raw=Contributions::Value(out.groups[0].values,target,layer);
+                                    const auto actualVal=Contributions::Normalize(raw,shift);
+                                    if(!actualVal || *actualVal<=0){valid=false;break;}
+                                    long long cLo=0,cHi=0;
+                                    if(!sumStatBounds(candDefs,target,layer,cLo,cHi) || cHi<=0){valid=false;break;}
+                                    long long bLo=0,bHi=0;
+                                    const bool bKnown=sumStatBounds(baseDefs,target,layer,bLo,bHi);
+                                    if(bKnown){
+                                        if(*actualVal<bLo+cLo){valid=false;break;}
+                                        if(!enchanted && !out.unresolvedCorruption && *actualVal>bHi+cHi){valid=false;break;}
+                                        if(groupFn3 && !enchanted && !out.unresolvedCorruption && bLo==bHi){
+                                            const long long res=*actualVal-bLo;
+                                            if(!groupResidual)groupResidual=res;
+                                            else if(*groupResidual!=res){valid=false;break;}
+                                        }
+                                    }
+                                    const std::uint64_t key=(std::uint64_t{target}<<32)|layer;
+                                    if(checkedKeys.insert(key).second && (!bKnown || *actualVal>bHi))++explained;
+                                }
+                                if(!valid)break;
+                            }
+                            if(!valid || !specHasTarget){valid=false;break;}
+                        }
+                        if(valid && explained>0){
+                            if(explained>bestExplained){bestExplained=explained;bestCount=1;bestCand=std::move(candDefs);}
+                            else if(explained==bestExplained)++bestCount;
+                        }
+                    }
+                    if(bestExplained>0 && bestCount==1)out.craft=std::move(bestCand);
+                }
+            }
+        }
+    }
+    if(enchanted && upgradeTotal==1 && items && types && !out.unresolvedCorruption){
+        if(const auto cube=ContributionTable(D2RL::DataTables::TableId::CubeMain,out.capture.identity.bank,364,revision)){
+            if(const auto candidates=ContributionDefinitions::ResolveEnchantmentCandidates(*cube,*items,*types,properties,
+                out.capture.identity.classId,out.capture.identity.quality,activeUpgradeStat)){
+                std::vector<Affixes::Rolled> baseDefs=out.groups[0].definitions;
+                baseDefs.insert(baseDefs.end(),out.corruption.begin(),out.corruption.end());
+                std::optional<Affixes::Rolled> matched;unsigned matches=0;
+                baseDefs.insert(baseDefs.end(),out.craft.begin(),out.craft.end());
+                for(const auto& candidate:*candidates){
+                    auto block=SpecBlock(candidate.specs,"[E]");
+                    block.uniqueScalar=true;block.unconditionalScalar=true;
+                    bool allPresent=true,explainsResidual=false;
+                    for(const auto& spec:candidate.specs){
+                        if(spec.property>=properties.size()){allPresent=false;break;}
+                        const auto& p=properties[spec.property].bytes;
+                        for(unsigned slot=0;slot<7;++slot){
+                            const auto fn=p[0x18+slot];if(!fn)continue;
+                            const unsigned target=(fn==7)?17u:(fn==5)?21u:(fn==6)?22u:Affixes::Read<std::uint16_t>(p.data(),0x20+slot*2);
+                            if(target>=4096){allPresent=false;break;}
+                            unsigned layer=0;
+                            if(fn==21)layer=Affixes::Read<std::uint16_t>(p.data(),0x0a+slot*2);
+                            else if(fn==10 && spec.parameter>=0 && spec.parameter<24)layer=static_cast<unsigned>(spec.parameter/3*8+spec.parameter%3);
+                            else if((fn==22 || fn==24) && spec.parameter>=0 && spec.parameter<=65535)layer=static_cast<unsigned>(spec.parameter);
+                            const auto val=Contributions::Value(out.groups[0].values,target,layer);
+                            if(!val){allPresent=false;break;}
+                            const bool inBase=std::any_of(baseDefs.begin(),baseDefs.end(),[&](const auto& d){
+                                return Affixes::Contributes(d.row,properties,static_cast<int>(target),static_cast<int>(layer));});
+                            long long bLo=0,bHi=0;
+                            const bool bKnown=sumStatBounds(baseDefs,target,layer,bLo,bHi);
+                            const unsigned shift=(target==7 || target==9)?8u:0u;
+                            const auto actualVal=Contributions::Normalize(val,shift);
+                            if(!inBase || (bKnown && actualVal && *actualVal>bHi))explainsResidual=true;
+                        }
+                    }
+                    if(allPresent && explainsResidual){matched=block;++matches;}
+                }
+                if(matches==1 && matched)out.enchantment.push_back(*matched);
+            }
+        }
+    }
+    if(enchanted && out.enchantment.empty() && !out.unresolvedCorruption){
+        std::vector<Affixes::Rolled> baseDefs=out.groups[0].definitions;
+        baseDefs.insert(baseDefs.end(),out.corruption.begin(),out.corruption.end());
+        baseDefs.insert(baseDefs.end(),out.craft.begin(),out.craft.end());
+        auto findClassSkillProp=[&](unsigned layer)->std::optional<unsigned>{
+            for(std::size_t id=0;id<properties.size();++id){
+                const auto* p=properties[id].bytes.data();
+                if(p[0x18]==21 && !p[0x19] && !p[2] && Affixes::Read<std::uint16_t>(p,0x20)==83 &&
+                   Affixes::Read<std::uint16_t>(p,0x0a)==layer)
+                    return static_cast<unsigned>(id);
+            }
+            return {};
+        };
+        auto findSingleProp=[&](unsigned target)->std::optional<unsigned>{
+            for(std::size_t id=0;id<properties.size();++id){
+                const auto* p=properties[id].bytes.data();
+                if(p[0x18]==1 && !p[0x19] && !p[2] && Affixes::Read<std::uint16_t>(p,0x20)==target)
+                    return static_cast<unsigned>(id);
+                if(p[0x18]==21 && p[0x19]==3 && !p[0x1a] && !p[2] && !p[3] &&
+                   Affixes::Read<std::uint16_t>(p,0x0a)!=0 && Affixes::Read<std::uint16_t>(p,0x22)==target)
+                    return static_cast<unsigned>(id);
+                if(target==16 && p[0x18]==2 && !p[0x19] && !p[2] && Affixes::Read<std::uint16_t>(p,0x20)==16)
+                    return static_cast<unsigned>(id);
+                if(target==17 && p[0x18]==7 && !p[0x19] && !p[2])return static_cast<unsigned>(id);
+                if(target==21 && p[0x18]==5 && !p[0x19] && !p[2])return static_cast<unsigned>(id);
+                if(target==22 && p[0x18]==6 && !p[0x19] && !p[2])return static_cast<unsigned>(id);
+            }
+            return {};
+        };
+        auto findPairProp=[&](unsigned minTarget,unsigned maxTarget)->std::optional<unsigned>{
+            for(std::size_t id=0;id<properties.size();++id){
+                const auto* p=properties[id].bytes.data();
+                if(p[0x18]==15 && p[0x19]==16 && (!p[0x1a] || p[0x1a]==17) && !p[2] && !p[3] &&
+                   Affixes::Read<std::uint16_t>(p,0x20)==minTarget && Affixes::Read<std::uint16_t>(p,0x22)==maxTarget)
+                    return static_cast<unsigned>(id);
+            }
+            return {};
+        };
+        std::vector<ContributionDefinitions::Spec> residualSpecs;
+        for(unsigned minStat:{48u,50u,52u,54u}){
+            const unsigned maxStat=minStat+1;
+            const auto actualMin=Contributions::Value(out.groups[0].values,minStat);
+            const auto actualMax=Contributions::Value(out.groups[0].values,maxStat);
+            if(actualMin<=0 || actualMax<=0 || actualMin>100000 || actualMax>100000)continue;
+            long long baseMin=0,baseMax=0;bool fixedBase=true;
+            for(const auto& d:baseDefs){
+                if(!Affixes::Contributes(d.row,properties,static_cast<int>(minStat),0) &&
+                   !Affixes::Contributes(d.row,properties,static_cast<int>(maxStat),0))continue;
+                auto plain=d;plain.source=nullptr;
+                int mnLo{},mnHi{},mxLo{},mxHi{};
+                if(!d.unconditionalScalar || (d.source&&(std::string_view(d.source)=="[U]"||std::string_view(d.source)=="[RW]")&&!d.uniqueScalar) ||
+                   !Affixes::DamageEndpointBounds(plain,properties,static_cast<int>(minStat),static_cast<int>(maxStat),mnLo,mnHi,mxLo,mxHi,true) ||
+                   mnLo!=mnHi || mxLo!=mxHi){fixedBase=false;break;}
+                baseMin+=mnLo;baseMax+=mxLo;
+            }
+            if(!fixedBase || actualMin<=baseMin || actualMax<=baseMax)continue;
+            const int resMin=static_cast<int>(actualMin-baseMin),resMax=static_cast<int>(actualMax-baseMax);
+            if(const auto pairProp=findPairProp(minStat,maxStat)){
+                residualSpecs.push_back({*pairProp,0,resMin,resMax});
+            }else if(const auto minProp=findSingleProp(minStat)){
+                if(const auto maxProp=findSingleProp(maxStat)){
+                    residualSpecs.push_back({*minProp,0,resMin,resMin});
+                    residualSpecs.push_back({*maxProp,0,resMax,resMax});
+                }
+            }
+        }
+        for(const auto& entry:out.groups[0].values){
+            if(entry.value<=0 || entry.value>100000)continue;
+            const unsigned entryStat=static_cast<unsigned>(entry.key>>32);
+            const unsigned layer=static_cast<unsigned>(entry.key&0xffffffffu);
+            if(entryStat==83 && layer<8){
+                long long bLo=0,bHi=0;
+                if(sumStatBounds(baseDefs,83,layer,bLo,bHi) && bLo==bHi && entry.value>bLo){
+                    const int res=static_cast<int>(entry.value-bLo);
+                    if(const auto prop=findClassSkillProp(layer))
+                        residualSpecs.push_back({*prop,0,res,res});
+                }
+                continue;
+            }
+            if(layer!=0){
+                if((entryStat==107 || entryStat==387) && layer<=65535){
+                    long long bLo=0,bHi=0;
+                    if(sumStatBounds(baseDefs,entryStat,layer,bLo,bHi) && bLo==bHi && entry.value>bLo){
+                        const int res=static_cast<int>(entry.value-bLo);
+                        for(std::size_t id=0;id<properties.size();++id){
+                            const auto* p=properties[id].bytes.data();
+                            const bool match107=entryStat==107 && p[0x18]==22 && !p[0x19] && !p[2] && Affixes::Read<std::uint16_t>(p,0x20)==107;
+                            const bool match387=entryStat==387 && p[0x18]==22 && p[0x19]==24 && !p[0x1a] && !p[2] && !p[3] &&
+                                Affixes::Read<std::uint16_t>(p,0x20)==387 && Affixes::Read<std::uint16_t>(p,0x22)==97;
+                            if(match107 || match387){residualSpecs.push_back({static_cast<unsigned>(id),static_cast<int>(layer),res,res});break;}
+                        }
+                    }
+                }
+                continue;
+            }
+            const unsigned stat=static_cast<unsigned>(entry.key>>32);
+            if(stat==11 || stat==18 || stat==20 || stat==23 || stat==24 || stat==31 ||
+               (out.capture.identity.quality==3 && (stat==16 || stat==17 || stat==19 || stat==21 || stat==22 || stat==75)) ||
+               (stat>=48 && stat<=59) || stat==72 || stat==73 || stat==75 || stat==194 ||
+               (stat>=216 && stat<=250) || (stat>=359 && stat<=363) || (stat>=391 && stat<=398) ||
+               (stat>=404 && stat<=412) || (stat>=417 && stat<=420))continue;
+            const unsigned shift=(stat==7 || stat==9)?8u:0u;
+            const auto actualVal=Contributions::Normalize(entry.value,shift);
+            if(!actualVal || *actualVal<=0)continue;
+            int bLo=0,bHi=0;bool bFixed=true;long long baseSum=0;
+            for(const auto& d:baseDefs){
+                if(!Affixes::Contributes(d.row,properties,static_cast<int>(stat),0))continue;
+                if(!defStatBounds(d,stat,0,bLo,bHi) || bLo!=bHi){bFixed=false;break;}
+                baseSum+=bLo;
+            }
+            if(!bFixed || *actualVal<=baseSum)continue;
+            const int res=static_cast<int>(*actualVal-baseSum);
+            if(const auto prop=findSingleProp(stat))
+                residualSpecs.push_back({*prop,0,res,res});
+        }
+        for(std::size_t i=0;i<residualSpecs.size();i+=3){
+            std::vector<ContributionDefinitions::Spec> chunk(
+                residualSpecs.begin()+static_cast<std::ptrdiff_t>(i),
+                residualSpecs.begin()+static_cast<std::ptrdiff_t>(std::min(residualSpecs.size(),i+3)));
+            auto block=SpecBlock(chunk,"[E]");
+            block.uniqueScalar=true;block.unconditionalScalar=true;
+            out.enchantment.push_back(block);
+        }
+    }
+    if(out.capture.sockets.empty()&&!corrupted&&!enchanted&&out.craft.empty())return {};
     for(std::size_t index=0;index<out.capture.sockets.size();++index){
         const auto& socket=out.capture.sockets[index];std::vector<Affixes::Rolled> definitions;
         if(socket.identity.quality==4||socket.identity.quality==6){
@@ -181,13 +496,16 @@ std::optional<SourceGroups> GatherSourceGroups(void* source,std::span<const Affi
     }
     return out;
 }
-void AddOwnedSourceLabels(const SourceGroups& sources,std::vector<CapturedLine> observed,std::string_view actual,
+void AddOwnedSourceLabels(const SourceGroups& sources,std::vector<CapturedLine>& observed,std::string_view actual,
     std::span<const Affixes::Property> properties,const unsigned char* itemStats,std::size_t statCount,
     Affixes::LayerEncoding encoding,std::span<const Affixes::PropertyGroup> groups,std::vector<RangeText::Label>& labels) {
     std::vector<Affixes::Rolled> all;
     for(const auto& group:sources.groups)all.insert(all.end(),group.definitions.begin(),group.definitions.end());
     all.insert(all.end(),sources.corruption.begin(),sources.corruption.end());
+    all.insert(all.end(),sources.craft.begin(),sources.craft.end());
+    all.insert(all.end(),sources.enchantment.begin(),sources.enchantment.end());
     AddUnobservedCompositeIdentities(observed,actual,all,properties,encoding,groups,itemStats,statCount);
+    if(sources.enchanted || sources.unresolvedCorruption)return;
     std::vector<std::string> handled;
     for(const auto& line:observed){
         if(line.layer||line.grouped||line.stat<0||static_cast<std::size_t>(line.stat)>=statCount||
@@ -195,10 +513,13 @@ void AddOwnedSourceLabels(const SourceGroups& sources,std::vector<CapturedLine> 
         handled.push_back(line.key);unsigned stat=static_cast<unsigned>(line.stat);
         const auto* metadata=itemStats+stat*0x144;if(Affixes::Read<std::uint16_t>(metadata,0)!=stat)continue;
         const auto shift=metadata[0x14];if(shift>16)continue;
-        const bool paired=stat>=48&&stat<=55;
+        const bool isDamageEndpoint=(stat>=21&&stat<=24)||(stat>=48&&stat<=55);
+        const bool paired=isDamageEndpoint && std::count(line.key.begin(),line.key.end(),'#')==2;
         if(!paired&&Affixes::Read<std::uint16_t>(metadata,0x32)!=19)continue;
-        if(paired){stat&=~1u;if(stat+1>=statCount||itemStats[(stat+1)*0x144+0x14]!=shift)continue;}
+        if(paired){stat=(stat>=21&&stat<=24)?((stat&1)?stat:stat-1):(stat&~1u);if(stat+1>=statCount||itemStats[(stat+1)*0x144+0x14]!=shift)continue;}
+
         auto input=sources.groups;
+        for(auto d:sources.craft){d.uniqueScalar=true;d.unconditionalScalar=true;input[0].definitions.push_back(std::move(d));}
         const auto corruption=ContributionModel::Exact(sources.corruption,properties,stat);
         const auto maxCorruption=paired?ContributionModel::Exact(sources.corruption,properties,stat+1):std::optional<int>{0};
         if(!corruption||!maxCorruption)continue;
@@ -231,9 +552,11 @@ void AddOwnedSourceLabels(const SourceGroups& sources,std::vector<CapturedLine> 
 void AddLinkedSourceLabels(const SourceGroups& sources,std::span<const CapturedLine> observed,std::string_view actual,
     std::span<const Affixes::Property> properties,const unsigned char* metadata,std::size_t count,
     std::vector<RangeText::Label>& labels,std::span<const Affixes::PropertyGroup> propertyGroups={}) {
-    // Corruption retains its established independent reconstruction. A future
-    // linked solve must include that operation before it can use its totals.
-    if(!sources.corruption.empty() || sources.groups.empty() || sources.groups.size()>8)return;
+    if(sources.groups.empty() || sources.groups.size()>8)return;
+    auto groups=sources.groups;
+    for(auto d:sources.corruption){d.uniqueScalar=true;d.unconditionalScalar=true;groups[0].definitions.push_back(std::move(d));}
+    for(auto d:sources.craft){d.uniqueScalar=true;d.unconditionalScalar=true;groups[0].definitions.push_back(std::move(d));}
+    for(auto d:sources.enchantment){d.uniqueScalar=true;d.unconditionalScalar=true;groups[0].definitions.push_back(std::move(d));}
     const Affixes::LayerEncoding selectorEncoding{6,63,randomSkillsReady.load()};
     const auto normalize=[&](unsigned stat,std::int64_t raw)->std::optional<int>{
         if(stat>=count)return {};const auto* row=metadata+stat*0x144;
@@ -241,25 +564,29 @@ void AddLinkedSourceLabels(const SourceGroups& sources,std::span<const CapturedL
         return Contributions::Normalize(raw,row[0x14]);
     };
     std::vector<PropertyRolls::Solution> solved;
-    for(const auto& group:sources.groups)solved.push_back(PropertyRolls::SolveSources(group.definitions,properties,group.values,normalize,propertyGroups));
+    for(const auto& group:groups)solved.push_back(PropertyRolls::SolveSources(group.definitions,properties,group.values,normalize,propertyGroups));
     std::set<std::string> handled;
     for(const auto& line:observed){
         if(line.stat<0 || line.stat==204 || static_cast<std::size_t>(line.stat)>=count || !handled.insert(line.key).second)continue;
         const unsigned stat=static_cast<unsigned>(line.stat);std::vector<unsigned> members;
-        // Physical endpoints and durability percent live on owned modifiers.
-        // Aggregate physical damage includes the base weapon; aggregate
+        // Physical endpoints, enhanced defense/damage, and durability percent live on owned modifiers.
+        // Aggregate physical damage/defense includes the base item; aggregate
         // durability contains the resulting capacity, not stat75's percentage.
         // Require the displayed modifier to match the complete owned value.
-        if(!line.layer && !line.grouped && (stat==75 || (stat>=21 && stat<=24))){
-            const bool physical=stat!=75;const unsigned minimum=physical?((stat&1)?stat:stat-1):stat;
-            const unsigned maximum=physical?minimum+1:minimum;
+        if(!line.layer && !line.grouped && (stat==16 || stat==17 || stat==18 || stat==75 || (stat>=21 && stat<=24))){
+            const bool physical=stat>=21 && stat<=24;
+            const bool paired=physical && std::count(line.key.begin(),line.key.end(),'#')==2;
+            const unsigned minimum=paired?((stat&1)?stat:stat-1):stat;
+            const unsigned maximum=paired?minimum+1:minimum;
+
             if(maximum>=count)continue;
             bool admitted=true;
             for(unsigned member=minimum;member<=maximum;++member){const auto* row=metadata+member*0x144;
                 admitted &= Affixes::Read<std::uint16_t>(row,0)==member && row[0x14]==0 &&
                     row[0x50]==(physical?0:13) && Affixes::Read<std::uint16_t>(row,0x32)==19;}
+            if(stat==17 || stat==18)for(const auto& g:groups)admitted &= Contributions::Value(g.values,17)==Contributions::Value(g.values,18);
             if(!admitted)continue;
-            const auto owned=ContributionModel::Build(line.key,minimum,0,sources.groups,properties,physical);
+            const auto owned=ContributionModel::Build(line.key,minimum,0,groups,properties,paired);
             if(!owned)continue;unsigned matches=0;bool renders=false;
             for(const auto text:RangeText::Lines(actual))if(RangeText::Analyze(text).key==line.key){++matches;renders=!RangeText::ExpandOwned(text,*owned).empty();}
             if(matches==1 && renders){std::erase_if(labels,[&](const auto& old){return old.key==line.key;});labels.push_back(*owned);}continue;
@@ -274,7 +601,7 @@ void AddLinkedSourceLabels(const SourceGroups& sources,std::span<const CapturedL
                     !metadata[member*0x144+0x14] && !metadata[member*0x144+0x50];
             if(!metadataValid)continue;
             const ContributionModel::Group* poison=nullptr;bool valid=true;
-            for(const auto& g:sources.groups)if(Contributions::Value(g.values,57)||Contributions::Value(g.values,58)||Contributions::Value(g.values,59)){
+            for(const auto& g:groups)if(Contributions::Value(g.values,57)||Contributions::Value(g.values,58)||Contributions::Value(g.values,59)){
                 if(poison){valid=false;break;}poison=&g;
             }
             if(!valid || !poison || Contributions::Value(poison->values,326)>1)continue;
@@ -294,7 +621,7 @@ void AddLinkedSourceLabels(const SourceGroups& sources,std::span<const CapturedL
                 }
             }
             if(!valid || durations!=1)continue;
-            auto poisonLabel=ContributionModel::Build(line.key,57,0,sources.groups,properties,true);
+            auto poisonLabel=ContributionModel::Build(line.key,57,0,groups,properties,true);
             if(!poisonLabel || poisonLabel->ownedParts.size()!=1)continue;
             const auto convert=[&](int rate)->std::optional<int>{
                 const auto product=std::int64_t{rate}*frames;
@@ -314,17 +641,102 @@ void AddLinkedSourceLabels(const SourceGroups& sources,std::span<const CapturedL
             if(matches==1 && renders){std::erase_if(labels,[&](const auto& old){return old.key==line.key;});labels.push_back(*poisonLabel);}continue;
         }
         if(!line.layer && !line.grouped && stat>=48 && stat<=55){
-            const unsigned minimum=stat&~1u,maximum=minimum+1;
+            const bool pairedLine=std::count(line.key.begin(),line.key.end(),'#')==2;
+            const unsigned minimum=pairedLine?(stat&~1u):stat,maximum=pairedLine?(minimum+1):stat;
             if(maximum>=count || metadata[minimum*0x144+0x14]!=metadata[maximum*0x144+0x14] ||
                metadata[minimum*0x144+0x50] || metadata[maximum*0x144+0x50])continue;
-            long long low=0,high=0;for(const auto& g:sources.groups){low+=Contributions::Value(g.values,minimum);high+=Contributions::Value(g.values,maximum);}
-            if(low!=Contributions::Value(sources.capture.total,minimum) || high!=Contributions::Value(sources.capture.total,maximum))continue;
-            const auto paired=ContributionModel::Build(line.key,minimum,metadata[minimum*0x144+0x14],sources.groups,properties,true);
-            if(!paired)continue;unsigned matches=0;bool renders=false;
-            for(const auto text:RangeText::Lines(actual))if(RangeText::Analyze(text).key==line.key){++matches;renders=!RangeText::ExpandOwned(text,*paired).empty();}
-            if(matches==1 && renders){std::erase_if(labels,[&](const auto& old){return old.key==line.key;});labels.push_back(*paired);}continue;
+            long long low=0,high=0;
+            std::vector<std::string> fallbackSources;bool fallbackValid=true;
+            for(std::size_t n=0;n<groups.size();++n){
+                const auto& g=groups[n];
+                const auto vMin=Contributions::Value(g.values,minimum),vMax=pairedLine?Contributions::Value(g.values,maximum):0;
+                low+=vMin;high+=vMax;
+                if(vMin>0 || vMax>0){
+                    auto lbl=Affixes::Label(g.definitions,properties,static_cast<int>(minimum),0,selectorEncoding,propertyGroups);
+                    if(lbl.empty() && pairedLine)lbl=Affixes::Label(g.definitions,properties,static_cast<int>(maximum),0,selectorEncoding,propertyGroups);
+                    if(lbl.empty() && n==0 && sources.enchanted)lbl="[E]";
+                    if(lbl.empty())fallbackValid=false;
+                    else fallbackSources.push_back(g.prefix+lbl);
+                }
+            }
+            if(low!=Contributions::Value(sources.capture.total,minimum) || (pairedLine && high!=Contributions::Value(sources.capture.total,maximum)))continue;
+            if(const auto paired=ContributionModel::Build(line.key,minimum,metadata[minimum*0x144+0x14],groups,properties,pairedLine)){
+
+                unsigned matches=0;bool renders=false;
+                for(const auto text:RangeText::Lines(actual))if(RangeText::Analyze(text).key==line.key){++matches;renders=!RangeText::ExpandOwned(text,*paired).empty();}
+                if(matches==1 && renders){std::erase_if(labels,[&](const auto& old){return old.key==line.key;});labels.push_back(*paired);continue;}
+            }
+            if(fallbackValid && !fallbackSources.empty()){
+                unsigned matches=0;
+                for(const auto text:RangeText::Lines(actual))if(RangeText::Analyze(text).key==line.key)++matches;
+                if(matches==1){
+                    RangeText::Label fallback;fallback.key=line.key;
+                    fallback.text=fallbackSources.size()==1?fallbackSources.front():"[Combined]";
+                    fallback.sourceOnly=true;
+                    std::erase_if(labels,[&](const auto& old){return old.key==line.key;});
+                    labels.push_back(std::move(fallback));
+                }
+            }
+            continue;
         }
-        const bool selector=!line.grouped && std::any_of(sources.groups.begin(),sources.groups.end(),[&](const auto& g){
+        if(!line.grouped && line.layer>0 && stat>=195 && stat<=201 && selectorEncoding.skillBits && selectorEncoding.skillBits<16){
+            const auto totalChance=Contributions::Value(sources.capture.total,stat,static_cast<unsigned>(line.layer));
+            if(totalChance<=0 || totalChance>100000)continue;
+            long long groupSum=0;bool procValid=true,allVerified=true;
+            std::vector<std::string> contributors;
+            for(std::size_t n=0;n<groups.size();++n){
+                const auto val=Contributions::Value(groups[n].values,stat,static_cast<unsigned>(line.layer));
+                if(val<0){procValid=false;break;}
+                if(!val)continue;
+                groupSum+=val;
+                long long defSum=0;std::vector<std::string> groupNames;
+                for(const auto& d:groups[n].definitions){
+                    if(const auto c=ScalingAffixes::Proc(d,properties,static_cast<int>(stat),line.layer,selectorEncoding)){
+                        defSum+=c->first;
+                        groupNames.push_back(groups[n].prefix+Affixes::NamedLabel(d));
+                    }
+                }
+                if(defSum==val && !groupNames.empty()){
+                    contributors.insert(contributors.end(),groupNames.begin(),groupNames.end());
+                }else if(n>0 && !groups[n].definitions.empty() &&
+                         std::all_of(groups[n].definitions.begin(),groups[n].definitions.end(),
+                             [](const auto& d){return d.source && std::string_view(d.source)=="[U]";})) {
+                    allVerified=false;
+                    contributors.push_back(groups[n].prefix+"[U]");
+                }else if(n==0 && sources.enchanted && defSum==0 &&
+                         std::none_of(groups[0].definitions.begin(),groups[0].definitions.end(),[&](const auto& d){
+                             return Affixes::Contributes(d.row,properties,static_cast<int>(stat),line.layer,selectorEncoding,propertyGroups);})){
+                    allVerified=false;
+                    contributors.push_back("[E]");
+                }else if(n==0 && sources.capture.identity.quality==7 && defSum==0){
+                    allVerified=false;
+                    contributors.push_back("[U]");
+                }else{
+                    procValid=false;break;
+                }
+            }
+            if(procValid && groupSum==totalChance && !contributors.empty()){
+                const int level=line.layer&static_cast<int>(selectorEncoding.skillMask);
+                std::string chanceRange;unsigned matches=0;
+                for(const auto text:RangeText::Lines(actual))if(RangeText::Analyze(text).key==line.key){
+                    ++matches;chanceRange=RangeText::FixedProcChance(text,static_cast<int>(totalChance),level);
+                }
+                if(matches==1){
+                    RangeText::Label procLabel;procLabel.key=line.key;
+                    procLabel.text=contributors.size()==1?contributors.front():"[Combined]";
+                    if(allVerified && !chanceRange.empty()){
+                        procLabel.fallbackRange=std::move(chanceRange);
+                        procLabel.replaceNativeRange=true;
+                    }else{
+                        procLabel.sourceOnly=true;
+                    }
+                    std::erase_if(labels,[&](const RangeText::Label& old){return old.key==line.key;});
+                    labels.push_back(std::move(procLabel));
+                }
+            }
+            continue;
+        }
+        const bool selector=!line.grouped && std::any_of(groups.begin(),groups.end(),[&](const auto& g){
             return std::any_of(g.definitions.begin(),g.definitions.end(),[&](const auto& d){return line.layer>=0 && PropertyRolls::LayerBounds(d,properties,stat,static_cast<unsigned>(line.layer),selectorEncoding.randomSkills).has_value();});});
         if(line.grouped){
             if(!line.group || line.layer)continue;
@@ -338,8 +750,8 @@ void AddLinkedSourceLabels(const SourceGroups& sources,std::span<const CapturedL
         for(auto member:members)if(normalize(member,Contributions::Value(sources.capture.total,member))!=total){members.clear();break;}
         if(line.grouped && members.empty())continue;
         RangeText::Label label;label.key=line.key;label.ownedTotal=*total;long long sum=0;bool valid=true;
-        for(std::size_t n=0;n<sources.groups.size();++n){
-            const auto& group=sources.groups[n];
+        for(std::size_t n=0;n<groups.size();++n){
+            const auto& group=groups[n];
             if(line.layer || selector){
                 // Only selector functions with verified additive semantics;
                 // packed proc/charge layers stay native.
@@ -363,6 +775,39 @@ void AddLinkedSourceLabels(const SourceGroups& sources,std::span<const CapturedL
                 continue;
             }
             for(auto p:part->ownedParts){p.label=group.prefix+p.label;label.ownedParts.push_back(std::move(p));}
+        }
+        if(!valid && !line.layer && !line.grouped && !selector){
+            long long rawSum=0;bool fallbackOk=true,socketImpossible=false;
+            std::vector<std::string> groupLabels;
+            for(std::size_t n=0;n<groups.size();++n){
+                const auto v=normalize(stat,Contributions::Value(groups[n].values,stat));
+                if(!v){fallbackOk=false;break;}
+                rawSum+=*v;
+                auto text=Affixes::Label(groups[n].definitions,properties,static_cast<int>(stat),0,selectorEncoding,propertyGroups);
+                if(*v==0){
+                    if(!text.empty()){fallbackOk=false;break;}
+                    continue;
+                }
+                if(text.empty() && n==0 && sources.enchanted){
+                    text="[E]";
+                    socketImpossible=true;
+                }
+                if(text.empty()){fallbackOk=false;break;}
+                if(solved[n].impossible.contains(stat))socketImpossible=true;
+                groupLabels.push_back(groups[n].prefix+text);
+            }
+            if(fallbackOk && socketImpossible && rawSum==*total && !groupLabels.empty()){
+                unsigned matches=0;
+                for(const auto text:RangeText::Lines(actual))if(RangeText::Analyze(text).key==line.key)++matches;
+                if(matches==1){
+                    RangeText::Label fallback;fallback.key=line.key;
+                    fallback.text=groupLabels.size()==1?groupLabels.front():"[Combined]";
+                    fallback.sourceOnly=true;
+                    std::erase_if(labels,[&](const auto& old){return old.key==line.key;});
+                    labels.push_back(std::move(fallback));
+                }
+            }
+            continue;
         }
         if(!valid || sum!=*total || label.ownedParts.empty() || label.ownedParts.size()>12)continue;
         if(stat==253 && !line.grouped && !line.layer){if(!quantityRateReady.load())continue;label.quantityRate=true;}
@@ -395,7 +840,7 @@ void AddIntrinsicUndeadLabel(void* source,const unsigned char* tables,
     if(!blunt || !*blunt)return;
     auto owned=GatherSourceGroups(source,definitions,affixes,prefixIndex,autoIndex,properties);
     std::vector<ContributionModel::Group> groups;
-    if(owned){if(!owned->corruption.empty())return;groups=owned->groups;}
+    if(owned){if(!owned->corruption.empty()||!owned->craft.empty())return;groups=owned->groups;}
     else {
         if(!capture.sockets.empty() || (capture.identity.flags&0x04000000u) || HasRecipeExtras(capture))return;
         groups.push_back({capture.own,{definitions.begin(),definitions.end()},""});

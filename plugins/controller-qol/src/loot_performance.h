@@ -17,7 +17,7 @@ inline void Report(const D2RL::PluginContext* context) noexcept {
         context->LogInfo(line);
         context->WriteConsoleMessage(line,D2RL::ConsoleMessageKind::Output);
     };
-    Window.Print("QOL_PERF","1.3.1+rev.91",Names,Counters,emit);
+    Window.Print("QOL_PERF","1.3.1+rev.92",Names,Counters,emit);
     CurrentPageQuery::Report("qol",emit);
 }
 }

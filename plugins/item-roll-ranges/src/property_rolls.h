@@ -11,7 +11,7 @@ namespace PropertyRolls {
 // they do not scale the stored/displayed attribute points. Level operations
 // and other transformations still require their own qualified paths.
 inline bool ItemScalarOperand(const unsigned char* metadata){
-    return metadata[0x50]==0 || metadata[0x50]==8 || metadata[0x50]==9;
+    return metadata[0x50]==0 || metadata[0x50]==8 || metadata[0x50]==9 || metadata[0x50]==11;
 }
 // A variable is one property-function roll, not one displayed stat. Function 3
 // can copy a nonzero preceding roll to several stats; zero-inclusive domains
@@ -43,7 +43,7 @@ inline bool BlockPossible(std::uint32_t id,std::span<const Affixes::Property> pr
             const unsigned stat=Affixes::Read<std::uint16_t>(row.data(),0x20+slot*2);if(stat<4096)blocked.insert(stat);
             if(BlockImplicit(fn,stat,row[2+slot],blocked))continue;
             if(stat>=4096 && fn!=5 && fn!=6 && fn!=7)return false;
-            if(fn==7){blocked.insert(17);blocked.insert(18);}if(fn==5){blocked.insert(21);blocked.insert(23);}if(fn==6){blocked.insert(22);blocked.insert(24);}}
+            if(fn==7){blocked.insert(17);blocked.insert(18);}if(fn==5||(fn==15&&stat==21)){blocked.insert(21);blocked.insert(23);}if(fn==6||(fn==16&&stat==22)){blocked.insert(22);blocked.insert(24);}}
         return true;
     }
     if((id>>16)!=1 || (id&0xffff)>=groups.size())return false;
@@ -81,7 +81,8 @@ inline Model Compile(std::span<const Affixes::Rolled> sources,std::span<const Af
                 if(stat<4096)affected.insert(stat);
                 if(fn==7){affected.insert(17);affected.insert(18);}
                 if(fn==5){affected.insert(21);affected.insert(23);}
-                if(fn==6){affected.insert(22);affected.insert(24);}
+                if(fn==6||(fn==16&&stat==22)){affected.insert(22);affected.insert(24);}
+                if(fn==15&&stat==21){affected.insert(21);affected.insert(23);}
                 if(BlockImplicit(fn,stat,row[2+slot],affected)){valid=false;previous.reset();continue;}
                 // Compiled uint16 property id, then seven replacement flags.
                 if(stat>=4096 || row[2+slot]){if(stat>=4096 && fn!=5 && fn!=6 && fn!=7)out.complete=false;valid=false;previous.reset();continue;}
@@ -94,9 +95,17 @@ inline Model Compile(std::span<const Affixes::Rolled> sources,std::span<const Af
                     if(fn==17 && (parameter<0 || parameter>1000000))valid=false;
                     pending.push_back({fn==17&&parameter?parameter:low,fn==17&&parameter?parameter:high,source,{stat}});previous=pending.size()-1;
                 }else if(fn==3 && previous && (low>0 || high<0)){
-                    auto& stats=pending[*previous].stats;
-                    if(std::find(stats.begin(),stats.end(),stat)!=stats.end())valid=false;
-                    else stats.push_back(stat);
+                    const bool duplicate=std::any_of(pending.begin(),pending.end(),[&](const Variable& v){
+                        return std::find(v.stats.begin(),v.stats.end(),stat)!=v.stats.end();});
+                    if(duplicate)valid=false;
+                    else if(low==high)pending.push_back({low,high,source,{stat}});
+                    else pending[*previous].stats.push_back(stat);
+                }else if(slot==0 && fn==21 && row[0x19]==3 && !row[0x1a] && !row[3] &&
+                         Affixes::Read<std::uint16_t>(row.data(),0x0a)!=0 && (low>0 || high<0)){
+                    const unsigned stat2=Affixes::Read<std::uint16_t>(row.data(),0x22);
+                    if(stat2>=4096){out.complete=false;valid=false;}
+                    else{affected.insert(stat2);pending.push_back({low,high,source,{stat2}});}
+                    break;
                 }else{valid=false;previous.reset();}
             }
             if(!valid || pending.empty() || out.variables.size()+pending.size()>128){
@@ -277,7 +286,21 @@ inline std::optional<RangeText::Label> Label(const Solution& solution,std::strin
     const auto& terms=solution.model.terms.at(stat);
     for(auto member:group){
         const auto at=solution.model.terms.find(member);
-        if(!solution.verified.contains(member) || at==solution.model.terms.end() || at->second!=terms)return {};
+        if(!solution.verified.contains(member) || at==solution.model.terms.end())return {};
+        if(at->second!=terms){
+            auto sameGroupTerms=[&](const std::vector<std::size_t>& a,const std::vector<std::size_t>& b){
+                if(a.size()!=b.size())return false;
+                for(std::size_t k=0;k<a.size();++k){
+                    if(a[k]==b[k])continue;
+                    const auto& va=solution.model.variables[a[k]];
+                    const auto& vb=solution.model.variables[b[k]];
+                    if(va.low!=va.high || vb.low!=vb.high || va.low!=vb.low)return false;
+                    if(va.source!=vb.source && solution.model.names[va.source]!=solution.model.names[vb.source])return false;
+                }
+                return true;
+            };
+            if(!sameGroupTerms(terms,at->second))return {};
+        }
     }
     RangeText::Label label;label.key=std::move(key);label.ownedTotal=actual;
     std::map<std::size_t,std::vector<std::size_t>> bySource;

@@ -161,8 +161,8 @@ void Choices(){
  check(!PropertyRolls::Feasible({{0,1}},proofEquation,proofBudget,&proofUnknown) && proofUnknown);
  proofBudget=10;proofUnknown=false;check(!PropertyRolls::Feasible({{2,3}},proofEquation,proofBudget,&proofUnknown) && !proofUnknown);
  std::array<unsigned char,324> metadata{};check(PropertyRolls::ItemScalarOperand(metadata.data()));
- for(unsigned op:{8,9}){metadata[0x50]=static_cast<unsigned char>(op);check(PropertyRolls::ItemScalarOperand(metadata.data()));}
- for(unsigned op:{1,2,3,4,5,6,7,10,11,12,13}){metadata[0x50]=static_cast<unsigned char>(op);check(!PropertyRolls::ItemScalarOperand(metadata.data()));}
+ for(unsigned op:{8,9,11}){metadata[0x50]=static_cast<unsigned char>(op);check(PropertyRolls::ItemScalarOperand(metadata.data()));}
+ for(unsigned op:{1,2,3,4,5,6,7,10,12,13}){metadata[0x50]=static_cast<unsigned char>(op);check(!PropertyRolls::ItemScalarOperand(metadata.data()));}
  std::vector<Affixes::Property> p={property({0,1,2,3}),property({96}),property({79})};
  auto a=roll(0,3,8,"[U]"),b=roll(1,10,20,"[U]"),c=roll(2,15,30,"[U]");
  a.unconditionalScalar=b.unconditionalScalar=c.unconditionalScalar=false;

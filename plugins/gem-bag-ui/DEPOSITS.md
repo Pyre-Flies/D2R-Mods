@@ -1,8 +1,9 @@
 # Gem Bag deposits (beta.17)
 
-Shift + right-click a stored bag deposits eligible gems and clusters from that
-bag's current storage page. Plain right-click and LB+B retain the withdrawal
-picker. This first candidate adds no picker button. Drag-to-bag was cancelled by the user; Shift + right-click is the deposit input.
+Shift + right-click or controller LB+B on a stored bag deposits eligible gems
+and clusters from that bag's current storage page. Plain right-click and LB+A
+retain the withdrawal picker. This candidate adds no picker button. Drag-to-bag
+was cancelled by the user; Shift + right-click and LB+B are the deposit inputs.
 
 ## Recipe evidence
 

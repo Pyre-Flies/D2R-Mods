@@ -43,6 +43,7 @@ int main(int argc,char** argv) {
     check(config.find("[qol]")!=config.npos,"configuration section is QOL");
     check(config.find("modifier = \"bumper\"")!=config.npos,"identify/move default uses L1");
     check(config.find("ground_pickup_button = \"bumper\"")!=config.npos,"ground-loot default uses L1");
+    check(config.find("ground_pickup_distance = 14")!=config.npos,"ground-loot default distance is 14");
     check(config.find("quick_identify = true")!=config.npos && config.find("quick_move = true")!=config.npos,"item actions remain enabled");
     check(config.find("debug_logging = false")!=config.npos,"release debug logging defaults off");
     check(config.find("prioritize_portals = true")!=config.npos,"portal priority defaults on");

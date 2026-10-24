@@ -82,3 +82,6 @@ This table is an index, not sufficient justification for an unguarded hook.
 
 - [Always Show Sockets](always-show-sockets.md): exact icon/scale/ring contracts,
   source guards, appearance controls and stable-suite validation limits.
+- [Stash Search 1.10.12 decompilation and native contracts](stash-search-1.10.12-decompilation.md):
+  26 guarded `D2R.exe` RVAs, 7 `D2RCore.dll` pointer-table checks, `BankPanel::Draw`
+  hook, `StashSearchAnchor` layout gating, and cross-tab shared-stash switching.

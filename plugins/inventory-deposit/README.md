@@ -92,7 +92,7 @@ and Reimagined-style advanced storage with the HD keyboard/mouse inventory.
 Controller/classic layouts are outside the button's scope. Unsupported builds
 leave it unavailable.
 
-Twelve automated suites passed. Live checks cover deposits, placement,
+Thirteen automated suites passed. Live checks cover deposits, placement,
 hover/disabled states and tab feedback. Remote multiplayer, multiple resolutions
 and save/reload persistence are not fully validated.
 

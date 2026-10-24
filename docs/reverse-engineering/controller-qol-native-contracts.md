@@ -29,7 +29,7 @@ complete approach/walk contract. See [the live-failure follow-up](../../plugins/
 | D2RCore `0x67F4D0` / lookup `0x680D28` | Native raw-controller manager access | Exact Core hash and layout checks; never reuse as unguarded input API |
 | `0x878D30` | TabBar controller navigation | Filters before selection mutation |
 | `0x27DF80` | Main UI switcher | Menu navigation path |
-| `0x14C6810` | Skill Tree navigation | Skill sub-tab handling |
+| `0x14C6810` | Skill Tree navigation (`SkillsPanel` message handler) | Skill sub-tab handling (`6->19`, `7->20`) plus rev.90 single-press `A` allocation (`action==0 && !repeat -> action=14`, matching `SkillsPanel` button-activate dispatch at `0x14C6974` to `0x14C7370`) |
 | `0xC66A0` / `0xC6E90` | Ground-label press/release | Scoped controller-label behavior |
 | `0x86D410` | Controller-prompt widget scope | Prompt draw scope; global renderer hook was removed for coexistence |
 | calls `0x86D6A9` / `0x86D6F3` | Controller prompt text/spacing | Exact five-byte CALL redirects; retained relay/lifetime requirements |
@@ -97,7 +97,8 @@ The reviewed caller supplies `true, true, false` for the wrapper's final flags. 
 | ObjectsTxt `SubClass & 0x40` | Waypoint family (OperateFn 23 in all inspected active rows) | Rev.43 priority classifier using established compiled SubClass offset `+0x127` |
 | ObjectsTxt `SubClass & 0x01` | Shrine plus healing/mana-well family (OperateFn 2 in inspected active rows) | Rev.44 default-on priority classifier using established compiled SubClass offset `+0x127` |
 | ObjectsTxt classes `111, 113, 115, 118, 130, 132, 137, 138, 322, 426, 493, 498, 513, 519` | Complete environmental Fountain/Well family using OperateFn 22 in active table SHA-256 `45851636360723F5E1B3DE98207625748AF23546D40918C1BC8254A263F2747B` | Rev.46 exact allowlist under `prioritize_shrines`; avoids broad SubClass 0/32 promotion |
-| ObjectsTxt class allowlist (47 IDs) | Ordinary active-table chest family | Rev.44 opt-in priority; exact IDs in `SHRINE-CHEST-PRIORITY-REV44.md`, deliberately not generic SubClass 8 |
+| ObjectsTxt classes `192, 304, 305, 306` | Arcane Sanctuary red teleporters (`TeleportPad1`..`TeleportPad4`, `OperateFn 18`, `SubClass 0`) | Rev.90 exact-class `PriorityKind::Portal` classification; native `SubClass & 0x04` check at `0x18A753` missed `SubClass 0` teleporters |
+| ObjectsTxt class allowlist (53 IDs) | Ordinary active-table chest family plus Act 2/3 quest chests (`354, 355, 356, 405, 406, 407`: Horadric/Scroll/Staff/Khalim Eye/Brain/Heart chests) | Rev.44/rev.90 priority; `HookSelectTarget` enables `chests=true` when `prioritize_chests` is active; deliberately not generic `SubClass 8` |
 | `0x349860` entry / exact tail `0x349865..0x34987F` | Object class getter shared-entry admission | Rev.45 accepts original prefix or executable rel32 `E9`, never patches/bypasses the owner, and still requires the reviewed 27-byte tail |
 
 See `plugins/controller-qol/docs/PORTAL-PRIORITY.md`, `STASH-WAYPOINT-PRIORITY-REV43.md`, `SHRINE-CHEST-PRIORITY-REV44.md`, `PORTAL-CONTACT-1.3.1-rev.7.md`, `CHRONICLE-GROUND-FLAG-CONFLICT.md`, and `HOOK-SCOPE-REVIEW-2026-09-26.md`.

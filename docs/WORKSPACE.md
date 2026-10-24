@@ -15,6 +15,7 @@ Paths below are relative to that workspace.
 | `CURRENT-BUILDS.md` | Current artifact, source, hash and validation index. |
 | `current/release/` | Download-verified published ZIPs and checksums. |
 | `current/<plugin>/` | Current DLL and relevant validation records. |
+| `current/candidates/<plugin>/` | One validated local candidate, clearly separate from the published release. |
 | `scratch/<task>/` | Reusable temporary builds, tests and candidate packages. |
 | `companions/` | Independent Buff HUD and UnHoarder source checkouts. |
 | `dependencies/` | Reusable machine-local tools and caches. |

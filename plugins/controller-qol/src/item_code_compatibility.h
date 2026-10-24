@@ -22,7 +22,43 @@
 #include <mutex>
 
 namespace QolItemCode {
-enum class ArtifactProfile {Unknown,Legacy,BackgroundFix,ControllerFix,DropFix,SocketFix,LabelOnly,Visibility,Opacity,Polling,NativeReads,LabelPreflight,LabelWork,FormatterObservation,ResidentPages,SocketBatchAlt};
+enum class ArtifactProfile {Unknown,Legacy,BackgroundFix,ControllerFix,DropFix,SocketFix,LabelOnly,Visibility,Opacity,Polling,NativeReads,LabelPreflight,LabelWork,FormatterObservation,ResidentPages,SocketBatchAlt,Structural};
+// Structural detour validation for any UnHoarder build: verifies that game+Rva
+// has an E9 relative jump to a 14-byte FF 25 absolute indirect relay targeting
+// executable code inside unhoarder.dll, and that unhoarder.dll's wrapper loads
+// a non-executable writable original-trampoline pointer whose 19-byte stub
+// begins with the exact 5-byte Original prologue and jumps back to game+Rva+5.
+inline bool ValidateStructural(const QolChatForwarding::Memory& memory,uintptr_t game,uintptr_t companion) noexcept {
+    using namespace QolChatForwarding;
+    if(!memory.read || !game || game>UINTPTR_MAX-Rva-sizeof(Original) || !companion)return false;
+    const auto entry=game+Rva;
+    unsigned char actual[sizeof(Original)]{},relay[14]{},wrapper[32]{},trampoline[19]{};
+    uintptr_t relayAddress{},destination{},slotAddress{},previous{},resume{};int32_t displacement{};
+    if(!memory.read(memory.user,entry,actual,sizeof(actual),Kind::Trampoline) || actual[0]!=0xe9 ||
+       std::memcmp(actual+5,Original+5,sizeof(Original)-5))return false;
+    std::memcpy(&displacement,actual+1,4);
+    if(!Relative(entry+5,displacement,relayAddress) ||
+       !memory.read(memory.user,relayAddress,relay,sizeof(relay),Kind::Trampoline) ||
+       std::memcmp(relay,Jump,sizeof(Jump)))return false;
+    std::memcpy(&destination,relay+6,8);
+    if(!memory.read(memory.user,destination,wrapper,sizeof(wrapper),Kind::Code))return false;
+    // Locate RIP-relative load (48 8B 05 disp32) or RIP-indirect call (FF 15 disp32) in wrapper
+    bool foundSlot=false;
+    for(size_t i=0;i+7<=sizeof(wrapper);++i) {
+        if(wrapper[i]==0x48 && wrapper[i+1]==0x8b && wrapper[i+2]==0x05) {
+            int32_t slotDisp{};std::memcpy(&slotDisp,wrapper+i+3,4);
+            if(Relative(destination+i+7,slotDisp,slotAddress)) {foundSlot=true;break;}
+        } else if(wrapper[i]==0xff && wrapper[i+1]==0x15) {
+            int32_t slotDisp{};std::memcpy(&slotDisp,wrapper+i+2,4);
+            if(Relative(destination+i+6,slotDisp,slotAddress)) {foundSlot=true;break;}
+        }
+    }
+    if(!foundSlot || !memory.read(memory.user,slotAddress,&previous,sizeof(previous),Kind::Data) ||
+       !previous || !memory.read(memory.user,previous,trampoline,sizeof(trampoline),Kind::Trampoline) ||
+       std::memcmp(trampoline,Original,5) || std::memcmp(trampoline+5,Jump,sizeof(Jump)))return false;
+    std::memcpy(&resume,trampoline+11,8);
+    return resume==entry+5;
+}
 // Cache only disk identity. Every admission still opens the live image and
 // checks the complete matching forwarding graph, page ownership and continuation.
 inline ArtifactProfile IdentifyArtifact(HMODULE module) noexcept {
@@ -52,8 +88,11 @@ inline ArtifactProfile IdentifyArtifact(HMODULE module) noexcept {
         identity=ArtifactProfile::Unknown;
         unsigned char actual[32]{};bool readable{};
         (void)QolCore::VerifyFileHash(module,known[0].hash,actual,&readable);
-        if(readable)for(const auto& candidate:known)
-            if(!std::memcmp(actual,candidate.hash,sizeof(actual))) {identity=candidate.profile;break;}
+        if(readable) {
+            for(const auto& candidate:known)
+                if(!std::memcmp(actual,candidate.hash,sizeof(actual))) {identity=candidate.profile;break;}
+            if(identity==ArtifactProfile::Unknown)identity=ArtifactProfile::Structural;
+        }
         checked=module;
     }
     return module?identity:ArtifactProfile::Unknown;
@@ -92,6 +131,7 @@ inline bool Compatible(uintptr_t game,const unsigned char* expected,size_t size)
     case ArtifactProfile::Opacity: return QolItemCodeOpacity::Validate(image.Reader(),game,companion);
     case ArtifactProfile::Polling: return QolItemCodePolling::Validate(image.Reader(),game,companion);
     case ArtifactProfile::NativeReads: return QolItemCodeNativeReads::Validate(image.Reader(),game,companion);
+    case ArtifactProfile::Structural: return ValidateStructural(image.Reader(),game,companion);
     default:return false;
     }
 }

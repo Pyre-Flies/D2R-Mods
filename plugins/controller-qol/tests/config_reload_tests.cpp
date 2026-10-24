@@ -98,7 +98,7 @@ int main() {
     D2RL::PluginContext context{};context.contextSize=sizeof(context);context.api=&api;context.pluginConfigPath=mainPath.c_str();
     owner=&context;startup={};published.store(std::make_shared<const QolConfig::Settings>(startup));
     idle=&Idle;apply=&Updated;watcher.Resync(Files());running.store(true);
-    Write(mainPath,Main(12,120));Poll(0);Poll(649);Check(QolReload::Snapshot()->groundPickupDistance==6);
+    Write(mainPath,Main(12,120));Poll(0);Poll(649);Check(QolReload::Snapshot()->groundPickupDistance==14);
     Poll(650);Check(QolReload::Snapshot()->groundPickupDistance==12 && motion.deadzone==0.4f && commits==1);
     Write(mainPath,Main(9,80,"enabled=false\nground_pickup=false\n"));Poll(700);Poll(1350);
     Check(QolReload::Snapshot()->enabled && QolReload::Snapshot()->groundPickup && QolReload::Snapshot()->groundPickupDistance==9);

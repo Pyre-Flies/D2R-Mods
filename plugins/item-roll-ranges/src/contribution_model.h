@@ -7,14 +7,33 @@ struct Group {Contributions::Stats values;std::vector<Affixes::Rolled> definitio
 inline bool Supported(unsigned stat) {
     switch(stat){case 0:case 1:case 2:case 3:case 7:case 9:case 16:case 17:case 18:case 19:
     case 21:case 22:case 23:case 24:case 31:case 34:case 35:case 36:case 37:case 39:case 41:case 43:case 45:
-    case 48:case 49:case 50:case 51:case 52:case 53:case 54:case 55:case 57:case 60:case 62:case 74:case 75:
-    case 78:case 79:case 80:case 85:case 86:case 89:case 93:case 96:case 99:case 102:case 122:case 149:return true;
+    case 48:case 49:case 50:case 51:case 52:case 53:case 54:case 55:case 57:case 60:case 62:case 74:case 75:case 76:case 77:
+    case 78:case 79:case 80:case 85:case 86:case 89:case 93:case 96:case 99:case 102:case 122:case 149:
+    case 329:case 330:case 331:case 332:case 333:case 334:case 335:case 336:
+    case 399:case 400:case 401:case 402:case 403:case 413:case 414:case 415:case 416:return true;
+
     default:return false;}
 }
 inline bool Bounds(const Affixes::Rolled& definition,std::span<const Affixes::Property> properties,int stat,int& low,int& high) {
     if(!definition.unconditionalScalar || (definition.source&&(std::string_view(definition.source)=="[U]"||std::string_view(definition.source)=="[RW]")&&!definition.uniqueScalar))return false;
     auto plain=definition;plain.source=nullptr;
-    return Affixes::ScalarBounds(plain,properties,stat,0,low,high);
+    if(Affixes::ScalarBounds(plain,properties,stat,0,low,high))return true;
+    if((stat>=21&&stat<=24)||(stat>=48&&stat<=55)){
+        for(unsigned n=0;n<3;++n){
+            const int id=plain.row.Number(0x24+16*n);if(id<0||static_cast<std::size_t>(id)>=properties.size())continue;
+            const auto* p=properties[static_cast<std::size_t>(id)].bytes.data();
+            bool fn5=false,fn6=false;for(unsigned s=0;s<7;++s){fn5|=p[0x18+s]==5;fn6|=p[0x18+s]==6;}
+            if(fn5&&fn6)return false;
+        }
+        const int minStat=(stat>=21&&stat<=24)?((stat<=22)?21:23):(stat&~1);
+        const int maxStat=minStat+1;
+        int mnLo{},mnHi{},mxLo{},mxHi{};
+        if(!Affixes::DamageEndpointBounds(plain,properties,minStat,maxStat,mnLo,mnHi,mxLo,mxHi,true))return false;
+        low=(stat==minStat)?mnLo:mxLo;
+        high=(stat==minStat)?mnHi:mxHi;
+        return true;
+    }
+    return false;
 }
 inline std::optional<RangeText::Label> Build(std::string key,unsigned stat,unsigned shift,
     std::span<const Group> groups,std::span<const Affixes::Property> properties,bool paired=false) {
@@ -41,7 +60,7 @@ inline std::optional<RangeText::Label> Build(std::string key,unsigned stat,unsig
             lo+=part.low;hi+=part.high;maxLo+=part.maxLow;maxHi+=part.maxHigh;
             // Unique/set/runeword specs are separate property blocks from one
             // owned source. Keep their independent endpoint domains together.
-            auto same=paired && definition.source?std::find_if(parts.begin(),parts.end(),
+            auto same=definition.source?std::find_if(parts.begin(),parts.end(),
                 [&](const auto& old){return old.label==part.label;}):parts.end();
             if(same!=parts.end()){
                 const auto add=[](int a,int b)->std::optional<int>{const auto sum=std::int64_t{a}+b;

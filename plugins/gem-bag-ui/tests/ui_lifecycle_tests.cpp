@@ -15,6 +15,9 @@ unsigned reads{},registeredPanels{},registeredResources{},nativeLayouts{},opened
 bool languageReady{},panelVisible{},changedName{},loading=true,rejectLabelWrite{},french{},hostNameDifferences{},hostEffectMismatch{};
 bool hostMode{};
 bool portableGeometry{};
+bool controllerActive{},focusedPresent{};
+uint32_t focusedId{},focusedClass{};
+SharedEvents::ItemTooltipListener tooltipRegistration{};
 TestData::Fixture tableFixture;
 Lifecycle::DataTablesLoadedListener dataListener{};
 Network::ChannelRegistration channelRegistration{};
@@ -37,7 +40,10 @@ ItemService itemService{.serviceSize=ItemServiceSize,.serviceVersion=ItemService
 InventoryService inventoryService{.serviceSize=InventoryServiceSize,.serviceVersion=InventoryService::AbiVersion,
     .getLocalPlayer=[](const PluginContext*,PlayerHandle* owner) noexcept {*owner=1;return Inventory::Result::Success;},
     .getCursorItem=[](const PluginContext*,PlayerHandle,ItemHandle* cursor) noexcept {*cursor=0;return Inventory::Result::NotFound;},
-    .forEachInventoryItem=[](const PluginContext*,PlayerHandle,const Inventory::ItemFilter*,Inventory::ItemCallback,void*) noexcept {return Unexpected<Inventory::Result>();}};
+    .forEachInventoryItem=[](const PluginContext* c,PlayerHandle,const Inventory::ItemFilter*,Inventory::ItemCallback cb,void* data) noexcept {
+        if(!focusedPresent)return Unexpected<Inventory::Result>();
+        cb(c,&bag,data);return Inventory::Result::Success;
+    }};
 PanelService panelService{.serviceSize=PanelServiceSize,.serviceVersion=PanelService::AbiVersion,
     .registerPanel=[](const PluginContext*,const Panels::PanelRegistration*,uint64_t* handle) noexcept {*handle=nextHandle++;++registeredPanels;return Panels::Result::Success;},
     .unregisterPanel=Unregister<Panels::Result>,
@@ -54,7 +60,8 @@ ResourceService resourceService{.serviceSize=ResourceServiceSize,.serviceVersion
     },.unregisterResource=[](const PluginContext*,uint64_t) noexcept {Check(registeredResources>0,"owned layout removed once");--registeredResources;++removedResources;return Resources::Result::Success;}};
 WidgetService widgetService{.serviceSize=WidgetServiceSize,.serviceVersion=WidgetService::AbiVersion};
 SharedEventService eventService{.serviceSize=SharedEventServiceSize,.serviceVersion=SharedEventService::AbiVersion,
-    .registerItemTooltipListener=Register<SharedEvents::Result,SharedEvents::ItemTooltipListener>,
+    .registerItemTooltipListener=[](const PluginContext* c,const SharedEvents::ItemTooltipListener* r,uint64_t* handle) noexcept {
+        tooltipRegistration=*r;return Register<SharedEvents::Result>(c,r,handle);},
     .unregisterItemTooltipListener=Unregister<SharedEvents::Result>,
     .registerUiMessageListener=Register<SharedEvents::Result,SharedEvents::UiMessageListener>,
     .unregisterUiMessageListener=Unregister<SharedEvents::Result>};
@@ -127,8 +134,8 @@ bool Deposit(const D2RL::PluginContext*,const D2RL::ItemService*,const D2RL::Inv
 bool Initialize(const D2RL::PluginContext*){return true;}
 bool Inspect(const D2RL::PluginContext*,const D2RL::ItemService*,D2RL::ItemHandle,const Info&,Snapshot&,std::string&){return Test::Unexpected<bool>();}
 bool Execute(const D2RL::PluginContext*,const D2RL::ItemService*,D2RL::PlayerHandle,const Info&,unsigned,Snapshot&,std::string&,bool&){return Test::Unexpected<bool>();}
-bool Focus(const D2RL::PluginContext*,uint32_t&,uint32_t&) noexcept{return false;}
-bool Controller(const D2RL::PluginContext*) noexcept{return false;}
+bool Focus(const D2RL::PluginContext*,uint32_t& id,uint32_t& cls) noexcept{if(!Test::focusedPresent)return false;id=Test::focusedId;cls=Test::focusedClass;return true;}
+bool Controller(const D2RL::PluginContext*) noexcept{return Test::controllerActive;}
 bool SafeUi(const D2RL::PluginContext*) noexcept{return true;}
 }
 namespace GemBag::Geometry {
@@ -217,8 +224,19 @@ int main(int argc,char** argv) {
     StartDeposit(bag);StartDeposit(bag);DrainUi(&context);
     if(gameJobs!=beforeDirect+2||directDeposit)std::fprintf(stderr,"Direct pending=%u busy=%u open=%u jobs=%u before=%u ready=%u failed=%u message=%s\n",directDeposit,busy,open,gameJobs,beforeDirect,ready,requestFailed,message.c_str());
     Check(!directDeposit&&!busy&&!open&&gameJobs==beforeDirect+2&&openedPanels==beforePanels,"bag gesture inspects then deposits once without opening a panel");
+    focusedPresent=true;focusedId=bag.runtimeId;focusedClass=bag.classId;controllerActive=true;
+    char tooltipBuffer[128]{};SharedEvents::ItemTooltipEvent tipEvent{.structSize=SharedEvents::ItemTooltipEventSize,.item=bag.handle,.text=tooltipBuffer,.capacity=sizeof(tooltipBuffer)};
+    Check(tooltipRegistration.callback!=nullptr,"tooltip listener registered");tooltipRegistration.callback(&context,&tipEvent,nullptr);
+    Check(!std::strcmp(tooltipBuffer,"LB+A: Choose gem\nLB+B: Deposit gems + clusters"),"controller tooltip advertises LB+A picker and LB+B deposit");
+    Check(QueueCommand(UiAction::DepositFocused,bag.runtimeId,bag.classId),"controller LB+B queues focused bag deposit");
+    DrainUi(&context);
+    Check(!directDeposit&&!busy&&!open&&gameJobs==beforeDirect+4&&openedPanels==beforePanels,"controller focused deposit inspects then deposits without opening a panel");
+    Check(QueueCommand(UiAction::DepositFocused,bag.runtimeId+1,bag.classId),"stale focused bag command queued");
+    DrainUi(&context);
+    Check(gameJobs==beforeDirect+4,"moved focus before UI callback refuses controller deposit");
+    focusedPresent=false;controllerActive=false;
     hostEffectMismatch=true;StartDeposit(bag);DrainUi(&context);
-    Check(!directDeposit&&!ready&&gameJobs==beforeDirect+3,"direct deposit refuses mismatched host definitions and clears pending state");
+    Check(!directDeposit&&!ready&&gameJobs==beforeDirect+5,"direct deposit refuses mismatched host definitions and clears pending state");
     D2RLoaderUnloadPlugin();
     Check(registeredResources==0&&removedResources==4,"unload releases all owned startup layouts");
     if(argc==2){std::ofstream out(argv[1]);out<<layouts[0];}

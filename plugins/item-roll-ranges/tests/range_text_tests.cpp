@@ -290,6 +290,19 @@ int main() {
     }
     const auto minimal=RangeText::Merge(crowded,crowded,50,crowdedLabels);
     check(minimal.labeled>0 && minimal.text.find("[Combined]")!=std::string::npos);
+    const auto partialCompact=RangeText::Merge(crowded,crowded,75,crowdedLabels);
+    check(partialCompact.text.size()<75 && partialCompact.annotated>=1 && partialCompact.labeled==2);
+    check(partialCompact.text.find("[+30 - +40]")!=std::string::npos && partialCompact.text.find("[Combined]")!=std::string::npos);
+    check(partialCompact.text.find("[Set]")!=std::string::npos);
+    const auto rangeFallback=RangeText::Merge("+2% to Experience Gained","+2% to Experience Gained",50,{lore});
+    check(rangeFallback.text.size()<50 && rangeFallback.annotated==1 && rangeFallback.text.find("[+2%]")!=std::string::npos);
     check(RangeText::Merge(crowded,crowded,crowded.size()+1,crowdedLabels).text==crowded);
-
+    const std::string companionStar="\xee\x81\xbe" "1*\xee\x81\xbe" "3 +20% Faster Cast Rate";
+    check(RangeText::Analyze(companionStar).key==RangeText::Analyze("+20% Faster Cast Rate").key);
+    RangeText::Label fcrLabel;fcrLabel.key=RangeText::Analyze("+20% Faster Cast Rate").key;fcrLabel.ownedTotal=20;
+    fcrLabel.ownedParts={{10,10,10,"[U]"},{10,10,10,"[C]"}};
+    const auto fcrMerged=RangeText::Merge(companionStar,companionStar,1024,{fcrLabel});
+    check(fcrMerged.labeled==1 && fcrMerged.text.find("+10% Faster Cast Rate [U]")!=std::string::npos);
+    check(fcrMerged.text.find("+10% Faster Cast Rate [C]")!=std::string::npos);
+    check(fcrMerged.text.find(companionStar+" [Combined]")!=std::string::npos);
 }

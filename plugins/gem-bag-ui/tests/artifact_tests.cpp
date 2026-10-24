@@ -23,7 +23,7 @@ int wmain(int argc,wchar_t** argv) {
     auto unload=reinterpret_cast<D2RL::UnloadPluginFn>(GetProcAddress(m,"D2RLoaderUnloadPlugin"));
     Check(info&&load&&unload,"lifecycle exports");auto p=info();
     Check(p&&p->infoSize==D2RL::PluginInfoSize&&p->abiVersion==D2RL_PLUGIN_ABI_VERSION&&!std::strcmp(p->id,"gem-bag-ui")&&
-        !std::strcmp(p->version,"1.3.1+rev.1")&&D2RL::HasValidPluginRole(p->flags)&&D2RL::HasFlag(p->flags,D2RL::PluginFlags::Shared)&&
+        !std::strcmp(p->version,"1.3.1+rev.2")&&D2RL::HasValidPluginRole(p->flags)&&D2RL::HasFlag(p->flags,D2RL::PluginFlags::Shared)&&
         D2RL::HasFlag(p->flags,D2RL::PluginFlags::NativeHooks),"plugin identity ABI and role");
     Check(!D2RL::HasFlag(p->flags,D2RL::PluginFlags::ModScopedOnly),"global installation is allowed by plugin metadata");
     Check(!load(nullptr),"null context rejected");

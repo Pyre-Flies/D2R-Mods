@@ -85,7 +85,8 @@ inline bool PropertyContributes(const Property& property,int param,int low,int l
         // Physical damage functions have implicit stats, not statN fields.
         if (!layer && ((fn==5 && (stat==21 || stat==23)) ||
                       (fn==6 && (stat==22 || stat==24)) ||
-                      (fn==7 && (stat==17 || stat==18)))) return true;
+                      (fn==7 && (stat==17 || stat==18)) ||
+                      (!p[2+slot] && ((fn==15 && target==21 && stat==23) || (fn==16 && target==22 && stat==24))))) return true;
         if (target!=stat) continue;
         // Mirror native property functions, not localized tooltip text.
         if (fn==21) { // fixed class/element selector stored in Properties.valN
@@ -151,10 +152,21 @@ inline bool UniqueScalarBounds(const Rolled& source,std::span<const Property> pr
     const int id=source.row.Number(0x24);
     if (id<0 || static_cast<std::size_t>(id)>=properties.size()) return false;
     const auto* p=properties[static_cast<std::size_t>(id)].bytes.data();
+    if(stat>=21&&stat<=24){
+        bool minimum=false,maximum=false;
+        for(unsigned slot=0;slot<7;++slot){minimum|=p[0x18+slot]==5;maximum|=p[0x18+slot]==6;}
+        if(minimum&&maximum)return false;
+    }
     unsigned found=0;
     for (unsigned slot=0;slot<7;++slot) {
-        if (Read<std::uint16_t>(p,0x20+slot*2)!=stat || !p[0x18+slot]) continue;
-        if (p[0x18+slot]!=1 && p[0x18+slot]!=8) return false;
+        const auto fn=p[0x18+slot];
+        if (!fn) continue;
+        if ((fn==5 && (stat==21 || stat==23)) || (fn==6 && (stat==22 || stat==24)) ||
+            (fn==7 && (stat==17 || stat==18))) {
+            ++found; continue;
+        }
+        if (Read<std::uint16_t>(p,0x20+slot*2)!=stat) continue;
+        if (fn!=1 && fn!=3 && fn!=8 && !(fn==2 && stat==16)) return false;
         ++found;
     }
     low=source.row.Number(0x2c); high=source.row.Number(0x30);
@@ -198,7 +210,7 @@ inline bool ScalarBounds(const Rolled& affix,std::span<const Property> propertie
             const auto fn=p[0x18+slot];
             if ((fn==5 && (stat==21 || stat==23)) || (fn==6 && (stat==22 || stat==24)) ||
                 (fn==7 && (stat==17 || stat==18)) ||
-                ((!layer && (fn==1 || fn==8 || (fn==2 && stat==16) || (fn==13 && stat==75 && !p[2+slot])) && Read<std::uint16_t>(p,0x20+slot*2)==stat) ||
+                ((!layer && (fn==1 || fn==3 || fn==8 || (fn==2 && stat==16) || (fn==13 && stat==75 && !p[2+slot])) && Read<std::uint16_t>(p,0x20+slot*2)==stat) ||
                  (fn==21 && stat==83 && Read<std::uint16_t>(p,0x20+slot*2)==83 &&
                   layer>=0 && layer<8 && Read<std::uint16_t>(p,0x0a+slot*2)==layer))) ++matches;
         }
@@ -217,6 +229,7 @@ inline bool DamageEndpointBounds(const Rolled& affix,std::span<const Property> p
     if (affix.source || minStat<0 || maxStat<0) return false;
     minLow=minHigh=maxLow=maxHigh=0;
     bool foundMin=false,foundMax=false;
+    const bool physical=(minStat==21 && maxStat==22) || (minStat==23 && maxStat==24);
     for (unsigned n=0;n<3;++n) {
         const int id=affix.row.Number(0x24+16*n);
         if (id<0 || static_cast<std::size_t>(id)>=properties.size()) continue;
@@ -225,7 +238,21 @@ inline bool DamageEndpointBounds(const Rolled& affix,std::span<const Property> p
         if (low>high || low< -1000000 || high>1000000) return false;
         for (unsigned slot=0;slot<7;++slot) {
             const auto fn=p[0x18+slot];
-            const int target=Read<std::uint16_t>(p,0x20+slot*2);
+            if (!fn) continue;
+            if (physical && (fn==5 || fn==6)) {
+                if (p[2+slot]) return false;
+                if (fn==5) {
+                    if (foundMin) return false;
+                    minLow=low; minHigh=high; foundMin=true;
+                } else {
+                    if (foundMax) return false;
+                    maxLow=low; maxHigh=high; foundMax=true;
+                }
+                continue;
+            }
+            const int rawTarget=Read<std::uint16_t>(p,0x20+slot*2);
+            const int target=(minStat==23 && maxStat==24 && ((fn==15 && rawTarget==21) || (fn==16 && rawTarget==22)))
+                ? (rawTarget+2) : rawTarget;
             if(fn && (target==minStat || target==maxStat) &&
                ((target==minStat && fn!=1 && fn!=15) || (target==maxStat && fn!=1 && fn!=16) || p[2+slot]))return false;
             if (target==minStat && (fn==1 || fn==15)) {
