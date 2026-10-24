@@ -1,25 +1,37 @@
-# D2R Mods - 2026.10.22.1
+# D2R Mods - 2026.10.24.1
 
-- **Controller QOL rev.91:** Fixes Arcane Sanctuary red teleporters and Act 2/3
-  quest chests (including Khalim's chests) so they can be reliably used with the
-  controller `A` button near ground items. Skill points on the Skill Tree now
-  allocate on a single `A` press instead of requiring a hold. Also speeds up
-  ground-loot label and held-shortcut checks alongside UnHoarder.
-- **UnHoarder 1.2.16:** Improves loot-label performance and avoids unnecessary
-  inventory scans. Hold keyboard ALT to pick up filter-hidden items with the mouse.
-- **Gem Bag UI rev.1:** Adds a mouse/controller gem picker and Shift + right-click
-  deposits for compatible gems and clusters. Install the same version on client
-  and host for hosted games; shared-stash deposits need free inventory space.
-- **Day Night Cycle rev.1:** Restores natural day/night lighting and adds saved
-  controls for natural, daytime or nighttime lighting. Runs entirely on the client.
-- The other plugins retain their current released behavior.
+- **Ultrawide 1.3.5+rev.2:** Full 21:9 and 32:9 gameplay support. Removes side
+  pillarboxes and widens the vignette mask during gameplay while keeping menus
+  framed cleanly, unclamps horizontal mouse/placard/automap bounds, supports
+  centered or full-length HUD and top-corner HUD anchoring, expands the terrain
+  cache to 22×22, expands the active monster room window to 7×7 to prevent edge
+  pop-in, and scales monster AI perception range.
+- **Controller QOL rev.93:** Prevents `LB + A` item identification from
+  triggering while holding an item on the cursor (so the `A` button never gets
+  stuck after picking up an item), increases the default `LB` ground-loot
+  assignment range to `14`, and adds compatibility with `UnHoarder 1.2.17`
+  alongside `1.2.16`.
+- **Inventory Deposit rev.13:** Fixes compatibility with `UnHoarder` (`1.2.16`
+  and `1.2.17`) so the **Deposit All** button stays available regardless of
+  plugin load order.
+- **Gem Bag UI rev.2:** Swaps controller shortcuts so `LB + A` opens the gem
+  picker and `LB + B` deposits compatible gems and gem clusters, with updated
+  tooltip prompts.
+- **Item Roll Ranges rev.55:** Fixes max-socket display on Set and Unique items
+  with innate socket limits, preserves charged-skill tooltip formatting when
+  showing roll ranges, and prevents property text truncation on heavily modified
+  items.
+- The other plugins and companion packages retain their current released behavior.
 
 Close the game before replacing DLLs and keep one active copy of each plugin.
-Existing settings and filters are preserved; packaged defaults are references.
-Buff HUD needs both its DLL and MPQ. The UnHoarder Reimagined ZIP includes its
-sound tables; retain your existing filter.json.
+When installing **Ultrawide**, extract its `d2rloader/data/hd/tc22sh/` shader
+files alongside `d2rloader/plugins/`. Existing settings and filters are
+preserved; packaged defaults are references. Buff HUD needs both its DLL and
+MPQ. The UnHoarder Reimagined ZIP (`1.2.16`) includes its sound tables; retain
+your existing `filter.json`.
 
-Automated checks pass. Red portal and quest-chest interactions, single-press skill
-allocation, and ground-loot performance were user-tested in-game. The plugin guides
-describe remaining live-test limits, including fixed lighting controls and broader
-pickup/hosted coverage.
+Automated build, unit, and packaging checks pass across all nine plugins.
+Ultrawide gameplay, Gem Bag UI controller shortcuts, Item Roll Ranges tooltip
+formatting, and UnHoarder coexistence were validated against the current game
+and mod builds. See individual plugin guides for multiplayer and host/client
+notes.

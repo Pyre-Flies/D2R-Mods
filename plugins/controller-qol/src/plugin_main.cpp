@@ -21,6 +21,7 @@
 #include "custom_page_actions.h"
 #include "identify_action.h"
 #include "native_identify.h"
+#include "native_identify_profile.h"
 #include "client_transfer.h"
 #include "storage_focus.h"
 #include "identify_stat.h"
@@ -65,7 +66,7 @@ namespace PlacardOverlay {void ForgetSession() noexcept;}
 namespace {
 
 using PluginSettings=QolConfig::Settings;
-static PluginSettings g_Settings{}; // Startup settings; never mutated by reload.
+static PluginSettings g_Settings; // Startup settings; never mutated by reload.
 static PluginSettings ReadSettings() noexcept {
     const auto current=QolReload::Snapshot();return current?*current:g_Settings;
 }
@@ -141,7 +142,7 @@ static constexpr D2RL::PluginInfo ControllerQoLPluginInfo {
     .abiVersion  = D2RL_PLUGIN_ABI_VERSION,
     .id          = "controller-qol-updates",
     .name        = "Controller QOL Updates",
-    .version     = "1.3.1+rev.92",
+    .version     = "1.3.1+rev.93",
     .author      = "PyreFly",
     .description = "Direct controller looting with filtered labels, inventory shortcuts, and stash navigation.",
     .flags       = D2RL::PluginFlags::Shared | D2RL::PluginFlags::NativeHooks,
@@ -906,6 +907,49 @@ static void TriggerAutoFillBelt() noexcept {
     },nullptr);
 }
 
+static bool NativeCursorBytesMatch(uintptr_t addr, const unsigned char* expected, size_t size) noexcept {
+    unsigned char actual[16]{};
+    SIZE_T got{};
+    return size <= sizeof(actual) &&
+        ReadProcessMemory(GetCurrentProcess(), reinterpret_cast<const void*>(addr), actual, size, &got) &&
+        got == size && !std::memcmp(actual, expected, size);
+}
+
+static bool IsCursorEmpty(const D2RL::PluginContext* ctx, D2RL::PlayerHandle player = D2RL::InvalidPlayerHandle) noexcept {
+    if (!ctx) return false;
+    if (g_Inventory && g_Inventory->getCursorItem) {
+        if (player == D2RL::InvalidPlayerHandle) {
+            player = s_LastPlayerHandle.load();
+            if (player == D2RL::InvalidPlayerHandle && g_Inventory->getLocalPlayer) {
+                g_Inventory->getLocalPlayer(ctx, &player);
+            }
+        }
+        if (player != D2RL::InvalidPlayerHandle) {
+            D2RL::ItemHandle cursor{};
+            const auto res = g_Inventory->getCursorItem(ctx, player, &cursor);
+            if ((res != D2RL::Inventory::Result::Success || cursor != D2RL::InvalidItemHandle) &&
+                res != D2RL::Inventory::Result::NotFound) {
+                return false;
+            }
+        }
+    }
+    if (ctx->exeBase) {
+        const auto cursorAddr = ctx->exeBase + 0x14f1e0;
+        const auto modeAddr = ctx->exeBase + 0x14f210;
+        if (NativeCursorBytesMatch(cursorAddr, QolNativeIdentifyProfile::Cursor, sizeof(QolNativeIdentifyProfile::Cursor)) &&
+            NativeCursorBytesMatch(modeAddr, QolNativeIdentifyProfile::Mode, sizeof(QolNativeIdentifyProfile::Mode))) {
+            __try {
+                if (reinterpret_cast<void*(__fastcall*)()>(cursorAddr)() != nullptr ||
+                    reinterpret_cast<int(__fastcall*)()>(modeAddr)() == 5) {
+                    return false;
+                }
+            } __except (EXCEPTION_EXECUTE_HANDLER) {
+            }
+        }
+    }
+    return true;
+}
+
 static auto __cdecl OnItemInteraction(
     const D2RL::PluginContext* context,
     const D2RL::ItemInteractions::ItemInteractionEvent* event,
@@ -1018,13 +1062,17 @@ static auto __cdecl OnItemInteraction(
         if(QolMaterials::TryWithdrawToBelt(context,itemInfo))return D2RL::ItemInteractions::Decision::Consume;
     }
 
-    if(Probe::BatchFeatureEnabled(settingsSnapshot.quickIdentify,settingsSnapshot.identifyAll) &&
+    const bool cursorEmpty = event->container != D2RL::Items::ItemContainer::Cursor &&
+        itemInfo.container != D2RL::Items::ItemContainer::Cursor &&
+        IsCursorEmpty(context, event->player);
+
+    if(cursorEmpty && Probe::BatchFeatureEnabled(settingsSnapshot.quickIdentify,settingsSnapshot.identifyAll) &&
        modifierActive && !btnX && QolIdentify::BulkTome(itemInfo)) {
         if(QolClientTransfer::Busy() || QolBelt::Busy() || QolMaterials::Busy() || QolBulkStash::Busy())return D2RL::ItemInteractions::Decision::Consume;
         (void)QolNativeIdentify::RequestAll(context,event->player,itemInfo,settingsSnapshot.nativeIdentify,isController && settingsSnapshot.consumeTomeOrScroll);
         return D2RL::ItemInteractions::Decision::Consume;
     }
-    if (isUnidentified && settingsSnapshot.quickIdentify && modifierActive) {
+    if (cursorEmpty && isUnidentified && settingsSnapshot.quickIdentify && modifierActive) {
         // Prefer authoritative SDK work. Only an Unavailable scheduler permits
         // read-only client preparation and a native request on the UI thread.
         if(QolNativeIdentify::Busy() || QolClientTransfer::Busy() || QolBelt::Busy() || QolMaterials::Busy() || QolBulkStash::Busy())return D2RL::ItemInteractions::Decision::Consume;
@@ -1145,9 +1193,11 @@ static void __cdecl OnItemTooltipCallback(
 
             const bool isPotionItem   = QolBelt::BeltCandidate(info.code) && QolBelt::SupportedSource(info.container);
             const bool canMoveToBelt  = !vendorStock && (isPotionItem || advancedPotion);
-            const bool canIdentifyAll = !vendorStock &&
+            const bool cursorEmpty    = info.container != D2RL::Items::ItemContainer::Cursor &&
+                IsCursorEmpty(context, player);
+            const bool canIdentifyAll = cursorEmpty && !vendorStock &&
                 Probe::BatchFeatureEnabled(settingsSnapshot.quickIdentify,settingsSnapshot.identifyAll) && QolIdentify::BulkTome(info);
-            const bool canIdentify    = !vendorStock && isUnidentified && settingsSnapshot.quickIdentify;
+            const bool canIdentify    = cursorEmpty && !vendorStock && isUnidentified && settingsSnapshot.quickIdentify;
             const bool vendorScroll=vendorStock && QolVendor::TomeForScroll(info.code)!=0;
             const bool canAutoFill    = settingsSnapshot.quickMove && (vendorScroll || (IsPotionItem(info.code) && (vendorStock || isStashOpen || isCubeOpen || info.container == D2RL::Items::ItemContainer::Inventory ||
                                          info.container == D2RL::Items::ItemContainer::PersonalStash ||
@@ -2315,7 +2365,7 @@ D2RL_PLUGIN_EXPORT auto D2RLoaderLoadPlugin(const D2RL::PluginContext* context) 
     },+[](const QolConfig::Settings& next) noexcept {
         ControllerQoL::SetTriggerThreshold(next.triggerThreshold);
     });
-    context->LogInfo("[QOL] QOL v1.3.1+rev.92 loaded: controller item features and integrated v0.6 navigation/label hooks.");
+    context->LogInfo("[QOL] QOL v1.3.1+rev.93 loaded: controller item features and integrated v0.6 navigation/label hooks.");
     return true;
 }
 

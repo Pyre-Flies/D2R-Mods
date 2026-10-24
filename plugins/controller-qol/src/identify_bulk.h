@@ -17,12 +17,13 @@ struct BulkPlan {
     Info requested{},tome{};
     std::array<Info,256> targets{};
     unsigned count{},next{},completed{};
-    bool found{},overflow{},includeCube{};
+    bool found{},overflow{},includeCube{},cursorOccupied{};
     uint32_t TargetMask() const noexcept {
         return D2RL::Items::ContainerBit(Container::Inventory) |
             (includeCube?D2RL::Items::ContainerBit(Container::Cube):0u);
     }
     void Observe(const Info& item) noexcept {
+        if(item.container==Container::Cursor){cursorOccupied=true;return;}
         if(Same(item,requested)){tome=item;found=true;}
         if(!(TargetMask()&D2RL::Items::ContainerBit(item.container)) || (item.stateFlags&D2RL::Items::ItemStateIdentified) ||
            Code(item.code,D2RL::Items::MakeItemCode("ibk")))return;

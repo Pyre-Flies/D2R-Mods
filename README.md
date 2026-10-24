@@ -8,7 +8,7 @@ Download individual runtime ZIPs from the
 
 | Plugin | Version | What it adds |
 | --- | --- | --- |
-| [Controller QOL Updates](plugins/controller-qol/README.md) | `1.3.1+rev.92` | Controller item shortcuts, direct ground looting, menu navigation, and right-stick skill aiming. |
+| [Controller QOL Updates](plugins/controller-qol/README.md) | `1.3.1+rev.93` | Controller item shortcuts, direct ground looting, menu navigation, and right-stick skill aiming. |
 | [Ultrawide](plugins/ultrawide/README.md) | `1.3.5+rev.2` | 21:9 and 32:9 ultrawide viewport support: pillarbox/vignette removal, mouse/placard/automap unclamp, centered or full-length HUD, corner HUD anchoring, 22×22 terrain cache, 7×7 monster pop-in fix, and configurable AI range. |
 | [Item Roll Ranges](plugins/item-roll-ranges/README.md) | `1.3.1+rev.55` | Stat roll ranges, prefix/suffix/runeword/socket source breakdowns, base damage/Defense, item levels (`Ilvl`/`Qlvl`), and max socket capacity. |
 | [Gem Bag UI](plugins/gem-bag-ui/README.md) | `1.3.1+rev.2` | Interactive gem picker for withdrawing gems and one-step shortcut for depositing loose gems and gem clusters. |
@@ -22,7 +22,7 @@ Download individual runtime ZIPs from the
 
 | Package | Version | Description & Source |
 | --- | --- | --- |
-| **UnHoarder** | `1.2.16` | Separate Reimagined upgrade package maintained in the [UnHoarder fork](https://github.com/Pyre-Flies/d2rl-unhoarder). |
+| **UnHoarder** | `1.2.16` | Separate Reimagined upgrade package maintained in the [UnHoarder fork](https://github.com/Pyre-Flies/d2rl-unhoarder) (`Controller QOL` and `Inventory Deposit` also support `1.2.17`). |
 | **Buff HUD** | `1.1.1` | Separate DLL + MPQ companion package maintained in the [Buff HUD fork](https://github.com/Pyre-Flies/d2rl-buff-hud) with the controller/keyboard switching fix. |
 
 See [companion sources](docs/COMPANION-SOURCES.md) for details on both companion repositories. Experimental and diagnostic plugins are maintained separately in research.
@@ -33,7 +33,7 @@ See [companion sources](docs/COMPANION-SOURCES.md) for details on both companion
 
 1. **Extract the plugin archive:** Close the game, back up any previous DLLs, and extract each selected ZIP into your game directory (for global use) or active mod directory (for mod-specific use).
    - Plugin `.dll` files belong in `d2rloader/plugins/`. Keep only one active copy of each plugin.
-   - If installing **Ultrawide**, ensure the `data/hd/tc22sh/` shader folder is extracted alongside `d2rloader/`.
+   - If installing **Ultrawide**, ensure the `d2rloader/data/hd/tc22sh/` shader folder is extracted alongside `d2rloader/plugins/`.
    - For launcher-managed mod packs (such as D2R Reimagined), you can also use the launcher's normal mod/plugin update flow.
 2. **Launch through D2RLoader:** Missing configuration files are created automatically in your active `d2rloader/config/` folder on first launch.
 3. **Customizing settings:** Files inside `defaults/` in a release ZIP are reference copies so extracting an update never overwrites your active settings. To customize a plugin, edit its file under `d2rloader/config/` with the game closed and restart (or use the plugin's in-game chat commands where supported).

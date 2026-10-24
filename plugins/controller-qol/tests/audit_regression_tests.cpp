@@ -413,6 +413,34 @@ int main() {
     const auto beforeOrdinary=moves;QueueLegacyQuickMove(item,true);FlushGame(&context);
     Check(moves==beforeOrdinary+1 && destination==C::Cube,"LB+X ordinary item still moves to Cube");
 
+    // LB+A identify and Identify All refuse when an item is held on the cursor,
+    // returning Decision::Continue so native A placement/swap is not broken.
+    {
+        static D2RL::ItemHandle activeCursor{};
+        inventory.getCursorItem=+[](const D2RL::PluginContext*,D2RL::PlayerHandle,D2RL::ItemHandle* out) noexcept {
+            *out=activeCursor;return activeCursor?D2RL::Inventory::Result::Success:D2RL::Inventory::Result::NotFound;
+        };
+        SetSource(C::Inventory);item.stateFlags=0;item.code=D2RL::Items::MakeItemCode("axe");
+        g_Settings.enabled=true;g_Settings.quickIdentify=true;g_Settings.identifyAll=true;g_Settings.requireModifier=true;
+        Held(0x100);
+        D2RL::ItemInteractions::ItemInteractionEvent ev{};
+        ev.structSize=D2RL::ItemInteractions::ItemInteractionEventSize;
+        ev.player=localHandle;ev.item=item.handle;
+        ev.inputSource=D2RL::ItemInteractions::InputSource::Controller;
+        ev.container=C::Inventory;ev.cellX=item.x;ev.cellY=item.y;
+        activeCursor=999;game={};
+        Check(OnItemInteraction(&context,&ev,nullptr)==D2RL::ItemInteractions::Decision::Continue && !game.fn && !s_IdentifyPending.load(),
+            "LB+A single identify ignored while cursor holds an item");
+        item.code=D2RL::Items::MakeItemCode("ibk");
+        Check(OnItemInteraction(&context,&ev,nullptr)==D2RL::ItemInteractions::Decision::Continue && !game.fn && !QolNativeIdentify::Busy(),
+            "LB+A Identify All tome ignored while cursor holds an item");
+        activeCursor=0;item.code=D2RL::Items::MakeItemCode("axe");
+        Check(OnItemInteraction(&context,&ev,nullptr)==D2RL::ItemInteractions::Decision::Consume && game.fn!=nullptr && s_IdentifyPending.load(),
+            "LB+A single identify proceeds when cursor is empty");
+        s_IdentifyPending.store(false);game={};
+        inventory.getCursorItem=nullptr;
+    }
+
     // Exercise the actual BankPanel hook with native message decoding and a
     // physical snapshot. Opposite-trigger begins/repeats never reach TabBar.
     ctx=&context;enabled=useL1=sharedPageHook=true;*reinterpret_cast<int*>(node+0x16c4)=1;

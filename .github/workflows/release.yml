@@ -99,6 +99,15 @@ jobs:
       - name: Test Day Night Cycle
         run: ctest --test-dir build/day-night-cycle -C Release --output-on-failure
 
+      - name: Configure Ultrawide
+        run: cmake -S plugins/ultrawide -B build/ultrawide -A x64
+
+      - name: Build Ultrawide
+        run: cmake --build build/ultrawide --config Release --parallel
+
+      - name: Test Ultrawide
+        run: ctest --test-dir build/ultrawide -C Release --output-on-failure
+
       - name: Test update-safe archive layout
         run: python -m unittest discover -s tools -p "test_package*.py" -v
 
@@ -118,6 +127,8 @@ jobs:
           --gem-bag-artifact-verifier "build/gem-bag-ui/Release/gem-bag-artifact-tests.exe"
           --day-night-dll "build/day-night-cycle/Release/Day Night Cycle.dll"
           --day-night-artifact-verifier "build/day-night-cycle/Release/day-night-artifact-tests.exe"
+          --ultrawide-dll "build/ultrawide/Release/Ultrawide.dll"
+          --ultrawide-artifact-verifier "build/ultrawide/Release/ultrawide-artifact-tests.exe"
           --output dist
 
       - name: Upload workflow artifacts

@@ -1,5 +1,10 @@
 # Controller QOL changelog
 
+## 1.3.1+rev.93 - 2026-10-24
+
+- Prevent `LB + A` Quick Identify and Identify All from triggering while an item is held on the cursor, preserving normal controller `A` placement and swapping.
+- Increase default `LB` ground-loot assignment range to `14` and support `UnHoarder 1.2.17` alongside `1.2.16`.
+
 ## 1.3.1+rev.89 - 2026-10-21
 
 - Improve performance around visible loot, especially alongside UnHoarder.

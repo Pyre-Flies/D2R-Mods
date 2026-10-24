@@ -47,7 +47,10 @@ def make_archive(path: Path, files: dict[str, bytes]) -> None:
             raise SystemExit(f"DLL is outside the installable layout: {name}")
         if name.lower() == "sha256sums":
             raise SystemExit("Checksums belong alongside runtime ZIPs")
-        if name != "README.md" and not name.lower().endswith((".toml", ".dll")):
+        is_shader = (len(parts) == 5 and
+                     name.startswith("d2rloader/data/hd/tc22sh/") and
+                     name.lower().endswith(".bin"))
+        if name != "README.md" and not name.lower().endswith((".toml", ".dll")) and not is_shader:
             raise SystemExit(f"Unexpected runtime content: {name}")
     from package_inventory_deposit import reject_machine_paths
     for name, content in files.items():
@@ -147,6 +150,13 @@ def package_verified_plugin(plugin_name: str, display_name: str, dll: Path,
     config = plugin / f"{plugin_name}.toml"
     if config.is_file():
         files[f"defaults/{config.name}"] = require_file(config)
+    shader_dir = plugin / "assets/tc22sh"
+    if shader_dir.is_dir():
+        shaders = sorted(shader_dir.glob("*.bin"))
+        if len(shaders) != 14:
+            raise SystemExit(f"Expected 14 tc22sh shader files in {shader_dir}, found {len(shaders)}")
+        for shader in shaders:
+            files[f"d2rloader/data/hd/tc22sh/{shader.name}"] = require_file(shader)
     output.mkdir(parents=True, exist_ok=True)
     archive = output / f"{display_name.replace(' ', '-')}-{version}-PyreFly.zip"
     make_archive(archive, files)
@@ -168,6 +178,8 @@ def main() -> None:
     parser.add_argument("--gem-bag-artifact-verifier", type=Path)
     parser.add_argument("--day-night-dll", type=Path)
     parser.add_argument("--day-night-artifact-verifier", type=Path)
+    parser.add_argument("--ultrawide-dll", type=Path)
+    parser.add_argument("--ultrawide-artifact-verifier", type=Path)
     parser.add_argument("--unhoarder-runtime-zip", type=Path)
     parser.add_argument("--controller-only", action="store_true",
                         help="Package only Controller QOL (for focused prereleases).")
@@ -180,6 +192,7 @@ def main() -> None:
         "always_show_sockets_artifact_verifier",
         "gem_bag_dll", "gem_bag_artifact_verifier",
         "day_night_dll", "day_night_artifact_verifier",
+        "ultrawide_dll", "ultrawide_artifact_verifier",
     )
     if not args.controller_only:
         missing = ["--" + name.replace("_", "-") for name in required_suite_args
@@ -257,9 +270,11 @@ def main() -> None:
         args.gem_bag_dll, args.gem_bag_artifact_verifier, args.output, REPOSITORY)
     day_night_zip = package_verified_plugin("day-night-cycle", "Day Night Cycle",
         args.day_night_dll, args.day_night_artifact_verifier, args.output, REPOSITORY)
+    ultrawide_zip = package_verified_plugin("ultrawide", "Ultrawide",
+        args.ultrawide_dll, args.ultrawide_artifact_verifier, args.output, REPOSITORY)
     archives = (controller_zip, ranges_zip, map_assistance_zip,
                 inventory_deposit_zip, floating_damage_zip, sockets_zip,
-                gem_bag_zip, day_night_zip)
+                gem_bag_zip, day_night_zip, ultrawide_zip)
     if args.unhoarder_runtime_zip:
         from release_companion import stage
         archives += (stage(args.unhoarder_runtime_zip, args.output, REPOSITORY),)
@@ -283,6 +298,7 @@ def main() -> None:
     print(sockets_zip)
     print(gem_bag_zip)
     print(day_night_zip)
+    print(ultrawide_zip)
     print(args.output / "SHA256SUMS")
 
 

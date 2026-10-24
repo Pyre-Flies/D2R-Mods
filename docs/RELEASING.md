@@ -1,6 +1,6 @@
 # Publishing releases
 
-The stable suite contains eight first-party plugins and two separately maintained
+The stable suite contains nine first-party plugins and two separately maintained
 companions. The [repository README](../README.md) lists current versions;
 `release-companions.json` pins the exact companion packages and payload hashes.
 Experimental and diagnostic plugins stay in D2R-Mods-Research.
@@ -31,19 +31,19 @@ scan public text for private paths and credentials.
 
 Publish only authorized scope. Staging files alone does not authorize a push or release.
 Stable suite tags follow `release-YYYY.MM.DD.N`; plugin revisions are independent.
-The `release` workflow builds/tests/packages the eight first-party plugins.
+The `release` workflow builds/tests/packages the nine first-party plugins.
 GitHub Actions' `build/` and `dist/` directories are disposable runner output.
 Retained prerelease workflows support their historical tag conventions.
 
 UnHoarder and Buff HUD are released from their own forks. Use the exact companion
 ZIPs pinned in `release-companions.json`; QOL companion admission can depend on the
-DLL hash, so an arbitrary rebuild is not interchangeable. Buff HUD requires its
+DLL hash or structural profile, so an arbitrary rebuild is not interchangeable. Buff HUD requires its
 DLL and MPQ together. Preserve source attribution and required notices.
 UnHoarder's Reimagined package supplies sound tables; preserve pack-specific fields
 when applying sound routing to another pack. See [companion sources](COMPANION-SOURCES.md).
 
-After the eight-plugin workflow succeeds, attach the two verified companion ZIPs
-and regenerate adjacent `SHA256SUMS` for all ten runtime ZIPs. Confirm the tag
+After the nine-plugin workflow succeeds, attach the two verified companion ZIPs
+and regenerate adjacent `SHA256SUMS` for all eleven runtime ZIPs. Confirm the tag
 commit, workflow outcome and release status. Download the published assets and
 verify archive hashes, contents, payload hashes and metadata before promotion.
 A successful build or deployment is not new live-game acceptance.

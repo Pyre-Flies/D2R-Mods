@@ -1,4 +1,4 @@
-"""Regression tests for extraction-safe eight-plugin runtime releases."""
+"""Regression tests for extraction-safe nine-plugin runtime releases."""
 from contextlib import redirect_stdout, redirect_stderr
 import hashlib
 import io
@@ -189,6 +189,9 @@ class EightPluginSuiteTests(FloatingDamagePackageFixture, unittest.TestCase):
             "plugins/day-night-cycle/src/plugin.cpp": b'.version="1.3.1+rev.1",',
             "plugins/day-night-cycle/README.md": b"# Day Night Cycle\nClient lighting.\n",
             "plugins/day-night-cycle/day-night-cycle.toml": b"[day-night-cycle]\nenabled = true\n",
+            "plugins/ultrawide/src/plugin.cpp": b'.version="1.3.5+rev.2",',
+            "plugins/ultrawide/README.md": b"# Ultrawide\n21:9 and 32:9 gameplay.\n",
+            "plugins/ultrawide/ultrawide.toml": b"[ultrawide]\nenabled = true\n",
             "plugins/always-show-sockets/src/plugin.cpp": b'.version="1.3.1+rev.1",',
             "plugins/always-show-sockets/always-show-sockets.toml": b"# Reference sockets config\n",
             "plugins/always-show-sockets/README.md": b"# Sockets\n",
@@ -203,6 +206,8 @@ class EightPluginSuiteTests(FloatingDamagePackageFixture, unittest.TestCase):
             "plugins/inventory-deposit/README.md": b"# Inventory Deposit\nDeposit all inventory items.\n",
             "plugins/inventory-deposit/RUNTIME-RELEASE-NOTES.md": b"# Changelog\nDeposit button.\n",
         }
+        for i in range(14):
+            fixtures[f"plugins/ultrawide/assets/tc22sh/shader_{i:02d}.bin"] = f"shader-{i}".encode()
         for name, data in fixtures.items():
             path = self.repo / name
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -221,6 +226,8 @@ class EightPluginSuiteTests(FloatingDamagePackageFixture, unittest.TestCase):
             ("--gem-bag-artifact-verifier", "gem-bag-artifact-tests.exe"),
             ("--day-night-dll", "Day Night Cycle.dll"),
             ("--day-night-artifact-verifier", "day-night-artifact-tests.exe"),
+            ("--ultrawide-dll", "Ultrawide.dll"),
+            ("--ultrawide-artifact-verifier", "ultrawide-artifact-tests.exe"),
         ):
             path = self.root / "built" / filename
             if not path.exists():
@@ -250,22 +257,23 @@ class EightPluginSuiteTests(FloatingDamagePackageFixture, unittest.TestCase):
                 redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
             package_runtime.main()
 
-    def test_full_suite_has_exactly_eight_runtime_zips_and_manifest(self):
+    def test_full_suite_has_exactly_nine_runtime_zips_and_manifest(self):
         self.run_suite()
         expected_dlls = {
             "Controller QOL Updates.dll", "Item Roll Ranges.dll", "Map Assistance.dll",
             "Inventory Deposit.dll", "Floating Damage.dll", "Always Show Sockets.dll",
-            "Gem Bag UI.dll", "Day Night Cycle.dll",
+            "Gem Bag UI.dll", "Day Night Cycle.dll", "Ultrawide.dll",
         }
         archives = set(self.output.glob("*.zip"))
-        self.assertEqual(len(archives), 8)
+        self.assertEqual(len(archives), 9)
         manifest = dict(line.split("  ", 1)[::-1]
                         for line in (self.output / "SHA256SUMS").read_text().splitlines())
         self.assertEqual(set(manifest), {path.name for path in archives})
         install = self.root / "install"
         customized = {}
         for config in ("controller-qol-updates.toml", "controller-qol-skills.toml",
-                       "item-roll-ranges.toml", "map-assistance.toml", "inventory-deposit.toml", "floating-damage.toml", "day-night-cycle.toml"):
+                       "item-roll-ranges.toml", "map-assistance.toml", "inventory-deposit.toml",
+                       "floating-damage.toml", "day-night-cycle.toml", "ultrawide.toml"):
             path = install / "d2rloader/config" / config
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(b"# customized setting kept\r\nvalue = 99\r\n")
@@ -276,8 +284,9 @@ class EightPluginSuiteTests(FloatingDamagePackageFixture, unittest.TestCase):
             with zipfile.ZipFile(archive) as zipped:
                 dlls = [name for name in zipped.namelist() if name.lower().endswith(".dll")]
                 self.assertEqual(len(dlls), 1)
-                self.assertEqual(set(zipped.namelist()), {dlls[0], "README.md"} |
-                                 {name for name in zipped.namelist() if name.startswith("defaults/")})
+                allowed_extra = {name for name in zipped.namelist()
+                                 if name.startswith("defaults/") or name.startswith("d2rloader/data/hd/tc22sh/")}
+                self.assertEqual(set(zipped.namelist()), {dlls[0], "README.md"} | allowed_extra)
                 self.assertFalse(any(name.lower().endswith(".toml") and not name.startswith("defaults/")
                                      for name in zipped.namelist()))
                 self.assertTrue(dlls[0].startswith("d2rloader/plugins/"))
@@ -286,6 +295,9 @@ class EightPluginSuiteTests(FloatingDamagePackageFixture, unittest.TestCase):
                     self.assertNotIn("docs/ITEM-LEVELS-REV45.md", zipped.namelist())
                     self.assertIn("README.md", zipped.namelist())
                     self.assertIn(b"always_show_ranges = false", zipped.read("defaults/item-roll-ranges.toml"))
+                if Path(dlls[0]).name == "Ultrawide.dll":
+                    shaders = [n for n in zipped.namelist() if n.startswith("d2rloader/data/hd/tc22sh/")]
+                    self.assertEqual(len(shaders), 14)
                 self.assertFalse(any(name.lower().startswith("d2rloader/config/")
                                      for name in zipped.namelist()))
                 self.assertNotIn("SHA256SUMS", zipped.namelist())
@@ -295,9 +307,10 @@ class EightPluginSuiteTests(FloatingDamagePackageFixture, unittest.TestCase):
         for path, data in customized.items():
             self.assertEqual(path.read_bytes(), data)
         self.assertFalse((self.root / "fresh/d2rloader/config").exists())
-        self.assertEqual(self.run.call_count, 5)
+        self.assertEqual(self.run.call_count, 6)
         verified = {Path(call.args[0][1]).name for call in self.run.call_args_list}
-        self.assertEqual(verified, {"Inventory Deposit.dll", "Floating Damage.dll", "Always Show Sockets.dll", "Gem Bag UI.dll", "Day Night Cycle.dll"})
+        self.assertEqual(verified, {"Inventory Deposit.dll", "Floating Damage.dll", "Always Show Sockets.dll",
+                                    "Gem Bag UI.dll", "Day Night Cycle.dll", "Ultrawide.dll"})
 
     def test_controller_only_prerelease_keeps_single_plugin_contract(self):
         arguments = self.arguments[:3] + ["--controller-only", "--output", str(self.output)]

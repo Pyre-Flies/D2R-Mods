@@ -20,6 +20,7 @@
 #include "storage_focus.h"
 #include <mutex>
 #include <cstdio>
+#include <cstring>
 #include <atomic>
 namespace QolNativeIdentify {
 namespace {
@@ -116,6 +117,31 @@ bool CurrentPlayer(D2RL::PlayerHandle expected) noexcept {
     return expected && context->QueryService(&inventory)==D2RL::ServiceQueryResult::Success && inventory &&
         inventory->getLocalPlayer(context,&current)==D2RL::Inventory::Result::Success && current==expected;
 }
+bool CursorBytesMatch(uintptr_t addr,const unsigned char* expected,size_t size) noexcept {
+    unsigned char actual[16]{};SIZE_T got{};
+    return size<=sizeof(actual) && ReadProcessMemory(GetCurrentProcess(),reinterpret_cast<const void*>(addr),actual,size,&got) && got==size && !std::memcmp(actual,expected,size);
+}
+bool CursorBusy(D2RL::PlayerHandle player=D2RL::InvalidPlayerHandle) noexcept {
+    if(!context)return true;
+    if(context->exeBase &&
+       CursorBytesMatch(context->exeBase+0x14f1e0,QolNativeIdentifyProfile::Cursor,sizeof(QolNativeIdentifyProfile::Cursor)) &&
+       CursorBytesMatch(context->exeBase+0x14f210,QolNativeIdentifyProfile::Mode,sizeof(QolNativeIdentifyProfile::Mode))) {
+        __try {
+            if(At<void*(__fastcall*)()>(0x14f1e0)()!=nullptr || At<int(__fastcall*)()>(0x14f210)()==5)return true;
+        } __except(EXCEPTION_EXECUTE_HANDLER) {}
+    }
+    const D2RL::InventoryService* inv{};
+    if(context->QueryService(&inv)==D2RL::ServiceQueryResult::Success && inv && inv->getCursorItem) {
+        if(!player && inv->getLocalPlayer)inv->getLocalPlayer(context,&player);
+        if(player) {
+            D2RL::ItemHandle cursor{};
+            const auto res=inv->getCursorItem(context,player,&cursor);
+            if((res!=D2RL::Inventory::Result::Success || cursor!=D2RL::InvalidItemHandle) &&
+               res!=D2RL::Inventory::Result::NotFound)return true;
+        }
+    }
+    return false;
+}
 // Read-only client quantity through the same guarded grid and stat getter used by Tick.
 bool ClientQuantity(const D2RL::PluginContext*,const D2RL::ItemService*,D2RL::ItemHandle handle,int32_t& quantity) noexcept {
     __try {
@@ -167,6 +193,7 @@ void AdvanceBulk() noexcept {
     const D2RL::InventoryService* inv{};D2RL::PlayerHandle player{};
     if(context->QueryService(&inv)!=D2RL::ServiceQueryResult::Success || !inv ||
        inv->getLocalPlayer(context,&player)!=D2RL::Inventory::Result::Success || player!=work.player){Finish("[QOL/IdentifyAll] Player changed.");return;}
+    if(CursorBusy(player)){Finish("[QOL/IdentifyAll] Cursor occupied; remaining work cancelled.");return;}
     QolIdentify::Info tome{};tome.structSize=D2RL::Items::ItemInfoSize;
     int32_t charges{};
     if(items->getItemInfo(context,bulk.tome.handle,&tome)!=D2RL::Items::Result::Success || !QolIdentify::Same(tome,bulk.tome) ||
@@ -225,10 +252,11 @@ void __cdecl BeginBulk(const D2RL::PluginContext* ctx,void* token) noexcept {
     const D2RL::InventoryService* inv{};D2RL::PlayerHandle player{};
     if(ctx->QueryService(&inv)!=D2RL::ServiceQueryResult::Success || !inv ||
        inv->getLocalPlayer(ctx,&player)!=D2RL::Inventory::Result::Success || player!=work.player){Finish("[QOL/IdentifyAll] Player unavailable.");return;}
+    if(CursorBusy(player)){Finish("[QOL/IdentifyAll] Cursor occupied; no action.");return;}
     D2RL::Inventory::ItemFilter filter{D2RL::Inventory::ItemFilterSize,0,
-        bulk.TargetMask()|D2RL::Items::ContainerBit(bulk.requested.container),0};
-    if(inv->forEachInventoryItem(ctx,player,&filter,CollectBulk,nullptr)!=D2RL::Inventory::Result::Success || !bulk.found || bulk.overflow) {
-        Finish("[QOL/IdentifyAll] Snapshot incomplete or selected tome unavailable; no action.");return;
+        bulk.TargetMask()|D2RL::Items::ContainerBit(bulk.requested.container)|D2RL::Items::ContainerBit(QolIdentify::Container::Cursor),0};
+    if(inv->forEachInventoryItem(ctx,player,&filter,CollectBulk,nullptr)!=D2RL::Inventory::Result::Success || !bulk.found || bulk.overflow || bulk.cursorOccupied) {
+        Finish("[QOL/IdentifyAll] Snapshot incomplete, cursor occupied, or selected tome unavailable; no action.");return;
     }
     if(remoteRoute && !QolClientTransfer::Source(bulk.requested,bulk.tome)) {
         Finish("[QOL/IdentifyAll] Requested tome identity changed; no action.");return;
@@ -399,7 +427,7 @@ static bool PersonalStashOpenGuarded() noexcept {
 bool PersonalStashOpen() noexcept { std::lock_guard lock(mutex);return PersonalStashOpenGuarded(); }
 bool RequestAll(const D2RL::PluginContext* ctx,D2RL::PlayerHandle player,const QolIdentify::Info& tome,bool nativeMode,bool allowRemote) noexcept {
     std::lock_guard lock(mutex);
-    if(ctx!=context || !items || !items->getItemInfo || !items->editItem || !threads || !threads->runOnGameThread || !QolIdentify::BulkTome(tome) || (nativeMode && !Guard()))return false;
+    if(ctx!=context || !items || !items->getItemInfo || !items->editItem || !threads || !threads->runOnGameThread || !QolIdentify::BulkTome(tome) || (nativeMode && !Guard()) || CursorBusy(player))return false;
     if(tome.container==QolIdentify::Container::PersonalStash && !PersonalStashOpen())return false;
     if(busy){ctx->LogWarn("[QOL/IdentifyAll] Existing identification pending; duplicate ignored.");return true;}
     remoteRoute=false;bulk={};bulk.includeCube=!nativeMode;bulk.requested=tome;bulkActive=true;bulkNative=nativeMode;bulkStarted=GetTickCount64();
@@ -422,6 +450,7 @@ int Request(const D2RL::PluginContext* ctx,D2RL::PlayerHandle player,const QolId
     std::lock_guard lock(mutex);
     if(ctx!=context){if(ctx)ctx->LogWarn("[QOL/IdentifyNative] refused=context-mismatch.");return -1;}
     if(!Guard())return -1;
+    if(CursorBusy(player)){ctx->LogWarn("[QOL/IdentifyNative] refused=cursor-occupied.");return -1;}
     if(busy) {
         ctx->LogWarn("[QOL/IdentifyNative] refused=request-already-pending.");return -1;
     }
@@ -434,7 +463,7 @@ int Request(const D2RL::PluginContext* ctx,D2RL::PlayerHandle player,const QolId
 bool RequestRemote(const D2RL::PluginContext* ctx,D2RL::PlayerHandle player,const QolIdentify::Info& target) noexcept {
     std::lock_guard lock(mutex);
     if(ctx!=context || !sessionEvents || !items || !items->getItemInfo || !Guard() || !RemoteGuard() ||
-       !CurrentPlayer(player) || !QolIdentify::NativeContainer(target.container))return false;
+       !CurrentPlayer(player) || !QolIdentify::NativeContainer(target.container) || CursorBusy(player))return false;
     if(busy || QolClientTransfer::Busy())return true; // Consume a duplicate; never also pick up the target.
     const D2RL::InventoryService* inventory{};
     if(ctx->QueryService(&inventory)!=D2RL::ServiceQueryResult::Success || !inventory || !inventory->forEachInventoryItem)return false;
@@ -443,6 +472,7 @@ bool RequestRemote(const D2RL::PluginContext* ctx,D2RL::PlayerHandle player,cons
     QolIdentify::Request request{player,target,true,true,personal};
     QolIdentify::Scan scan{};scan.request=&request;scan.items=items;scan.readQuantity=ClientQuantity;
     const D2RL::Inventory::ItemFilter filter{D2RL::Inventory::ItemFilterSize,0,D2RL::Items::ContainerBit(QolIdentify::Container::Inventory)|
+        D2RL::Items::ContainerBit(QolIdentify::Container::Cursor)|
         (personal?D2RL::Items::ContainerBit(QolIdentify::Container::PersonalStash):0u),0};
     if(inventory->forEachInventoryItem(ctx,player,&filter,[](const D2RL::PluginContext* ctx,const QolIdentify::Info* info,void* user) noexcept {
         auto& scan=*static_cast<QolIdentify::Scan*>(user);
@@ -453,13 +483,13 @@ bool RequestRemote(const D2RL::PluginContext* ctx,D2RL::PlayerHandle player,cons
            (!scan.scroll.handle || (scan.scroll.container!=QolIdentify::Container::Inventory && info->container==QolIdentify::Container::Inventory)))scan.scroll=*info;
         return action;
     },&scan)!=D2RL::Inventory::Result::Success ||
-       !scan.found || !QolClientTransfer::Source(target,scan.target) || (!scan.tome.handle && !scan.scroll.handle) || (scan.target.stateFlags&D2RL::Items::ItemStateIdentified)) {
+       scan.cursorOccupied || !scan.found || !QolClientTransfer::Source(target,scan.target) || (!scan.tome.handle && !scan.scroll.handle) || (scan.target.stateFlags&D2RL::Items::ItemStateIdentified)) {
         ctx->LogWarn("[QOL/IdentifyNative] Remote ID needs an unchanged Inventory/Personal target and an eligible charged tome or loose scroll; no action.");return false;
     }
     const auto supply=scan.tome.handle?scan.tome:scan.scroll;
     if(!scan.tome.handle && supply.quantity>1)return false; // Unqualified modded scroll stacks.
     work={scan.target,supply,player,GetTickCount64()};work.scroll=!scan.tome.handle;remoteRoute=true;bulkActive=false;busy=true;++generation;
-    if(threads->runOnUiThread(ctx,Tick,reinterpret_cast<void*>(generation))!=D2RL::Threads::Result::Success) {
+    if(threads->runOnUiThread(context,Tick,reinterpret_cast<void*>(generation))!=D2RL::Threads::Result::Success) {
         Finish("[QOL/IdentifyNative] Remote UI scheduling unavailable; no action.");return false;
     }
     ctx->LogInfo("[QOL/IdentifyNative] Remote single ID queued through direct native request.");return true;

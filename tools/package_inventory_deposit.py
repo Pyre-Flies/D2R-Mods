@@ -26,6 +26,8 @@ MACHINE_PATH = re.compile(
 
 
 def reject_machine_paths(name: str, content: bytes) -> None:
+    if name.lower().endswith(".bin"):
+        return
     regions = [content]
     if name.endswith(".dll") and len(content) >= 64 and content.startswith(b"MZ"):
         # The artifact verifier has already admitted this PE. Inspect its data

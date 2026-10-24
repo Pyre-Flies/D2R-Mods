@@ -7,7 +7,7 @@ using ItemResult=D2RL::Items::Result;
 using ScanResult=D2RL::Inventory::Result;
 using ReadQuantity=bool(*)(const D2RL::PluginContext*,const D2RL::ItemService*,D2RL::ItemHandle,int32_t&) noexcept;
 using NativeTomeUse=int(*)(const D2RL::PluginContext*,D2RL::PlayerHandle,const Info&,const Info&) noexcept;
-enum class Status { NativeRefused, NativePending, Success, ServicesUnavailable, PlayerUnavailable, ScanFailed, TargetMissing, AlreadyIdentified, NoConsumable, EmptyTome, MutationFailed, ChargeReadFailed, ChargeVerificationFailed, RollbackFailed };
+enum class Status { NativeRefused, NativePending, Success, ServicesUnavailable, PlayerUnavailable, CursorOccupied, ScanFailed, TargetMissing, AlreadyIdentified, NoConsumable, EmptyTome, MutationFailed, ChargeReadFailed, ChargeVerificationFailed, RollbackFailed };
 struct Request { D2RL::PlayerHandle player{}; Info target{}; bool requireConsumable{true},consume{true}; bool personalStashOpen{}; };
 struct Result {
     Status status{Status::ServicesUnavailable};
@@ -36,12 +36,13 @@ struct Scan {
     ReadQuantity readQuantity{};
     Result result{};
     Info target{},tome{},scroll{};
-    bool found{};
+    bool found{},cursorOccupied{},cursorChecked{};
 };
 inline D2RL::Inventory::IterationAction __cdecl Visit(const D2RL::PluginContext* ctx,const Info* item,void* user) noexcept {
     auto& s=*static_cast<Scan*>(user);
     if(!item) return D2RL::Inventory::IterationAction::Continue;
     ++s.result.scanned;
+    if(item->container==Container::Cursor) {s.cursorOccupied=true;return D2RL::Inventory::IterationAction::Stop;}
     if(Same(*item,s.request->target)) {s.target=*item;s.found=true;}
     if(item->container==Container::Inventory || item->container==Container::Cube ||
        (s.request->personalStashOpen && item->container==Container::PersonalStash)) {
@@ -65,7 +66,7 @@ inline D2RL::Inventory::IterationAction __cdecl Visit(const D2RL::PluginContext*
         }
     }
     // Once both exact identity and the preferred charged tome are known, stop.
-    return s.found && s.tome.handle && s.tome.container==Container::Inventory ? D2RL::Inventory::IterationAction::Stop : D2RL::Inventory::IterationAction::Continue;
+    return s.cursorChecked && s.found && s.tome.handle && s.tome.container==Container::Inventory ? D2RL::Inventory::IterationAction::Stop : D2RL::Inventory::IterationAction::Continue;
 }
 inline ItemResult SetIdentified(const D2RL::PluginContext* ctx,const D2RL::ItemService* items,D2RL::PlayerHandle player,D2RL::ItemHandle item,bool value) noexcept {
     D2RL::Items::ItemEdit edit{};
@@ -113,11 +114,22 @@ inline Result Execute(const D2RL::PluginContext* ctx,const D2RL::ItemService* it
     if(!items || !inventory || !items->editItem || !items->executeExistingItemTransaction || !items->destroyItem || !inventory->getLocalPlayer || !inventory->forEachInventoryItem)return s.result;
     D2RL::PlayerHandle player{};
     if(inventory->getLocalPlayer(ctx,&player)!=ScanResult::Success || !player || player!=req.player) {s.result.status=Status::PlayerUnavailable;return s.result;}
+    if(req.target.container==Container::Cursor) {s.result.status=Status::CursorOccupied;return s.result;}
+    if(inventory->getCursorItem) {
+        D2RL::ItemHandle cursor{};
+        const auto cursorScan=inventory->getCursorItem(ctx,player,&cursor);
+        if((cursorScan!=ScanResult::Success || cursor!=D2RL::InvalidItemHandle) && cursorScan!=ScanResult::NotFound) {
+            s.result.status=Status::CursorOccupied;return s.result;
+        }
+        s.cursorChecked=true;
+    }
     D2RL::Inventory::ItemFilter filter{D2RL::Inventory::ItemFilterSize,0,
         D2RL::Items::ContainerBit(req.target.container)|D2RL::Items::ContainerBit(Container::Inventory)|D2RL::Items::ContainerBit(Container::Cube)|
+        D2RL::Items::ContainerBit(Container::Cursor)|
         (req.personalStashOpen?D2RL::Items::ContainerBit(Container::PersonalStash):0u),0};
     s.result.scan=inventory->forEachInventoryItem(ctx,player,&filter,Visit,&s);
     if(s.result.scan!=ScanResult::Success) {s.result.status=Status::ScanFailed;return s.result;}
+    if(s.cursorOccupied) {s.result.status=Status::CursorOccupied;return s.result;}
     if(!s.found) {s.result.status=Status::TargetMissing;return s.result;}
     if(s.target.stateFlags&D2RL::Items::ItemStateIdentified) {s.result.status=Status::AlreadyIdentified;return s.result;}
     const Info& supply=s.tome.handle?s.tome:s.scroll;
@@ -175,6 +187,7 @@ inline const char* Name(Status s) noexcept {
     case Status::Success:return "success";
     case Status::ServicesUnavailable:return "SDK-services-unavailable";
     case Status::PlayerUnavailable:return "authoritative-player-unavailable-or-changed";
+    case Status::CursorOccupied:return "cursor-occupied-no-identify";
     case Status::ScanFailed:return "inventory-enumeration-failed";
     case Status::TargetMissing:return "exact-target-not-found";
     case Status::AlreadyIdentified:return "already-identified-no-charge-used";

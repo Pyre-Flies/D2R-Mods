@@ -77,6 +77,18 @@ int main() {
     req=Reset();req.consume=false;Check(run(req).status==Status::Success && edits==1 && transactions==0,"consume setting honored");
     req=Reset();req.requireConsumable=false;rows.pop_back();Check(run(req).status==Status::Success,"explicit free-identify option retained");
     req=Reset();req.player=2;Check(run(req).status==Status::PlayerUnavailable && scans==0,"changed player rejected");
+    req=Reset();req.target.container=Container::Cursor;Check(run(req).status==Status::CursorOccupied && scans==0 && transactions==0 && edits==0,"cursor target refused before scan");
+    req=Reset();Info held=rows.front();held.handle=303;held.runtimeId=303;held.container=Container::Cursor;rows.push_back(held);
+    Check(run(req).status==Status::CursorOccupied && transactions==0 && edits==0 && !rows[0].stateFlags,"enumerated cursor item refuses identify without mutating target or tome");
+    static D2RL::ItemHandle cursorHandle{};
+    inv.getCursorItem=+[](const D2RL::PluginContext*,D2RL::PlayerHandle,D2RL::ItemHandle* out) noexcept {
+        *out=cursorHandle;return cursorHandle?ScanResult::Success:ScanResult::NotFound;
+    };
+    req=Reset();cursorHandle=303;
+    Check(run(req).status==Status::CursorOccupied && scans==0 && transactions==0 && edits==0,"occupied cursor service refuses identify before scan");
+    cursorHandle=0;
+    BulkPlan cursorPlan{};cursorPlan.requested=rows.back();cursorPlan.Observe(rows.back());cursorPlan.Observe(rows.front());cursorPlan.Observe(held);
+    Check(cursorPlan.cursorOccupied,"bulk snapshot detects occupied cursor");
     auto nativeRun=[&](const Request& r){return Execute(nullptr,&items,&inv,r,ReadNativeQuantity);};
     req=Reset(0);nativeModel=true;nativeQuantity=97;
     auto r=nativeRun(req);Check(r.status==Status::Success && nativeQuantity==96 && r.remainingQuantity==96 && r.quantityMismatches==1 && transactions==0,"stat70 charged book works despite zero SDK quantity");
