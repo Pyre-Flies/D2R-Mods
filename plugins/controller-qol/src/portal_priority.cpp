@@ -88,7 +88,7 @@ PriorityKind ReadPriorityObjectDistance(void* player, void* candidate, int& meas
         const auto classId = getClass(candidate, "Controller QOL Updates", 0);
         const auto record = getObject(getVersion(candidate), classId);
         if (!record) return PriorityKind::None;
-        const auto kind = ClassifyPriorityObject(classId, record[0x127]);
+        const auto kind = ClassifyPriorityObject(classId, record[0x127], static_cast<const uint32_t*>(candidate)[3]);
         if (!KindEnabled(kind, portals, stash, waypoints, shrines, chests)) return PriorityKind::None;
         measured = distance(player, candidate);
         return measured >= 0 ? kind : PriorityKind::None;

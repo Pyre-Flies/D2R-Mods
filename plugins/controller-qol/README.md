@@ -1,6 +1,6 @@
 # Controller QOL Updates
 
-**1.3.1+rev.93 · by PyreFly · Windows x64 / D2RLoader 1.3.1 / plugin ABI 4**
+**1.3.1+rev.94 · by PyreFly · Windows x64 / D2RLoader 1.3.1 / plugin ABI 4**
 
 Controller item shortcuts, direct ground looting, menu navigation and optional
 right-stick skill aiming. This README covers the default button combinations,

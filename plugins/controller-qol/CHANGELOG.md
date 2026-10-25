@@ -1,5 +1,10 @@
 # Controller QOL changelog
 
+## 1.3.1+rev.94 - 2026-10-25
+
+- Prioritize all quest interactables (such as Cain's Gibbet, Inifuss Tree, Wirt's Body, Horadric Malus, Tainted Sun Altar, Horadric/Khalim chests, Compelling Orb, Hellforge, Diablo Seals, Ancients' Altar, Frozen Anya, and pre-activation Cairn Stones / Horadric Staff orifice / Arcane Tome) and act-transition portals over combat skills on `A` and nearby ground loot.
+- Support `UnHoarder 1.2.18` alongside `1.2.16` and `1.2.17`.
+
 ## 1.3.1+rev.93 - 2026-10-24
 
 - Prevent `LB + A` Quick Identify and Identify All from triggering while an item is held on the cursor, preserving normal controller `A` placement and swapping.

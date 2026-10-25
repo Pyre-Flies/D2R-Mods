@@ -142,7 +142,7 @@ static constexpr D2RL::PluginInfo ControllerQoLPluginInfo {
     .abiVersion  = D2RL_PLUGIN_ABI_VERSION,
     .id          = "controller-qol-updates",
     .name        = "Controller QOL Updates",
-    .version     = "1.3.1+rev.93",
+    .version     = "1.3.1+rev.94",
     .author      = "PyreFly",
     .description = "Direct controller looting with filtered labels, inventory shortcuts, and stash navigation.",
     .flags       = D2RL::PluginFlags::Shared | D2RL::PluginFlags::NativeHooks,
@@ -2348,8 +2348,8 @@ D2RL_PLUGIN_EXPORT auto D2RLoaderLoadPlugin(const D2RL::PluginContext* context) 
         context->LogWarn("[QOL] Navigation/label module unavailable; inspect QOL diagnostics. Item features remain loaded.");
     }
     QolPortal::Initialize(context,
-        g_Settings.enabled && (g_Settings.prioritizePortals || g_Settings.prioritizeStashBoxes ||
-            g_Settings.prioritizeWaypoints || g_Settings.prioritizeShrines || g_Settings.prioritizeChests),
+        g_Settings.enabled,
+
         g_Settings.groundPickup, g_Settings.prioritizePortals, g_Settings.prioritizeStashBoxes,
         g_Settings.prioritizeWaypoints, g_Settings.prioritizeShrines, g_Settings.prioritizeChests,
         g_Settings.debugLogging || g_Settings.portalDiagnostics,
@@ -2365,7 +2365,7 @@ D2RL_PLUGIN_EXPORT auto D2RLoaderLoadPlugin(const D2RL::PluginContext* context) 
     },+[](const QolConfig::Settings& next) noexcept {
         ControllerQoL::SetTriggerThreshold(next.triggerThreshold);
     });
-    context->LogInfo("[QOL] QOL v1.3.1+rev.93 loaded: controller item features and integrated v0.6 navigation/label hooks.");
+    context->LogInfo("[QOL] QOL v1.3.1+rev.94 loaded: controller item features and integrated v0.6 navigation/label hooks.");
     return true;
 }
 

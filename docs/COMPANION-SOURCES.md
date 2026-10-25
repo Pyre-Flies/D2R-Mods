@@ -6,7 +6,7 @@ UnHoarder and Buff HUD retain their own source repositories and release history.
 
 | Companion | Current release | Source |
 | --- | --- | --- |
-| UnHoarder | [1.2.16](https://github.com/Pyre-Flies/d2rl-unhoarder/releases/tag/v1.2.16) (`Controller QOL` and `Inventory Deposit` also support `1.2.17`) | [Fork](https://github.com/Pyre-Flies/d2rl-unhoarder) |
+| UnHoarder | [1.2.18](https://github.com/Pyre-Flies/d2rl-unhoarder/releases/tag/v1.2.18) (`Controller QOL` and `Inventory Deposit` support `1.2.16`–`1.2.18`) | [Fork](https://github.com/Pyre-Flies/d2rl-unhoarder) |
 | Buff HUD | [1.1.1](https://github.com/Pyre-Flies/d2rl-buff-hud/releases/tag/v1.1.1) | [Fork](https://github.com/Pyre-Flies/d2rl-buff-hud) |
 
 Buff HUD includes the controller/keyboard switching fix from

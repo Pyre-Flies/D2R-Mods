@@ -8,7 +8,7 @@ Download individual runtime ZIPs from the
 
 | Plugin | Version | What it adds |
 | --- | --- | --- |
-| [Controller QOL Updates](plugins/controller-qol/README.md) | `1.3.1+rev.93` | Controller item shortcuts, direct ground looting, menu navigation, and right-stick skill aiming. |
+| [Controller QOL Updates](plugins/controller-qol/README.md) | `1.3.1+rev.94` | Controller item shortcuts, direct ground looting, menu navigation, and right-stick skill aiming. |
 | [Ultrawide](plugins/ultrawide/README.md) | `1.3.5+rev.2` | 21:9 and 32:9 ultrawide viewport support: pillarbox/vignette removal, mouse/placard/automap unclamp, centered or full-length HUD, corner HUD anchoring, 22×22 terrain cache, 7×7 monster pop-in fix, and configurable AI range. |
 | [Item Roll Ranges](plugins/item-roll-ranges/README.md) | `1.3.1+rev.55` | Stat roll ranges, prefix/suffix/runeword/socket source breakdowns, base damage/Defense, item levels (`Ilvl`/`Qlvl`), and max socket capacity. |
 | [Gem Bag UI](plugins/gem-bag-ui/README.md) | `1.3.1+rev.2` | Interactive gem picker for withdrawing gems and one-step shortcut for depositing loose gems and gem clusters. |
@@ -22,7 +22,7 @@ Download individual runtime ZIPs from the
 
 | Package | Version | Description & Source |
 | --- | --- | --- |
-| **UnHoarder** | `1.2.16` | Separate Reimagined upgrade package maintained in the [UnHoarder fork](https://github.com/Pyre-Flies/d2rl-unhoarder) (`Controller QOL` and `Inventory Deposit` also support `1.2.17`). |
+| **UnHoarder** | `1.2.18` | Separate Reimagined upgrade package maintained in the [UnHoarder fork](https://github.com/Pyre-Flies/d2rl-unhoarder) (`Controller QOL` and `Inventory Deposit` support `1.2.16`–`1.2.18`). |
 | **Buff HUD** | `1.1.1` | Separate DLL + MPQ companion package maintained in the [Buff HUD fork](https://github.com/Pyre-Flies/d2rl-buff-hud) with the controller/keyboard switching fix. |
 
 See [companion sources](docs/COMPANION-SOURCES.md) for details on both companion repositories. Experimental and diagnostic plugins are maintained separately in research.

@@ -53,6 +53,15 @@ int main() {
     static_assert(ClassifyPriorityObject(304,0)==PriorityKind::Portal); // Arcane Sanctuary TeleportPad2
     static_assert(ClassifyPriorityObject(305,0)==PriorityKind::Portal); // Arcane Sanctuary TeleportPad3
     static_assert(ClassifyPriorityObject(306,0)==PriorityKind::Portal); // Arcane Sanctuary TeleportPad4
+    static_assert(ClassifyPriorityObject(100,0)==PriorityKind::Portal); // DurielPortal
+    static_assert(ClassifyPriorityObject(298,0x10)==PriorityKind::Portal); // ArcaneSanctuaryPortal
+    static_assert(ClassifyPriorityObject(342,0x10)==PriorityKind::Portal); // HellGate
+    static_assert(ClassifyPriorityObject(547,0)==PriorityKind::Portal); // AncientsGateway
+    static_assert(ClassifyPriorityObject(563,0)==PriorityKind::Portal); // FinalPortal
+    static_assert(ClassifyPriorityObject(564,0)==PriorityKind::Portal); // SummitDoor
+    static_assert(ClassifyPriorityObject(565,0)==PriorityKind::Portal); // ReallyTheLastPortal
+    static_assert(ClassifyPriorityObject(566,0)==PriorityKind::Portal); // NotKiddingLastPortal
+    static_assert(ClassifyPriorityObject(569,0)==PriorityKind::Portal); // DummyEx108 (Throne of Destruction)
     static_assert(ClassifyPriorityObject(267,0)==PriorityKind::Stash);
     static_assert(ClassifyPriorityObject(119,0x40)==PriorityKind::Waypoint);
     static_assert(ClassifyPriorityObject(159,0)==PriorityKind::None); // hidden stash is not town storage
@@ -62,12 +71,33 @@ int main() {
     static_assert(ClassifyPriorityObject(322,0x20)==PriorityKind::Well);
     static_assert(ClassifyPriorityObject(519,0)==PriorityKind::Well);
     static_assert(ClassifyPriorityObject(5,0x08)==PriorityKind::Chest);
-    static_assert(ClassifyPriorityObject(354,0x08)==PriorityKind::Chest); // HoradricCubeChest
-    static_assert(ClassifyPriorityObject(355,0x08)==PriorityKind::Chest); // HoradricScrollChest
-    static_assert(ClassifyPriorityObject(356,0x08)==PriorityKind::Chest); // StaffOfKingsChest
-    static_assert(ClassifyPriorityObject(405,0x08)==PriorityKind::Chest); // KhalimHeartChest
-    static_assert(ClassifyPriorityObject(406,0x08)==PriorityKind::Chest); // KhalimBrainChest
-    static_assert(ClassifyPriorityObject(407,0x08)==PriorityKind::Chest); // KhalimEyeChest
+    static_assert(ClassifyPriorityObject(354,0x08)==PriorityKind::Quest); // HoradricCubeChest
+    static_assert(ClassifyPriorityObject(355,0x08)==PriorityKind::Quest); // HoradricScrollChest
+    static_assert(ClassifyPriorityObject(356,0x08)==PriorityKind::Quest); // StaffOfKingsChest
+    static_assert(ClassifyPriorityObject(405,0x08)==PriorityKind::Quest); // KhalimHeartChest
+    static_assert(ClassifyPriorityObject(406,0x08)==PriorityKind::Quest); // KhalimBrainChest
+    static_assert(ClassifyPriorityObject(407,0x08)==PriorityKind::Quest); // KhalimEyeChest
+    static_assert(ClassifyPriorityObject(268,0x08)==PriorityKind::Quest); // Wirt's Body
+    static_assert(ClassifyPriorityObject(26,0)==PriorityKind::Quest); // Cain's Gibbet
+    static_assert(ClassifyPriorityObject(30,0)==PriorityKind::Quest); // Tree of Inifuss
+    static_assert(ClassifyPriorityObject(108,0)==PriorityKind::Quest); // Horadric Malus
+    static_assert(ClassifyPriorityObject(149,0)==PriorityKind::Quest); // Altar of the Tainted Sun (Viper Amulet)
+    static_assert(ClassifyPriorityObject(193,0)==PriorityKind::Quest); // Lam Esen's Tome
+    static_assert(ClassifyPriorityObject(252,0)==PriorityKind::Quest); // Gidbinn Altar
+    static_assert(ClassifyPriorityObject(366,0)==PriorityKind::Quest); // BeneathTheCityStairs
+    static_assert(ClassifyPriorityObject(367,0)==PriorityKind::Quest); // BeneathTheCityLever
+    static_assert(ClassifyPriorityObject(376,0)==PriorityKind::Quest); // Hellforge (mode 0)
+    static_assert(ClassifyPriorityObject(376,0,2)==PriorityKind::Quest); // Hellforge (mode 2 smash)
+    static_assert(ClassifyPriorityObject(392,0)==PriorityKind::Quest); // DiabloSeal1
+    static_assert(ClassifyPriorityObject(396,0)==PriorityKind::Quest); // DiabloSeal5
+    static_assert(ClassifyPriorityObject(404,0)==PriorityKind::Quest); // Compelling Orb
+    static_assert(ClassifyPriorityObject(546,0)==PriorityKind::Quest); // AncientsAltar
+    static_assert(ClassifyPriorityObject(558,0)==PriorityKind::Quest); // Anya's Prison of Ice
+    static_assert(ClassifyPriorityObject(573,0)==PriorityKind::Quest); // ColossalAltar
+    static_assert(ClassifyPriorityObject(8,0,0)==PriorityKind::Quest && ClassifyPriorityObject(8,0,2)==PriorityKind::None); // TowerTome unread only
+    static_assert(ClassifyPriorityObject(17,0,0)==PriorityKind::Quest && ClassifyPriorityObject(17,0,2)==PriorityKind::None); // Cairn Stone untouched only
+    static_assert(ClassifyPriorityObject(152,0,0)==PriorityKind::Quest && ClassifyPriorityObject(152,0,2)==PriorityKind::None); // Horadric Orifice unplaced only
+    static_assert(ClassifyPriorityObject(357,0,0)==PriorityKind::Quest && ClassifyPriorityObject(357,0,2)==PriorityKind::None); // Horazon's Journal unread only
     static_assert(ClassifyPriorityObject(416,0x08)==PriorityKind::None); // StoneStash excluded
     static_assert(KindEnabled(PriorityKind::Portal,true,false,false));
     static_assert(KindEnabled(PriorityKind::Stash,false,true,false));
@@ -78,6 +108,7 @@ int main() {
     static_assert(KindEnabled(PriorityKind::Chest,false,false,false,false,true));
     static_assert(!KindEnabled(PriorityKind::Chest,true,true,true,true,false));
     static_assert(!KindEnabled(PriorityKind::Stash,true,false,true));
+    static_assert(KindEnabled(PriorityKind::Quest,false,false,false,false,false)); // Quest interactables always enabled
     // A portal rejected BEFORE comparison must be admitted by native scoring.
     // Model only its two independent gates: center distance and facing angle.
     unsigned char native[ScoringControllerBytes]{}, view[ScoringControllerBytes]{};
@@ -128,6 +159,7 @@ int main() {
     Check(PreferObject(true,false,357,4,PriorityKind::Shrine,6,6),"shrine beats loot at boundary");
     Check(PreferObject(true,false,357,4,PriorityKind::Well,6,6),"well beats loot at boundary");
     Check(PreferObject(true,false,357,4,PriorityKind::Chest,6,6),"enabled normal chest beats loot at boundary");
+    Check(PreferObject(true,false,357,4,PriorityKind::Quest,6,6),"quest interactable beats loot at boundary");
     Check(!PreferObject(true,true,357,4,PriorityKind::Stash,2,6),"LB loot retains ownership over stash");
     Check(!PreferObject(true,false,357,4,PriorityKind::None,2,6),"ordinary object is not promoted");
     Check(!PreferObject(true,false,357,2,PriorityKind::Waypoint,2,6),"object versus object retains native ranking");
@@ -143,7 +175,7 @@ int main() {
         auto eligible=[&](void*) { ++checks; return kind!=PriorityKind::None && WithinPriorityDistance(distance,10); };
         Check(RecoverInteraction(true,true,false,nullptr,query,eligible)==&portal && queries==1 && checks==1,
             "accepted nearby chest restored after null combat arbitration");
-        for (auto family : {PriorityKind::Portal,PriorityKind::Stash,PriorityKind::Waypoint,PriorityKind::Shrine,PriorityKind::Well,PriorityKind::Chest}) {
+        for (auto family : {PriorityKind::Portal,PriorityKind::Stash,PriorityKind::Waypoint,PriorityKind::Shrine,PriorityKind::Well,PriorityKind::Chest,PriorityKind::Quest}) {
             kind=family; distance=10;
             Check(RecoverInteraction(true,true,false,nullptr,query,eligible)==&portal,"enabled priority families recover at inclusive boundary");
         }
