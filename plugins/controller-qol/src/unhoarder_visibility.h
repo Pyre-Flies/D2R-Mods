@@ -7,6 +7,18 @@
 namespace QolLootVisibility {
 inline thread_local uint32_t CurrentLabelGuid{};
 inline thread_local const void* CurrentLabelUnit{};
+inline const char* ActiveLootFilterProviderId() noexcept {
+    static std::atomic<uint64_t> s_lastCheckTick{0};
+    static std::atomic<bool> s_hasPyre{false};
+    const uint64_t now = GetTickCount64();
+    const uint64_t last = s_lastCheckTick.load(std::memory_order_relaxed);
+    if (last == 0 || now < last || (now - last) > 500U) {
+        s_lastCheckTick.store(now, std::memory_order_relaxed);
+        s_hasPyre.store(GetModuleHandleW(L"pyre-lootfilter.dll") != nullptr,
+                        std::memory_order_relaxed);
+    }
+    return s_hasPyre.load(std::memory_order_relaxed) ? "pyre-lootfilter" : "unhoarder";
+}
 inline bool CannotHideLabel(const D2RL::PluginContext* context,
     const void* unit,uint32_t guid) noexcept {
     CurrentLabelGuid=guid;
@@ -17,7 +29,7 @@ inline bool CannotHideLabel(const D2RL::PluginContext* context,
     if(context->QueryService(&communication)!=D2RL::ServiceQueryResult::Success ||
        !D2RL::HasPluginCommunicationServiceField(communication,D2RL::PluginCommunicationServiceRequiredSize))return false;
     D2RL::PluginCommunication::ServiceLease<UnhoarderLabelVisibility::Service> lease;
-    if(D2RL::PluginCommunication::Acquire(context,communication,"unhoarder",
+    if(D2RL::PluginCommunication::Acquire(context,communication,ActiveLootFilterProviderId(),
         UnhoarderLabelVisibility::Name,UnhoarderLabelVisibility::Version,
         sizeof(UnhoarderLabelVisibility::Service),&lease)!=D2RL::PluginCommunication::Result::Success ||
        !lease || !UnhoarderLabelVisibility::Valid(lease.Get()))return false;
@@ -35,7 +47,7 @@ inline bool Hidden(const D2RL::PluginContext* context,const void* unit,
     if(context->QueryService(&communication)!=D2RL::ServiceQueryResult::Success ||
        !D2RL::HasPluginCommunicationServiceField(communication,D2RL::PluginCommunicationServiceRequiredSize))return false;
     D2RL::PluginCommunication::ServiceLease<UnhoarderVisibility::Service> lease;
-    if(D2RL::PluginCommunication::Acquire(context,communication,"unhoarder",
+    if(D2RL::PluginCommunication::Acquire(context,communication,ActiveLootFilterProviderId(),
         UnhoarderVisibility::Name,UnhoarderVisibility::Version,
         sizeof(UnhoarderVisibility::Service),&lease)!=D2RL::PluginCommunication::Result::Success ||
        !lease || !UnhoarderVisibility::Valid(lease.Get()))return false;

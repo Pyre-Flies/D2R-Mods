@@ -130,3 +130,9 @@ hook refusal retains the four essential aim hooks; cast_observer_enabled=false
 leaves that entry free. All other profile guards remain required. See
 [AIM-CAST-OBSERVER-COMPATIBILITY.md](AIM-CAST-OBSERVER-COMPATIBILITY.md) for admission,
 reset fallback and automated/live validation boundaries.
+
+## Production 1.3.1+rev.95 summary (current call-site & service interop state)
+
+- **Placard post-name call-site redirect (`0x1FAA1D` -> `0x846210`):** `PlacardOverlay::Install` (`src/placard_call.h`) patches only the post-name query `CALL rel32` at `0x1FAA1D` via a 64-byte near-relay (`QolRelay::Allocate` in outer `±[0x50000000, 0x70000000]` range). Both the shared tooltip builder entry `0xCBEB0` (used by Chronicle) and the upstream name writer call `0x1FAA18` / entry `0xCBEA0` (used by Pyre Loot Filter / UnHoarder) remain untouched.
+- **Seven pickup `CALL rel32` redirects (`0x410005`, `0x4112F5`, `0x416126`, `0x41738D`, `0x4BA0EF`, `0x4BBAD0`, `0x55496C` -> `0x471950`):** `GroundLoot::InstallPickupCalls` (`src/pickup_calls.h`) redirects the seven direct callers via a near-relay while leaving the shared `0x471950` entry untouched for `Potion Auto Pickup` and `UnHoarder`. Allowed pickups call `exeBase + 0x471950`, traversing any entry hook installed there.
+- **Loot-filter visibility interop (`PluginCommunicationService`):** `QolClientLoot` and `QolNavigation` consume the versioned `unhoarder-ground-visibility` and `unhoarder-label-visibility` services published by `Pyre Loot Filter` (`0.1.0`) or `UnHoarder` (`1.2.16`–`1.2.18`) via `D2RL::PluginCommunicationService`, eliminating direct cross-plugin code hooks for visibility queries.

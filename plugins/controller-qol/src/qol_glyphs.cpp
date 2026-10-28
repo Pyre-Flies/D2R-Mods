@@ -35,7 +35,7 @@ constexpr unsigned char measureBytes[]={0x48,0x89,0x5c,0x24,0x08,0x48,0x89,0x74,
 
 // Widget ctor stores its UTF-8 name string at +8 and parent at +0x30.
 // Copy bounded names while guarded; never retain native widget pointers.
-size_t ReadNames(void* widget,char (&names)[12][64]) noexcept {
+size_t ReadNames(void* widget,char (&names)[12][64],std::string_view (&views)[12]) noexcept {
     __try {
         size_t count=0;
         for(auto node=static_cast<const unsigned char*>(widget);node && count<12;++count) {
@@ -44,6 +44,7 @@ size_t ReadNames(void* widget,char (&names)[12][64]) noexcept {
             size_t i=0;for(;i<63 && name[i];++i) names[count][i]=name[i];
             names[count][i]=0;
             if(i==63 && name[i]) return 0;
+            views[count]={names[count],i};
             auto parent=*reinterpret_cast<const unsigned char* const*>(node+0x30);
             if(parent==node) return 0;
             node=parent;
@@ -82,7 +83,7 @@ bool CopyHeaderLabel(void* widget,char* output) noexcept {
 }
 bool IsRuleReorderLegend(void* widget) noexcept {
     __try {
-        if(!context || !widget || !QolNavigation::LootFilterReorderEnabled())return false;
+        if(!context || !widget)return false;
         const auto node=reinterpret_cast<uintptr_t>(widget);
         const auto legend=*reinterpret_cast<const uintptr_t*>(node+0x30);
         if(!legend || *reinterpret_cast<const uintptr_t*>(legend)!=context->exeBase+0x1d76550 || node<legend+0x680)return false;
@@ -92,35 +93,43 @@ bool IsRuleReorderLegend(void* widget) noexcept {
         const auto entries=*reinterpret_cast<const uintptr_t*>(legend+0x88);
         if(!entries)return false;
         const auto entry=reinterpret_cast<const uint32_t*>(entries+(offset/0x230)*0x40);
-        return entry[0]==0xe00d && (entry[1]==0xe001 || entry[1]==0xe002) && entry[2]==2;
+        return entry[0]==0xe00d && (entry[1]==0xe001 || entry[1]==0xe002) && entry[2]==2 && QolNavigation::LootFilterReorderEnabled();
     } __except(EXCEPTION_EXECUTE_HANDLER) {return false;}
 }
 void DrawScoped(void* widget,Hint hint,bool header) {
-    char previousLabel[512];std::memcpy(previousLabel,currentHeaderLabel,sizeof(previousLabel));
-    currentHeaderLabel[0]=0;
-    if(header && !CopyHeaderLabel(widget,currentHeaderLabel))currentHeaderLabel[0]=0;
-    auto previous=currentHint;
     const bool previousHeader=currentHeader;
+    const bool saveLabel=header || previousHeader || currentHeaderLabel[0]!=0;
+    char previousLabel[512];
+    if(saveLabel) {
+        std::memcpy(previousLabel,currentHeaderLabel,sizeof(previousLabel));
+        currentHeaderLabel[0]=0;
+        if(header && !CopyHeaderLabel(widget,currentHeaderLabel))currentHeaderLabel[0]=0;
+    }
+    auto previous=currentHint;
     const bool previousReorder=currentRuleReorder;
     currentRuleReorder=IsRuleReorderLegend(widget);
     currentHeader=header;
     currentHint=hint; // A nested unrelated draw never inherits a hint.
     __try {originalDrawWidget(widget);}
-    __finally {currentHint=previous;currentHeader=previousHeader;currentRuleReorder=previousReorder;std::memcpy(currentHeaderLabel,previousLabel,sizeof(previousLabel));}
+    __finally {
+        currentHint=previous;currentHeader=previousHeader;currentRuleReorder=previousReorder;
+        if(saveLabel)std::memcpy(currentHeaderLabel,previousLabel,sizeof(previousLabel));
+    }
 }
 void __fastcall HookWidget(void* widget) {
     auto hint=Hint::None;
     bool header=false;
     if(active.load(std::memory_order_relaxed)) {
-        char names[12][64]{};
-        size_t count=ReadNames(widget,names);
+        char names[12][64];
         std::string_view views[12];
-        for(size_t i=0;i<count;++i) views[i]=names[i];
+        size_t count=ReadNames(widget,names,views);
         header=measureText && QolHeaderPolicy::Scope(views,count) && ControllerQoL::IsControllerUiActive();
-        bool primary=false,secondary=false;
-        QolNavigation::GetGlyphModes(primary,secondary);
-        hint=QolGlyphPolicy::Classify(views,count,primary,secondary,QolNavigation::SharedPageRemapEnabled(),QolNavigation::OptionsRemapEnabled(),QolNavigation::ChronicleRemapEnabled(),QolNavigation::LootFilterRemapEnabled(),QolNavigation::ModInformationRemapEnabled());
-        if(hint!=Hint::None) ++hintDraws;
+        if(QolGlyphPolicy::Classify(views,count,true,true,true,true,true,true,true)!=Hint::None) {
+            bool primary=false,secondary=false;
+            QolNavigation::GetGlyphModes(primary,secondary);
+            hint=QolGlyphPolicy::Classify(views,count,primary,secondary,QolNavigation::SharedPageRemapEnabled(),QolNavigation::OptionsRemapEnabled(),QolNavigation::ChronicleRemapEnabled(),QolNavigation::LootFilterRemapEnabled(),QolNavigation::ModInformationRemapEnabled());
+            if(hint!=Hint::None) ++hintDraws;
+        }
     }
     // No widget, text buffer, asset, or binding is modified. The two guarded
     // detours borrow static replacement strings only for synchronous rendering.

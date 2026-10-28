@@ -78,9 +78,11 @@ remove this plugin; hot reload is unsupported.
 `/damagenumbers [on|off|status]` and an empty/toggle argument control the feature.
 Motion and capture accept the same bounded control grammar. Feature transitions
 clear baselines/numbers and invalidate queued generations; repeated on/off and
-status preserve current state. The command cannot override native admission and
-does not rewrite saved configuration. Capture is opt-in, capped at 128 records,
-and stops on explicit off, game leave or unload.
+status preserve current state. The command cannot override native admission.
+Setting changes (`on`/`off`/`toggle` and `motion`) persist `[floating-damage] enabled`
+and `falling_motion` via [chat_config.h](../../plugins/shared/chat_config.h) (see
+[CHAT-COMMAND-SETTINGS.md](../CHAT-COMMAND-SETTINGS.md)). Capture is opt-in,
+session-only, capped at 128 records, and stops on explicit off, game leave or unload.
 
 The two-DLL automated fixture verifies routing/help, duplicates/failures,
 queue refusal, delayed parser creation, cancellation, callback draining and

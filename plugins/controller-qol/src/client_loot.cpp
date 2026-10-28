@@ -69,8 +69,8 @@ void __fastcall HookClientUpdate(void* player) noexcept {
     QueuedApproach queued{};HeldFn held{};
     {
         std::lock_guard lock(mutex);
-        if(!active || !Ready() || !ValidateUpdate() ||
-           reinterpret_cast<uintptr_t>(player)!=playerIdentity)return;
+        if(!queuedApproach.request.item.guid || !active || !Ready() ||
+           reinterpret_cast<uintptr_t>(player)!=playerIdentity || !ValidateUpdate())return;
         queued=queuedApproach;queuedApproach={};held=heldNow;
     }
     if(!queued.request.item.guid || !held || !held())return;

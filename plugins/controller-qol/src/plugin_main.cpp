@@ -142,7 +142,7 @@ static constexpr D2RL::PluginInfo ControllerQoLPluginInfo {
     .abiVersion  = D2RL_PLUGIN_ABI_VERSION,
     .id          = "controller-qol-updates",
     .name        = "Controller QOL Updates",
-    .version     = "1.3.1+rev.94",
+    .version     = "1.3.1+rev.95",
     .author      = "PyreFly",
     .description = "Direct controller looting with filtered labels, inventory shortcuts, and stash navigation.",
     .flags       = D2RL::PluginFlags::Shared | D2RL::PluginFlags::NativeHooks,
@@ -1603,6 +1603,17 @@ namespace PlacardOverlay {
     inline void RegisterPlacard(uint32_t guid, void* textBuffer, size_t bufferSize, bool isWide) {
         if (guid == 0 || !textBuffer || bufferSize < 8) return;
         std::lock_guard<std::recursive_mutex> lock(s_PlacardMutex);
+        const ULONGLONG now = GetTickCount64();
+        auto existing = s_TrackedPlacards.find(guid);
+        if (existing != s_TrackedPlacards.end() &&
+            existing->second.textBuffer == textBuffer &&
+            existing->second.bufferSize == bufferSize &&
+            existing->second.isWide == isWide) {
+            existing->second.lastSeenTick = now;
+            existing->second.lease.bytes = 0;
+            existing->second.lease.active = false;
+            return;
+        }
         for(auto it=s_TrackedPlacards.begin();it!=s_TrackedPlacards.end();) {
             if(it->first!=guid && it->second.textBuffer==textBuffer) {
                 QolClientLoot::Track(it->first,false);
@@ -1615,7 +1626,7 @@ namespace PlacardOverlay {
             .bufferSize = bufferSize,
             .isWide = isWide,
             .guid = guid,
-            .lastSeenTick = GetTickCount64()
+            .lastSeenTick = now
         };
     }
 
@@ -1730,8 +1741,9 @@ namespace PlacardOverlay {
         QolClientLoot::Track(guid,true,unit);
 
         // If ground pickup modifier is currently held down, apply the prefix immediately
-        if (Probe::GroundShortcutsEnabled(ReadSettings().enabled,ReadSettings().groundPickup) &&
-            ControllerQoL::IsGroundPickupActive(ReadSettings().groundPickupButton)) {
+        const auto settingsSnapshot=ReadSettings();
+        if (Probe::GroundShortcutsEnabled(settingsSnapshot.enabled,settingsSnapshot.groundPickup) &&
+            ControllerQoL::IsGroundPickupActive(settingsSnapshot.groundPickupButton)) {
             for (size_t i = 0; i < GroundLoot::NUM_STICKY_SLOTS; ++i) {
                 if (QolClientLoot::SlotFor(guid)==static_cast<int>(i)) {
                     ApplyPlacardBuffer(s_TrackedPlacards.at(guid),
@@ -2145,9 +2157,10 @@ D2RL_PLUGIN_EXPORT auto D2RLoaderLoadPlugin(const D2RL::PluginContext* context) 
     if(!nativeInputOk) context->LogInfo(ControllerQoL::GetXInputHookReport());
 
     ControllerQoL::SetGroundPickupPredicate([]() noexcept {
-        return Probe::GroundShortcutsEnabled(ReadSettings().enabled,ReadSettings().groundPickup) &&
+        const auto live=ReadSettings();
+        return Probe::GroundShortcutsEnabled(live.enabled,live.groundPickup) &&
             QolClientLoot::Ready() && ControllerQoL::NativeInputInstalled() && ControllerQoL::IsControllerUiActive() &&
-            QolNavigation::GroundInputActive() && ControllerQoL::IsGroundPickupActive(ReadSettings().groundPickupButton);
+            QolNavigation::GroundInputActive() && ControllerQoL::IsGroundPickupActive(live.groundPickupButton);
     });
     // Start background controller polling thread for ground item pickup & inspection
     if (g_Settings.enabled) {
@@ -2365,7 +2378,7 @@ D2RL_PLUGIN_EXPORT auto D2RLoaderLoadPlugin(const D2RL::PluginContext* context) 
     },+[](const QolConfig::Settings& next) noexcept {
         ControllerQoL::SetTriggerThreshold(next.triggerThreshold);
     });
-    context->LogInfo("[QOL] QOL v1.3.1+rev.94 loaded: controller item features and integrated v0.6 navigation/label hooks.");
+    context->LogInfo("[QOL] QOL v1.3.1+rev.95 loaded: controller item features and integrated v0.6 navigation/label hooks.");
     return true;
 }
 

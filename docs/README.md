@@ -14,6 +14,7 @@ Agents start with [AGENTS.md](../AGENTS.md) and one affected developer guide.
 | Map Assistance | [Developer guide](../plugins/map-assistance/DEVELOPMENT.md) |
 | Gem Bag UI | [Developer guide](../plugins/gem-bag-ui/DEVELOPMENT.md), [deposit contract](../plugins/gem-bag-ui/DEPOSITS.md) |
 | Day Night Cycle | [Developer guide](../plugins/day-night-cycle/DEVELOPMENT.md), [native contract](../plugins/day-night-cycle/NATIVE-CONTRACT.md) |
+| Pyre Loot Filter | [Player & feature guide](../plugins/pyre-lootfilter/README.md), [native registry](reverse-engineering/README.md) |
 | Build or contribute | [CONTRIBUTING.md](../CONTRIBUTING.md) |
 | Local folders and cleanup | [Workspace layout](WORKSPACE.md) |
 | Package or publish | [Release process](RELEASING.md), [companion sources](COMPANION-SOURCES.md) |

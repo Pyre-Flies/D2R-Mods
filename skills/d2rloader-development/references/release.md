@@ -14,16 +14,20 @@ Forking or opening a PR does not itself require reverse-engineering documentatio
 
 For this project, resolve the D2R-Mods checkout and read `docs/RELEASING.md` plus the selected plugin's release instructions and current workflows. Those records define suite versus standalone/beta packaging, config preservation, CI and downloaded-asset verification. Use the user-authorized release scope. This reference is the maintained skill entry for packaging/release work formerly referred to as `d2r-mods-runtime-release`; do not require a separate skill with that name.
 
-## Release contents
+## Release contents and Launcher ZIP compatibility
 
-Unless the project already defines a different convention, prepare:
+Prepare:
 
-- a ready-to-install runtime archive with the expected `d2rloader/plugins` layout;
-- a source archive containing the reproducible plugin source and required build metadata;
-- concise installation and removal instructions;
-- readable compatibility requirements, with exact build/provider hashes in linked technical documentation when native behavior is gated to them;
-- known limitations and live-validation status;
-- SHA-256 checksums for archives and the runtime DLL.
+- **A clean, drag-and-drop runtime archive (`<Plugin>-<version>.zip`) with zero extra fluff:**
+  - Include **only** the installable files in their exact target folder structure (e.g., `d2rloader/plugins/<Plugin>.dll`, plus `d2rloader/config/...` only when shipping an installable config).
+  - Do **not** include `reference/`, `defaults/`, `licenses/`, `README.md`, `SHA256SUMS`, or other non-runtime files inside the runtime `.zip`. A player extracting the archive into `mods/Reimagined/` and overwriting must be completely done with no leftover folders.
+- **D2R Reimagined Launcher "Install Plugin/Zip" (`LocalPluginInstallService`) compliance:**
+  - In `I:\reimagined-launcher\ReimaginedLauncher\Utilities\LocalPluginInstallService.cs`, `MapPath` routes `.dll`/`.mpq` to `plugins/<filename>`, paths containing `config/` to `config/<subpath>`, and `.toml`/`.ini`/`.cfg` to `config/<filename>`.
+  - Any `.json` file outside a `config/` directory causes the launcher installer to abort with an error (`Cannot determine whether <name> is a config or patch`), and any other file types (such as `.bin` shaders or `.txt` MPQ tables) are skipped (`Skipped`) by the launcher installer.
+  - Before publishing any plugin release, check all archive entries against `LocalPluginInstallService.MapPath`. If any required file cannot be installed by the launcher's "Install Plugin/Zip" button (or would be skipped/rejected), **explicitly notify the user before publishing** and explain why so you can pivot as needed.
+- **Separate companion release assets (outside the runtime `.zip`):**
+  - `SHA256SUMS` and any source archive (`*-source.zip`) belong as separate release assets alongside the runtime `.zip`, never inside the runtime `.zip`.
+  - Put installation instructions, compatibility requirements, known limitations, and validation status in the GitHub release notes and repository `README.md`.
 
 Exclude build caches, local absolute paths, logs containing personal information, backups, save files, unrelated binaries, and credentials.
 

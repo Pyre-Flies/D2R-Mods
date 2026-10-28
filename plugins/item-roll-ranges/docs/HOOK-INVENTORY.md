@@ -70,3 +70,24 @@ Stash Search1.10.12 expected32 original bytes at renderer0x902E20. Old QOL rende
 ## Patch revisit checklist
 
 Locate installer and witness header; identify module before resolving RVA; compare guard bytes/call destinations; preserve calling convention and predecessor return rules; check whether another plugin owns the entry; test partial failure/shutdown and both plugin orders. Update this index and the focused evidence doc together. Keep previous production snapshots unchanged.
+
+## Production 1.3.1+rev.55 update (current Core slot inventory)
+
+Provider SHA-256 `2A868D013D2E0830BD2D9E04B918B19E46A73CF726C833E70D089B948FDEB5A2`. `Item Roll Ranges` installs **zero inline hooks in `D2R.exe`** (apart from the shared `D2RLChat` `/alwaysshowrolls` registration via `native_commands.cpp`) and instead uses atomic `InterlockedCompareExchangePointer` (`Exchange`) on **12 `D2RCore.dll` data-pointer slots** in [`src/plugin.cpp`](../src/plugin.cpp), each scoped to its exact `D2RCore.dll` caller return address:
+
+| Core slot RVA | Native game target | Qualified Core return address(es) | Purpose |
+|---|---|---|---|
+| `0x702260` | `0x194320` | `0x377CFC` (`+0x50 == 0x376E3C`, `+0x130 == 0x81977C`) | Unique row visibility (`UniqueVisibilityAdapter`; clears flag `8` on snapshot for Renewed Sunders) |
+| `0x701E70` | `0x300A90` | `0x377B2E` (`+0x50 == 0x376E22`, `+0x130 == 0x81977C`) | Set visibility table selector (`SetVisibilityAdapter`) |
+| `0x7043A0` | `0x2DB800` | `0x3E7FD6` | Special damage formatter (`SpecialAdapter`) |
+| `0x7044E8` | `0x2C0FB0` | `0x816936` | Weapon header damage formatter (`DamageAdapter`) |
+| `0x704430` | `0x2BD480` | `0x81A360` | Defense/header builder (`HeaderBuilderEntry`) |
+| `0x6FDBD8` | `0x80CF0` | `0x81A6BD` (and optional socket return `0x8190BA`) | Header string assign (`HeaderAssignAdapter`; Defense base range, `Ilvl`/`Qlvl`, socket capacity) |
+| `0x704400` | `0x2D6330` | `0x3E80B2` / `0x3E80FD` | Native range helper (`RangeHelperAdapter`) |
+| `0x7043E8` | `0x2D6520` | `0x3E82EA` | Single-stat formatter (`SingleAdapter`) |
+| `0x704490` | `0x2DC4B0` | `0x81D53B` | Property list formatter (`PropertiesAdapter`) |
+| `0x6FE3B0` | `0x1209FA0` | `0x8195E0` | Keyboard modifier reader (`AlwaysModifierAdapter` for `/AlwaysShowRolls`) |
+| `0x6FE470` | `0x13CA70` | `0x81995A` | Controller button reader (`AlwaysButtonAdapter` assembly tail-forwarder; preserves original return address so Controller QOL's `0x13CA70` inline hook still sees `0x81995A`) |
+| `0x704600` | `0x843CA0` | `0x81920E` | Optional always-show footer hint filter (`AlwaysWidgetAdapter`) |
+
+Read-only Core slot checks (not written): `0x6FF370` (`0x3D4220` affix eligibility), `0x702230` (`0x314110` armor lookup), `0x702AE0` (panel reader).

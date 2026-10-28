@@ -1,15 +1,15 @@
 # Controller QOL Updates
 
-**1.3.1+rev.94 · by PyreFly · Windows x64 / D2RLoader 1.3.1 / plugin ABI 4**
+**1.3.1+rev.95 · by PyreFly · Windows x64 / D2RLoader 1.3.1 / plugin ABI 4**
 
 Controller item shortcuts, direct ground looting, menu navigation and optional
 right-stick skill aiming. This README covers the default button combinations,
 all shared settings and skill-profile editing. Use `/qol reload` in the loader
 console to request a settings reload.
 
-This release improves performance around visible loot, including when used with
-UnHoarder 1.2.16. Both plugins remain independent. Controller pickup settings
-and shortcuts are unchanged; UnHoarder's mouse pickup override uses keyboard ALT.
+This release improves performance around visible loot and integrates directly
+with [Pyre Loot Filter](../pyre-lootfilter/README.md). Both plugins remain independent. Controller pickup settings
+and shortcuts are unchanged; Pyre Loot Filter's mouse pickup override uses keyboard Ctrl.
 
 Use `/qol perf` for a read-only performance report in the plugin log. Run it
 before and after a 30-60 second test. Supported main settings and skill profiles
@@ -17,7 +17,7 @@ reload automatically or through `/qol reload`; invalid edits retain the last
 valid settings, and hook/binding changes still require a restart.
 
 Live checks include the red portal and quest-chest interaction fixes, single-press
-skill allocation, and loot-label/held-shortcut performance alongside UnHoarder.
+skill allocation, and loot-label/held-shortcut performance alongside Pyre Loot Filter.
 Automated checks pass; complete hosted, pickup and settings-reload acceptance
 remains open. See the [validation guide](docs/VALIDATION.md) for the tested scope.
 

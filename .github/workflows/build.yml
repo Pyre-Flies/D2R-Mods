@@ -16,7 +16,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        plugin: [controller-qol, item-roll-ranges, map-assistance, inventory-deposit, floating-damage, always-show-sockets, gem-bag-ui, day-night-cycle]
+        plugin: [controller-qol, item-roll-ranges, map-assistance, inventory-deposit, floating-damage, always-show-sockets, gem-bag-ui, day-night-cycle, ultrawide, pyre-lootfilter]
         include:
           - plugin: controller-qol
             dll: Controller QOL Updates.dll
@@ -34,6 +34,10 @@ jobs:
             dll: Gem Bag UI.dll
           - plugin: day-night-cycle
             dll: Day Night Cycle.dll
+          - plugin: ultrawide
+            dll: Ultrawide.dll
+          - plugin: pyre-lootfilter
+            dll: pyre-lootfilter.dll
 
     steps:
       - uses: actions/checkout@v4
@@ -49,16 +53,8 @@ jobs:
         if: matrix.plugin == 'inventory-deposit'
         run: python -m pip install -r plugins/inventory-deposit/requirements-build.txt
 
-      - name: Fetch reviewed UnHoarder for compatibility tests
-        if: matrix.plugin == 'controller-qol'
-        run: python tools/release_companion.py --output companions
-
       - name: Configure
         run: cmake -S "plugins/${{ matrix.plugin }}" -B "build/${{ matrix.plugin }}" -A x64
-
-      - name: Configure exact UnHoarder fixture
-        if: matrix.plugin == 'controller-qol'
-        run: cmake -S plugins/controller-qol -B build/controller-qol -DQOL_UNHOARDER_SOCKET_BATCH_ALT_DLL="${{ github.workspace }}/companions/unhoarder.dll"
 
       - name: Build
         run: cmake --build "build/${{ matrix.plugin }}" --config Release --parallel
@@ -70,7 +66,7 @@ jobs:
         if: matrix.plugin == 'inventory-deposit'
         run: python -m unittest discover -s tools -p test_package_inventory_deposit.py -v
 
-      - name: Test eight-plugin packaging and update-safe archive layout
+      - name: Test ten-plugin packaging and update-safe archive layout
         if: matrix.plugin == 'floating-damage'
         run: python tools/test_package_runtime.py
 

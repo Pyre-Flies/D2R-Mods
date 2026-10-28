@@ -1,5 +1,10 @@
 # Controller QOL changelog
 
+## 1.3.1+rev.95 - 2026-10-28
+
+- Add native ground-loot and label visibility interop with **Pyre Loot Filter** (`pyre-lootfilter.dll`), and admit `pyre-lootfilter` dispatch trampolines and extended register (`r8`?`r15`) RIP-relative wrapper loads.
+- Cut per-frame CPU overhead by ~67% (`0.0498 ms` -> `0.0163 ms/frame`) by avoiding `1,040-byte` `PlacardLease` zero-initialization on tracked ground placards, caching `ReadSettings()` snapshots to eliminate repeated `std::atomic<std::shared_ptr>` spinlocks, ordering widget/vtable guards before mutex acquisitions in `qol_glyphs.cpp`, and skipping idle `D2RCore.dll` byte checks in `HookClientUpdate`.
+
 ## 1.3.1+rev.94 - 2026-10-25
 
 - Prioritize all quest interactables (such as Cain's Gibbet, Inifuss Tree, Wirt's Body, Horadric Malus, Tainted Sun Altar, Horadric/Khalim chests, Compelling Orb, Hellforge, Diablo Seals, Ancients' Altar, Frozen Anya, and pre-activation Cairn Stones / Horadric Staff orifice / Arcane Tome) and act-transition portals over combat skills on `A` and nearby ground loot.

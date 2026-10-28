@@ -1,0 +1,6 @@
+[pyre-lootfilter]
+enabled = true
+auto_reload = true
+alt_pickup_override = true
+minimap_icons = true
+drop_sounds = true

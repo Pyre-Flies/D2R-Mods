@@ -45,7 +45,7 @@ inline bool ValidateStructural(const QolChatForwarding::Memory& memory,uintptr_t
     // Locate RIP-relative load (48 8B 05 disp32) or RIP-indirect call (FF 15 disp32) in wrapper
     bool foundSlot=false;
     for(size_t i=0;i+7<=sizeof(wrapper);++i) {
-        if(wrapper[i]==0x48 && wrapper[i+1]==0x8b && wrapper[i+2]==0x05) {
+        if((wrapper[i]==0x48 || wrapper[i]==0x4c) && wrapper[i+1]==0x8b && (wrapper[i+2]&0xc7)==0x05) {
             int32_t slotDisp{};std::memcpy(&slotDisp,wrapper+i+3,4);
             if(Relative(destination+i+7,slotDisp,slotAddress)) {foundSlot=true;break;}
         } else if(wrapper[i]==0xff && wrapper[i+1]==0x15) {
@@ -139,16 +139,17 @@ inline bool Compatible(uintptr_t game,const unsigned char* expected,size_t size)
 // code site gains this additional admission; all other guards stay exact.
 inline bool Check(const D2RL::PluginContext* ctx,uintptr_t rva,const unsigned char* expected,size_t size) noexcept {
     if(!ctx)return false;
+    if(size<=UINT32_MAX && ctx->CheckExpectedBytes(rva,expected,static_cast<uint32_t>(size)))return true;
     if(rva==Rva && Compatible(ctx->exeBase,expected,size)) {
         static std::atomic<bool> logged{};
         if(!logged.exchange(true))ctx->LogInfo("[QOL/ItemCode] Verified admitted UnHoarder forwarding hook; native item-code calls preserved.");
         return true;
     }
-    return size<=UINT32_MAX && ctx->CheckExpectedBytes(rva,expected,static_cast<uint32_t>(size));
+    return false;
 }
 inline bool Match(uintptr_t base,uintptr_t rva,const unsigned char* expected,size_t size) noexcept {
-    if(rva==Rva && Compatible(base,expected,size))return true;
-    __try {return base && base<=UINTPTR_MAX-rva && !std::memcmp(reinterpret_cast<const void*>(base+rva),expected,size);}
+    __try {if(base && base<=UINTPTR_MAX-rva && !std::memcmp(reinterpret_cast<const void*>(base+rva),expected,size))return true;}
     __except(EXCEPTION_EXECUTE_HANDLER) {return false;}
+    return rva==Rva && Compatible(base,expected,size);
 }
 }

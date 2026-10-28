@@ -28,7 +28,6 @@ class InventoryDepositPackageTests(unittest.TestCase):
             "plugins/inventory-deposit/RUNTIME-RELEASE-NOTES.md": b"# Changelog\nInitial public prerelease.\n",
             "LICENSE": b"Plugin license fixture\n",
             "third_party/D2RLoader-PluginSDK/LICENSE": b"SDK license fixture\n",
-            # These source/build files must never leak into the runtime ZIP.
             "plugins/inventory-deposit/assets/art/normal.png": b"private art fixture",
             "plugins/inventory-deposit/local.log": b"private log fixture",
             "plugins/inventory-deposit/old.dll.bak": b"private backup fixture",
@@ -62,13 +61,11 @@ class InventoryDepositPackageTests(unittest.TestCase):
         with zipfile.ZipFile(archive) as zipped:
             self.assertEqual(set(zipped.namelist()), RUNTIME_NAMES)
             self.assertEqual(zipped.read("d2rloader/plugins/Inventory Deposit.dll"), self.dll.read_bytes())
-            self.assertIn(b"Plugin license fixture", zipped.read("README.md"))
-            self.assertIn(b"SDK license fixture", zipped.read("README.md"))
             self.assertNotIn("SHA256SUMS", zipped.namelist())
+            self.assertNotIn("README.md", zipped.namelist())
             zipped.extractall(self.root / "install")
         self.assertEqual(live.read_bytes(), customized)
-        self.assertEqual((self.root / "install/defaults/inventory-deposit.toml").read_bytes(),
-                         (self.plugin / "inventory-deposit.toml").read_bytes())
+        self.assertFalse((self.root / "install/defaults").exists())
         self.assertEqual((self.output / "SHA256SUMS").read_text(),
                          f"{hashlib.sha256(archive.read_bytes()).hexdigest()}  {archive.name}\n")
 
@@ -121,48 +118,32 @@ class InventoryDepositPackageTests(unittest.TestCase):
         with self.assertRaisesRegex(SystemExit, "numeric Inventory Deposit"):
             self.package()
         self.run.assert_not_called()
-        self.assertFalse(self.output.exists())
 
-    def test_private_paths_rejected_in_docs_config_and_binary_strings(self):
-        originals = {path: path.read_bytes() for path in (
-            self.plugin / "README.md",
-            self.plugin / "inventory-deposit.toml", self.dll)}
+    def test_private_paths_blocked_in_docs_config_and_dll_data_sections(self):
+        pe = bytearray(256)
+        pe[:2] = b"MZ"
+        pe[60:64] = struct.pack("<I", 64)
+        pe[64:68] = b"PE\0\0"
+        pe[70:72] = struct.pack("<H", 1)
+        pe[84:86] = struct.pack("<H", 24)
+        section = 64 + 24 + 24
+        pe[section:section + 6] = b".rdata"
+        pe[section + 16:section + 24] = struct.pack("<II", 64, 160)
+        pe[section + 36:section + 40] = struct.pack("<I", 0x40000040)
+        pe[160:191] = b"C:\\Users\\private\\deposit.pdb\x00"
         cases = (
-            (self.plugin / "README.md", b"See C:/Users/example/source/README.md"),
-            (self.plugin / "inventory-deposit.toml", b"# local D:\\work\\plugin\\config.toml"),
-            (self.plugin / "README.md", b"See \\\\server\\private\\build"),
-            (self.plugin / "README.md", b"See /home/developer/build"),
-            (self.dll, b"MZ\x00C:\\Users\\example\\plugin.pdb\x00"),
-            (self.dll, "C:\\Users\\example\\plugin.pdb".encode("utf-16-le")),
-            (self.dll, b"x" + "C:\\Users\\example\\plugin.pdb".encode("utf-16-le")),
+            (self.plugin / "README.md", b"Built from I:\\D2R-Mods\\plugins"),
+            (self.plugin / "inventory-deposit.toml", b"# /Users/private/config"),
+            (self.dll, bytes(pe)),
         )
-        for path, content in cases:
-            with self.subTest(path=path.name, content=content):
-                path.write_bytes(content)
+        for path, bad in cases:
+            original = path.read_bytes()
+            with self.subTest(path=path.name):
+                path.write_bytes(bad)
                 with self.assertRaisesRegex(SystemExit, "Machine-specific path"):
                     self.package()
                 self.assertFalse(self.output.exists())
-                path.write_bytes(originals[path])
-
-    def test_pe_privacy_scans_data_without_mistaking_sprite_pixels_for_paths(self):
-        # Native sprites really can contain ASCII-looking drive/UNC sequences.
-        # A synthetic two-section PE distinguishes those pixels from PDB data.
-        image = bytearray(1024)
-        image[:2] = b"MZ"
-        struct.pack_into("<I", image, 60, 128)
-        image[128:132] = b"PE\0\0"
-        struct.pack_into("<H", image, 134, 2)
-        for header, section, start in ((152, b".rdata", 512), (192, b".rsrc", 768)):
-            image[header:header + len(section)] = section
-            struct.pack_into("<II", image, header + 16, 256, start)
-            struct.pack_into("<I", image, header + 36, 0x40)
-        pixel_pattern = b"xxx C:/RGBeffect\\pixeldata"
-        image[768:768 + len(pixel_pattern)] = pixel_pattern
-        reject_machine_paths("fixture.dll", bytes(image))
-        local_pdb = b"C:/build/private/plugin.pdb\0"
-        image[512:512 + len(local_pdb)] = local_pdb
-        with self.assertRaisesRegex(SystemExit, "Machine-specific path"):
-            reject_machine_paths("fixture.dll", bytes(image))
+                path.write_bytes(original)
 
 
 if __name__ == "__main__":

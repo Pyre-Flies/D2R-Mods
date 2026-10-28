@@ -6,9 +6,10 @@ plugin's `src/` and `tests/` first; historical records are opt-in (`rg --no-igno
 
 ## Ownership and safety
 
-- `plugins/` contains the eight production plugins listed in README.md. Keep
-  experiments and diagnostics in the separate D2R-Mods-Research repository.
-- UnHoarder and Buff HUD have independent forks; see
+- `plugins/` contains the ten production plugins listed in README.md plus shared
+  helpers in `plugins/shared/`. Keep experiments and diagnostics in the separate
+  D2R-Mods-Research repository.
+- Buff HUD is maintained in its independent companion fork; see
   [companion sources](docs/COMPANION-SOURCES.md).
 - Treat native addresses, RVAs, signatures, layouts, provider hashes and ABIs as
   build-specific. Record new native paths, guards, offsets and contracts in the

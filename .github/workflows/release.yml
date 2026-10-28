@@ -24,11 +24,11 @@ jobs:
       - name: Install Inventory Deposit artwork converter dependency
         run: python -m pip install -r plugins/inventory-deposit/requirements-build.txt
 
-      - name: Fetch reviewed UnHoarder for compatibility tests
+      - name: Fetch reviewed Buff HUD companion package
         run: python tools/release_companion.py --output companions
 
       - name: Configure Controller QOL Updates
-        run: cmake -S plugins/controller-qol -B build/controller-qol -A x64 -DQOL_UNHOARDER_SOCKET_BATCH_ALT_DLL="${{ github.workspace }}/companions/unhoarder.dll"
+        run: cmake -S plugins/controller-qol -B build/controller-qol -A x64
 
       - name: Build Controller QOL Updates
         run: cmake --build build/controller-qol --config Release --parallel
@@ -108,6 +108,15 @@ jobs:
       - name: Test Ultrawide
         run: ctest --test-dir build/ultrawide -C Release --output-on-failure
 
+      - name: Configure Pyre Loot Filter
+        run: cmake -S plugins/pyre-lootfilter -B build/pyre-lootfilter -A x64
+
+      - name: Build Pyre Loot Filter
+        run: cmake --build build/pyre-lootfilter --config Release --parallel
+
+      - name: Test Pyre Loot Filter
+        run: ctest --test-dir build/pyre-lootfilter -C Release --output-on-failure
+
       - name: Test update-safe archive layout
         run: python -m unittest discover -s tools -p "test_package*.py" -v
 
@@ -129,6 +138,9 @@ jobs:
           --day-night-artifact-verifier "build/day-night-cycle/Release/day-night-artifact-tests.exe"
           --ultrawide-dll "build/ultrawide/Release/Ultrawide.dll"
           --ultrawide-artifact-verifier "build/ultrawide/Release/ultrawide-artifact-tests.exe"
+          --pyre-lootfilter-dll "build/pyre-lootfilter/Release/pyre-lootfilter.dll"
+          --pyre-lootfilter-artifact-verifier "build/pyre-lootfilter/Release/pyre-lootfilter-artifact-tests.exe"
+          --buffhud-runtime-zip "companions/Buff-HUD-1.1.2-PyreFly.zip"
           --output dist
 
       - name: Upload workflow artifacts

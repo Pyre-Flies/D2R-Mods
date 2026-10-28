@@ -9,15 +9,15 @@ import re
 import struct
 import subprocess
 
-from package_runtime import make_archive, read_version, require_file, runtime_readme
+from package_runtime import (
+    make_archive, read_version, require_file, validate_plugin_docs_and_configs,
+)
 
 
 REPOSITORY = Path(__file__).resolve().parents[1]
 CORE_SHA256 = "2A868D013D2E0830BD2D9E04B918B19E46A73CF726C833E70D089B948FDEB5A2"
 RUNTIME_NAMES = frozenset({
     "d2rloader/plugins/Inventory Deposit.dll",
-    "defaults/inventory-deposit.toml",
-    "README.md",
 })
 MACHINE_PATH = re.compile(
     r"(?<![A-Za-z0-9])[A-Za-z]:[/\\]|\\\\[A-Za-z0-9][^\s\\]*\\|/(?:Users|home)/",
@@ -26,14 +26,10 @@ MACHINE_PATH = re.compile(
 
 
 def reject_machine_paths(name: str, content: bytes) -> None:
-    if name.lower().endswith(".bin"):
+    if name.lower().endswith((".bin", ".flac")):
         return
     regions = [content]
     if name.endswith(".dll") and len(content) >= 64 and content.startswith(b"MZ"):
-        # The artifact verifier has already admitted this PE. Inspect its data
-        # sections (including CodeView/PDB strings), not executable instructions
-        # or sprite pixels that can coincidentally resemble ASCII paths. The
-        # embedded config's source is checked separately below.
         pe = struct.unpack_from("<I", content, 60)[0]
         if pe + 24 > len(content) or content[pe:pe + 4] != b"PE\0\0":
             raise SystemExit("Verified DLL has an invalid PE header")
@@ -52,7 +48,6 @@ def reject_machine_paths(name: str, content: bytes) -> None:
                 raise SystemExit("Verified DLL has an invalid data section")
             regions.append(content[start:start + size])
     for region in regions:
-        # Check narrow strings and both possible UTF-16 alignments.
         texts = [region.decode("utf-8", errors="replace")]
         texts.extend(region[alignment:].decode("utf-16-le", errors="replace")
                      for alignment in (0, 1))
@@ -74,14 +69,13 @@ def package_inventory_deposit(dll: Path, verifier: Path, output: Path,
     dll_bytes = require_file(dll)
     if not verifier.is_file():
         raise SystemExit(f"Artifact verifier does not exist: {verifier}")
+    validate_plugin_docs_and_configs(plugin, repository, "inventory-deposit.toml")
     subprocess.run([str(verifier.resolve()), str(dll.resolve())], check=True)
     if require_file(dll) != dll_bytes:
         raise SystemExit("DLL changed while its artifact verification was running")
 
     files = {
         "d2rloader/plugins/Inventory Deposit.dll": dll_bytes,
-        "defaults/inventory-deposit.toml": require_file(plugin / "inventory-deposit.toml"),
-        "README.md": runtime_readme(plugin, repository),
     }
     if files.keys() != RUNTIME_NAMES:
         raise SystemExit("Unexpected Inventory Deposit runtime contents")

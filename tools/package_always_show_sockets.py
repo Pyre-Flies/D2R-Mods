@@ -8,7 +8,7 @@ import subprocess
 import zipfile
 
 ROOT=Path(__file__).resolve().parents[1]
-NAMES={'d2rloader/plugins/Always Show Sockets.dll','defaults/always-show-sockets.toml','README.md'}
+NAMES={'d2rloader/plugins/Always Show Sockets.dll'}
 MACHINE=re.compile(r'(?<![A-Za-z0-9])[A-Za-z]:[/\\]|\\\\[A-Za-z0-9][^\s\\]*\\|/(?:Users|home)/',re.I)
 def privacy(name,data):
     regions=[data]
@@ -42,13 +42,12 @@ def package(dll,verifier,output,tag=None,root=ROOT):
     plugin=root/'plugins/always-show-sockets'
     version=re.search(r'\.version="([^"]+)"',(plugin/'src/plugin.cpp').read_text()).group(1)
     validate_version(version,tag)
+    from package_runtime import make_archive,validate_plugin_docs_and_configs
+    validate_plugin_docs_and_configs(plugin,root,'always-show-sockets.toml')
     original=dll.read_bytes()
     subprocess.run([str(verifier.resolve()),str(dll.resolve())],check=True)
     if dll.read_bytes()!=original:raise ValueError('DLL changed during verification')
-    from package_runtime import make_archive,runtime_readme
-    files={'d2rloader/plugins/Always Show Sockets.dll':original,
-           'defaults/always-show-sockets.toml':(plugin/'always-show-sockets.toml').read_bytes(),
-           'README.md':runtime_readme(plugin,root)}
+    files={'d2rloader/plugins/Always Show Sockets.dll':original}
     assert files.keys()==NAMES
     for name,data in files.items():privacy(name,data)
     output.mkdir(parents=True,exist_ok=True)

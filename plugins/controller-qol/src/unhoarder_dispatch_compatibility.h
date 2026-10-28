@@ -46,7 +46,7 @@ inline bool ExecutableImageFor(QolChatForwarding::ImageMemory& image,uintptr_t t
         return result>=0 && std::memcmp(digest,textHash,sizeof(digest))==0;
     } catch(...) {return false;}
 }
-inline bool ValidateStructural(const QolChatForwarding::Memory& memory,uintptr_t game,uintptr_t companion,
+inline bool ValidateDispatchTrampolineOnly(const QolChatForwarding::Memory& memory,uintptr_t game,uintptr_t companion,
     const unsigned char* original,size_t size) noexcept {
     using namespace QolChatForwarding;
     if(!memory.read || !original || size<32 || size>4096 || !game || !companion ||
@@ -69,7 +69,7 @@ inline bool ValidateStructural(const QolChatForwarding::Memory& memory,uintptr_t
         if(wrapper[i]==0xff && wrapper[i+1]==0x15) {
             int32_t slotDisp{};std::memcpy(&slotDisp,wrapper+i+2,4);
             (void)Relative(destination+i+6,slotDisp,slotAddress);
-        } else if(wrapper[i]==0x48 && wrapper[i+1]==0x8b && wrapper[i+2]==0x05) {
+        } else if((wrapper[i]==0x48 || wrapper[i]==0x4c) && wrapper[i+1]==0x8b && (wrapper[i+2]&0xc7)==0x05) {
             int32_t slotDisp{};std::memcpy(&slotDisp,wrapper+i+3,4);
             (void)Relative(destination+i+7,slotDisp,slotAddress);
         }
@@ -80,11 +80,23 @@ inline bool ValidateStructural(const QolChatForwarding::Memory& memory,uintptr_t
             if(resume==address+5) {matchedTrampoline=true;break;}
         }
     }
-    return matchedTrampoline && QolItemCode::ValidateStructural(memory,game,companion);
+    return matchedTrampoline;
+}
+inline bool ValidateStructural(const QolChatForwarding::Memory& memory,uintptr_t game,uintptr_t companion,
+    const unsigned char* original,size_t size) noexcept {
+    return ValidateDispatchTrampolineOnly(memory,game,companion,original,size) &&
+           QolItemCode::ValidateStructural(memory,game,companion);
 }
 inline bool Check(const D2RL::PluginContext* context,const unsigned char* original,size_t size) noexcept {
     if(!context || !original || size>UINT32_MAX)return false;
     if(context->CheckExpectedBytes(Rva,original,static_cast<uint32_t>(size)))return true;
+    if(const auto pyre=GetModuleHandleW(L"pyre-lootfilter.dll")) {
+        QolChatForwarding::ImageMemory pyreImage{};
+        if(pyreImage.Open(pyre) &&
+           context->CheckExpectedBytes(QolItemCode::Rva,QolItemCode::Original,sizeof(QolItemCode::Original)) &&
+           ValidateDispatchTrampolineOnly(pyreImage.Reader(),context->exeBase,reinterpret_cast<uintptr_t>(pyre),original,size))
+            return true;
+    }
     const auto module=GetModuleHandleW(L"unhoarder.dll");
     QolChatForwarding::ImageMemory image{};
     if(!module || !image.Open(module))return false;

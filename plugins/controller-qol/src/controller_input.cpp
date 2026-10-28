@@ -223,6 +223,9 @@ bool IsRightBumperPressed() noexcept {
 
 bool IsGroundPickupActive(const char* button) noexcept {
     if (!button || button[0] == '\0') return IsLeftBumperPressed();
+    if ((button[0] == 'l' || button[0] == 'L') && (button[1] == 'b' || button[1] == 'B') && button[2] == '\0') {
+        return IsLeftBumperPressed();
+    }
     if (_stricmp(button, "lb") == 0 || _stricmp(button, "l1") == 0 || _stricmp(button, "bumper") == 0) {
         return IsLeftBumperPressed();
     }

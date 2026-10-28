@@ -1,8 +1,8 @@
 # Publishing releases
 
-The stable suite contains nine first-party plugins and two separately maintained
-companions. The [repository README](../README.md) lists current versions;
-`release-companions.json` pins the exact companion packages and payload hashes.
+The stable suite contains ten first-party plugins and the separately maintained
+Buff HUD companion. The [repository README](../README.md) lists current versions;
+`release-companions.json` pins the exact companion package and payload hashes.
 Experimental and diagnostic plugins stay in D2R-Mods-Research.
 
 ## Prepare
@@ -16,36 +16,32 @@ Experimental and diagnostic plugins stay in D2R-Mods-Research.
 4. Run the relevant packaging checks:
 
    ```powershell
-   python tools/test_package_runtime.py
-   python tools/test_package_inventory_deposit.py
+   python -m unittest discover -s tools -p "test_package*.py" -v
    ```
 
 Use the packaging tool's `--help` for required DLL, artifact-verifier and output
-arguments. Write candidate ZIPs to scratch. Packages use the plugin's canonical
-README.md, installable runtime files, required notices and reference TOMLs under
-`defaults/`. Keep engineering notes and changelogs in source. Keep checksums
-beside the ZIPs. Verify extraction layout, metadata, ABI, exports and hashes;
-scan public text for private paths and credentials.
+arguments. Write candidate ZIPs to scratch. Runtime ZIPs contain only the direct
+installable files (`d2rloader/plugins/<Plugin>.dll`, plus `d2rloader/data/hd/tc22sh/*.bin`
+for Ultrawide and `Reimagined.mpq/data/...` sound assets for Pyre Loot Filter) so
+both the D2R Reimagined Launcher's **Install Plugin/Zip** and manual drag-and-drop
+work with zero leftover files. Keep checksums beside the ZIPs. Verify extraction
+layout, metadata, ABI, exports and hashes; scan public text for private paths and credentials.
 
 ## Publish and verify
 
 Publish only authorized scope. Staging files alone does not authorize a push or release.
 Stable suite tags follow `release-YYYY.MM.DD.N`; plugin revisions are independent.
-The `release` workflow builds/tests/packages the nine first-party plugins.
+The `release` workflow builds/tests/packages the ten first-party plugins and stages
+the verified Buff HUD companion package.
 GitHub Actions' `build/` and `dist/` directories are disposable runner output.
 Retained prerelease workflows support their historical tag conventions.
 
-UnHoarder and Buff HUD are released from their own forks. Use the exact companion
-ZIPs pinned in `release-companions.json`; QOL companion admission can depend on the
-DLL hash or structural profile, so an arbitrary rebuild is not interchangeable. Buff HUD requires its
-DLL and MPQ together. Preserve source attribution and required notices.
-UnHoarder's Reimagined package supplies sound tables; preserve pack-specific fields
-when applying sound routing to another pack. See [companion sources](COMPANION-SOURCES.md).
+Buff HUD is released from its own fork (`Pyre-Flies/d2rl-buff-hud`) and pinned in
+`release-companions.json`. Buff HUD requires its DLL and MPQ together. Preserve
+source attribution and required notices. See [companion sources](COMPANION-SOURCES.md).
 
-After the nine-plugin workflow succeeds, attach the two verified companion ZIPs
-and regenerate adjacent `SHA256SUMS` for all eleven runtime ZIPs. Confirm the tag
-commit, workflow outcome and release status. Download the published assets and
-verify archive hashes, contents, payload hashes and metadata before promotion.
+Confirm the tag commit, workflow outcome and release status. Download the published
+assets and verify archive hashes, contents, payload hashes and metadata before promotion.
 A successful build or deployment is not new live-game acceptance.
 
 ## Promote and clean

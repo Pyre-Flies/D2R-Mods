@@ -1,4 +1,4 @@
-"""Fetch the exact reviewed Unhoarder package; never substitute a CI rebuild."""
+"""Fetch and verify the exact reviewed Buff HUD companion package."""
 from pathlib import Path, PurePosixPath
 import argparse
 import hashlib
@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def manifest(root=ROOT):
-    return json.loads((root / "release-companions.json").read_text(encoding="utf-8"))["unhoarder"]
+    return json.loads((root / "release-companions.json").read_text(encoding="utf-8"))["buffhud"]
 
 
 def digest(data):
@@ -21,7 +21,7 @@ def digest(data):
 
 def verify(data, expected):
     if digest(data) != expected["sha256"]:
-        raise ValueError("Unhoarder archive identity mismatch")
+        raise ValueError("Buff HUD archive identity mismatch")
     with zipfile.ZipFile(io.BytesIO(data)) as archive:
         names = archive.namelist()
         if len(names) != len(set(names)) or archive.testzip() is not None:
@@ -32,20 +32,15 @@ def verify(data, expected):
                 raise ValueError("Unsafe companion archive path")
             if name.lower().startswith("d2rloader/config/") or name.lower().endswith(".toml"):
                 raise ValueError("Companion must preserve active configuration")
-        dlls = [name for name in names if name.lower().endswith(".dll")]
-        if dlls != ["d2rloader/plugins/unhoarder.dll"]:
-            raise ValueError("Companion must contain exactly its own plugin")
-        dll = archive.read(dlls[0])
+        expected_entries = {"d2rloader/plugins/d2rl-buff-panel.dll", "d2rloader/plugins/d2rl-buff-panel.mpq"}
+        if set(names) != expected_entries:
+            raise ValueError("Companion must contain only d2rl-buff-panel.dll and d2rl-buff-panel.mpq")
+        dll = archive.read("d2rloader/plugins/d2rl-buff-panel.dll")
         if digest(dll) != expected["dllSha256"]:
-            raise ValueError("Unreviewed Unhoarder DLL")
-        for folder in ("excel", "excel_launcher_clean"):
-            table = archive.read(f"Reimagined.mpq/data/global/{folder}/sounds.txt")
-            if digest(table) != expected["soundsSha256"]:
-                raise ValueError("Unreviewed sound table")
-        for line in archive.read("SHA256SUMS").decode("utf-8").splitlines():
-            checksum, name = line.split("  ", 1)
-            if digest(archive.read(name)) != checksum:
-                raise ValueError("Companion internal checksum mismatch")
+            raise ValueError("Unreviewed Buff HUD DLL")
+        mpq = archive.read("d2rloader/plugins/d2rl-buff-panel.mpq")
+        if digest(mpq) != expected["mpqSha256"]:
+            raise ValueError("Unreviewed Buff HUD MPQ")
         return dll
 
 
@@ -77,8 +72,8 @@ def main():
     dll = verify(data, expected)
     args.output.mkdir(parents=True, exist_ok=True)
     (args.output / expected["asset"]).write_bytes(data)
-    (args.output / "unhoarder.dll").write_bytes(dll)
-    print("Verified Unhoarder package and exact native compatibility artifact.")
+    (args.output / "d2rl-buff-panel.dll").write_bytes(dll)
+    print("Verified Buff HUD companion package and exact native artifacts.")
 
 
 if __name__ == "__main__":

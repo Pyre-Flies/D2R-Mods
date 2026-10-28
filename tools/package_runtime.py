@@ -1,4 +1,4 @@
-"""Create the installable runtime ZIPs for a D2R-Mods GitHub release."""
+"""Create the lean installable runtime ZIPs for a D2R-Mods GitHub release."""
 
 from __future__ import annotations
 
@@ -25,6 +25,8 @@ def check_public_text(name: str, data: bytes) -> None:
     """Reject private/workflow text in the curated end-user documents."""
     if not name.lower().endswith((".md", ".txt", ".toml")):
         return
+    if name.lower().endswith("sounds.txt"):
+        return
     text = data.decode("utf-8", errors="replace")
     if re.search(r"\b(?:Codex|ChatGPT|OpenAI)\b|AI[- ](?:assisted|generated|tools?)", text, re.I):
         raise SystemExit(f"Internal tooling reference in runtime document: {name}")
@@ -41,16 +43,20 @@ def make_archive(path: Path, files: dict[str, bytes]) -> None:
             raise SystemExit(f"Unsafe archive path: {name}")
         if name.lower().startswith("d2rloader/config/"):
             raise SystemExit(f"Runtime archives must not overwrite user configuration: {name}")
-        if name.lower().endswith(".toml") and not name.startswith("defaults/"):
-            raise SystemExit(f"Reference config must be under defaults/ (never overwrite user config): {name}")
+        if name.lower().startswith("defaults/") or name.lower().endswith(".toml"):
+            raise SystemExit(f"Runtime archives must be lean (no defaults/ or .toml files): {name}")
+        if name.lower() in ("readme.md", "sha256sums"):
+            raise SystemExit(f"Non-installable file inside runtime archive: {name}")
         if name.lower().endswith(".dll") and not name.startswith("d2rloader/plugins/"):
             raise SystemExit(f"DLL is outside the installable layout: {name}")
-        if name.lower() == "sha256sums":
-            raise SystemExit("Checksums belong alongside runtime ZIPs")
         is_shader = (len(parts) == 5 and
                      name.startswith("d2rloader/data/hd/tc22sh/") and
                      name.lower().endswith(".bin"))
-        if name != "README.md" and not name.lower().endswith((".toml", ".dll")) and not is_shader:
+        is_sound_table = (name == "Reimagined.mpq/data/global/excel/sounds.txt")
+        is_sound_flac = (len(parts) == 7 and
+                         name.startswith("Reimagined.mpq/data/hd/global/sfx/item/") and
+                         name.lower().endswith(".flac"))
+        if not name.lower().endswith(".dll") and not is_shader and not is_sound_table and not is_sound_flac:
             raise SystemExit(f"Unexpected runtime content: {name}")
     from package_inventory_deposit import reject_machine_paths
     for name, content in files.items():
@@ -83,10 +89,9 @@ def require_file(path: Path) -> bytes:
 
 
 def runtime_readme(plugin: Path, repository: Path) -> bytes:
-    """One usage document, with required redistribution notices inline."""
+    """Validate the plugin's public README and required redistribution notices."""
+    from package_inventory_deposit import reject_machine_paths
     text = require_file(plugin / "README.md").decode("utf-8").rstrip()
-    # Repository-relative links become usable from the standalone ZIP. Local
-    # section anchors remain local to its README.
     base = plugin.relative_to(repository).as_posix()
     def public_link(match):
         target = match.group(1)
@@ -99,14 +104,26 @@ def runtime_readme(plugin: Path, repository: Path) -> bytes:
     notices = (b"\n\n## Notices\n\n" + require_file(repository / "LICENSE").strip() +
                b"\n\n### D2RLoader Plugin SDK\n\n" +
                require_file(repository / "third_party/D2RLoader-PluginSDK/LICENSE").strip() + b"\n")
-    return readme + notices
+    combined = readme + notices
+    reject_machine_paths("README.md", combined)
+    check_public_text("README.md", combined)
+    return combined
+
+
+def validate_plugin_docs_and_configs(plugin: Path, repository: Path, *config_names: str) -> None:
+    from package_inventory_deposit import reject_machine_paths
+    runtime_readme(plugin, repository)
+    for cfg in config_names:
+        cfg_path = plugin / cfg
+        if cfg_path.is_file():
+            data = require_file(cfg_path)
+            reject_machine_paths(cfg, data)
+            check_public_text(cfg, data)
 
 
 def package_floating_damage(dll: Path, verifier: Path, output: Path,
                             repository: Path = REPOSITORY) -> Path:
-    """Package the exact verified DLL and its public runtime documentation."""
-    from package_inventory_deposit import reject_machine_paths
-
+    """Package the exact verified DLL into a lean runtime ZIP."""
     plugin = repository / "plugins/floating-damage"
     version = read_version(plugin / "src/plugin.cpp", r'\.version\s*=\s*"([^"]+)"')
     if not re.fullmatch(r"\d+\.\d+\.\d+(?:-beta\.\d+|\+rev\.\d+)", version):
@@ -114,14 +131,14 @@ def package_floating_damage(dll: Path, verifier: Path, output: Path,
     dll_bytes = require_file(dll)
     if not verifier.is_file():
         raise SystemExit(f"Artifact verifier does not exist: {verifier}")
+    validate_plugin_docs_and_configs(plugin, repository, "floating-damage.toml")
     subprocess.run([str(verifier.resolve()), str(dll.resolve())], check=True)
     if require_file(dll) != dll_bytes:
         raise SystemExit("DLL changed while its artifact verification was running")
 
+    from package_inventory_deposit import reject_machine_paths
     files = {
         "d2rloader/plugins/Floating Damage.dll": dll_bytes,
-        "defaults/floating-damage.toml": require_file(plugin / "floating-damage.toml"),
-        "README.md": runtime_readme(plugin, repository),
     }
     for name, content in files.items():
         reject_machine_paths(name, content)
@@ -133,23 +150,23 @@ def package_floating_damage(dll: Path, verifier: Path, output: Path,
 
 def package_verified_plugin(plugin_name: str, display_name: str, dll: Path,
                             verifier: Path, output: Path,
-                            repository: Path = REPOSITORY) -> Path:
+                            repository: Path = REPOSITORY,
+                            dll_filename: str | None = None,
+                            version_pattern: str = r'\.version\s*=\s*"([^"]+)"') -> Path:
     """Package a standalone plugin only after verifying its exact artifact."""
     plugin = repository / "plugins" / plugin_name
-    version = read_version(plugin / "src/plugin.cpp", r'\.version\s*=\s*"([^"]+)"')
+    version = read_version(plugin / "src/plugin.cpp", version_pattern)
     if not re.fullmatch(r"\d+\.\d+\.\d+\+rev\.\d+", version):
         raise SystemExit(f"Expected a numeric {display_name} release version: {version}")
     payload = require_file(dll)
     if not verifier.is_file():
         raise SystemExit(f"Artifact verifier does not exist: {verifier}")
+    validate_plugin_docs_and_configs(plugin, repository, f"{plugin_name}.toml")
     subprocess.run([str(verifier.resolve()), str(dll.resolve())], check=True)
     if require_file(dll) != payload:
         raise SystemExit("DLL changed while its artifact verification was running")
-    files = {f"d2rloader/plugins/{display_name}.dll": payload,
-             "README.md": runtime_readme(plugin, repository)}
-    config = plugin / f"{plugin_name}.toml"
-    if config.is_file():
-        files[f"defaults/{config.name}"] = require_file(config)
+    target_dll = dll_filename or f"{display_name}.dll"
+    files = {f"d2rloader/plugins/{target_dll}": payload}
     shader_dir = plugin / "assets/tc22sh"
     if shader_dir.is_dir():
         shaders = sorted(shader_dir.glob("*.bin"))
@@ -157,6 +174,16 @@ def package_verified_plugin(plugin_name: str, display_name: str, dll: Path,
             raise SystemExit(f"Expected 14 tc22sh shader files in {shader_dir}, found {len(shaders)}")
         for shader in shaders:
             files[f"d2rloader/data/hd/tc22sh/{shader.name}"] = require_file(shader)
+    reimagined_dir = plugin / "assets/reimagined"
+    if reimagined_dir.is_dir():
+        sound_table = reimagined_dir / "data/global/excel/sounds.txt"
+        files["Reimagined.mpq/data/global/excel/sounds.txt"] = require_file(sound_table)
+        flac_dir = reimagined_dir / "data/hd/global/sfx/item"
+        flacs = sorted(flac_dir.glob("Filter*.flac")) if flac_dir.is_dir() else []
+        if len(flacs) != 16:
+            raise SystemExit(f"Expected 16 Filter*.flac files in {flac_dir}, found {len(flacs)}")
+        for flac in flacs:
+            files[f"Reimagined.mpq/data/hd/global/sfx/item/{flac.name}"] = require_file(flac)
     output.mkdir(parents=True, exist_ok=True)
     archive = output / f"{display_name.replace(' ', '-')}-{version}-PyreFly.zip"
     make_archive(archive, files)
@@ -180,7 +207,9 @@ def main() -> None:
     parser.add_argument("--day-night-artifact-verifier", type=Path)
     parser.add_argument("--ultrawide-dll", type=Path)
     parser.add_argument("--ultrawide-artifact-verifier", type=Path)
-    parser.add_argument("--unhoarder-runtime-zip", type=Path)
+    parser.add_argument("--pyre-lootfilter-dll", type=Path)
+    parser.add_argument("--pyre-lootfilter-artifact-verifier", type=Path)
+    parser.add_argument("--buffhud-runtime-zip", type=Path)
     parser.add_argument("--controller-only", action="store_true",
                         help="Package only Controller QOL (for focused prereleases).")
     parser.add_argument("--output", type=Path, required=True)
@@ -193,6 +222,7 @@ def main() -> None:
         "gem_bag_dll", "gem_bag_artifact_verifier",
         "day_night_dll", "day_night_artifact_verifier",
         "ultrawide_dll", "ultrawide_artifact_verifier",
+        "pyre_lootfilter_dll", "pyre_lootfilter_artifact_verifier",
     )
     if not args.controller_only:
         missing = ["--" + name.replace("_", "-") for name in required_suite_args
@@ -208,20 +238,11 @@ def main() -> None:
         controller / "src" / "plugin_main.cpp",
         r'\.version\s*=\s*"([^"]+)"',
     )
-    ranges_version = read_version(
-        ranges / "src" / "plugin.cpp",
-        r'"item-roll-ranges",\s*"Item Roll Ranges",\s*"([^"]+)"',
+    validate_plugin_docs_and_configs(
+        controller, REPOSITORY, "controller-qol-updates.toml", "skill-defaults.toml"
     )
-    map_assistance_version = read_version(
-        map_assistance / "src" / "plugin.cpp",
-        r'\.version\s*=\s*"([^"]+)"',
-    )
-
     controller_files = {
         "d2rloader/plugins/Controller QOL Updates.dll": require_file(args.controller_dll),
-        "defaults/controller-qol-updates.toml": require_file(controller / "controller-qol-updates.toml"),
-        "defaults/controller-qol-skills.toml": require_file(controller / "skill-defaults.toml"),
-        "README.md": runtime_readme(controller, REPOSITORY),
     }
     controller_zip = args.output / (
         f"Controller-QOL-Updates-{controller_version}-PyreFly.zip"
@@ -235,27 +256,30 @@ def main() -> None:
         print(args.output / "SHA256SUMS")
         return
 
+    ranges_version = read_version(
+        ranges / "src" / "plugin.cpp",
+        r'"item-roll-ranges",\s*"Item Roll Ranges",\s*"([^"]+)"',
+    )
+    map_assistance_version = read_version(
+        map_assistance / "src" / "plugin.cpp",
+        r'\.version\s*=\s*"([^"]+)"',
+    )
+    validate_plugin_docs_and_configs(ranges, REPOSITORY, "item-roll-ranges.toml")
     ranges_files = {
         "d2rloader/plugins/Item Roll Ranges.dll": require_file(args.ranges_dll),
-        "defaults/item-roll-ranges.toml": require_file(ranges / "item-roll-ranges.toml"),
-        "README.md": runtime_readme(ranges, REPOSITORY),
     }
     ranges_zip = args.output / f"Item-Roll-Ranges-{ranges_version}-PyreFly.zip"
     make_archive(ranges_zip, ranges_files)
 
+    validate_plugin_docs_and_configs(map_assistance, REPOSITORY, "map-assistance.toml")
     map_assistance_files = {
         "d2rloader/plugins/Map Assistance.dll": require_file(args.map_assistance_dll),
-        "defaults/map-assistance.toml": require_file(map_assistance / "map-assistance.toml"),
-        "README.md": runtime_readme(map_assistance, REPOSITORY),
     }
     map_assistance_zip = args.output / (
         f"Map-Assistance-{map_assistance_version}-PyreFly.zip"
     )
     make_archive(map_assistance_zip, map_assistance_files)
 
-    # Reuse the standalone deposit packager's exact-DLL verification, privacy
-    # checks, embedded-artwork documentation and license contract. Its focused
-    # checksum file is replaced below by the complete suite manifest.
     from package_inventory_deposit import package_inventory_deposit
     inventory_deposit_zip = package_inventory_deposit(
         args.inventory_deposit_dll, args.inventory_deposit_artifact_verifier,
@@ -272,12 +296,19 @@ def main() -> None:
         args.day_night_dll, args.day_night_artifact_verifier, args.output, REPOSITORY)
     ultrawide_zip = package_verified_plugin("ultrawide", "Ultrawide",
         args.ultrawide_dll, args.ultrawide_artifact_verifier, args.output, REPOSITORY)
+    pyre_lootfilter_zip = package_verified_plugin(
+        "pyre-lootfilter", "Pyre Loot Filter",
+        args.pyre_lootfilter_dll, args.pyre_lootfilter_artifact_verifier,
+        args.output, REPOSITORY,
+        dll_filename="pyre-lootfilter.dll",
+        version_pattern=r'PluginVersion\[\]\s*=\s*"([^"]+)"',
+    )
     archives = (controller_zip, ranges_zip, map_assistance_zip,
                 inventory_deposit_zip, floating_damage_zip, sockets_zip,
-                gem_bag_zip, day_night_zip, ultrawide_zip)
-    if args.unhoarder_runtime_zip:
+                gem_bag_zip, day_night_zip, ultrawide_zip, pyre_lootfilter_zip)
+    if args.buffhud_runtime_zip:
         from release_companion import stage
-        archives += (stage(args.unhoarder_runtime_zip, args.output, REPOSITORY),)
+        archives += (stage(args.buffhud_runtime_zip, args.output, REPOSITORY),)
     unexpected = set(args.output.glob("*.zip")) - set(archives)
     if unexpected:
         raise SystemExit("Output contains unrelated ZIPs; use a clean output directory: " +
@@ -290,15 +321,8 @@ def main() -> None:
         )
     )
     (args.output / "SHA256SUMS").write_text(release_sums, encoding="utf-8", newline="\n")
-    print(controller_zip)
-    print(ranges_zip)
-    print(map_assistance_zip)
-    print(inventory_deposit_zip)
-    print(floating_damage_zip)
-    print(sockets_zip)
-    print(gem_bag_zip)
-    print(day_night_zip)
-    print(ultrawide_zip)
+    for archive in archives:
+        print(archive)
     print(args.output / "SHA256SUMS")
 
 

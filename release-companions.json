@@ -1,20 +1,11 @@
 {
-  "unhoarder": {
-    "repository": "Pyre-Flies/d2rl-unhoarder",
-    "tag": "v1.2.16",
-    "asset": "Unhoarder-1.2.16-Reimagined.zip",
-    "sha256": "af9d3df212e5504eb1643811c6293e27b6b3845c7700f620d92596b0773f0734",
-    "dllSha256": "cc9dfc7430089a74d3732b2a3551d9cee05d3517940d34b4795058bf442bd4d7",
-    "soundsSha256": "b9303d841ebc26b22bfb2471c199659d880eac5d456b01c6859dac35c005a8a1",
-    "sourceCommit": "7052ebdb853495643326ebaa017c1a7913b61eba"
-  },
   "buffhud": {
     "repository": "Pyre-Flies/d2rl-buff-hud",
-    "tag": "v1.1.1",
-    "asset": "Buff-HUD-1.1.1-PyreFly.zip",
-    "sha256": "e145facea38df7a4f067bbc603613ac488a74275ad22bf2654dfffc0cd60593a",
-    "dllSha256": "e496ba55b7a08222551cdf8a5e64785b75373c290c63b71cbd0ac862092c8e46",
-    "mpqSha256": "482f0b879b5a378aa2c6d8435fac5f40beb013f4c8f6a2b6667abfc53bf44ec0",
-    "sourceCommit": "e6e04cf0de38d19799b7bd403256ec52251971f2"
+    "tag": "v1.1.2",
+    "asset": "Buff-HUD-1.1.2-PyreFly.zip",
+    "sha256": "63b0b103b1f1064ff74a509f8e77ec9561e54910e4b7de01d17a70e353e7b832",
+    "dllSha256": "caf46a74ce9d07df162d5f7548fce3a34a194015fd950f655159e333d46f53b2",
+    "mpqSha256": "e9faecbd7b05975cb9ec722b3b8c70b42af8a92267691e3d2890cf0c89adb349",
+    "sourceCommit": "a0c212e"
   }
 }
