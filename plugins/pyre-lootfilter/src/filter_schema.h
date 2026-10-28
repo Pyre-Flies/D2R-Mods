@@ -255,6 +255,7 @@ struct Conditions {
     std::vector<std::uint32_t> codes;
     std::vector<std::uint32_t> baseCodes;
     std::vector<std::uint32_t> typeCodes;
+    std::vector<std::uint32_t> tierCodes;
     NumberTest quantity;
     std::vector<std::uint32_t> qualities;
     NumberTest itemLevel;
@@ -274,6 +275,7 @@ struct Conditions {
         if (!codes.empty() && !ContainsSorted(codes, item.code)) return true;
         if (!baseCodes.empty() && !ContainsSorted(baseCodes, item.code)) return true;
         if (!typeCodes.empty() && !ContainsSorted(typeCodes, item.code)) return true;
+        if (!tierCodes.empty() && !ContainsSorted(tierCodes, item.code)) return true;
         return false;
     }
 
@@ -1131,6 +1133,57 @@ inline bool ParseConditions(const Json::Value& value, Conditions& dest,
                 parsed.push_back(0xFFFFFFFFU);
             }
             dest.typeCodes = std::move(parsed);
+        } else if (key == "tier") {
+            const auto parseTier = [](const Json::Value& v, Tables::EquipmentTier& out) noexcept {
+                if (!v.is_string()) return false;
+                std::string lower = v.as_string();
+                for (char& ch : lower) {
+                    if (ch >= 'A' && ch <= 'Z') ch = static_cast<char>(ch + ('a' - 'A'));
+                }
+                if (lower == "normal") {
+                    out = Tables::EquipmentTier::Normal;
+                    return true;
+                }
+                if (lower == "exceptional") {
+                    out = Tables::EquipmentTier::Exceptional;
+                    return true;
+                }
+                if (lower == "elite") {
+                    out = Tables::EquipmentTier::Elite;
+                    return true;
+                }
+                return false;
+            };
+            if (!fieldVal.is_string() && !fieldVal.is_array()) {
+                error = "tier-requires-name-or-names";
+                return false;
+            }
+            if (!tables.EnsureBaseNames(error)) return false;
+            std::vector<std::uint32_t> parsed;
+            const auto appendTier = [&](const Json::Value& elem) -> bool {
+                Tables::EquipmentTier tier{};
+                if (!parseTier(elem, tier)) {
+                    error = "unsupported-tier-name";
+                    return false;
+                }
+                const auto& codes = tables.baseNames.CodesForTier(tier);
+                parsed.insert(parsed.end(), codes.begin(), codes.end());
+                return true;
+            };
+            if (fieldVal.is_array()) {
+                if (fieldVal.empty() || fieldVal.size() > 3) {
+                    error = "tier-array-must-have-1..3-names";
+                    return false;
+                }
+                for (const auto& elem : fieldVal.arrayValues) {
+                    if (!appendTier(elem)) return false;
+                }
+            } else if (!appendTier(fieldVal)) {
+                return false;
+            }
+            std::sort(parsed.begin(), parsed.end());
+            parsed.erase(std::unique(parsed.begin(), parsed.end()), parsed.end());
+            dest.tierCodes = std::move(parsed);
         } else if (key == "rarity") {
             const auto qualityValue = [](const Json::Value& v, std::uint32_t& out) noexcept {
                 if (!v.is_string()) return false;

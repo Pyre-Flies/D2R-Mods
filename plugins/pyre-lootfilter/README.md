@@ -6,7 +6,7 @@ Clean-room native ground loot filter plugin for D2RLoader.
 
 - **100% `filter.json` Compatibility (Schema v1, v2, and v3)**:
   - Loads `d2rloader/config/filter.json` directly.
-  - Supports `code`, `baseName` (`weapons.txt` + `armor.txt`), `itemType` (`itemtypes.txt` hierarchy + `quest` items, with non-fatal warnings for unknown/empty mod categories), `rarity`, `identified`, `ethereal`, `itemLevel`, `sockets`, `quantity`, and `sellPrice`.
+  - Supports `code`, `baseName` (`weapons.txt` + `armor.txt`), `tier` (`normal`, `exceptional`, `elite` from `weapons.txt` + `armor.txt`), `itemType` (`itemtypes.txt` hierarchy + `quest` items, with non-fatal warnings for unknown/empty mod categories), `rarity`, `identified`, `ethereal`, `itemLevel`, `sockets`, `quantity`, and `sellPrice`.
   - Supports `show` / `hide` rules, v3 `continue: true` rule composition, custom item `name`, stack count prefixes (`"12x Item Name"`), `tooltip` (`backgroundColor`, `textColor`, and `borderColor`), `dropSound` (with `.flac` asset fallback), and `minimapIcon` (`circle`, `square`, `diamond`, `triangle`, `triangleDown`, `star`, `spark`, `kite`, `hexagon`, `cross`, `chevron`, `bullseye`).
 - **Lightweight Single-Pass Runtime**:
   - Evaluates each ground item once per `(unitId, filterGeneration)` via SEH-guarded in-process `UnitAny` / `ItemData` / `StatListEx` reads (`UnitEvaluationCache`).

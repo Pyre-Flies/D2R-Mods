@@ -166,13 +166,34 @@ inline fs::path DiscoverExcel(const fs::path& configPath) {
     return {};
 }
 
+enum class EquipmentTier : std::uint8_t {
+    Normal = 0,
+    Exceptional = 1,
+    Elite = 2,
+};
+
 struct BaseNameCatalog {
     std::unordered_map<std::string, std::vector<std::uint32_t>> byName;
+    std::vector<std::uint32_t> normalCodes;
+    std::vector<std::uint32_t> exceptionalCodes;
+    std::vector<std::uint32_t> eliteCodes;
     std::size_t weaponRows{}, armorRows{};
 
     [[nodiscard]] const std::vector<std::uint32_t>* Find(std::string_view name) const {
         const auto it = byName.find(std::string(name));
         return it == byName.end() ? nullptr : &it->second;
+    }
+
+    [[nodiscard]] const std::vector<std::uint32_t>& CodesForTier(EquipmentTier tier) const noexcept {
+        switch (tier) {
+            case EquipmentTier::Exceptional:
+                return exceptionalCodes;
+            case EquipmentTier::Elite:
+                return eliteCodes;
+            case EquipmentTier::Normal:
+            default:
+                return normalCodes;
+        }
     }
 };
 
@@ -183,6 +204,9 @@ inline bool ReadBaseNameTable(const fs::path& path, BaseNameCatalog& out,
     if (!ReadTsvLines(path, lines, headings, error)) return false;
     const auto nameIdx = ColumnIndex(headings, "name");
     const auto codeIdx = ColumnIndex(headings, "code");
+    const auto normIdx = ColumnIndex(headings, "normcode");
+    const auto uberIdx = ColumnIndex(headings, "ubercode");
+    const auto ultraIdx = ColumnIndex(headings, "ultracode");
     if (nameIdx == headings.size() || codeIdx == headings.size()) {
         error = "baseName-table-requires-literal-name-and-code-columns";
         return false;
@@ -206,6 +230,18 @@ inline bool ReadBaseNameTable(const fs::path& path, BaseNameCatalog& out,
             return false;
         }
         out.byName[std::string(name)].push_back(packed);
+
+        const auto normCode = (normIdx < row.size()) ? row[normIdx] : std::string_view{};
+        const auto uberCode = (uberIdx < row.size()) ? row[uberIdx] : std::string_view{};
+        const auto ultraCode = (ultraIdx < row.size()) ? row[ultraIdx] : std::string_view{};
+        if (!ultraCode.empty() && code == ultraCode && ultraCode != normCode) {
+            out.eliteCodes.push_back(packed);
+        } else if (!uberCode.empty() && code == uberCode && uberCode != normCode) {
+            out.exceptionalCodes.push_back(packed);
+        } else {
+            out.normalCodes.push_back(packed);
+        }
+
         if (++rowCount > 4096) {
             error = "baseName-table-over-4096-named-rows";
             return false;
@@ -228,6 +264,13 @@ inline bool LoadBaseNames(const fs::path& excel, BaseNameCatalog& out, std::stri
         std::sort(codes.begin(), codes.end());
         codes.erase(std::unique(codes.begin(), codes.end()), codes.end());
     }
+    const auto sortUnique = [](std::vector<std::uint32_t>& vec) {
+        std::sort(vec.begin(), vec.end());
+        vec.erase(std::unique(vec.begin(), vec.end()), vec.end());
+    };
+    sortUnique(staged.normalCodes);
+    sortUnique(staged.exceptionalCodes);
+    sortUnique(staged.eliteCodes);
     out = std::move(staged);
     return true;
 }

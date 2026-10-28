@@ -32,7 +32,7 @@
 namespace PyreLootFilter {
 namespace {
 
-inline constexpr char PluginVersion[] = "1.0.0+rev.1";
+inline constexpr char PluginVersion[] = "1.0.0+rev.2";
 inline constexpr char CommandHelp[] = "status/reload/perf/on/off/toggle/minimap/sound/alt";
 static_assert(sizeof(CommandHelp) <= 64);
 inline constexpr unsigned ConfigCapacity = 4096U;

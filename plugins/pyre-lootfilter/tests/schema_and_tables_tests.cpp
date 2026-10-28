@@ -64,14 +64,18 @@ int main() {
 
     WriteTextFile(
         excelDir / L"weapons.txt",
-        "name\tcode\ttype\ttype2\tquest\r\n"
-        "Phase Blade\t7cr\tswor\t\t0\r\n"
-        "Khalim's Flail\tqf1\tmace\t\t1\r\n");
+        "name\tcode\tnormcode\tubercode\tultracode\ttype\ttype2\tquest\r\n"
+        "Crystal Sword\tcrs\tcrs\t9cr\t7cr\tswor\t\t0\r\n"
+        "Dimensional Blade\t9cr\tcrs\t9cr\t7cr\tswor\t\t0\r\n"
+        "Phase Blade\t7cr\tcrs\t9cr\t7cr\tswor\t\t0\r\n"
+        "Khalim's Flail\tqf1\tqf1\t\t\tmace\t\t1\r\n");
 
     WriteTextFile(
         excelDir / L"armor.txt",
-        "name\tcode\ttype\ttype2\tquest\r\n"
-        "Monarch\tuit\tshie\t\t0\r\n");
+        "name\tcode\tnormcode\tubercode\tultracode\ttype\ttype2\tquest\r\n"
+        "Kite Shield\tkit\tkit\txit\tuit\tshie\t\t0\r\n"
+        "Dragon Shield\txit\tkit\txit\tuit\tshie\t\t0\r\n"
+        "Monarch\tuit\tkit\txit\tuit\tshie\t\t0\r\n");
 
     WriteTextFile(
         excelDir / L"misc.txt",
@@ -534,6 +538,55 @@ int main() {
                       shapesTable->rules[5].minimapShape == Schema::MinimapShape::Chevron &&
                       shapesTable->rules[6].minimapShape == Schema::MinimapShape::Bullseye,
                   "All extended minimapIcon shapes parse and map to their enum values");
+
+            WriteTextFile(
+                filterPath,
+                R"json({
+  "version": 3,
+  "rules": [
+    {
+      "show": {
+        "ruleName": "Elite bases",
+        "conditions": {
+          "tier": "elite"
+        },
+        "name": "[Elite] {name}"
+      }
+    },
+    {
+      "hide": {
+        "ruleName": "Hide Normal and Exceptional bases",
+        "conditions": {
+          "tier": ["normal", "exceptional"]
+        }
+      }
+    }
+  ]
+})json");
+            const auto tierTable = Schema::LoadFilterRuleTable(filterPath, 102, nullptr);
+            Check(tierTable != nullptr && tierTable->rules.size() == 2,
+                  "tier condition ('elite' and ['normal', 'exceptional']) loads from weapons.txt and armor.txt");
+
+            Schema::ItemFacts eliteSword{};
+            eliteSword.code = Tables::PackCode("7cr");
+            Check(Schema::ResolveDecision(tierTable.get(), eliteSword, dec) && dec.show &&
+                      dec.hasName && std::string_view(dec.name.data()) == "[Elite] {name}",
+                  "Phase Blade (7cr) matches tier: 'elite'");
+
+            Schema::ItemFacts excShield{};
+            excShield.code = Tables::PackCode("xit");
+            Check(Schema::ResolveDecision(tierTable.get(), excShield, dec) && !dec.show,
+                  "Dragon Shield (xit) matches tier: ['normal', 'exceptional'] hide rule");
+
+            Schema::ItemFacts normSword{};
+            normSword.code = Tables::PackCode("crs");
+            Check(Schema::ResolveDecision(tierTable.get(), normSword, dec) && !dec.show,
+                  "Crystal Sword (crs) matches tier: ['normal', 'exceptional'] hide rule");
+
+            Schema::ItemFacts runeItem{};
+            runeItem.code = Tables::PackCode("r30");
+            Check(!Schema::ResolveDecision(tierTable.get(), runeItem, dec),
+                  "Non-equipment misc item (Ber Rune r30) does not match weapon/armor tier rules");
         }
     }
 

@@ -9,7 +9,7 @@ Download individual runtime ZIPs from the
 | Plugin | Version | What it adds |
 | --- | --- | --- |
 | [Controller QOL Updates](plugins/controller-qol/README.md) | `1.3.1+rev.95` | Controller item shortcuts, direct ground looting, menu navigation, and right-stick skill aiming. |
-| [Pyre Loot Filter](plugins/pyre-lootfilter/README.md) | `1.0.0+rev.1` | Clean-room native `filter.json` (v1/v2/v3) ground loot filter with custom label colors, stack prefixes, drop sounds, minimap icons, mouse pickup guard, and Controller QOL visibility interop. |
+| [Pyre Loot Filter](plugins/pyre-lootfilter/README.md) | `1.0.0+rev.2` | Clean-room native `filter.json` (v1/v2/v3) ground loot filter with custom label colors, stack prefixes, drop sounds, minimap icons, mouse pickup guard, and Controller QOL visibility interop. |
 | [Ultrawide](plugins/ultrawide/README.md) | `1.3.5+rev.2` | 21:9 and 32:9 ultrawide viewport support: pillarbox/vignette removal, mouse/placard/automap unclamp, centered or full-length HUD, corner HUD anchoring, 22×22 terrain cache, 7×7 monster pop-in fix, and configurable AI range. |
 | [Item Roll Ranges](plugins/item-roll-ranges/README.md) | `1.3.1+rev.55` | Stat roll ranges, prefix/suffix/runeword/socket source breakdowns, base damage/Defense, item levels (`Ilvl`/`Qlvl`), and max socket capacity. |
 | [Gem Bag UI](plugins/gem-bag-ui/README.md) | `1.3.1+rev.2` | Interactive gem picker for withdrawing gems and one-step shortcut for depositing loose gems and gem clusters. |

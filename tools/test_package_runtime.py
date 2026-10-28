@@ -171,7 +171,7 @@ class TenPluginSuiteTests(FloatingDamagePackageFixture, unittest.TestCase):
             "plugins/ultrawide/src/plugin.cpp": b'.version="1.3.5+rev.2",',
             "plugins/ultrawide/README.md": b"# Ultrawide\n21:9 and 32:9 gameplay.\n",
             "plugins/ultrawide/ultrawide.toml": b"[ultrawide]\nenabled = true\n",
-            "plugins/pyre-lootfilter/src/plugin.cpp": b'inline constexpr char PluginVersion[] = "1.0.0+rev.1";',
+            "plugins/pyre-lootfilter/src/plugin.cpp": b'inline constexpr char PluginVersion[] = "1.0.0+rev.2";',
             "plugins/pyre-lootfilter/README.md": b"# Pyre Loot Filter\nNative loot filter.\n",
             "plugins/pyre-lootfilter/pyre-lootfilter.toml": b"[pyre-lootfilter]\nenabled = true\n",
             "plugins/pyre-lootfilter/assets/reimagined/data/global/excel/sounds.txt": b"sound\tindex\nFilter01\t9999\n",
