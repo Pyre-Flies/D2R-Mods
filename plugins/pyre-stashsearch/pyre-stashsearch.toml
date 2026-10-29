@@ -1,0 +1,9 @@
+# Pyre Stash Search configuration
+[pyre-stashsearch]
+# Keep the side tab flyout expanded across stash opens and game launches.
+tab_flyout_expanded = false
+
+# Optional custom tab names (or right-click any tab in the Side Tab Flyout in-game to rename):
+# tab_name_personal = "Personal"
+# tab_name_shared_1 = "Runes"
+# tab_name_shared_2 = "Bases"

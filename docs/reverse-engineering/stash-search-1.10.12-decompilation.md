@@ -41,23 +41,24 @@
 | 9 | `0x3E2B634` | `SS+0x1b550` | 16 B (`SS+0x14598`) | `FF 25 86 F6 FF FF FF 25 88 F6 FF FF FF 25 8A F6` | Import/delay thunk -> `D2RCore.dll+0x817c40`: `BuildItemFullDescription(UnitAny* item, wchar_t* outBuf, uint64_t maxChars)` |
 | 10 | `0x300A90` | `SS+0x1b558` | 16 B (`SS+0x145a8`) | `48 8B 05 19 F0 9F 01 C3 CC CC CC CC CC CC CC CC` | `GetDataTables() -> sgptDataTables*` (reads `[D2R+0x1cffab0]`) |
 | 11 | `0x3E2B730` | `SS+0x1b560` | 6 B (`SS+0x145b8`) | `FF 25 DA F6 FF FF` | Import/delay thunk -> `D2RCore.dll+0x81f290`: `LookupStringByIndex(uint16_t stringId) -> const char*` |
-| 12 | `0x2C49F0` | `SS+0x1b568` | 32 B (`SS+0x145c0`) | `48 89 5C 24 20 56 41 56 41 57 48 83 EC 40 4C 8B FA 48 8B F1 33 DB E8 0B 2E FE FF 48 8B F0 48 85` | `InventoryGridWidget::GetItemsVector(InventoryGridWidget* grid, std::vector<GridCellItem>* out)` |
-| 13 | `0x5F4B90` | `SS+0x1b570` | *(un-guarded)* | *(resolved at `SS+0xca2a` without byte guard)* | `DrawSolidRect(void* drawCtx, float* rect4, uint32_t rgbaColor, ...)` (draws search box & dimming quads) |
+| 12 | `0x2C49F0` | `SS+0x1b568` | 32 B (`SS+0x145c0`) | `48 89 5C 24 20 56 41 56 41 57 48 83 EC 40 4C 8B FA 48 8B F1 33 DB E8 05 2E FE FF 4C 8B F0 48 85` | `InventoryGridWidget::GetItemAtCell(InventoryGridWidget* grid, const int32_t cellCoord[2]) -> UnitAny*` |
+| 13 | `0x5F4B90` | `SS+0x1b570` | *(un-guarded)* | *(resolved at `SS+0xca2a` without byte guard)* | `GetLocalizedStringByKey(const KeyView* key) -> const char*` (looks up `"LobbySearch"`, `"personal"`, `"shared"`) |
 | 14 | `0x855C90` | `SS+0x1b578` | 16 B (`SS+0x145e0`) | `48 89 5C 24 08 48 89 6C 24 10 48 89 74 24 18 57` | `Widget::FindChild(Widget* parent, const char* childName) -> Widget*` |
 | 15 | `0x23AF50` | `SS+0x1b580` (also `D2RCore+0x700dc0`) | 16 B (`SS+0x145f0`) | `48 89 5C 24 08 57 48 83 EC 20 48 8D 15 3F 9C AA` | `BankPanel::GetSelectedTab(BankPanel* panel) -> uint8_t` (`0` = Personal, `1` = Shared, `2` = Gems, `3` = Materials, `4` = Runes) |
 | 16 | `0x878FB0` | `SS+0x1b588` | 16 B (`SS+0x14600`) | `48 89 5C 24 18 89 54 24 10 55 56 57 48 83 EC 30` | `TabBarWidget::SelectTab(TabBarWidget* tabBar, int tabIndex, bool notify)` |
 | 17 | `0x8562F0` | `SS+0x1b5d8` | 16 B (`SS+0x14610`) | `48 8B C4 48 89 70 20 57 48 81 EC A0 00 00 00 0F` | `Widget::GetScreenPosition(Widget* widget, int32_t outPos[2]) -> int32_t*` |
 | 18 | `0x8562A0` | `SS+0x1b5e0` | 16 B (`SS+0x14620`) | `40 53 48 83 EC 30 80 79 52 00 48 8B DA 74 2A 48` | `Widget::GetRectSize(Widget* widget, int32_t outRect[4]) -> int32_t*` (reads `[widget + 0x70]`) |
 | 19 | `0x86D1B0` | `SS+0x1b5b8` | 32 B (`SS+0x14630`) | `40 53 48 83 EC 20 C7 41 30 00 00 80 3F 33 C0 89 41 2C 0F 57 C0 89 41 3C 48 8B D9 88 41 46 89 41` | `TextStyle::Init(TextStyle* style, uint32_t fontType, const void* colorData)` |
-| 20 | `0x902E20` | `SS+0x1b5c0` | 32 B (`SS+0x14650`) | `48 8B C4 48 89 58 08 48 89 70 10 48 89 78 18 55 41 54 41 55 41 56 41 57 48 8D 68 E8 48 81 EC F0` | `FontRenderer::DrawText(void* renderer, const TextStyle* style, const std::string* utf8Text, float x, float y, ...)` |
-| 21 | `0x903CD0` | `SS+0x1b5c8` | 32 B (`SS+0x14670`) | `48 89 5C 24 08 55 56 57 41 54 41 55 41 56 41 57 48 8D 6C 24 D9 48 81 EC B0 00 00 00 0F 29 74 24` | `FontRenderer::MeasureText(void* renderer, const TextStyle* style, const std::string* utf8Text, ...)` |
-| 22 | `0x657B90` | `SS+0x1b5d0` | 32 B (`SS+0x14690`) | `4C 8B DC 55 53 56 57 41 54 41 56 41 57 49 8D 6B A8 48 81 EC 30 01 00 00 48 8B 05 B9 8C 61 01 48` | `LocalizeStringKey(const char* key, ...) -> const char*` |
+| 20 | `0x902E20` | `SS+0x1b5c0` | 32 B (`SS+0x14650`) | `48 89 5C 24 08 48 89 74 24 10 57 48 83 EC 70 0F 29 74 24 60 49 8B F0 0F 28 F3 48 8B FA 48 8B D9` | `FontRenderer::DrawStyledText(const char* utf8Text, const IntRect* rect, const void* styleBuf, float scale)` |
+| 21 | `0x903CD0` | `SS+0x1b5c8` | 32 B (`SS+0x14670`) | `48 89 5C 24 08 48 89 74 24 10 57 48 83 EC 50 0F 29 74 24 40 49 8B F9 0F 28 F2 48 8B F2 48 8B D9` | `FontRenderer::MeasureStyledText(const char* utf8Text, const void* styleBuf, float scale, const IntRect* rect) -> uint64_t` |
+| 22 | `0x657B90` | `SS+0x1b5d0` | 32 B (`SS+0x14690`) | `44 3B C1 0F 8C D3 02 00 00 4C 8B DC 55 41 54 41 55 41 57 49 8D 6B A8 48 81 EC 38 01 00 00 48 8B` | `DrawSolidRect(int left, int top, int right, int bottom, const float* color4f, int flag)` (draws search box, borders, dropdown, & dimming quads) |
 | 23 | `0x86D489` | *(Interior witness only)* | 31 B (`SS+0x146b0`) | `8B 97 B0 00 00 00 4C 8D 87 B4 00 00 00 48 8D 4C 24 50 4C 89 B4 24 F8 01 00 00 E8 08 FD FF FF 80` | Verifies `TextBoxWidget` style offsets `+0xb0` (dword) and `+0xb4` (struct) passed to `0x86d1b0` |
 | 24 | `0x888B8D` | *(Interior witness only)* | 29 B (`SS+0x146d0`) | `FF 90 C8 00 00 00 0F 28 DF 4C 8D 87 58 06 00 00 48 8D 54 24 48 48 8B 08 E8 76 A2 07 00 48 B8 00` | Verifies renderer vtable call `[rax + 0xc8]` before `0x902e20` (`FontRenderer::DrawText`) |
 | 25 | `0x23B060` | `SS+0x1b590` (also `D2RCore+0x700df0`) | 16 B (`SS+0x146f0`) | `48 83 EC 28 E8 A7 08 00 00 84 C0 74 2D E8 5E 02` | `BankPanel::GetSharedStashPageCount(BankPanel* panel) -> uint64_t` |
 | 26 | `0x23B910` | `SS+0x1b598` (also `D2RCore+0x700dd8`) | 16 B (`SS+0x14700`) | `40 57 48 83 EC 20 48 8D 15 7B 93 AA 01 E8 6E A3` | `BankPanel::IsShowingPreviousLadderSeason(BankPanel* panel) -> bool` (checks `"ShowPreviousLadderSeasonToggle"`) |
 | 27 | `0x23AD80` | `SS+0x1b5a0` (also `D2RCore+0x700e08`) | 16 B (`SS+0x14710`) | `48 89 5C 24 08 48 89 6C 24 10 48 89 74 24 18 57` | `BankPanel::GetSelectedSharedStashRecord(BankPanel* panel) -> SharedStashRecord*` |
 | 28 | `0x23E630` | `SS+0x1b5a8` (also `D2RCore+0x700e20`) | 16 B (`SS+0x14720`) | `48 89 5C 24 10 55 56 57 41 54 41 55 41 56 41 57` | `BankPanel::UpdateActiveStashView(BankPanel* panel, UnitAny* playerUnit)` |
+| 29 | `0x2F5020` | `g_Native.fnGetUnitStat` (extension) | 12 B (`+0x2F502A` tail) | `44 8B C2 48 8B 91 88 00 00 00 33 C0` | `STATLIST_GetUnitStatSigned(UnitAny* unit, uint32_t statId, uint16_t layer) -> int32_t` (tail-guarded at `+0x0A` to coexist with `D2RLoader` entry detour; queried with `statId = 194` (`STAT_ITEM_NUMSOCKETS`), `layer = 0` when `ITEMFLAG_SOCKETED` (`0x800`) is set on `[itemUnit + 0x10] + 0x18`) |
 
 *(Note: 26 RVAs are byte-checked in `SS+0x10500`, and 2 additional RVAs `0x36cfe0` and `0x5f4b90` are resolved into `SS+0x1b548` and `SS+0x1b570` without byte guards.)*
 
@@ -173,7 +174,7 @@ Every frame that `BankPanel::Draw` (`D2R+0x23aa60`) runs:
    - When the dropdown is open, renders up to `N` matching stash items with a scrollbar.
 4. Calls `DimNonMatchingGridItems(bankPanel)` (`SS+0x68D0`):
    - When a search filter is active (`hasQuery != 0`), looks up child `"grid"` (`InventoryGridWidget`) on `bankPanel` via `D2R+0x855c90`.
-   - Reads the grid's screen position (`D2R+0x8562f0`), size (`D2R+0x8562a0`), cell dimensions (`grid + 0x628`, `grid + 0x62c`), and calls `D2R+0x2c49f0` (`InventoryGridWidget::GetItemsVector`).
+   - Reads the grid's screen position (`D2R+0x8562f0`), size (`D2R+0x8562a0`), unscaled integer cell size (`int32_t` `cellSizeX` at `grid + 0x5b8`, `int32_t` `cellSizeY` at `grid + 0x5bc`, e.g., `98x98`), cell counts (`int32_t` `cols` at `grid + 0x628`, `int32_t` `rows` at `grid + 0x62c`), and calls `D2R+0x2c49f0` (`InventoryGridWidget::GetItemAtCell(grid, const int32_t cellCoord[2])`).
    - For each item in the current stash tab, builds its full item tooltip/description string via `D2R+0x3e2b634` (`D2RCore+0x817c40`), strips D2R color codes (`ÿc...`), and checks if it matches the search query.
    - For every item that **does not** match the query, draws a semi-transparent dark overlay rectangle (`0xB4000000`) over its grid cells via `D2R+0x5f4b90`.
 
@@ -199,4 +200,99 @@ Every frame that `BankPanel::Draw` (`D2R+0x23aa60`) runs:
 - Spawns a background thread (`SS+0xBEC0`) that registers window class `"StashSearchHiddenHostWindow"` (`SS+0x14AC8`), creates a message-only host window and a child Win32 `EDIT` control (`"EDIT"`, `SS+0x14B00`) for IME/clipboard/text-editing support, and installs global low-level hooks:
   - `SetWindowsHookExW(WH_MOUSE_LL /*14*/, LowLevelMouseProc /*SS+0xBA90*/, hInst, 0)`
   - `SetWindowsHookExW(WH_KEYBOARD_LL /*13*/, LowLevelKeyboardProc /*SS+0xBC20*/, hInst, 0)`
-- When `BankPanel::Draw` has run within the last `250 ms` (`0xFA` ms check at `SS+0xCB90`), clicking inside the computed search box rectangle focuses the hidden `EDIT` control and intercepts keyboard/mouse wheel input to update the search string and scroll/select dropdown results.
+- **When `BankPanel::Draw` has run within the last `250 ms` (`0xFA` ms check at `SS+0xCB90`)**, clicking inside the computed search box rectangle focuses the hidden `EDIT` control and intercepts keyboard/mouse wheel input to update the search string and scroll/select dropdown results.
+
+### 5. Shared-Page Slash Command (`SS+0xD650`, `SS+0xD3C0`)
+
+- In addition to substring item search, `StashSearch.dll` implements a `/` slash-command parser (`SS+0xD650`, `ParseSlashSharedPageCommand`) that allows jumping directly to a 1-based Shared Stash subpage:
+  - Query does not start with `'/'` (`0x2f`) -> `SlashCommandState::None` (`0`): normal substring item search across Personal + Shared tabs and non-matching grid dimming (`SS+0x68D0`).
+  - Query is `"/"` (or `"/"` followed only by whitespace) -> `SlashCommandState::MissingNumber` (`1`): dropdown shows single row `L"Enter shared page number"` (`SS+0x14930`).
+  - Query is `"/0"` or contains non-digits / overflow (`> 999999`) -> `SlashCommandState::InvalidNumber` (`2`): dropdown shows single row `L"Invalid page number"` (`SS+0x14968`).
+  - Query is `"/<N>"` (`1 <= N <= 999999`) -> `SlashCommandState::ValidPage` (`3`): dropdown shows single row `L"Press Enter to jump to shared page <N>"` (`SS+0x14990`), suppresses non-matching grid dimming in `SS+0x68D0`, and pressing `Enter` or clicking the dropdown row queues a jump to 0-based shared page `N - 1`.
+
+---
+
+## Complete Internal `StashSearch.dll` Function RVA Map
+
+| `StashSearch.dll` RVA | Reconstructed Symbol / Responsibility |
+|---:|---|
+| `0x3080` | `HiddenHostWndProc(HWND, UINT, WPARAM, LPARAM)` — handles custom `WM_APP+1` (`0x8001` focus edit) and `WM_APP+2` (`0x8002` unfocus edit) |
+| `0x3190` | `IsPointInRect(POINT, const RectF&)` — hit-test helper (`x in [l, r)`, `y in [t, b)`) |
+| `0x31E0` | `GetOrCreateEditFont(int pixelHeight)` — caches `CreateFontW("Microsoft YaHei UI", ...)` in `SS+0x1B3D8` |
+| `0x37E0` | `ScanSingleInventoryItems(Inventory*, bool isShared, int sharedTabIndex, const wstring& query, vector<DropdownEntry>&)` |
+| `0x3E30` | `Detour_BankPanelDraw(void* bankPanel)` — main `BankPanel::Draw` hook detour |
+| `0x4190` | `FormatDisplayLabelWithCount(const wstring& baseText, size_t matchCount, bool isSharedCommand)` |
+| `0x4480` | `PointInRectXY(int x, int y, const RectF&)` |
+| `0x44D0` | `ClampScrollOffset(int requested, int totalItems, int maxVisibleRows)` |
+| `0x4510` | `GetScrollbarMetrics(const DropdownLayout&, int totalItems, int maxVisibleRows, int scrollOffset)` |
+| `0x4630` | `ComputeScrollOffsetFromThumbY(int mouseY, float trackTop, float trackHeight, float thumbHeight, int totalItems, int maxVisible)` |
+| `0x46E0` | `ComputeDropdownLayout(const SearchBarLayout&, size_t rowCount)` |
+| `0x4890` | `GetHoveredDropdownRow(const DropdownLayout&, int mouseX, int mouseY, size_t visibleRows)` |
+| `0x4930` | `DrawSolidRectHelper(void* renderCtx, float l, float t, float r, float b, float scaleX, float scaleY, uint32_t color)` |
+| `0x4AF0` | `UpdateInputFocusAndEditWindow()` — synchronizes hidden `EDIT` focus and text when search bar focus changes |
+| `0x4EA0` | `ClearResolvedPointers()` — zeroes `SS+0x1B500..0x1B5E0` |
+| `0x4F70` | `StopInputWorkerThread()` — signals shutdown, posts `WM_QUIT` (`0x12`), joins worker thread (`SS+0x1B3C0`) |
+| `0x5060` | `DestroyHiddenWindowsAndHooks()` — unhooks `WH_MOUSE_LL` / `WH_KEYBOARD_LL`, destroys `EDIT` and host `HWND`, deletes `HFONT` |
+| `0x5210` | `ComputeSearchBarLayout(void* bankPanel)` — resolves `"StashSearchAnchor"`, checks parent opacity chain, computes UI rects |
+| `0x5DC0` | `ResolveFontAndTextStyle(void* bankPanel, void* anchorWidget, uint32_t* outFont, uint8_t* outColor)` |
+| `0x60A0` | `DrawFittedTextInRect(...)` — measures UTF-8 string (`D2R+0x903CD0`), binary-searches suffix/prefix truncation with `"..."` if needed, draws via `D2R+0x902E20` |
+| `0x68D0` | `DimNonMatchingGridItems(void* bankPanel)` — dims non-matching items in `"grid"` (`InventoryGridWidget`) with `0xB4000000` |
+| `0x7980` | `SwitchSharedStashSubpage(void* bankPanel, int pageIndex)` — switches shared stash page and updates `D2RCore.dll+0x700E38` |
+| `0x7BA0` | `ReadEditControlText(HWND editHwnd)` — reads `GetWindowTextLengthW` / `GetWindowTextW`, strips `\r`/`\n`, caps at 80 chars |
+| `0x8120` | `SyncQueryStateFromEditControl(HWND editHwnd)` — updates `SS+0x1B140` (`searchQuery`) under `SRWLOCK` when `EDIT` text changes |
+| `0x87A0` | `RenderSearchBarAndDropdown(void* bankPanel)` — full search box + dropdown list + scrollbar renderer |
+| `0x9A90` | `ScanAllStashesForMatches(const wstring& query, vector<DropdownEntry>&)` — scans Personal Stash + all Shared Stash tabs |
+| `0x9C30` | `EnumWindowsCallback_FindGameWindow(HWND, LPARAM)` — finds largest visible top-level window belonging to current PID |
+| `0x9D40` | `FindGameMainWindow()` — cached wrapper (250 ms TTL at `SS+0x1B4D8`/`0x1B4E0`) around `EnumWindows` |
+| `0x9E40` | `GetLocalizedSearchPlaceholder()` — caches localized `"Search"` string via `D2R+0x657B90` (`SS+0x1B470..0x1B4C8`) |
+| `0xA8E0` | `HandleMouseEvent(UINT msg, const MSLLHOOKSTRUCT*)` — processes `WM_LBUTTONDOWN`, `WM_LBUTTONUP`, `WM_MOUSEMOVE`, `WM_MOUSEWHEEL` |
+| `0xB560` | `HandleKeyboardEvent(UINT msg, const KBDLLHOOKSTRUCT*)` — processes `VK_RETURN`, `VK_ESCAPE`, `VK_BACK`, `Ctrl+A/C/V/X`, and character keys |
+| `0xBA90` | `LowLevelMouseProc(int nCode, WPARAM, LPARAM)` — `WH_MOUSE_LL` callback |
+| `0xBC20` | `LowLevelKeyboardProc(int nCode, WPARAM, LPARAM)` — `WH_KEYBOARD_LL` callback |
+| `0xBEC0` | `InputWorkerThreadProc(LPVOID)` — hidden window & hook message pump thread |
+| `0xC5A0` | `LoadPluginInternal(const D2RL_PluginContext*)` — main plugin initialization |
+| `0xCB90` | `IsStashPanelRecentlyDrawn()` — checks `GetTickCount64() - g_lastBankDrawTick <= 250` |
+| `0xCC20` | `StripColorCodesAndNormalize(wstring_view)` — strips `ÿc` (`\xFF\x63`) color tags and normalizes control chars |
+| `0xD020` | `ToLowerFolded(wstring_view)` — ASCII + `CharLowerBuffW` lowercase folding |
+| `0xD3C0` | `BuildSlashCommandDropdownEntry(SlashCommandState, int targetPage1Based)` |
+| `0xD650` | `ParseSlashSharedPageCommand(wstring_view, int* outPage1Based)` |
+| `0xD800` | `ProcessPendingTabSwitch(void* bankPanel)` — executes queued Personal / Shared tab + subpage navigation |
+| `0xDAB0` | `DeactivateSearchAndCloseDropdown()` — clears focus, dropdown, and drag state when stash panel closes |
+| `0xEB00..0xF2B0` | `__try / __except(EXCEPTION_EXECUTE_HANDLER)` safe native call and memory access wrappers (`SafeCall_GetLocalPlayerUnitId`, `SafeGetItemBaseName`, etc.) |
+| `0xF680` | `RemoveBankPanelHook()` — calls `ctx->hooks->removeHook(ctx, g_hookHandle)` |
+| `0x10220` | `VerifyD2RCoreExports(uintptr_t exeBase, uintptr_t coreBase)` |
+| `0x10500` | `VerifyAllGameSignatures(uintptr_t exeBase)` |
+| `0x117F0` | `D2RLoaderGetPluginInfo()` |
+| `0x11800` | `D2RLoaderLoadPlugin(const D2RL_PluginContext*)` |
+| `0x11850` | `D2RLoaderUnloadPlugin()` |
+
+---
+
+## Reconstructed & Extended C++20 Source Codebase (`pyre-stashsearch`)
+
+A complete, buildable C++20 implementation (`pyre-stashsearch.dll` `1.0.0`) resides in `I:\D2R-Mods\plugins\pyre-stashsearch\`:
+- `I:\D2R-Mods\plugins\pyre-stashsearch\CMakeLists.txt` — CMake build target (`pyre-stashsearch` -> `pyre-stashsearch.dll`) plus `pyre-stashsearch-unit` and `pyre-stashsearch-artifact` test targets.
+- `I:\D2R-Mods\plugins\pyre-stashsearch\src\version.rc` — Embedded `D2RL_PLUGIN_MANIFEST_RESOURCE_ID` (`1001`, `RT_RCDATA`, ABI v3) and `VS_VERSION_INFO` (`1.0.0.0`).
+- `I:\D2R-Mods\plugins\pyre-stashsearch\src\stash_search.h` — Constants, UI layout/scroll math, color-code stripping (`0xCC20`), case folding (`0xD020`), slash-command parser (`0xD650`), and `StashSearchConfig` TOML persistence.
+- `I:\D2R-Mods\plugins\pyre-stashsearch\src\native.h` & `I:\D2R-Mods\plugins\pyre-stashsearch\src\native.cpp` — All `D2R.exe` byte guards (`0x10500`), 7 `D2RCore.dll` pointer table checks (`0x10220`), and SEH-protected native wrappers (`0xEB00..0xF2B0`).
+- `I:\D2R-Mods\plugins\pyre-stashsearch\src\plugin.cpp` — Full plugin lifecycle, `BankPanel::Draw` hook (`0x3E30`), standalone `"BankTabs"` fallback layout (`0x5210`), search bar & dropdown renderer (`0x87A0`), matching item grid highlighter (`0x68D0`), stash scanner (`0x9A90`), shared-stash page jumper (`0x7980`, `0xD800`), expandable Side Tab Flyout with right-click custom tab names, and Win32 input thread (`0xBEC0`).
+- `I:\D2R-Mods\plugins\pyre-stashsearch\tests\unit_tests.cpp` & `I:\D2R-Mods\plugins\pyre-stashsearch\tests\artifact_tests.cpp` — Unit and DLL artifact contract tests.
+
+---
+
+## Newly Discovered `D2R.exe` Item Tooltip & Affix Builder RVAs (Enhanced Stash Search)
+
+| `D2R.exe` RVA | Prologue Guard (16 bytes) | Signature & Role |
+|---:|---|---|
+| `0x02BD480` | `48 8B C4 48 89 58 08 55 56 57 41 54 41 55 41 56` | `BuildFullHoverItemTooltip(uintptr_t playerUnit, uintptr_t itemUnit, ...)` — Top-level hover tooltip builder; calls `0x3E2B634` (`BuildItemFullDescription`), `0x2DA0E0` (`BuildItemStatsString` at `0x2BE16C`), and `0x2BF1B0` (`FormatItemTooltipSection` at `0x2BE6A0`). |
+| `0x02BF1B0` | `48 8B C4 55 53 56 57 41 54 41 55 41 56 41 57 48` | `FormatItemTooltipSection(...)` — Formats tooltip sections and invokes `0x2DA310` (`BuildSocketableStatsString` at `0x2BFD68`) for socketable items. |
+| `0x02DA0E0` | `40 53 55 56 57 41 55 41 56 41 57 48 81 EC 80 04` | `BuildItemStatsString(uintptr_t itemUnit, char* outBuf, int capacity, uint8_t flag1, uintptr_t prefixStr, uintptr_t arg6, ItemStatOptArg* optArg)` — Invokes `D2R.exe+0x3E2B832` (`D2Client_BuildItemPropertiesDescription`) to format all magic/rare/unique/set/crafted/runeword affix lines into `outBuf` (`char[1024]`). |
+| `0x02DA310` | `48 85 D2 0F 84 F0 01 00 00 44 89 4C 24 20 4C 89` | `BuildSocketableStatsString(uintptr_t playerUnit, uintptr_t itemUnit, char* outBuf, int capacity)` — Formats Weapon / Armor / Helm / Shield socketable bonuses for runes, gems, and jewels (`itemType == 4 && itemKind == 5`) into `outBuf` (`char[1024]`). |
+| `0x02F5020` | *(Tail guard at `0x2F502A`: `48 85 C9 74 09 0F B7 D2 FF E0 33 C0 C3`)* | `STATLIST_GetUnitStatSigned(uintptr_t unit, uint32_t statId, uint16_t layer) -> int32_t` — Reads any unit stat (such as `STAT_ITEM_NUMSOCKETS = 194`) even on background shared-stash items whose `BuildItemFullDescription` does not emit `"Socketed (N)"`. |
+| `0x023A730` | `40 55 53 56 57 41 56 48 83 EC 30 45 0F B6 F0 0F` | `BankPanel::StepSharedStashSubpage(uintptr_t bankPanel, uint8_t forward, uint8_t wrap)` — Native shared stash subpage stepper that updates `bankPanel + 0x168` (`0x170` for previous ladder season) and calls `D2R.exe+0x3E2B2F2` (hooked by `D2RCore.dll+0x1C9C09`). |
+| `0x0877D20` | `4C 8B DC ...` | `TabBarWidget::ResolveEnabledTabIndex(uintptr_t tabBar, uint32_t desiredTab, uint8_t forward)` — Reads total tab count at `tabBar + 0x558` (`int32_t`), current selected tab at `tabBar + 0x16C4` (`int32_t`), and per-tab enabled flags at `tabBar + 0x1788 + tabIdx` (`uint8_t`). Called by `TabBarWidget::SelectTab` (`0x878FB0`), which optionally plays UI sound `*(uint32_t*)(tabBar + 0x1550)` via `0x1A0780` when `playSound != 0`. Note that `0x878FB0` executes `int 3` (`swi(3)`) if `desiredTab < 0` or `desiredTab >= *(int32_t*)(tabBar + 0x558)`, and invokes the tab-changed std::function callback at `tabBar + 0x1758` (`target` at `+0x1760`, hooked by `D2RCore.dll+0x1C9D40`). |
+| `0x023E630` | `48 8B C4 55 53 56 57 41 54 41 55 41 56 41 57 48` | `BankPanel::UpdateActiveView(uintptr_t bankPanel, uintptr_t playerUnit)` — Rebinds the active stash view (`0=Personal`, `1=Shared`, `2=Gems`, `3=Materials`, `4=Runes`), toggling `"BankPages"` (`*(uintptr_t*)(bankPanel + 0x278)`), `"grid"` (`*(uintptr_t*)(bankPanel + 0x2A0)`, calling `InventoryGridWidget::ClearAndRebuild` at `0x2AAB40` and `0x2AD2B0`), and `"advancedstash_gems"` / `"advancedstash_materials"` / `"advancedstash_runes"`. Must be invoked **before** `BankPanel::Draw` (`0x23AA60`) on a given frame so child widgets and async HD item texture loads stay coherent. |
+
+
+
+
