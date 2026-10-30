@@ -532,18 +532,25 @@ struct FilterRuleTable {
             out.hasBorderColor = true;
             out.borderColor = rule.borderColor;
         }
-        if (rule.hasDropSound) {
-            out.hasDropSound = true;
-            out.dropSound = rule.dropSound;
-        }
-        if (rule.hasMinimapIcon) {
-            out.hasMinimapIcon = true;
-            out.minimapShape = rule.minimapShape;
-            out.minimapBorderColor = rule.minimapBorderColor;
-            out.minimapFillColor = rule.minimapFillColor;
-            out.minimapSizePx = rule.minimapSizePx;
+        if (rule.show) {
+            if (rule.hasDropSound) {
+                out.hasDropSound = true;
+                out.dropSound = rule.dropSound;
+            }
+            if (rule.hasMinimapIcon) {
+                out.hasMinimapIcon = true;
+                out.minimapShape = rule.minimapShape;
+                out.minimapBorderColor = rule.minimapBorderColor;
+                out.minimapFillColor = rule.minimapFillColor;
+                out.minimapSizePx = rule.minimapSizePx;
+            }
         }
         if (!rule.continueEvaluation) break;
+    }
+    if (!out.show) {
+        out.hasDropSound = false;
+        out.dropSound = {};
+        out.hasMinimapIcon = false;
     }
     return matched;
 }
@@ -1659,32 +1666,34 @@ inline std::shared_ptr<FilterRuleTable> LoadFilterRuleTable(
                     logWarn("LOOT_RULES_REFUSED invalid-dropSound last-valid-rules-preserved=1");
                 return nullptr;
             }
-            bool soundAssetAvailable = true;
-            if (sound.size() == 8 && sound.starts_with("Filter")) {
-                const auto soundExcel = !tables.excelDir.empty()
-                                            ? tables.excelDir
-                                            : Tables::DiscoverExcel(configPath);
-                if (!soundExcel.empty()) {
-                    std::error_code sfxEc;
-                    const auto flacPath = soundExcel.parent_path().parent_path() / L"hd" /
-                                          L"global" / L"sfx" / L"item" / (sound + ".flac");
-                    if (!std::filesystem::is_regular_file(flacPath, sfxEc) || sfxEc) {
-                        soundAssetAvailable = false;
-                        if (logWarn) {
-                            char msg[280]{};
-                            std::snprintf(
-                                msg, sizeof(msg),
-                                "LOOT_SOUND_ASSET_MISSING entry=%zu name='%s' reason=missing-flac-in-mod-data fallback=native-drop-sound",
-                                entryIdx, sound.c_str());
-                            logWarn(msg);
+            if (rule.show) {
+                bool soundAssetAvailable = true;
+                if (sound.size() == 8 && sound.starts_with("Filter")) {
+                    const auto soundExcel = !tables.excelDir.empty()
+                                                ? tables.excelDir
+                                                : Tables::DiscoverExcel(configPath);
+                    if (!soundExcel.empty()) {
+                        std::error_code sfxEc;
+                        const auto flacPath = soundExcel.parent_path().parent_path() / L"hd" /
+                                              L"global" / L"sfx" / L"item" / (sound + ".flac");
+                        if (!std::filesystem::is_regular_file(flacPath, sfxEc) || sfxEc) {
+                            soundAssetAvailable = false;
+                            if (logWarn) {
+                                char msg[280]{};
+                                std::snprintf(
+                                    msg, sizeof(msg),
+                                    "LOOT_SOUND_ASSET_MISSING entry=%zu name='%s' reason=missing-flac-in-mod-data fallback=native-drop-sound",
+                                    entryIdx, sound.c_str());
+                                logWarn(msg);
+                            }
                         }
                     }
                 }
-            }
-            if (soundAssetAvailable) {
-                std::memcpy(rule.dropSound.data(), sound.c_str(), sound.size() + 1);
-                rule.hasDropSound = true;
-                ++fresh->soundRules;
+                if (soundAssetAvailable) {
+                    std::memcpy(rule.dropSound.data(), sound.c_str(), sound.size() + 1);
+                    rule.hasDropSound = true;
+                    ++fresh->soundRules;
+                }
             }
         }
 
@@ -1747,7 +1756,7 @@ inline std::shared_ptr<FilterRuleTable> LoadFilterRuleTable(
                 }
                 const float clampedSize = std::clamp(
                     static_cast<float>(rawSize), MinMinimapSizePx, MaxMinimapSizePx);
-                if (static_cast<float>(rawSize) != clampedSize && logWarn) {
+                if (rule.show && static_cast<float>(rawSize) != clampedSize && logWarn) {
                     char msg[240]{};
                     std::snprintf(
                         msg, sizeof(msg),
@@ -1759,8 +1768,10 @@ inline std::shared_ptr<FilterRuleTable> LoadFilterRuleTable(
                 }
                 rule.minimapSizePx = clampedSize;
             }
-            rule.hasMinimapIcon = true;
-            ++fresh->minimapIconRules;
+            if (rule.show) {
+                rule.hasMinimapIcon = true;
+                ++fresh->minimapIconRules;
+            }
         }
 
         fresh->rules.push_back(std::move(rule));

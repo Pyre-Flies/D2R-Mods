@@ -9,7 +9,7 @@ Download individual runtime ZIPs from the
 | Plugin | Version | What it adds |
 | --- | --- | --- |
 | [Controller QOL Updates](plugins/controller-qol/README.md) | `1.3.1+rev.95` | Controller item shortcuts, direct ground looting, menu navigation, and right-stick skill aiming. |
-| [Pyre Loot Filter](plugins/pyre-lootfilter/README.md) | `1.3.1+rev.2` | Clean-room native `filter.json` (v1/v2/v3) ground loot filter with custom label colors, stack prefixes, drop sounds, minimap icons, mouse pickup guard, and Controller QOL visibility interop. |
+| [Pyre Loot Filter](plugins/pyre-lootfilter/README.md) | `1.3.1+rev.3` | Clean-room native `filter.json` (v1/v2/v3) ground loot filter with custom label colors, stack prefixes, drop sounds, minimap icons, mouse pickup guard, and Controller QOL visibility interop. |
 | [Pyre Stash Search](plugins/pyre-stashsearch/README.md) | `1.3.1+rev.1` | Instant cross-page Personal and Shared Stash search with boolean operators, stat shorthands, active-page item highlighting, and an expandable Side Tab Flyout with custom tab names. |
 | [Running Defense](plugins/running-defense/README.md) | `1.3.1+rev.1` | Configurable percentage Defense penalty while running (`defense_loss_percent`), actual running Defense on the Character Sheet with a running indicator icon, and optional running Shield Block penalty override. |
 | [Ultrawide](plugins/ultrawide/README.md) | `1.3.5+rev.2` | 21:9 and 32:9 ultrawide viewport support: pillarbox/vignette removal, mouse/placard/automap unclamp, centered or full-length HUD, corner HUD anchoring, 22×22 terrain cache, 7×7 monster pop-in fix, and configurable AI range. |

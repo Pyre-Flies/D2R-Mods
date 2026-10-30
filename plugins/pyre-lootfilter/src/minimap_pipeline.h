@@ -279,7 +279,10 @@ public:
                                     const Schema::EvaluatedDecision& decision,
                                     std::uint64_t generation,
                                     const D2RL::PluginContext* logCtx = nullptr) noexcept {
-        if (!unit || !decision.hasMinimapIcon) return false;
+        if (!unit || !decision.show || !decision.hasMinimapIcon) {
+            ForgetUnit(hdr.unitId);
+            return false;
+        }
         const auto nowMs = GetTickCount64();
 
         if (!itemMutex_.try_lock()) return false;
@@ -370,7 +373,7 @@ public:
         Schema::EvaluatedDecision decision{};
         if (!readers.EvaluateUnit(unit, 0, table, cache, Reader::Purpose::VerifiedLabel, facts,
                                   decision) ||
-            !decision.hasMinimapIcon) {
+            !decision.show || !decision.hasMinimapIcon) {
             ForgetUnit(hdr.unitId);
             return false;
         }

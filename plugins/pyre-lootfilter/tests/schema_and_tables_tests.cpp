@@ -587,6 +587,101 @@ int main() {
             runeItem.code = Tables::PackCode("r30");
             Check(!Schema::ResolveDecision(tierTable.get(), runeItem, dec),
                   "Non-equipment misc item (Ber Rune r30) does not match weapon/armor tier rules");
+
+            // Category E: Hide rules with preserved Show actions (dropSound / minimapIcon) or
+            // continue:true chains ending in Hide must never activate dropSound or minimapIcon.
+            WriteTextFile(
+                filterPath,
+                R"json({
+  "version": 3,
+  "rules": [
+    {
+      "hide": {
+        "ruleName": "Toggled-to-Hide rule retaining Show actions from builder",
+        "conditions": {
+          "code": "crs"
+        },
+        "dropSound": "Filter01",
+        "minimapIcon": {
+          "shape": "star",
+          "borderColor": "RGBA(255, 255, 255, 1)",
+          "fillColor": "RGBA(210, 120, 255, 1)",
+          "size": 24
+        }
+      }
+    },
+    {
+      "show": {
+        "ruleName": "Continue highlight before later Hide rule",
+        "conditions": {
+          "itemType": "Sword"
+        },
+        "continue": true,
+        "dropSound": "Filter01",
+        "minimapIcon": {
+          "shape": "diamond",
+          "borderColor": "white",
+          "fillColor": "gold"
+        }
+      }
+    },
+    {
+      "hide": {
+        "ruleName": "Hide Dimensional Blade after continue highlight",
+        "conditions": {
+          "code": "9cr"
+        }
+      }
+    },
+    {
+      "hide": {
+        "ruleName": "Hide Shield with continue and preserved actions",
+        "conditions": {
+          "itemType": "Shield"
+        },
+        "continue": true,
+        "dropSound": "Filter01",
+        "minimapIcon": {
+          "shape": "circle",
+          "borderColor": "white",
+          "fillColor": "red"
+        }
+      }
+    },
+    {
+      "show": {
+        "ruleName": "Re-show Monarch without actions",
+        "conditions": {
+          "code": "uit"
+        }
+      }
+    }
+  ]
+})json");
+            const auto hideActionTable = Schema::LoadFilterRuleTable(filterPath, 103, nullptr);
+            Check(hideActionTable != nullptr && hideActionTable->rules.size() == 5 &&
+                      hideActionTable->hiddenRules == 3 &&
+                      hideActionTable->soundRules == 1 &&
+                      hideActionTable->minimapIconRules == 1,
+                  "Hide rules with preserved dropSound/minimapIcon do not increment active soundRules or minimapIconRules");
+
+            Schema::ItemFacts hiddenCrs{};
+            hiddenCrs.code = Tables::PackCode("crs");
+            Check(Schema::ResolveDecision(hideActionTable.get(), hiddenCrs, dec) &&
+                      !dec.show && !dec.hasDropSound && !dec.hasMinimapIcon,
+                  "Hide rule with preserved dropSound and minimapIcon resolves with neither sound nor minimapIcon");
+
+            Schema::ItemFacts hidden9cr{};
+            hidden9cr.code = Tables::PackCode("9cr");
+            Check(Schema::ResolveDecision(hideActionTable.get(), hidden9cr, dec) &&
+                      !dec.show && !dec.hasDropSound && !dec.hasMinimapIcon,
+                  "Later Hide rule clears dropSound and minimapIcon inherited from earlier continue:true Show rule");
+
+            Schema::ItemFacts reshownMonarch{};
+            reshownMonarch.code = Tables::PackCode("uit");
+            Check(Schema::ResolveDecision(hideActionTable.get(), reshownMonarch, dec) &&
+                      dec.show && !dec.hasDropSound && !dec.hasMinimapIcon,
+                  "Earlier continue:true Hide rule does not leak preserved dropSound or minimapIcon into later Show rule");
         }
     }
 

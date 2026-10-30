@@ -32,7 +32,7 @@
 namespace PyreLootFilter {
 namespace {
 
-inline constexpr char PluginVersion[] = "1.3.1+rev.2";
+inline constexpr char PluginVersion[] = "1.3.1+rev.3";
 inline constexpr char CommandHelp[] = "status/reload/perf/on/off/toggle/minimap/sound/alt";
 static_assert(sizeof(CommandHelp) <= 64);
 inline constexpr unsigned ConfigCapacity = 4096U;
@@ -389,7 +389,7 @@ std::uint8_t __fastcall DetourLabelFormatter(
             const bool matched = g_readers.EvaluateUnit(
                 unit, 0, table, g_cache, Reader::Purpose::VerifiedLabel, facts, decision);
 
-            if (matched && decision.hasMinimapIcon &&
+            if (matched && decision.show && decision.hasMinimapIcon &&
                 g_minimapIcons.load(std::memory_order_relaxed)) {
                 (void)g_minimap.ObserveEvaluatedGroundUnit(unit, hdr, facts, decision,
                                                            table->generation, g_ctx);

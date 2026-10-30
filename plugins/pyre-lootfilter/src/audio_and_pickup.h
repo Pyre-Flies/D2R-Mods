@@ -143,6 +143,11 @@ enum class DropSoundAction : std::uint8_t {
         return DropSoundAction::PlayVanilla;
     }
 
+    // Suppress drop sound (both custom and vanilla) when the item is hidden by the filter.
+    if (!decision.show) {
+        return DropSoundAction::SuppressHidden;
+    }
+
     if (dropSoundsEnabled && loaderBase && decision.hasDropSound && decision.dropSound[0]) {
         auto* playNamed = reinterpret_cast<PlayNamedSoundFn>(loaderBase + Rva::LoaderPlayNamedSound);
         __try {
@@ -153,10 +158,6 @@ enum class DropSoundAction : std::uint8_t {
         }
     }
 
-    // Suppress vanilla drop sound when the item is hidden by the filter.
-    if (!decision.show) {
-        return DropSoundAction::SuppressHidden;
-    }
     return DropSoundAction::PlayVanilla;
 }
 

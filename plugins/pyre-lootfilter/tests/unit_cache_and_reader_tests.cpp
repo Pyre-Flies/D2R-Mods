@@ -217,6 +217,29 @@ int main() {
             &fakeUnit, AudioAndPickup::Rva::DropCallerReturn1, 0, true, &table, readers, cache);
         Check(dropAction == AudioAndPickup::DropSoundAction::SuppressHidden,
               "EvaluateDropSound returns SuppressHidden for hidden items so vanilla drop sound is silenced");
+
+        // Even if a decision has hasDropSound=true and hasMinimapIcon=true while show=false,
+        // EvaluateDropSound and MinimapState must suppress both.
+        dIn.hasDropSound = true;
+        std::memcpy(dIn.dropSound.data(), "Filter01", 9);
+        dIn.hasMinimapIcon = true;
+        cache.Store(777, fIn.code, 310, 5, GetTickCount64(), fIn, dIn);
+        table.soundRules = 1;
+        table.minimapIconRules = 1;
+
+        static bool customSoundCalled = false;
+        customSoundCalled = false;
+        const auto dropActionWithSound = AudioAndPickup::EvaluateDropSound(
+            &fakeUnit, AudioAndPickup::Rva::DropCallerReturn1, 0x10000, true, &table, readers, cache);
+        Check(dropActionWithSound == AudioAndPickup::DropSoundAction::SuppressHidden &&
+                  !customSoundCalled,
+              "EvaluateDropSound suppresses custom dropSound when decision.show is false");
+
+        Minimap::MinimapState minimap{};
+        Check(!minimap.ObserveEvaluatedGroundUnit(&fakeUnit, fakeUnit, fIn, dIn, 5) &&
+                  !minimap.ObserveGroundUnit(&fakeUnit, &table, readers, cache),
+              "MinimapState refuses to observe or track hidden items even if hasMinimapIcon is set");
+
         Check(AudioAndPickup::ShouldBlockEvaluatedGroundPickup(fOut, dOut),
               "ShouldBlockEvaluatedGroundPickup blocks hidden non-gold items");
     }
