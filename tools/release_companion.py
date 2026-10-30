@@ -32,13 +32,13 @@ def verify(data, expected):
                 raise ValueError("Unsafe companion archive path")
             if name.lower().startswith("d2rloader/config/") or name.lower().endswith(".toml"):
                 raise ValueError("Companion must preserve active configuration")
-        expected_entries = {"d2rloader/plugins/d2rl-buff-panel.dll", "d2rloader/plugins/d2rl-buff-panel.mpq"}
+        expected_entries = {"d2rloader/plugins/d2rl-buffhud.dll", "d2rloader/plugins/d2rl-buffhud.mpq"}
         if set(names) != expected_entries:
-            raise ValueError("Companion must contain only d2rl-buff-panel.dll and d2rl-buff-panel.mpq")
-        dll = archive.read("d2rloader/plugins/d2rl-buff-panel.dll")
+            raise ValueError("Companion must contain only d2rl-buffhud.dll and d2rl-buffhud.mpq")
+        dll = archive.read("d2rloader/plugins/d2rl-buffhud.dll")
         if digest(dll) != expected["dllSha256"]:
             raise ValueError("Unreviewed Buff HUD DLL")
-        mpq = archive.read("d2rloader/plugins/d2rl-buff-panel.mpq")
+        mpq = archive.read("d2rloader/plugins/d2rl-buffhud.mpq")
         if digest(mpq) != expected["mpqSha256"]:
             raise ValueError("Unreviewed Buff HUD MPQ")
         return dll
@@ -72,7 +72,7 @@ def main():
     dll = verify(data, expected)
     args.output.mkdir(parents=True, exist_ok=True)
     (args.output / expected["asset"]).write_bytes(data)
-    (args.output / "d2rl-buff-panel.dll").write_bytes(dll)
+    (args.output / "d2rl-buffhud.dll").write_bytes(dll)
     print("Verified Buff HUD companion package and exact native artifacts.")
 
 

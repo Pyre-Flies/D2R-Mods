@@ -1,6 +1,6 @@
 # Item Roll Ranges
 
-**1.3.1+rev.55 · by PyreFly**
+**1.3.1+rev.56 · by PyreFly**
 
 Shows possible modifier rolls and their sources beside the item's actual
 values. Ranges use the active game's definitions, including supported modded
@@ -30,18 +30,19 @@ exclude added affix damage/Defense. Fixed Base bounds retain both endpoints.
 | Label | Meaning |
 | --- | --- |
 | `[P]`, `[S]` | Prefix or suffix; name and tier follow. T1 is the strongest applicable tier in that family. |
-| `[U]` | Unique-item property. |
+| `[U]`, `[Set]` | Unique-item or permanent set-item property. |
 | `[RW]` | Runeword-owned property. |
+| `[Craft]` | Fixed or ranged crafted-recipe property. |
 | `[Base]` | Inherent property of the base item. |
 | `[Socket 1]` | Contribution from the first socketed item; subsequent sockets are numbered. |
-| `[C]` | Identified corruption contribution. |
+| `[C]`, `[E]` | Identified corruption or enchantment contribution. |
 | `[Combined]` | Total of overlapping sources; gray rows show their individual contributions. |
 
 When the saved total cannot uniquely identify an individual roll, that source
 can remain `?`. A `(?)` range warning means the plugin could not establish a
-reliable bound. Set source labels, enchantments and all crafting/set-bonus
-contributions are not fully attributed. Keep screenshots of uncertain cases
-with ranges shown when reporting them.
+reliable bound. Activated multi-piece set bonuses retain their native
+presentation. Keep screenshots of uncertain cases with ranges shown when
+reporting them.
 
 ## Commands and configuration
 

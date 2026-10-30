@@ -6,7 +6,7 @@ plugin's `src/` and `tests/` first; historical records are opt-in (`rg --no-igno
 
 ## Ownership and safety
 
-- `plugins/` contains the ten production plugins listed in README.md plus shared
+- `plugins/` contains the twelve production plugins listed in README.md plus shared
   helpers in `plugins/shared/`. Keep experiments and diagnostics in the separate
   D2R-Mods-Research repository.
 - Buff HUD is maintained in its independent companion fork; see

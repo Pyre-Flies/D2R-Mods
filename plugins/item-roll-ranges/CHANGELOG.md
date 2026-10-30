@@ -1,5 +1,11 @@
 # Item Roll Ranges changelog
 
+## 1.3.1+rev.56 - 2026-10-29
+
+- Attribute permanent set (`[Set]`), crafted-recipe (`[Craft]`), and identified enchantment (`[E]`, including multi-step `419`/`420` upgrades) contributions alongside unique, affix, runeword, socket, and corruption sources.
+- Expand combined-stat source breakdowns (`ContributionModel`) to cover block chance, maximum resistance bonuses, faster cast rate, crushing blow, deadly strike, open wounds, mana after kill, all-skills, and elemental mastery/pierce stats, and map two-handed weapon min/max damage property targets (`23`/`24`) when one-handed stats (`21`/`22`) are absent.
+- Filter internal upgrade/corruption marker stats from affix label pass-throughs and require non-empty native range replacement before staging pending Defense headers.
+
 ## 1.3.1+rev.55 - 2026-10-18
 
 - Keep annotations on crowded tooltips such as Tal Rasha's Horadric Crest with four facets. Collapse detailed source rows to combined totals when space is tight; retain fitting source labels if totals still exceed the native limit.

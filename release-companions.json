@@ -1,11 +1,11 @@
 {
   "buffhud": {
     "repository": "Pyre-Flies/d2rl-buff-hud",
-    "tag": "v1.1.2",
-    "asset": "Buff-HUD-1.1.2-PyreFly.zip",
-    "sha256": "63b0b103b1f1064ff74a509f8e77ec9561e54910e4b7de01d17a70e353e7b832",
-    "dllSha256": "caf46a74ce9d07df162d5f7548fce3a34a194015fd950f655159e333d46f53b2",
-    "mpqSha256": "e9faecbd7b05975cb9ec722b3b8c70b42af8a92267691e3d2890cf0c89adb349",
-    "sourceCommit": "a0c212e"
+    "tag": "v1.3.1+rev.3",
+    "asset": "Buff-HUD-1.3.1+rev.3.zip",
+    "sha256": "f6f65a0d257fb95e9feaf1f997503fb200332d40febe20aa347f9a9341f283ea",
+    "dllSha256": "29c8a7c3626f037e0bb2ba983e4ec1f833bde7fd7eac9e23a5250b3f5fc40d70",
+    "mpqSha256": "b2fcaebfc0840e421bc9901d10442ed2eea2e1ca817eae912b7707a0f9037950",
+    "sourceCommit": "f80e2be"
   }
 }

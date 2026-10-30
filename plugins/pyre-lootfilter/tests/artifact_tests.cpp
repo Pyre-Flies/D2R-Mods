@@ -68,7 +68,7 @@ int wmain(int argc, wchar_t** argv) {
     Check(info && info->infoSize == D2RL::PluginInfoSize &&
               info->abiVersion == D2RL_PLUGIN_ABI_VERSION &&
               std::strcmp(info->id, "pyre-lootfilter") == 0 &&
-              std::strcmp(info->version, "1.0.0+rev.2") == 0 &&
+              std::strcmp(info->version, "1.3.1+rev.2") == 0 &&
               D2RL::HasValidPluginRole(info->flags) &&
               D2RL::HasFlag(info->flags, D2RL::PluginFlags::NativeHooks),
           "PluginInfo identity, version, role, and native-hook capability");

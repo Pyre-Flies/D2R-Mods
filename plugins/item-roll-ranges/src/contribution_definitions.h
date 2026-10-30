@@ -106,23 +106,35 @@ inline std::optional<Corruption> ResolveCorruption(const Table& cube,const Table
 struct EnchantmentCandidate {unsigned upgradeStat{};std::vector<Spec> specs;};
 inline std::optional<std::vector<EnchantmentCandidate>> ResolveEnchantmentCandidates(
     const Table& cube,const Table& items,const Table& types,std::span<const Affixes::Property> properties,
-    unsigned classId,unsigned quality,unsigned upgradeStat) {
-    if(cube.stride!=364||items.stride!=448||types.stride!=232)return {};
+    unsigned classId,unsigned quality,unsigned upgradeStat,int qualityRecord=-1,long long upgradeCount=1) {
+    if(cube.stride!=364||items.stride!=448||types.stride!=232||upgradeCount<1)return {};
+    const bool multiStep=upgradeCount>1;
+    if(multiStep && (upgradeCount>5 || (upgradeStat!=419 && upgradeStat!=420)))return {};
     const auto* host=items.Row(classId);if(!host)return {};
     const int first=Affixes::Read<std::int16_t>(host,0x12e),second=Affixes::Read<std::int16_t>(host,0x130);
     std::vector<EnchantmentCandidate> out;
+    std::array<std::vector<std::vector<Spec>>,5> stepSpecs;
     for(std::size_t n=0;n<cube.count;++n){
         const auto* row=cube.Row(n);
         if(row[0]!=1||row[1]||(row[2]!=0xff&&row[2]>=8)||row[0x67]!=0xfe||row[0x64]||row[12]<2)continue;
         const auto isUpgradeStat=[&](unsigned s){return s==upgradeStat || (upgradeStat>=392 && upgradeStat<=395 && s>=392 && s<=395);};
         if((row[3]==16||row[3]==18) && !isUpgradeStat(Affixes::Read<unsigned>(row,4)))continue;
+        const int stepVal=Affixes::Read<int>(row,8);
+        if(multiStep && (row[3]!=18 || stepVal<0 || stepVal>=upgradeCount))continue;
+        if(!multiStep && row[3]==18 && (upgradeStat==419 || upgradeStat==420) && stepVal!=0)continue;
         bool applicable=false,otherInput=false;
         for(unsigned input=0;input<row[12]&&input<7;++input){
-            const auto* p=row+0x14+input*10;const unsigned flags=Affixes::Read<std::uint16_t>(p,0),id=Affixes::Read<unsigned>(p,2);
+            const auto* p=row+0x14+input*10;
+            const unsigned flags=Affixes::Read<std::uint16_t>(p,0);
+            const unsigned id=Affixes::Read<std::uint16_t>(p,2);
+            const unsigned specificId=Affixes::Read<std::uint16_t>(p,4);
             if(p[8]||p[9])continue;
             bool matchesHost=false;
-            if(flags==1 && id==classId && (!p[6]||p[6]==quality))matchesHost=true;
-            else if(flags==2 && (!p[6]||p[6]==quality)){
+            if(flags==1 && specificId==0 && id==classId && (!p[6]||p[6]==quality))matchesHost=true;
+            else if((flags&~0x40u)==1 && (flags&0x40u)!=0 && quality==7 && qualityRecord>=0 &&
+                    id==classId && (!p[6]||p[6]==7) &&
+                    (specificId==static_cast<unsigned>(qualityRecord) || specificId==static_cast<unsigned>(qualityRecord+1)))matchesHost=true;
+            else if(flags==2 && specificId==0 && (!p[6]||p[6]==quality)){
                 const auto match=Type(types,first,second,id);if(!match)return {};
                 matchesHost=*match;
             }
@@ -139,14 +151,39 @@ inline std::optional<std::vector<EnchantmentCandidate>> ResolveEnchantmentCandid
             const auto& prop=properties[id].bytes;
             if(prop[0x18]==17 && !prop[0x19] && isUpgradeStat(Affixes::Read<std::uint16_t>(prop.data(),0x20))){
                 if(!((param==1&&!lo&&!hi)||(!param&&lo==1&&hi==1))){valid=false;break;}
-
                 markerFound=true;continue;
             }
             if(p[10]!=100||p[11]){valid=false;break;}
             specs.push_back({id,param,lo,hi});
         }
         if(!valid||!markerFound||specs.empty()||specs.size()>3)continue;
-        out.push_back({upgradeStat,std::move(specs)});
+        if(multiStep){
+            stepSpecs[static_cast<std::size_t>(stepVal)].push_back(std::move(specs));
+            continue;
+        }
+        const bool duplicate=std::any_of(out.begin(),out.end(),[&](const EnchantmentCandidate& c){
+            if(c.upgradeStat!=upgradeStat||c.specs.size()!=specs.size())return false;
+            for(std::size_t k=0;k<specs.size();++k)
+                if(c.specs[k].property!=specs[k].property||c.specs[k].parameter!=specs[k].parameter||
+                   c.specs[k].low!=specs[k].low||c.specs[k].high!=specs[k].high)return false;
+            return true;
+        });
+        if(!duplicate)out.push_back({upgradeStat,std::move(specs)});
+    }
+    if(multiStep){
+        std::vector<Spec> cumulative;
+        for(long long s=0;s<upgradeCount;++s){
+            const auto& list=stepSpecs[static_cast<std::size_t>(s)];
+            if(list.size()!=1)return out;
+            for(const auto& sp:list[0]){
+                auto it=std::find_if(cumulative.begin(),cumulative.end(),[&](const Spec& existing){
+                    return existing.property==sp.property && existing.parameter==sp.parameter;
+                });
+                if(it!=cumulative.end()){it->low+=sp.low;it->high+=sp.high;}
+                else cumulative.push_back(sp);
+            }
+        }
+        if(!cumulative.empty() && cumulative.size()<=3)out.push_back({upgradeStat,std::move(cumulative)});
     }
     return out;
 }

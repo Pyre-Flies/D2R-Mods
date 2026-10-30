@@ -209,6 +209,10 @@ def main() -> None:
     parser.add_argument("--ultrawide-artifact-verifier", type=Path)
     parser.add_argument("--pyre-lootfilter-dll", type=Path)
     parser.add_argument("--pyre-lootfilter-artifact-verifier", type=Path)
+    parser.add_argument("--pyre-stashsearch-dll", type=Path)
+    parser.add_argument("--pyre-stashsearch-artifact-verifier", type=Path)
+    parser.add_argument("--running-defense-dll", type=Path)
+    parser.add_argument("--running-defense-artifact-verifier", type=Path)
     parser.add_argument("--buffhud-runtime-zip", type=Path)
     parser.add_argument("--controller-only", action="store_true",
                         help="Package only Controller QOL (for focused prereleases).")
@@ -223,6 +227,8 @@ def main() -> None:
         "day_night_dll", "day_night_artifact_verifier",
         "ultrawide_dll", "ultrawide_artifact_verifier",
         "pyre_lootfilter_dll", "pyre_lootfilter_artifact_verifier",
+        "pyre_stashsearch_dll", "pyre_stashsearch_artifact_verifier",
+        "running_defense_dll", "running_defense_artifact_verifier",
     )
     if not args.controller_only:
         missing = ["--" + name.replace("_", "-") for name in required_suite_args
@@ -303,9 +309,21 @@ def main() -> None:
         dll_filename="pyre-lootfilter.dll",
         version_pattern=r'PluginVersion\[\]\s*=\s*"([^"]+)"',
     )
+    pyre_stashsearch_zip = package_verified_plugin(
+        "pyre-stashsearch", "Pyre Stash Search",
+        args.pyre_stashsearch_dll, args.pyre_stashsearch_artifact_verifier,
+        args.output, REPOSITORY,
+        dll_filename="pyre-stashsearch.dll",
+    )
+    running_defense_zip = package_verified_plugin(
+        "running-defense", "Running Defense",
+        args.running_defense_dll, args.running_defense_artifact_verifier,
+        args.output, REPOSITORY,
+    )
     archives = (controller_zip, ranges_zip, map_assistance_zip,
                 inventory_deposit_zip, floating_damage_zip, sockets_zip,
-                gem_bag_zip, day_night_zip, ultrawide_zip, pyre_lootfilter_zip)
+                gem_bag_zip, day_night_zip, ultrawide_zip, pyre_lootfilter_zip,
+                pyre_stashsearch_zip, running_defense_zip)
     if args.buffhud_runtime_zip:
         from release_companion import stage
         archives += (stage(args.buffhud_runtime_zip, args.output, REPOSITORY),)

@@ -11,8 +11,8 @@ def digest(data):
 
 def fixture(extra=None, corrupt_dll=False, corrupt_mpq=False):
     files = {
-        "d2rloader/plugins/d2rl-buff-panel.dll": b"reviewed DLL",
-        "d2rloader/plugins/d2rl-buff-panel.mpq": b"reviewed MPQ",
+        "d2rloader/plugins/d2rl-buffhud.dll": b"reviewed DLL",
+        "d2rloader/plugins/d2rl-buffhud.mpq": b"reviewed MPQ",
     }
     if extra:
         files.update(extra)

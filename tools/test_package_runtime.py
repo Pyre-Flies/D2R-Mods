@@ -171,17 +171,23 @@ class TenPluginSuiteTests(FloatingDamagePackageFixture, unittest.TestCase):
             "plugins/ultrawide/src/plugin.cpp": b'.version="1.3.5+rev.2",',
             "plugins/ultrawide/README.md": b"# Ultrawide\n21:9 and 32:9 gameplay.\n",
             "plugins/ultrawide/ultrawide.toml": b"[ultrawide]\nenabled = true\n",
-            "plugins/pyre-lootfilter/src/plugin.cpp": b'inline constexpr char PluginVersion[] = "1.0.0+rev.2";',
+            "plugins/pyre-lootfilter/src/plugin.cpp": b'inline constexpr char PluginVersion[] = "1.3.1+rev.2";',
             "plugins/pyre-lootfilter/README.md": b"# Pyre Loot Filter\nNative loot filter.\n",
             "plugins/pyre-lootfilter/pyre-lootfilter.toml": b"[pyre-lootfilter]\nenabled = true\n",
             "plugins/pyre-lootfilter/assets/reimagined/data/global/excel/sounds.txt": b"sound\tindex\nFilter01\t9999\n",
+            "plugins/pyre-stashsearch/src/plugin.cpp": b'.version = "1.3.1+rev.1",',
+            "plugins/pyre-stashsearch/README.md": b"# Pyre Stash Search\nCross-page stash search.\n",
+            "plugins/pyre-stashsearch/pyre-stashsearch.toml": b"[pyre-stashsearch]\ntab_flyout_expanded = false\n",
+            "plugins/running-defense/src/plugin.cpp": b'.version = "1.3.1+rev.1",',
+            "plugins/running-defense/README.md": b"# Running Defense\nConfigurable running Defense penalty.\n",
+            "plugins/running-defense/running-defense.toml": b"[running-defense]\nenabled = true\n",
             "plugins/always-show-sockets/src/plugin.cpp": b'.version="1.3.1+rev.2",',
             "plugins/always-show-sockets/always-show-sockets.toml": b"# Reference sockets config\n",
             "plugins/always-show-sockets/README.md": b"# Sockets\n",
             "plugins/always-show-sockets/CONFIGURATION-GUIDE.md": b"# Configuration\n",
             "plugins/always-show-sockets/RUNTIME-RELEASE-NOTES.md": b"# Changelog\n",
             "plugins/controller-qol/src/plugin_main.cpp": b'.version="1.3.1+rev.95",',
-            "plugins/item-roll-ranges/src/plugin.cpp": b'"item-roll-ranges", "Item Roll Ranges", "1.3.1+rev.55",',
+            "plugins/item-roll-ranges/src/plugin.cpp": b'"item-roll-ranges", "Item Roll Ranges", "1.3.1+rev.56",',
             "plugins/item-roll-ranges/item-roll-ranges.toml": b"[display]\nalways_show_ranges = false\n",
             "plugins/map-assistance/src/plugin.cpp": b'.version="1.3.1+rev.1",',
             "plugins/inventory-deposit/src/plugin_main.cpp": b'.version="1.3.1+rev.13",',
@@ -215,6 +221,10 @@ class TenPluginSuiteTests(FloatingDamagePackageFixture, unittest.TestCase):
             ("--ultrawide-artifact-verifier", "ultrawide-artifact-tests.exe"),
             ("--pyre-lootfilter-dll", "pyre-lootfilter.dll"),
             ("--pyre-lootfilter-artifact-verifier", "pyre-lootfilter-artifact-tests.exe"),
+            ("--pyre-stashsearch-dll", "pyre-stashsearch.dll"),
+            ("--pyre-stashsearch-artifact-verifier", "pyre-stashsearch-artifact-tests.exe"),
+            ("--running-defense-dll", "Running Defense.dll"),
+            ("--running-defense-artifact-verifier", "running-defense-artifact-tests.exe"),
         ):
             path = self.root / "built" / filename
             if not path.exists():
@@ -248,9 +258,10 @@ class TenPluginSuiteTests(FloatingDamagePackageFixture, unittest.TestCase):
             "Controller QOL Updates.dll", "Item Roll Ranges.dll", "Map Assistance.dll",
             "Inventory Deposit.dll", "Floating Damage.dll", "Always Show Sockets.dll",
             "Gem Bag UI.dll", "Day Night Cycle.dll", "Ultrawide.dll", "pyre-lootfilter.dll",
+            "pyre-stashsearch.dll", "Running Defense.dll",
         }
         archives = set(self.output.glob("*.zip"))
-        self.assertEqual(len(archives), 10)
+        self.assertEqual(len(archives), 12)
         manifest = dict(line.split("  ", 1)[::-1]
                         for line in (self.output / "SHA256SUMS").read_text().splitlines())
         self.assertEqual(set(manifest), {path.name for path in archives})
@@ -282,7 +293,7 @@ class TenPluginSuiteTests(FloatingDamagePackageFixture, unittest.TestCase):
         self.assertEqual(actual_dlls, expected_dlls)
         self.assertFalse((install / "defaults").exists())
         self.assertFalse((install / "README.md").exists())
-        self.assertEqual(self.run.call_count, 7)
+        self.assertEqual(self.run.call_count, 9)
 
     def test_controller_only_prerelease_keeps_single_plugin_contract(self):
         arguments = self.arguments[:3] + ["--controller-only", "--output", str(self.output)]

@@ -241,6 +241,11 @@ bool AddUnobservedCompositeIdentities(std::vector<CapturedLine>& lines,std::stri
     Affixes::LayerEncoding encoding,std::span<const Affixes::PropertyGroup> groups,
     const unsigned char* itemStats,std::size_t itemStatCount) {
     const bool poisonPossible=std::any_of(rolled.begin(),rolled.end(),[&](const auto& d){return Affixes::Contributes(d.row,properties,57,0,encoding,groups);});
+    const auto inActual=[&](std::string_view key){
+        for(const auto text:RangeText::Lines(actual))
+            if(RangeText::Analyze(text).key==key)return true;
+        return false;
+    };
     std::vector<std::string> candidates;
     for (const auto text:RangeText::Lines(actual)) {
         const auto key=RangeText::Analyze(text).key;
@@ -260,6 +265,7 @@ bool AddUnobservedCompositeIdentities(std::vector<CapturedLine>& lines,std::stri
         std::array{54,55,56,-1}, std::array{57,58,59,-1}};
     std::vector<std::string> observedSources;
     for (const auto& line:lines) {
+        if (!inActual(line.key)) continue;
         bool composite=false;
         for (const auto& family:families)
             for (const int member:family) composite |= member>=0 && line.stat==member;
@@ -272,8 +278,10 @@ bool AddUnobservedCompositeIdentities(std::vector<CapturedLine>& lines,std::stri
     std::vector<FamilySource> sources;
     for (const auto& family:families) {
         bool observed=false;
-        for (const auto& line:lines)
+        for (const auto& line:lines) {
+            if (!inActual(line.key)) continue;
             for (const int member:family) observed |= member>=0 && line.stat==member;
+        }
         if (observed) continue;
         std::string familyLabel;
         int familyStat=-1;
@@ -526,15 +534,20 @@ void AddOwnedScalarIdentities(void* source,const Contributions::Snapshot& snapsh
     Contributions::Stats combined=snapshot.total;
     for(const auto& ownVal:snapshot.own){
         const auto s=static_cast<unsigned>(ownVal.key>>32);
-        const bool ownOnly=(ownVal.key&0xffffffffu)==0 && (s==16 || s==17 || s==18 || (s>=21 && s<=24) || s==75);
+        const bool ownOnly=(ownVal.key&0xffffffffu)==0 && (s==16 || s==17 || s==18 || s==20 || (s>=21 && s<=24) || s==31 || s==75);
+        std::int64_t val=ownVal.value;
+        if(ownOnly)for(const auto& sock:snapshot.sockets)val+=Contributions::Value(sock.values,s);
         auto it=std::find_if(combined.begin(),combined.end(),[&](const auto& c){return c.key==ownVal.key;});
         if(it==combined.end())combined.push_back(ownVal);
-        else if(ownOnly || it->value==0)it->value=ownVal.value;
+        else if(ownOnly || it->value==0)it->value=val;
     }
     std::vector<CapturedLine> candidates;std::set<unsigned> seenGroups;
     for(const auto& value:combined){
         const auto stat=static_cast<unsigned>(value.key>>32),layer=static_cast<unsigned>(value.key);
         if(stat>=count || layer>INT_MAX)continue;
+        if(!layer && ((stat==18 && Contributions::Value(combined,17)==value.value) ||
+                      (stat==23 && Contributions::Value(combined,21)==value.value) ||
+                      (stat==24 && Contributions::Value(combined,22)==value.value)))continue;
         if(stat==204 && encoding.skillBits>0 && encoding.skillBits<16 && encoding.skillMask==((1u<<encoding.skillBits)-1)){
             if(Affixes::ChargeSourceLabel(definitions,properties,static_cast<int>(layer),encoding,groups).empty())continue;
             const auto skillLevel=static_cast<long long>(layer&encoding.skillMask);
@@ -607,7 +620,9 @@ void AddOwnedScalarIdentities(void* source,const Contributions::Snapshot& snapsh
     }
     for(auto& candidate:candidates){
         if(std::count_if(candidates.begin(),candidates.end(),[&](const CapturedLine& other){return other.key==candidate.key;})!=1)continue;
-        if(std::none_of(observed.begin(),observed.end(),[&](const CapturedLine& old){return old.key==candidate.key;}))observed.push_back(candidate);
+        auto existing=std::find_if(observed.begin(),observed.end(),[&](const CapturedLine& old){return old.key==candidate.key;});
+        if(existing==observed.end())observed.push_back(candidate);
+        else if(candidate.grouped && !existing->grouped)*existing=candidate;
     }
 }
 std::vector<RangeText::Label> AffixLabels(void* source,const std::vector<CapturedLine>& lines,std::string_view actual={}) noexcept {
@@ -724,6 +739,10 @@ std::vector<RangeText::Label> AffixLabels(void* source,const std::vector<Capture
         std::vector<RangeText::Label> labels;
         const auto levelCap=ActiveLevelCap(tables);
         for (const auto& line:observed) {
+            if(line.stat==361 || line.stat==362 || (line.stat>=367 && line.stat<=376) ||
+               (line.stat>=384 && line.stat<=386) || (line.stat>=392 && line.stat<=398) ||
+               (line.stat>=404 && line.stat<=412) || line.stat==419 || line.stat==420 ||
+               line.stat==433 || (line.stat>=438 && line.stat<=440) || line.stat==443)continue;
             if(line.stat==204 && !line.grouped){
                 std::string key=line.key;
                 if(!actual.empty()){
@@ -849,7 +868,7 @@ std::vector<RangeText::Label> AffixLabels(void* source,const std::vector<Capture
                 const auto found=std::find_if(observed.begin(),observed.end(),[&](const CapturedLine& line){return line.key==label.key;});
                 if(found==observed.end() || found->layer || found->grouped || found->stat<0 || static_cast<std::uint64_t>(found->stat)>=itemStatCount)continue;
                 const auto stat=static_cast<unsigned>(found->stat);
-                if(stat!=16 && stat!=17 && stat!=18 && !(stat>=21&&stat<=24) && stat!=31 &&
+                if(stat!=16 && stat!=17 && stat!=18 && stat!=20 && !(stat>=21&&stat<=24) && stat!=31 &&
                    Contributions::Value(scalingSnapshot->own,stat)!=Contributions::Value(scalingSnapshot->total,stat))continue;
                 // A ranged source is useful even when Core supplied no clone.
                 const auto proven=ContributionModel::Build(label.key,stat,itemStats[stat*0x144+0x14],own,properties);
@@ -1226,10 +1245,10 @@ extern "C" __declspec(noinline) NativeText* __fastcall HeaderBuilderAdapter(void
             if(pos!=std::string::npos && changed.find(needle,pos+1)==std::string::npos)
                 changed.replace(pos,needle.size(),propOverflow.full);
         }
-        if (frame[0x18b0]) {
+        if (frame[0x18b0] && value) {
             // Core will publish its range replacement next. Keep only an owned
             // text proof and receiver identity; no item/stat/table pointers.
-            if ((value || changed!=actual) && changed.size()<=65536)
+            if (changed.size()<=65536)
                 pendingHeader={result,std::string(actual),changed};
             return result;
         }
@@ -1326,7 +1345,7 @@ void TraceProperties(unsigned annotated,unsigned unmatched,const char* actual,co
     try { seen.emplace_back(actual); } catch (...) { return; }
     char message[14000]{};
     const int n=std::snprintf(message,sizeof(message),
-        "v1.3.1+rev.55 properties annotated=%u unmatched=%u labeled=%u captured=%u\r\nACTUAL: %.4095s\r\nRANGED: %.4095s\r\nRESULT: %.4095s\r\n",annotated,unmatched,labeled,captured,actual,ranged,result);
+        "v1.3.1+rev.56 properties annotated=%u unmatched=%u labeled=%u captured=%u\r\nACTUAL: %.4095s\r\nRANGED: %.4095s\r\nRESULT: %.4095s\r\n",annotated,unmatched,labeled,captured,actual,ranged,result);
     if (n<=0 || n>=static_cast<int>(sizeof(message))) return;
     HANDLE file=CreateFileW(diagnosticPath,FILE_APPEND_DATA,FILE_SHARE_READ|FILE_SHARE_WRITE,nullptr,OPEN_ALWAYS,FILE_ATTRIBUTE_NORMAL,nullptr);
     if (file==INVALID_HANDLE_VALUE) return;
@@ -1855,14 +1874,14 @@ bool Install(const D2RL::PluginContext* context) noexcept {
     active.store(true, std::memory_order_release);
     context->LogInfo(propertySourcesReady.load()?"Item Roll Ranges: active linked-property/runeword source model admitted.":"Item Roll Ranges: active linked-property/runeword source model unavailable.");
     context->LogInfo(alwaysReady.load() && alwaysEnabled.load()?"Item Roll Ranges display mode: always show ranges.":"Item Roll Ranges display mode: native Ctrl/controller hold.");
-    context->LogInfo("Item Roll Ranges 1.3.1+rev.55 by PyreFly: Ctrl / RT(R2), or QOL range override; inventory, stash, Cube and vendor only. Actual values, native ranges, named P/S tiers and guarded stacked-damage details. Unsupported or ambiguous provenance is omitted.");
+    context->LogInfo("Item Roll Ranges 1.3.1+rev.56 by PyreFly: Ctrl / RT(R2), or QOL range override; inventory, stash, Cube and vendor only. Actual values, native ranges, named P/S tiers and guarded stacked-damage details. Unsupported or ambiguous provenance is omitted.");
     return true;
 }
 }
 
 D2RL_PLUGIN_EXPORT const D2RL::PluginInfo* __cdecl D2RLoaderGetPluginInfo() noexcept {
     static const D2RL::PluginInfo info{sizeof(D2RL::PluginInfo), D2RL_PLUGIN_ABI_VERSION,
-        "item-roll-ranges", "Item Roll Ranges", "1.3.1+rev.55", "PyreFly",
+        "item-roll-ranges", "Item Roll Ranges", "1.3.1+rev.56", "PyreFly",
         "Hold Ctrl or RT/R2 (R1/RB with Controller QOL) for native item stat ranges in item-management screens.",
         D2RL::PluginFlags::Client | D2RL::PluginFlags::NativeHooks, {}};
     return &info;

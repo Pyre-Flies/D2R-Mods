@@ -117,6 +117,24 @@ jobs:
       - name: Test Pyre Loot Filter
         run: ctest --test-dir build/pyre-lootfilter -C Release --output-on-failure
 
+      - name: Configure Pyre Stash Search
+        run: cmake -S plugins/pyre-stashsearch -B build/pyre-stashsearch -A x64
+
+      - name: Build Pyre Stash Search
+        run: cmake --build build/pyre-stashsearch --config Release --parallel
+
+      - name: Test Pyre Stash Search
+        run: ctest --test-dir build/pyre-stashsearch -C Release --output-on-failure
+
+      - name: Configure Running Defense
+        run: cmake -S plugins/running-defense -B build/running-defense -A x64
+
+      - name: Build Running Defense
+        run: cmake --build build/running-defense --config Release --parallel
+
+      - name: Test Running Defense
+        run: ctest --test-dir build/running-defense -C Release --output-on-failure
+
       - name: Test update-safe archive layout
         run: python -m unittest discover -s tools -p "test_package*.py" -v
 
@@ -140,7 +158,11 @@ jobs:
           --ultrawide-artifact-verifier "build/ultrawide/Release/ultrawide-artifact-tests.exe"
           --pyre-lootfilter-dll "build/pyre-lootfilter/Release/pyre-lootfilter.dll"
           --pyre-lootfilter-artifact-verifier "build/pyre-lootfilter/Release/pyre-lootfilter-artifact-tests.exe"
-          --buffhud-runtime-zip "companions/Buff-HUD-1.1.2-PyreFly.zip"
+          --pyre-stashsearch-dll "build/pyre-stashsearch/Release/pyre-stashsearch.dll"
+          --pyre-stashsearch-artifact-verifier "build/pyre-stashsearch/Release/pyre-stashsearch-artifact-tests.exe"
+          --running-defense-dll "build/running-defense/Release/Running Defense.dll"
+          --running-defense-artifact-verifier "build/running-defense/Release/running-defense-artifact-tests.exe"
+          --buffhud-runtime-zip "companions/Buff-HUD-1.3.1+rev.3.zip"
           --output dist
 
       - name: Upload workflow artifacts

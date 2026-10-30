@@ -53,12 +53,12 @@ int wmain(int argc, wchar_t** argv) {
 		value->abiVersion == D2RL_PLUGIN_ABI_VERSION &&
 		std::strcmp(value->id, "pyre-stashsearch") == 0 &&
 		std::strcmp(value->name, "Pyre Stash Search") == 0 &&
-		std::strcmp(value->version, "1.0.0") == 0 &&
+		std::strcmp(value->version, "1.3.1+rev.1") == 0 &&
 		std::strcmp(value->author, "PyreFly") == 0 &&
 		D2RL::HasValidPluginRole(value->flags) &&
 		D2RL::PluginRoleValue(value->flags) == D2RL::FlagsValue(D2RL::PluginFlags::Client) &&
 		D2RL::HasFlag(value->flags, D2RL::PluginFlags::NativeHooks),
-		"PluginInfo metadata, ABI version, Client role, and NativeHooks flag match pyre-stashsearch 1.0.0");
+		"PluginInfo metadata, ABI version, Client role, and NativeHooks flag match pyre-stashsearch 1.3.1+rev.1");
 
 	Check(!load(nullptr), "null context refused");
 	unload();

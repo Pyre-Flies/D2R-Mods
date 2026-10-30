@@ -1,0 +1,25 @@
+[running-defense]
+# Enable or disable the Running Defense plugin.
+enabled = true
+
+# Percentage of Defense Rating (Armor Class) lost while running (0 to 100).
+# In vanilla D2R, running causes a 100% Defense loss (and melee attacks auto-hit).
+# Walking always preserves 100% of Defense.
+# Examples:
+#   30 = lose 30% of Defense while running (retain 70% of Defense)
+#   75 = lose 75% of Defense while running (retain 25% of Defense)
+#    0 = lose 0% of Defense while running (retain 100% of Defense)
+#  100 = vanilla behavior (lose 100% of Defense while running)
+defense_loss_percent = 30
+
+# Optional override for the running Shield Block penalty.
+# In vanilla D2R, running reduces Shield Block chance by ~67% (to 1/3, capped at 25%).
+override_block_penalty = false
+block_loss_percent = 67
+
+# Show the running icon next to the Defense number on the Character Sheet
+# regardless of whether your character is currently running or standing still.
+show_running_icon_on_sheet = true
+
+# Tint the Defense number on the Character Sheet with the penalty color while running.
+highlight_defense_when_running = true

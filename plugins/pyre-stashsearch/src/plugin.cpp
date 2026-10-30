@@ -4041,7 +4041,7 @@ auto InitializePlugin(const D2RL::PluginContext* ctx) -> bool {
 							static_cast<uint32_t>(sizeof(kBytes_BankPanelDraw_23AA60)),
 							&Detour_BankPanelDraw,
 							&g_Native.originalBankPanelDraw)) {
-						ctx->LogInfo("Pyre Stash Search 1.0.0 initialized and BankPanel::Draw hook installed.");
+						ctx->LogInfo("Pyre Stash Search 1.3.1+rev.1 initialized and BankPanel::Draw hook installed.");
 						return true;
 					}
 					ctx->LogError("PyreStashSearch: failed to install BankPanel::Draw inline hook.");
@@ -4065,7 +4065,7 @@ const D2RL::PluginInfo kPluginInfo = {
 	.abiVersion  = D2RL_PLUGIN_ABI_VERSION,
 	.id          = "pyre-stashsearch",
 	.name        = "Pyre Stash Search",
-	.version     = "1.0.0",
+	.version     = "1.3.1+rev.1",
 	.author      = "PyreFly",
 	.description = "Cross-page stash search with boolean filters, item highlighting, and an expandable tab flyout with custom tab names. Inspired by yinyin333333.",
 	.flags       = D2RL::PluginFlags::Client | D2RL::PluginFlags::NativeHooks,
@@ -4085,7 +4085,7 @@ extern "C" __declspec(dllexport) auto __cdecl D2RLoaderLoadPlugin(const D2RL::Pl
 
 extern "C" __declspec(dllexport) void __cdecl D2RLoaderUnloadPlugin() noexcept {
 	if (StashSearch::g_PluginCtx != nullptr) {
-		StashSearch::g_PluginCtx->LogInfo("Pyre Stash Search 1.0.0 unloading.");
+		StashSearch::g_PluginCtx->LogInfo("Pyre Stash Search 1.3.1+rev.1 unloading.");
 	}
 	StashSearch::g_ShuttingDown.store(true, std::memory_order_release);
 	StashSearch::StopInputWorkerThread();

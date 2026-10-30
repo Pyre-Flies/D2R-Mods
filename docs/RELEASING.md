@@ -1,6 +1,6 @@
 # Publishing releases
 
-The stable suite contains ten first-party plugins and the separately maintained
+The stable suite contains twelve first-party plugins and the separately maintained
 Buff HUD companion. The [repository README](../README.md) lists current versions;
 `release-companions.json` pins the exact companion package and payload hashes.
 Experimental and diagnostic plugins stay in D2R-Mods-Research.
@@ -31,7 +31,7 @@ layout, metadata, ABI, exports and hashes; scan public text for private paths an
 
 Publish only authorized scope. Staging files alone does not authorize a push or release.
 Stable suite tags follow `release-YYYY.MM.DD.N`; plugin revisions are independent.
-The `release` workflow builds/tests/packages the ten first-party plugins and stages
+The `release` workflow builds/tests/packages the twelve first-party plugins and stages
 the verified Buff HUD companion package.
 GitHub Actions' `build/` and `dist/` directories are disposable runner output.
 Retained prerelease workflows support their historical tag conventions.

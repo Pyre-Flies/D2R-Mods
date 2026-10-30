@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.29)
-project(pyre-lootfilter VERSION 1.0.0 LANGUAGES CXX RC)
+project(pyre-lootfilter VERSION 1.3.1 LANGUAGES CXX RC)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
