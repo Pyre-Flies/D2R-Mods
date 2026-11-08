@@ -14,9 +14,9 @@ BEGIN
   BEGIN
    VALUE "CompanyName", "PyreFly\0"
    VALUE "FileDescription", "Ultrawide\0"
-   VALUE "FileVersion", "1.3.5+rev.2\0"
+   VALUE "FileVersion", "1.3.5+rev.3\0"
    VALUE "ProductName", "Ultrawide\0"
-   VALUE "ProductVersion", "1.3.5+rev.2\0"
+   VALUE "ProductVersion", "1.3.5+rev.3\0"
   END
  END
  BLOCK "VarFileInfo"

@@ -1,6 +1,6 @@
 # Ultrawide
 
-**1.3.5+rev.2 · by PyreFly · Windows x64 / D2RLoader 1.3.1 / plugin ABI 4**
+**1.3.5+rev.3 · by PyreFly · Windows x64 / D2RLoader 1.3.1 / plugin ABI 4**
 
 Unlocks full-viewport ultrawide (21:9 and 32:9) gameplay in Diablo II: Resurrected while keeping menus framed cleanly:
 

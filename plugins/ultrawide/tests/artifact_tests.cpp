@@ -34,7 +34,7 @@ int wmain(int argc, wchar_t** argv) {
     const auto value = info();
     Check(value && value->infoSize == D2RL::PluginInfoSize && value->abiVersion == D2RL_PLUGIN_ABI_VERSION &&
         !std::strcmp(value->id, "ultrawide") && !std::strcmp(value->name, "Ultrawide") &&
-        !std::strcmp(value->version, "1.3.5+rev.2") &&
+        !std::strcmp(value->version, "1.3.5+rev.3") &&
         D2RL::HasValidPluginRole(value->flags) && D2RL::PluginRoleValue(value->flags) == D2RL::FlagsValue(D2RL::PluginFlags::Client) &&
         D2RL::HasFlag(value->flags, D2RL::PluginFlags::NativeHooks), "metadata and client-only role");
     Check(!load(nullptr), "null context refusal");

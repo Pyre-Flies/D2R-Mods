@@ -228,6 +228,26 @@ inline void ClearAllStates() noexcept {
     stateLock.clear(std::memory_order_release);
 }
 
+inline uintptr_t GetRoomExLevel(uintptr_t roomEx) noexcept {
+    if (!roomEx || roomEx < 0x10000) return 0;
+    return *reinterpret_cast<const uintptr_t*>(roomEx + 0x90);
+}
+
+inline uintptr_t GetRoom1Level(uintptr_t room1) noexcept {
+    if (!room1 || room1 < 0x10000) return 0;
+    return GetRoomExLevel(*reinterpret_cast<const uintptr_t*>(room1 + 0x18));
+}
+
+inline bool IsSameLevelRoomEx(uintptr_t playerLevel, uintptr_t candidateRoomEx) noexcept {
+    if (!candidateRoomEx || candidateRoomEx < 0x10000) return false;
+    return !playerLevel || GetRoomExLevel(candidateRoomEx) == playerLevel;
+}
+
+inline bool IsSameLevelRoom1(uintptr_t playerLevel, uintptr_t candidateRoom1) noexcept {
+    if (!candidateRoom1 || candidateRoom1 < 0x10000) return false;
+    return !playerLevel || GetRoom1Level(candidateRoom1) == playerLevel;
+}
+
 inline void PrepareClientRoomsImpl(uintptr_t pClient, uintptr_t pOldRoom, uintptr_t pNewRoom, uintptr_t rbp) noexcept {
     const auto getNeighbors = reinterpret_cast<Room1GetNeighborsFn>(exeBase + 0x2efde0);
     const auto ensureRoomExActive = reinterpret_cast<RoomExEnsureActiveFn>(exeBase + 0x3289a0);
@@ -251,6 +271,7 @@ inline void PrepareClientRoomsImpl(uintptr_t pClient, uintptr_t pOldRoom, uintpt
     const uintptr_t pGame = *reinterpret_cast<const uintptr_t*>(pClient + 0x2b0);
     const uint8_t act = pGame ? *reinterpret_cast<const uint8_t*>(pGame + 0x106) : 0;
     auto& state = GetOrAllocateClientState(pClient);
+    const uintptr_t playerLevel = GetRoom1Level(pNewRoom);
 
     const auto ensureRoom1Populated = [&](uintptr_t room1) noexcept {
         if (!pGame || !room1 || room1 < 0x10000) return;
@@ -269,11 +290,29 @@ inline void PrepareClientRoomsImpl(uintptr_t pClient, uintptr_t pOldRoom, uintpt
     };
 
     const auto expandRoom1Fn = [&](uint8_t roomAct, uintptr_t room1, RoomList& outRooms) noexcept {
-        if (!room1 || room1 < 0x10000) return;
+        if (!IsSameLevelRoom1(playerLevel, room1)) return;
         ensureRoom1Populated(room1);
         outRooms.AddUnique(room1);
-        // Walk DRLG D2RoomEx neighbor vector at [pRoomEx + 0x10..0x18] so Stage 2/3 rooms whose
-        // D2Room1 (+0x58) was not yet materialized by 0x328A00 are materialized on-demand via 0x3289A0.
+        if (room1 == pNewRoom) {
+            // Preserve any native 1-hop D2Room1 neighbors already materialized by 0x2EF2F0
+            // (including across a doorway when standing directly on a warp room) so 0x48A200's
+            // native 1-hop disconnect cleanup stays 1:1 with state.activeRooms.
+            const uintptr_t* native1Hop{};
+            uint32_t native1HopCount{};
+            if (queryRoom1Fn(room1, native1Hop, native1HopCount) && native1Hop) {
+                for (uint32_t i = 0; i < native1HopCount; ++i) {
+                    const uintptr_t nRoom1 = native1Hop[i];
+                    if (!nRoom1 || nRoom1 < 0x10000) continue;
+                    if (IsSameLevelRoom1(playerLevel, nRoom1)) {
+                        ensureRoom1Populated(nRoom1);
+                    }
+                    outRooms.AddUnique(nRoom1);
+                }
+            }
+        }
+        // Walk DRLG D2RoomEx neighbor vector at [pRoomEx + 0x10..0x18] so Stage 2/3 rooms on the
+        // player's current floor whose D2Room1 (+0x58) was not yet materialized by 0x328A00 are
+        // materialized on-demand via 0x3289A0, without crossing Vis doorways into other levels.
         const uintptr_t pRoomEx = *reinterpret_cast<const uintptr_t*>(room1 + 0x18);
         if (pRoomEx && pRoomEx >= 0x10000) {
             const uintptr_t* pExNeighbors = *reinterpret_cast<const uintptr_t* const*>(pRoomEx + 0x10);
@@ -281,7 +320,7 @@ inline void PrepareClientRoomsImpl(uintptr_t pClient, uintptr_t pOldRoom, uintpt
             if (pExNeighbors && exCount > 0 && exCount <= 64) {
                 for (uint64_t i = 0; i < exCount; ++i) {
                     const uintptr_t neighborEx = pExNeighbors[i];
-                    if (!neighborEx || neighborEx < 0x10000) continue;
+                    if (!IsSameLevelRoomEx(playerLevel, neighborEx)) continue;
                     uintptr_t neighborRoom1 = *reinterpret_cast<const uintptr_t*>(neighborEx + 0x58);
                     if (!neighborRoom1) {
                         neighborRoom1 = ensureRoomExActive(roomAct, neighborEx);
@@ -299,6 +338,7 @@ inline void PrepareClientRoomsImpl(uintptr_t pClient, uintptr_t pOldRoom, uintpt
         uint32_t nCount{};
         if (queryRoom1Fn(room1, nArray, nCount) && nArray) {
             for (uint32_t i = 0; i < nCount; ++i) {
+                if (!IsSameLevelRoom1(playerLevel, nArray[i])) continue;
                 ensureRoom1Populated(nArray[i]);
                 outRooms.AddUnique(nArray[i]);
             }

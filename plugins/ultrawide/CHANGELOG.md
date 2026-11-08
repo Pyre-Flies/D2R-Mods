@@ -1,5 +1,9 @@
 # Ultrawide Changelog
 
+## 1.3.5+rev.3 - 2026-11-08
+
+- Restrict 2-hop/3-hop active room neighborhood expansion (`PrepareClientRoomsImpl` at `0x487254`) to rooms belonging to the player's current floor (`[pRoomEx + 0x90] == [pPlayerRoomEx + 0x90]`) so `MonsterPopIn` never crawls through `Vis` doorway/warp links into connected floors (such as multi-warp or cross-Act Labyrinth floors) whose `Vis0..7` destinations have not yet been registered by `0x2F0460`.
+
 ## 1.3.5+rev.2 - 2026-10-23
 
 - Fix cross-plugin coexistence conflict with `gem-bag-ui` (`CheckExpectedBytes` at `0x8562F0` `Widget::GetScreenPos`) by removing all hooks from `0x8562F0..0x856476` and instead updating `m_anchor.x` (`[panel + 0x48]`) on `AutoMapPanel`, `HireablesPanel`, and `HUDWarningsPanel` at `0x8A6461` inside `UIRootWidget::Update` (`0x8A5AA0`).

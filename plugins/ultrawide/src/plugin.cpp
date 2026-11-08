@@ -104,7 +104,7 @@ D2RL_PLUGIN_EXPORT auto D2RLoaderGetPluginInfo() noexcept -> const D2RL::PluginI
         .abiVersion = D2RL_PLUGIN_ABI_VERSION,
         .id = "ultrawide",
         .name = "Ultrawide",
-        .version = "1.3.5+rev.2",
+        .version = "1.3.5+rev.3",
         .author = "PyreFly",
         .description = "Ultrawide gameplay support: pillarbox/vignette removal, mouse/placard/automap unclamp, centered/full-length HUD & corner HUD anchoring, 22x22 terrain expansion, 7x7 monster pop-in fix, and configurable AI range.",
         .flags = D2RL::PluginFlags::Client | D2RL::PluginFlags::NativeHooks

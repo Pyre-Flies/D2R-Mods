@@ -373,6 +373,73 @@ void TestMonsterPopInReconcile() {
     ReconcileClientNeighborhood(state3Hop, 0, 0, roomId(3, 3), queryNeighbors7, expandNeighbors7, 3U);
     Check(state3Hop.activeRooms.count == 49, "center room (3,3) in 3-hop mode expands to all 49 rooms in 7x7 grid");
     Check(expandedRooms.size() == 26, "1 center + 25 (9+16) rooms expanded on initial 3-hop entry");
+
+    // Verify same-floor (pRoomEx + 0x90) gating across Vis doorway neighbors
+    struct FakeRoomEx {
+        unsigned char pad0[0x10]{};
+        const uintptr_t* exNeighbors{};
+        uint64_t exCount{};
+        unsigned char pad20[0x38]{};
+        uintptr_t room1{};
+        unsigned char pad60[0x30]{};
+        uintptr_t pLevel{};
+    };
+    static_assert(offsetof(FakeRoomEx, exNeighbors) == 0x10);
+    static_assert(offsetof(FakeRoomEx, exCount) == 0x18);
+    static_assert(offsetof(FakeRoomEx, room1) == 0x58);
+    static_assert(offsetof(FakeRoomEx, pLevel) == 0x90);
+
+    struct FakeRoom1 {
+        unsigned char pad0[0x18]{};
+        uintptr_t pRoomEx{};
+    };
+    static_assert(offsetof(FakeRoom1, pRoomEx) == 0x18);
+
+    const uintptr_t levelFloor21 = 0x500001ULL;
+    const uintptr_t levelFloor20 = 0x500002ULL;
+
+    FakeRoomEx exA0{}, exA1{}, exB0{}, exB1{};
+    FakeRoom1 rA0{}, rA1{}, rB0{}, rB1{};
+    exA0.pLevel = levelFloor21; exA0.room1 = reinterpret_cast<uintptr_t>(&rA0); rA0.pRoomEx = reinterpret_cast<uintptr_t>(&exA0);
+    exA1.pLevel = levelFloor21; exA1.room1 = reinterpret_cast<uintptr_t>(&rA1); rA1.pRoomEx = reinterpret_cast<uintptr_t>(&exA1);
+    exB0.pLevel = levelFloor20; exB0.room1 = reinterpret_cast<uintptr_t>(&rB0); rB0.pRoomEx = reinterpret_cast<uintptr_t>(&exB0);
+    exB1.pLevel = levelFloor20; exB1.room1 = reinterpret_cast<uintptr_t>(&rB1); rB1.pRoomEx = reinterpret_cast<uintptr_t>(&exB1);
+
+    Check(GetRoom1Level(exA0.room1) == levelFloor21 && GetRoom1Level(exB0.room1) == levelFloor20, "GetRoom1Level reads [pRoomEx + 0x90]");
+    Check(IsSameLevelRoomEx(levelFloor21, reinterpret_cast<uintptr_t>(&exA1)), "same-floor RoomEx admitted");
+    Check(!IsSameLevelRoomEx(levelFloor21, reinterpret_cast<uintptr_t>(&exB0)), "cross-floor Vis RoomEx rejected");
+    Check(IsSameLevelRoom1(levelFloor21, exA1.room1), "same-floor Room1 admitted");
+    Check(!IsSameLevelRoom1(levelFloor21, exB0.room1), "cross-floor Vis Room1 rejected");
+
+    // Simulate standing 1 hop from a doorway room (exA0 -> exA1 [doorway on Floor 21] -> exB0 [Floor 20] -> exB1 [Floor 20])
+    const uintptr_t a0Neighbors[]{reinterpret_cast<uintptr_t>(&exA0), reinterpret_cast<uintptr_t>(&exA1)};
+    const uintptr_t a1Neighbors[]{reinterpret_cast<uintptr_t>(&exA0), reinterpret_cast<uintptr_t>(&exA1), reinterpret_cast<uintptr_t>(&exB0)};
+    const uintptr_t b0Neighbors[]{reinterpret_cast<uintptr_t>(&exA1), reinterpret_cast<uintptr_t>(&exB0), reinterpret_cast<uintptr_t>(&exB1)};
+    exA0.exNeighbors = a0Neighbors; exA0.exCount = 2;
+    exA1.exNeighbors = a1Neighbors; exA1.exCount = 3;
+    exB0.exNeighbors = b0Neighbors; exB0.exCount = 3;
+
+    const uintptr_t playerLevel = GetRoom1Level(exA0.room1);
+    auto expandSameLevelOnly = [&](uint8_t, uintptr_t room1, RoomList& outRooms) noexcept {
+        if (!IsSameLevelRoom1(playerLevel, room1)) return;
+        outRooms.AddUnique(room1);
+        const uintptr_t pRoomEx = *reinterpret_cast<const uintptr_t*>(room1 + 0x18);
+        const uintptr_t* pExNeighbors = *reinterpret_cast<const uintptr_t* const*>(pRoomEx + 0x10);
+        const uint64_t exCount = *reinterpret_cast<const uint64_t*>(pRoomEx + 0x18);
+        for (uint64_t i = 0; i < exCount; ++i) {
+            const uintptr_t neighborEx = pExNeighbors[i];
+            if (!IsSameLevelRoomEx(playerLevel, neighborEx)) continue;
+            outRooms.AddUnique(*reinterpret_cast<const uintptr_t*>(neighborEx + 0x58));
+        }
+    };
+    ClientRoomState doorwayState{};
+    ReconcileClientNeighborhood(doorwayState, 0, 0, exA0.room1, queryNeighbors, expandSameLevelOnly, 3U);
+    Check(doorwayState.activeRooms.count == 2 &&
+          doorwayState.activeRooms.Contains(exA0.room1) &&
+          doorwayState.activeRooms.Contains(exA1.room1) &&
+          !doorwayState.activeRooms.Contains(exB0.room1) &&
+          !doorwayState.activeRooms.Contains(exB1.room1),
+          "3-hop expansion stops at Vis doorway and never crawls into connected floor");
 }
 
 void TestMonsterAiPatches() {
