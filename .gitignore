@@ -49,3 +49,9 @@ desktop.ini
 /plugins/terrain-coverage-probe/
 /plugins/terrain-room-supply-probe/
 /plugins/ultrawide-bars/
+
+# Closed-source runtime plugins (only player READMEs are tracked here).
+/plugins/chain-hook/*
+!/plugins/chain-hook/README.md
+/plugins/pyre-perf/*
+!/plugins/pyre-perf/README.md

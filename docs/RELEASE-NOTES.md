@@ -1,7 +1,13 @@
-# D2R Mods - 2026.11.08.1
+# D2R Mods - 2026.11.11.1
 
-- **Ultrawide 1.3.5+rev.3:** Fixes a crash in multi-floor dungeons (such as Forsaken Labyrinth Floor 21) where the 3-hop monster pop-in expansion could reach through staircase/doorway links and force-load rooms on connected floors before you actually entered them. Room pre-loading now stays strictly on your current floor while keeping the full `monster_pop_in_radius = 3` (`7x7` room window) on the active map.
+Adds **Pyre Performance Optimizations** and **Universal Chain Hook** to the public runtime release alongside the full D2RLoader plugin suite.
 
-Close the game before replacing `Ultrawide.dll`. Existing `ultrawide.toml` settings and `data/hd/tc22sh/` terrain shaders are preserved.
+- **Pyre Performance Optimizations 1.3.1+rev.1 (`pyre-perf.dll`):** Improves combat frame pacing and simulation throughput during dense monster packs and heavy projectile builds across nine live-toggleable switches (`/pyreperf`) - missile damage stat caching, fast `NextDelay` hit-lock lookups, spatial collision filtering, client impact sound and sub-missile VFX budgeting, unit collision size caching, radial aura/AoE pre-filtering, monster AI room pre-filtering, and frozen enemy shatter VFX restoration (plus optional same-tick missile damage batching, off by default). **Highly recommended to pair with Universal Chain Hook**, since it hooks across many engine subsystems.
+- **Universal Chain Hook 1.3.1+rev.6 (`00-d2rl-chain-hook.dll`):** Lets multiple D2RLoader plugins that hook the same underlying game functions or dispatch tables run together in any load order without conflicts or extra hot-path overhead, with `/chainhook status`, `/chainhook list`, and `/chainhook test` inspection commands in the D2RLoader console.
+- **Full Runtime Suite Included:** Bundles all 14 PyreFly D2RLoader plugins plus the **Buff HUD 1.3.1+rev.3** companion package and a complete `SHA256SUMS` manifest in one release.
 
-Automated build, unit, artifact, and packaging checks pass; still needs a live check in Forsaken Labyrinth.
+**Upgrading & installation notes:**
+- Both **Pyre Performance Optimizations** and **Universal Chain Hook** are released as standalone runtime DLLs (`pyre-perf.dll` and `00-d2rl-chain-hook.dll`) with player guides in [`plugins/pyre-perf/README.md`](https://github.com/Pyre-Flies/D2R-Mods/blob/main/plugins/pyre-perf/README.md) and [`plugins/chain-hook/README.md`](https://github.com/Pyre-Flies/D2R-Mods/blob/main/plugins/chain-hook/README.md).
+- Keep the `00-` prefix on `00-d2rl-chain-hook.dll` intact so D2RLoader discovers it first.
+
+Automated build, unit, runtime hook, binary audit, and packaging checks pass across all included packages, alongside prior live gameplay testing of both new plugins.
