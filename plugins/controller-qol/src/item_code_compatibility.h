@@ -135,10 +135,98 @@ inline bool Compatible(uintptr_t game,const unsigned char* expected,size_t size)
     default:return false;
     }
 }
-// Keep existing direct/native and SDK diagnostic paths intact. Only the item
-// code site gains this additional admission; all other guards stay exact.
+// Keep existing direct/native and SDK diagnostic paths intact. Item-code and
+// FinishInventoryInteraction (SOUND_PlayUnitSound) admit verified plugin hooks.
+inline constexpr uintptr_t FinishInteractionRva=0x1a0780;
+inline constexpr unsigned char FinishInteractionOriginal[]={
+    0x40,0x55,0x56,0x57,0x41,0x56,0x41,0x57,0x48,0x8d,0x6c,0x24,0xd1,0x48,0x81,0xec,
+    0x00,0x01,0x00,0x00,0x48,0x8b,0x05,0x2d,0xab,0x82,0x02,0x48,0x33,0xc4,0x48,0x89,
+};
+template<class PluginCheckFn>
+inline bool ValidateFinishInteractionDetour(const QolChatForwarding::Memory& memory,uintptr_t game,
+    const unsigned char* expected,size_t size,PluginCheckFn&& isPluginCode) noexcept {
+    using namespace QolChatForwarding;
+    if(!memory.read || !game || !expected || size!=sizeof(FinishInteractionOriginal) ||
+       game>UINTPTR_MAX-FinishInteractionRva-sizeof(FinishInteractionOriginal) ||
+       std::memcmp(expected,FinishInteractionOriginal,sizeof(FinishInteractionOriginal))!=0)return false;
+    const auto entry=game+FinishInteractionRva;
+    unsigned char actual[sizeof(FinishInteractionOriginal)]{};
+    if(!memory.read(memory.user,entry,actual,sizeof(actual),Kind::Trampoline))return false;
+    uintptr_t target{};size_t replaced{};
+    if(actual[0]==0xe9) {
+        int32_t displacement{};std::memcpy(&displacement,actual+1,4);
+        if(!Relative(entry+5,displacement,target))return false;
+        replaced=5;
+    } else if(!std::memcmp(actual,Jump,sizeof(Jump))) {
+        std::memcpy(&target,actual+6,8);
+        replaced=14;
+    } else return false;
+    if(std::memcmp(actual+replaced,FinishInteractionOriginal+replaced,sizeof(FinishInteractionOriginal)-replaced)!=0)
+        return false;
+    for(unsigned hop=0;hop<4 && target;++hop) {
+        if(isPluginCode(target))return true;
+        unsigned char relStub[5]{};
+        if(!memory.read(memory.user,target,relStub,sizeof(relStub),Kind::Trampoline))return false;
+        if(relStub[0]==0xe9) {
+            int32_t displacement{};std::memcpy(&displacement,relStub+1,4);
+            if(!Relative(target+5,displacement,target))return false;
+            continue;
+        }
+        unsigned char absStub[14]{};
+        if(!memory.read(memory.user,target,absStub,sizeof(absStub),Kind::Trampoline) ||
+           std::memcmp(absStub,Jump,sizeof(Jump))!=0)return false;
+        std::memcpy(&target,absStub+6,8);
+    }
+    return false;
+}
+inline HMODULE LookupAdmittedLoaderPluginModule(uintptr_t target,uintptr_t game) noexcept {
+    __try {
+        HMODULE module{};
+        if(!target || !GetModuleHandleExW(
+                GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS|GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                reinterpret_cast<LPCWSTR>(target),&module) ||
+           !module || reinterpret_cast<uintptr_t>(module)==game)return nullptr;
+        auto getInfo=reinterpret_cast<D2RL::GetPluginInfoFn>(GetProcAddress(module,"D2RLoaderGetPluginInfo"));
+        if(!getInfo)return nullptr;
+        const auto* info=getInfo();
+        if(!info || info->infoSize<D2RL::PluginInfoRequiredSize ||
+           info->abiVersion!=D2RL_PLUGIN_ABI_VERSION || !info->id || !*info->id)return nullptr;
+        return module;
+    } __except(EXCEPTION_EXECUTE_HANDLER) {
+        return nullptr;
+    }
+}
+inline bool IsAdmittedLoaderPluginCode(uintptr_t target,uintptr_t game) noexcept {
+    const HMODULE module=LookupAdmittedLoaderPluginModule(target,game);
+    if(!module)return false;
+    QolChatForwarding::ImageMemory image{};
+    unsigned char codeByte{};
+    return image.Open(module,true) && image.Read(target,&codeByte,1,QolChatForwarding::Kind::Code);
+}
+inline bool HasInlineJumpAt(uintptr_t address) noexcept {
+    __try {
+        if(!address)return false;
+        const auto* p=reinterpret_cast<const unsigned char*>(address);
+        return p[0]==0xe9 || (p[0]==0xff && p[1]==0x25);
+    } __except(EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+inline bool CompatibleFinishInteraction(uintptr_t game,const unsigned char* expected,size_t size) noexcept {
+    QolPerf::Scope timing(QolPerf::Counters[QolPerf::Compatibility]);
+    if(!game || game>UINTPTR_MAX-FinishInteractionRva || !HasInlineJumpAt(game+FinishInteractionRva))return false;
+    QolChatForwarding::ImageMemory trampolines{};
+    trampolines.localCopies=true;
+    return ValidateFinishInteractionDetour(trampolines.Reader(),game,expected,size,
+        [game](uintptr_t target) noexcept { return IsAdmittedLoaderPluginCode(target,game); });
+}
 inline bool Check(const D2RL::PluginContext* ctx,uintptr_t rva,const unsigned char* expected,size_t size) noexcept {
     if(!ctx)return false;
+    if(rva==FinishInteractionRva && CompatibleFinishInteraction(ctx->exeBase,expected,size)) {
+        static std::atomic<bool> logged{};
+        if(!logged.exchange(true))ctx->LogInfo("[QOL/FinishInteraction] Verified D2RLoader plugin hook on PlaySoundById; post-transfer sound call preserved.");
+        return true;
+    }
     if(size<=UINT32_MAX && ctx->CheckExpectedBytes(rva,expected,static_cast<uint32_t>(size)))return true;
     if(rva==Rva && Compatible(ctx->exeBase,expected,size)) {
         static std::atomic<bool> logged{};
@@ -150,6 +238,7 @@ inline bool Check(const D2RL::PluginContext* ctx,uintptr_t rva,const unsigned ch
 inline bool Match(uintptr_t base,uintptr_t rva,const unsigned char* expected,size_t size) noexcept {
     __try {if(base && base<=UINTPTR_MAX-rva && !std::memcmp(reinterpret_cast<const void*>(base+rva),expected,size))return true;}
     __except(EXCEPTION_EXECUTE_HANDLER) {return false;}
-    return rva==Rva && Compatible(base,expected,size);
+    return (rva==Rva && Compatible(base,expected,size)) ||
+        (rva==FinishInteractionRva && CompatibleFinishInteraction(base,expected,size));
 }
 }

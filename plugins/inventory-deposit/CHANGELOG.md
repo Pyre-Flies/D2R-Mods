@@ -1,5 +1,32 @@
 # Inventory Deposit changelog
 
+## 1.3.1+rev.16 - 2026-11-14
+
+- Route `QolBulkStash::Guard()`, `QolBulkStash::Remote()`, and `InventoryDepositNative` byte guards through `QolItemCode::Check` (`PluginContext::CheckExpectedBytes`) so `Universal Chain Hook` is honored on button clicks and batch execution, and structurally admit verified `D2RLoader` ABI-v4 plugin inline detours at `FinishInventoryInteraction` (`PlaySoundById`, `0x1A0780`) via `ValidateFinishInteractionDetour` without false-positive `D2RCore.dll` safety-check errors.
+- Restore `/O2` Release forwarding witnesses (`QolChatForwarding::ReleaseProfile` / `ValidateRelease`) alongside `/Od` (`Profile` / `ValidateDebug`) so `Inventory Deposit` and `Controller QOL Updates` coexist with both canonical CMake `--preset release` (`/O2`) and `dist/` (`/Od`) builds of `d2rl-global-chat.dll`, and add `/O2` stat-reader witnesses (`QolMapsQuantity::ReleaseProfile`) for `d2rl-maps.dll`.
+- Suppress early-startup background refresh warnings (`UI scheduling unavailable; button action refused.`) before D2R initializes its UI subsystem while keeping explicit click failures logged.
+- Skip advanced-stash items whose current-season stash counter (`0x46D8F0` /
+  `itemData+0x9C`) has already reached the configured stack limit (`D2RCore.dll+0x1BB960`
+  and `D2RCore.dll+0x3A0F20` ord 109), and track in-flight per-`classId` batch
+  submissions in `QolBulkStash::Plan` so partial stacks that fill up mid-batch
+  skip remaining copies without submitting a rejected packet `0x63` or aborting
+  the rest of the batch.
+- Distinguish player-wide pending-transaction state (`0x3351B0(player, 0x36) != 0`,
+  treated as `Unavailable` / `Refused`) from item-scoped pending-transaction
+  nodes (`0x1C7360(item) != 0` when player state `0x36` is clear, treated as
+  `Ineligible` / skipped) so a single inventory item previously rejected on a
+  full stack never disables the Deposit All button or stops a batch for other
+  items. When all remaining candidates belong to full stacks, `HasEligibleItems()`
+  returns `false` and the button greys out.
+- Add `deposit_rejuvenation_potions = true` under `[inventory_deposit]` in
+  `inventory-deposit.toml` and in-game `/autodeposit rejuv [on|off|toggle|status]`
+  (plus `/autodeposit status` and `/autodeposit help`) with immediate button
+  eligibility refresh and TOML persistence via `ChatConfig::Save`.
+- Filter rejuvenation and full rejuvenation potions (`rvs`, `rvl`) across
+  UI button eligibility (`HasEligibleItems`), remote client transfers
+  (`BatchDepositUnsafe`), and local game-thread batches (`QolBulkStash::Observer::allow`)
+  when rejuvenation potion depositing is disabled.
+
 ## Documentation
 
 - Make the plugin README the complete user reference for commands, settings

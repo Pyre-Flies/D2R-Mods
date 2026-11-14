@@ -16,6 +16,7 @@
 #include "shared_page_signatures.h"
 #include "shared_owner_compatibility.h"
 #include "storage_focus_profile.h"
+#include <cstring>
 #include <mutex>
 
 namespace {
@@ -35,6 +36,14 @@ template<class T> T At(uintptr_t rva) noexcept {
     return reinterpret_cast<T>(pluginContext->exeBase + rva);
 }
 
+bool MatchAddress(uintptr_t address, const unsigned char* bytes, size_t size) noexcept {
+    unsigned char actual[128]{};
+    SIZE_T got{};
+    return size <= sizeof(actual) &&
+        ReadProcessMemory(GetCurrentProcess(), reinterpret_cast<const void*>(address), actual, size, &got) &&
+        got == size && std::memcmp(actual, bytes, size) == 0;
+}
+
 void Disable(const char* reason) noexcept {
     supported = false;
     if (!faulted && pluginContext) pluginContext->LogWarn(reason);
@@ -47,8 +56,7 @@ bool Guard() noexcept {
     if (!pluginContext || !pluginContext->exeBase || !coreBase ||
         reinterpret_cast<uintptr_t>(GetModuleHandleW(L"D2RCore.dll")) != coreBase) return false;
     for (const auto& site : QolClientTransfer::Profile::Sites) {
-        if (site.size > UINT32_MAX ||
-            !pluginContext->CheckExpectedBytes(site.rva, site.bytes, static_cast<uint32_t>(site.size))) return false;
+        if (!QolItemCode::Check(pluginContext, site.rva, site.bytes, site.size)) return false;
     }
     using namespace QolBelt::Signatures;
     using namespace QolNativeIdentifyProfile;
@@ -75,10 +83,15 @@ bool Guard() noexcept {
 
 bool DepositGuard() noexcept {
     using namespace QolMaterials::Signatures;
-    return pluginContext->CheckExpectedBytes(0x15a0b0, QolStorageProfile::DepositEligible, sizeof(QolStorageProfile::DepositEligible)) &&
-        pluginContext->CheckExpectedBytes(0x46da50, CurrentOwner, sizeof(CurrentOwner)) &&
-        pluginContext->CheckExpectedBytes(0x23b980, PreviousSeason, sizeof(PreviousSeason)) &&
-        pluginContext->CheckExpectedBytes(0x1a0780, FinishInteraction, sizeof(FinishInteraction));
+    return QolItemCode::Check(pluginContext, 0x15a0b0, QolStorageProfile::DepositEligible, sizeof(QolStorageProfile::DepositEligible)) &&
+        QolItemCode::Check(pluginContext, 0x46da50, CurrentOwner, sizeof(CurrentOwner)) &&
+        QolItemCode::Check(pluginContext, 0x46d8f0, FindCounter, sizeof(FindCounter)) &&
+        QolItemCode::Check(pluginContext, 0x46d9a0, HasCounter, sizeof(HasCounter)) &&
+        QolItemCode::Check(pluginContext, 0x3351b0, HasUnitState, sizeof(HasUnitState)) &&
+        QolItemCode::Check(pluginContext, 0x23b980, PreviousSeason, sizeof(PreviousSeason)) &&
+        QolItemCode::Check(pluginContext, 0x1a0780, FinishInteraction, sizeof(FinishInteraction)) &&
+        MatchAddress(coreBase + D2R::Native::CoreGetMaterialsLimitRva, CoreMaterialsLimit, sizeof(CoreMaterialsLimit)) &&
+        MatchAddress(coreBase + D2R::Native::CoreGetCounterFullStatusRva, CoreCounterFull, sizeof(CoreCounterFull));
 }
 
 bool ProfileAvailable() noexcept {
@@ -124,12 +137,18 @@ InventoryDepositEligibility::Result InspectEligibilityUnsafe(const Info& live) n
     using Eligibility = InventoryDepositEligibility::Result;
     // Same admitted client lookup and identity/page checks as BatchDepositUnsafe.
     // This is a synchronous read: no transfer or finish-interaction call.
+    auto* player = D2R::Native::GetLocalPlayerUnit(pluginContext->exeBase);
+    auto* owner = player ? At<void*(__fastcall*)(void*)>(0x46da50)(player) : nullptr;
     auto* item = static_cast<uint32_t*>(At<void*(__fastcall*)(uint32_t, uint32_t)>(0x9a5d0)(live.runtimeId, 4));
-    if (!item || item[0] != 4 || item[1] != live.classId || item[2] != live.runtimeId || item[3] != 0 ||
+    if (!player || !owner || !item || item[0] != 4 || item[1] != live.classId || item[2] != live.runtimeId || item[3] != 0 ||
         At<uint32_t(__fastcall*)(const void*)>(0x36ef50)(item) != live.code ||
-        At<uint8_t(__fastcall*)(const void*)>(0x36cfe0)(item) != 0) return Eligibility::Unavailable;
-    if (At<int(__fastcall*)(const void*)>(0x1c7360)(item)) return Eligibility::Unavailable;
-    return At<bool(__fastcall*)(const void*)>(0x15a0b0)(item) ? Eligibility::Eligible : Eligibility::Ineligible;
+        At<uint8_t(__fastcall*)(const void*)>(0x36cfe0)(item) != 0 ||
+        At<int(__fastcall*)(const void*, uint32_t)>(0x3351b0)(player, 0x36)) return Eligibility::Unavailable;
+    if (At<int(__fastcall*)(const void*)>(0x1c7360)(item)) return Eligibility::Ineligible;
+    if (!InventoryDepositNative::AllowItem(live) || !At<bool(__fastcall*)(const void*)>(0x15a0b0)(item)) return Eligibility::Ineligible;
+    return D2R::Native::HasAdvancedStashCapacity(pluginContext->exeBase, coreBase, owner, live.classId, 0, nullptr, live.quantity)
+        ? Eligibility::Eligible
+        : Eligibility::Ineligible;
 }
 
 bool HasEligibleItemsGuarded() noexcept {
@@ -172,11 +191,16 @@ Result BatchDepositUnsafe(const D2RL::PluginContext* context, const Info& expect
         if (!player || !item || item[0] != 4 || item[1] != live.classId || item[2] != live.runtimeId || item[3] != 0 ||
             At<uint32_t(__fastcall*)(const void*)>(0x36ef50)(item) != live.code ||
             At<uint8_t(__fastcall*)(const void*)>(0x36cfe0)(item) != 0 ||
-            At<int(__fastcall*)(const void*)>(0x1c7360)(item) ||
+            At<int(__fastcall*)(const void*, uint32_t)>(0x3351b0)(player, 0x36) ||
             At<void*(__fastcall*)()>(0x14f1e0)() || At<int(__fastcall*)()>(0x14f210)() == 5) return Result::Refused;
-        if (!At<bool(__fastcall*)(const void*)>(0x15a0b0)(item)) return Result::Ineligible;
         auto* destination = At<void*(__fastcall*)(void*)>(0x46da50)(player);
         if (!destination) return Result::Refused;
+        if (At<int(__fastcall*)(const void*)>(0x1c7360)(item) ||
+            !InventoryDepositNative::AllowItem(live) ||
+            !At<bool(__fastcall*)(const void*)>(0x15a0b0)(item) ||
+            !D2R::Native::HasAdvancedStashCapacity(context->exeBase, coreBase, destination, live.classId, 0, nullptr, live.quantity)) {
+            return Result::Ineligible;
+        }
         alignas(8) unsigned char placement[16]{};
         // Submitted includes a native false return: the unchanged queue owns
         // observation and must never retry an uncertain client request.
@@ -193,6 +217,7 @@ Result BatchDepositUnsafe(const D2RL::PluginContext* context, const Info& expect
 namespace InventoryDepositNative {
 bool Initialize(const D2RL::PluginContext* context) noexcept {
     std::lock_guard lock(nativeMutex);
+    D2R::Native::ClearAdvancedStashRejections();
     pluginContext = context;
     itemService = nullptr;
     inventoryService = nullptr;
@@ -230,6 +255,7 @@ bool Initialize(const D2RL::PluginContext* context) noexcept {
 
 void Shutdown() noexcept {
     std::lock_guard lock(nativeMutex);
+    D2R::Native::ClearAdvancedStashRejections();
     supported = false;
     pluginContext = nullptr;
     itemService = nullptr;

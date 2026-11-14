@@ -85,7 +85,9 @@ static D2RL::Input::ActionHandle              g_ActionHandle        = D2RL::Inpu
 static D2RL::SharedEvents::ListenerHandle     g_TooltipActionHandle = D2RL::SharedEvents::InvalidHandle;
 
 static std::atomic<bool> g_PollingRunning{false};
-static std::thread g_PollingThread;
+// Never destroyed: a global std::thread still joinable when the process exits
+// without unloading plugins is std::terminate, a 0xC0000409 crash (see time-played).
+static std::thread& g_PollingThread = *new std::thread;
 static std::atomic<ULONGLONG> g_LastInventoryInteractionTick{0};
 
 static std::atomic<D2RL::ItemHandle> s_FocusedItem{D2RL::InvalidItemHandle};
@@ -142,7 +144,7 @@ static constexpr D2RL::PluginInfo ControllerQoLPluginInfo {
     .abiVersion  = D2RL_PLUGIN_ABI_VERSION,
     .id          = "controller-qol-updates",
     .name        = "Controller QOL Updates",
-    .version     = "1.3.1+rev.95",
+    .version     = "1.3.1+rev.97",
     .author      = "PyreFly",
     .description = "Direct controller looting with filtered labels, inventory shortcuts, and stash navigation.",
     .flags       = D2RL::PluginFlags::Shared | D2RL::PluginFlags::NativeHooks,
@@ -440,12 +442,12 @@ static void ExecuteMove(const D2RL::PluginContext* context, MoveRequest* req) no
         if (!TestUiMode(UI_MODE_STASH)) {  return; }
         const bool fromCube=req->sourceContainer==D2RL::Items::ItemContainer::Cube;
         if(fromCube && !QolClientTransfer::AdvancedTab(D2R::Native::GetActiveStashTabIndex(exeBase))) {return;}
-        struct Deposit { uintptr_t base; void* player; uint8_t page; bool inspected{},eligible{},submitted{}; } deposit{exeBase,playerUnit,static_cast<uint8_t>(fromCube?3:0)};
+        struct Deposit { uintptr_t base; void* player; uint8_t page; int32_t quantity; bool inspected{},eligible{},submitted{}; } deposit{exeBase,playerUnit,static_cast<uint8_t>(fromCube?3:0),liveTarget.quantity};
         g_Items->editNativeItem(context,activeTarget,[](const D2RL::PluginContext*,void* item,void* user) noexcept {
             auto& d=*static_cast<Deposit*>(user);
             d.inspected=item!=nullptr;
             d.eligible=D2R::Native::CanDepositToAdvancedStash(d.base,item);
-            if (d.eligible && d.player) d.submitted=D2R::Native::DepositToAdvancedStash(d.base,item,d.player,d.page);
+            if (d.eligible && d.player) d.submitted=D2R::Native::DepositToAdvancedStash(d.base,item,d.player,d.page,d.quantity);
         },&deposit);
         if (!deposit.inspected || deposit.eligible || fromCube) {
             context->LogInfo(deposit.submitted ? "[QOL/Materials] Existing smart-deposit helper submitted storage move." :
@@ -459,11 +461,11 @@ static void ExecuteMove(const D2RL::PluginContext* context, MoveRequest* req) no
     // 2. Inventory -> Stash: Smart deposit to Advanced Stash or active Stash tab
     const bool isStashOpen = TestUiMode(UI_MODE_STASH);
     if (QolMaterials::UseStashDeposit(req->sourceContainer,req->primaryDestination,isStashOpen)) {
-        struct Deposit { uintptr_t base; void* player; bool eligible{},submitted{}; } deposit{exeBase,playerUnit};
+        struct Deposit { uintptr_t base; void* player; int32_t quantity; bool eligible{},submitted{}; } deposit{exeBase,playerUnit,liveTarget.quantity};
         g_Items->editNativeItem(context, activeTarget, [](const D2RL::PluginContext*, void* item, void* userData) noexcept {
             auto& d=*static_cast<Deposit*>(userData);
             d.eligible=item && d.player && D2R::Native::CanDepositToAdvancedStash(d.base,item);
-            if(d.eligible)d.submitted=D2R::Native::DepositToAdvancedStash(d.base,item,d.player);
+            if(d.eligible)d.submitted=D2R::Native::DepositToAdvancedStash(d.base,item,d.player,0,d.quantity);
         }, &deposit);
 
         // A. Smart deposit check for Advanced Stash (runes, gems, stackables, essences)
@@ -2378,7 +2380,7 @@ D2RL_PLUGIN_EXPORT auto D2RLoaderLoadPlugin(const D2RL::PluginContext* context) 
     },+[](const QolConfig::Settings& next) noexcept {
         ControllerQoL::SetTriggerThreshold(next.triggerThreshold);
     });
-    context->LogInfo("[QOL] QOL v1.3.1+rev.95 loaded: controller item features and integrated v0.6 navigation/label hooks.");
+    context->LogInfo("[QOL] QOL v1.3.1+rev.97 loaded: controller item features and integrated v0.6 navigation/label hooks.");
     return true;
 }
 

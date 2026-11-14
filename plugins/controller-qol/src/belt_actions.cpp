@@ -66,7 +66,7 @@ bool Validate(const D2RL::PluginContext* ctx) noexcept {
             ? QolCompat::ValidateBeltEntry(ctx->exeBase + site.rva)
             : site.rva == D2R::Native::ShiftRightClickPlaceActionRva
                 ? QolBeltCompat::Stored(ctx->exeBase+site.rva)
-                : QolBeltCompat::Match(ctx->exeBase+site.rva,site.bytes,site.size);
+                : QolItemCode::Check(ctx,site.rva,site.bytes,site.size);
         if (!matched) {
             char message[128];
             std::snprintf(message, sizeof(message), "[QOL/Belt] Native admission mismatch at RVA 0x%llX.", static_cast<unsigned long long>(site.rva));

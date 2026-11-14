@@ -13,6 +13,7 @@ struct Observer {
     void (*begin)(void*) noexcept{};
     void (*removed)(void*,const D2RL::Items::ItemInfo&) noexcept{};
     void (*end)(void*) noexcept{};
+    bool (*allow)(void*,const D2RL::Items::ItemInfo&) noexcept{};
 };
 void Initialize(const D2RL::PluginContext*,Available,const Observer* observer=nullptr) noexcept;
 bool Request() noexcept;

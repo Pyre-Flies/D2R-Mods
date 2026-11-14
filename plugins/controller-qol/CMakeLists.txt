@@ -256,7 +256,7 @@ add_executable(qol-artifact-tests tests/artifact_tests.cpp)
 target_include_directories(qol-artifact-tests PRIVATE src "${PLUGIN_SDK}/include")
 target_compile_definitions(qol-artifact-tests PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 add_dependencies(qol-artifact-tests controller-qol)
-add_test(NAME qol-artifact COMMAND qol-artifact-tests "$<TARGET_FILE:controller-qol>" "1.3.1+rev.95")
+add_test(NAME qol-artifact COMMAND qol-artifact-tests "$<TARGET_FILE:controller-qol>" "1.3.1+rev.97")
 
 add_executable(qol-shared-sdk-tests tests/shared_sdk_tests.cpp)
 target_include_directories(qol-shared-sdk-tests PRIVATE src "${PLUGIN_SDK}/include")
@@ -264,7 +264,7 @@ target_compile_definitions(qol-shared-sdk-tests PRIVATE WIN32_LEAN_AND_MEAN NOMI
 add_test(NAME qol-shared-sdk COMMAND qol-shared-sdk-tests)
 
 add_executable(qol-bulk-stash-tests tests/bulk_stash_tests.cpp)
-target_include_directories(qol-bulk-stash-tests PRIVATE src "${PLUGIN_SDK}/include")
+target_include_directories(qol-bulk-stash-tests PRIVATE src include "${PLUGIN_SDK}/include")
 add_test(NAME qol-bulk-stash COMMAND qol-bulk-stash-tests)
 
 # Exercise QOL's production observer bridge and the shared animator itself.
@@ -283,6 +283,14 @@ add_test(NAME qol-stash-feedback COMMAND qol-stash-feedback-tests)
 add_executable(qol-stash-feedback-policy-tests "${INVENTORY_DEPOSIT}/tests/stash_feedback_policy_tests.cpp")
 target_include_directories(qol-stash-feedback-policy-tests PRIVATE "${INVENTORY_DEPOSIT}/src")
 add_test(NAME qol-stash-feedback-policy COMMAND qol-stash-feedback-policy-tests)
+
+add_executable(qol-item-code-coexistence-tests "${INVENTORY_DEPOSIT}/tests/item_code_coexistence_tests.cpp")
+target_include_directories(qol-item-code-coexistence-tests PRIVATE src "${PLUGIN_SDK}/include")
+target_compile_definitions(qol-item-code-coexistence-tests PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_compile_options(qol-item-code-coexistence-tests PRIVATE /W4 /WX)
+target_link_libraries(qol-item-code-coexistence-tests PRIVATE bcrypt)
+add_dependencies(qol-item-code-coexistence-tests controller-qol)
+add_test(NAME qol-item-code-coexistence COMMAND qol-item-code-coexistence-tests "$<TARGET_FILE:controller-qol>")
 
 # Integrated aim policy and configuration isolation regression coverage.
 add_executable(qol-aim-tests tests/aim_policy_tests.cpp)

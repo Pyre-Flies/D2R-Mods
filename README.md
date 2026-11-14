@@ -8,7 +8,7 @@ Download individual runtime ZIPs from the
 
 | Plugin | Version | What it adds |
 | --- | --- | --- |
-| [Controller QOL Updates](plugins/controller-qol/README.md) | `1.3.1+rev.95` | Controller item shortcuts, direct ground looting, menu navigation, and right-stick skill aiming. |
+| [Controller QOL Updates](plugins/controller-qol/README.md) | `1.3.1+rev.97` | Controller item shortcuts, direct ground looting, menu navigation, and right-stick skill aiming. |
 | [Pyre Performance Optimizations](plugins/pyre-perf/README.md) | `1.3.1+rev.2` | High-density combat and projectile frame-pacing optimizations across damage stat caching, `NextDelay`, spatial collision, client sound/VFX budgeting, aura/AI room scans, and frozen shatter VFX (highly recommended with [Universal Chain Hook](plugins/chain-hook/README.md)). |
 | [Universal Chain Hook](plugins/chain-hook/README.md) | `1.3.1+rev.7` | Automatic load-order-independent native hook chaining and shared hotkey coordination so multiple D2RLoader plugins work together seamlessly. |
 | [Pyre Loot Filter](plugins/pyre-lootfilter/README.md) | `1.3.1+rev.3` | Clean-room native `filter.json` (v1/v2/v3) ground loot filter with custom label colors, stack prefixes, drop sounds, minimap icons, mouse pickup guard, and Controller QOL visibility interop. |
@@ -17,7 +17,7 @@ Download individual runtime ZIPs from the
 | [Ultrawide](plugins/ultrawide/README.md) | `1.3.5+rev.3` | 21:9 and 32:9 ultrawide viewport support: pillarbox/vignette removal, mouse/placard/automap unclamp, centered or full-length HUD, corner HUD anchoring, 22×22 terrain cache, 7×7 monster pop-in fix, and configurable AI range. |
 | [Item Roll Ranges](plugins/item-roll-ranges/README.md) | `1.3.1+rev.56` | Stat roll ranges, prefix/suffix/runeword/set/craft/socket/corruption/enchantment source breakdowns, base damage/Defense, item levels (`Ilvl`/`Qlvl`), and max socket capacity. |
 | [Gem Bag UI](plugins/gem-bag-ui/README.md) | `1.3.1+rev.2` | Interactive gem picker for withdrawing gems and one-step shortcut for depositing loose gems and gem clusters. |
-| [Inventory Deposit](plugins/inventory-deposit/README.md) | `1.3.1+rev.13` | Keyboard/mouse **Deposit All** button beside inventory gold for moving eligible inventory gems, runes, materials, and rejuvenation potions into advanced storage. |
+| [Inventory Deposit](plugins/inventory-deposit/README.md) | `1.3.1+rev.16` | Keyboard/mouse **Deposit All** button beside inventory gold for moving eligible inventory gems, runes, materials, and rejuvenation potions into advanced storage, with `/autodeposit rejuv` toggle. |
 | [Floating Damage](plugins/floating-damage/README.md) | `1.3.1+rev.13` | Local single-player enemy HP-loss numbers with elemental damage colors and critical-hit emphasis. |
 | [Always Show Sockets](plugins/always-show-sockets/README.md) | `1.3.1+rev.2` | Continuous or hover-based styled socket display with configurable size, opacity, ring, and lift. |
 | [Day Night Cycle](plugins/day-night-cycle/README.md) | `1.3.1+rev.1` | Restores natural time-of-day lighting progression with live chat controls for auto, day, and night modes. |
@@ -72,6 +72,7 @@ Enter slash commands in normal game chat (feedback is printed in the D2RLoader c
 | | `Shift + Right-click` / `LB + B` | Deposit compatible gems and gem clusters from the current storage page into the bag. |
 | **[Map Assistance](plugins/map-assistance/README.md)** | Hover `Keys` outside town | Display area layout and navigation notes directly on the Keys item tooltip. |
 | **[Inventory Deposit](plugins/inventory-deposit/README.md)** | Click **Deposit All** (stash open) | Move eligible inventory gems, runes, materials, and rejuvenation potions into advanced storage. |
+| | `/autodeposit rejuv` · `on` · `off` · `status` | Toggle rejuvenation potion (`rvs`, `rvl`) depositing and save the setting. |
 | **[Ultrawide](plugins/ultrawide/README.md)** | Configured in `ultrawide.toml` | Automatic during gameplay; configure HUD mode, corner HUD anchoring, terrain cache, pop-in radius, and AI range in `d2rloader/config/ultrawide.toml`. |
 
 ---

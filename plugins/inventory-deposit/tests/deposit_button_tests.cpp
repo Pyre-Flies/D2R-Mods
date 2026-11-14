@@ -58,6 +58,7 @@ struct Fixture {
     std::deque<Task> tasks;
     std::map<uint64_t,bool> visibility,enablement;
     std::vector<std::string> widgetNames;
+    std::vector<std::string> warnLogs;
 
     Fixture();
     ~Fixture() {InventoryDepositButton::Shutdown();Check(Clean(),"shutdown releases all owned registrations");fixture=nullptr;}
@@ -237,10 +238,13 @@ D2RL::Threads::Result __cdecl Queue(const D2RL::PluginContext* context,D2RL::Thr
     if(fixture->rejectQueue)return D2RL::Threads::Result::Unavailable;
     fixture->tasks.push_back({context,callback,data});return D2RL::Threads::Result::Success;
 }
+void __cdecl RecordWarn(const D2RL::PluginContext*,const char* message) noexcept {
+    if(fixture && message)fixture->warnLogs.emplace_back(message);
+}
 Fixture::Fixture() {
     Check(fixture==nullptr,"fixtures run serially");fixture=this;
-    api.apiSize=sizeof(api);api.queryService=&Query;
-    context.contextSize=sizeof(context);context.api=&api;
+    api.apiSize=sizeof(api);api.queryService=&Query;api.logWarn=&RecordWarn;
+    context.contextSize=sizeof(context);context.abiVersion=D2RL_PLUGIN_ABI_VERSION;context.api=&api;
     resources.serviceSize=sizeof(resources);resources.serviceVersion=1;
     resources.registerResource=&RegisterResource;resources.unregisterResource=&UnregisterResource;
     panels.serviceSize=sizeof(panels);panels.serviceVersion=1;
@@ -374,7 +378,12 @@ void StateAndQueueTests() {
     f.visible=true;Check(Click(f)==Action::Consume,"new click accepted after cancelled work");f.enabled=false;f.Pump();
     Check(!f.requests,"new busy state before queued click executes cancels the deposit");
     f.enabled=true;for(unsigned i=0;i<100;++i)Click(f);f.Pump();Check(f.requests==1,"click storm produces only one request per queued batch");
-    f.rejectQueue=true;Click(f);InventoryDepositButton::Refresh();Check(f.tasks.empty(),"scheduler rejection leaves no queued work");
+    f.rejectQueue=true;f.warnLogs.clear();InventoryDepositButton::Refresh();
+    Check(f.warnLogs.empty(),"background refresh before UI queue init does not warn about a refused button click");
+    Click(f);Click(f);InventoryDepositButton::Refresh();
+    Check(f.warnLogs.size()==1 && f.warnLogs[0].find("button action refused")!=std::string::npos,
+        "explicit click while UI queue is unavailable warns once");
+    Check(f.tasks.empty(),"scheduler rejection leaves no queued work");
     f.rejectQueue=false;Click(f);f.Pump();Check(f.requests==2,"scheduler rejection does not leave action permanently latched");
     f.requestResult=false;Click(f);f.Pump();Check(f.requests==3 && f.tasks.empty(),"declined deposit does not automatically retry item movement");
     f.requestResult=true;Click(f);f.Pump();Check(f.requests==4,"a later explicit click can retry a declined request");

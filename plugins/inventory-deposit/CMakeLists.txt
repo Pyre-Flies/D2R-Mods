@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.29)
 # compiler probes and Debug builds; Release artifacts retain normal flags.
 cmake_policy(SET CMP0141 NEW)
 set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT "$<$<CONFIG:Debug,RelWithDebInfo>:Embedded>")
-project(inventory-deposit VERSION 1.3.1.13 LANGUAGES CXX RC)
+project(inventory-deposit VERSION 1.3.1.16 LANGUAGES CXX RC)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
@@ -14,6 +14,8 @@ set(PLUGIN_SDK "${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/D2RLoader-PluginSD
 add_subdirectory("${PLUGIN_SDK}" "${CMAKE_CURRENT_BINARY_DIR}/sdk" EXCLUDE_FROM_ALL)
 include("${PLUGIN_SDK}/cmake/D2RLPluginEmbedConfig.cmake")
 set(QOL "${CMAKE_CURRENT_SOURCE_DIR}/../controller-qol")
+set(CHAT_VENDOR "${CMAKE_CURRENT_SOURCE_DIR}/../always-show-sockets/vendor")
+set(SETTINGS_VENDOR "${CMAKE_CURRENT_SOURCE_DIR}/vendor/D2RLSettings")
 
 # Original source art is converted during the build, then embedded as RCDATA.
 # Only the DLL is needed at runtime; generated sprites stay in the build tree.
@@ -41,8 +43,10 @@ set_source_files_properties("${BUTTON_ART_GENERATED}/button_art.rc" PROPERTIES
 add_library(inventory-deposit SHARED src/plugin_main.cpp src/deposit_button.cpp
     src/deposit_native.cpp src/gold_anchor.cpp src/button_state.cpp src/button_art.cpp src/stash_feedback.cpp src/version.rc
     "${BUTTON_ART_GENERATED}/button_art.rc"
-    "${QOL}/src/bulk_stash.cpp" "${QOL}/src/belt_compatibility.cpp")
-target_include_directories(inventory-deposit PRIVATE src "${QOL}/src" "${QOL}/include")
+    "${QOL}/src/bulk_stash.cpp" "${QOL}/src/belt_compatibility.cpp"
+    "${CHAT_VENDOR}/src/native_commands.cpp" "${CHAT_VENDOR}/src/image_scan.cpp"
+    "${SETTINGS_VENDOR}/src/settings.cpp")
+target_include_directories(inventory-deposit PRIVATE src "${CMAKE_CURRENT_SOURCE_DIR}/.." "${QOL}/src" "${QOL}/include" "${CHAT_VENDOR}/include" "${SETTINGS_VENDOR}/include")
 target_compile_definitions(inventory-deposit PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX _CRT_SECURE_NO_WARNINGS)
 target_compile_options(inventory-deposit PRIVATE /W4)
 target_link_libraries(inventory-deposit PRIVATE D2RLPlugin::D2RLPlugin bcrypt)
@@ -56,7 +60,7 @@ target_include_directories(inventory-deposit-ui-tests PRIVATE src "${PLUGIN_SDK}
 target_compile_definitions(inventory-deposit-ui-tests PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 add_test(NAME inventory-deposit-ui COMMAND inventory-deposit-ui-tests)
 add_executable(inventory-deposit-policy-tests "${QOL}/tests/bulk_stash_tests.cpp")
-target_include_directories(inventory-deposit-policy-tests PRIVATE "${QOL}/src" "${PLUGIN_SDK}/include")
+target_include_directories(inventory-deposit-policy-tests PRIVATE "${QOL}/src" "${QOL}/include" "${PLUGIN_SDK}/include")
 add_test(NAME inventory-deposit-batch-policy COMMAND inventory-deposit-policy-tests)
 add_executable(inventory-deposit-transfer-tests "${QOL}/tests/client_transfer_tests.cpp")
 target_include_directories(inventory-deposit-transfer-tests PRIVATE "${QOL}/src" "${PLUGIN_SDK}/include")
@@ -68,7 +72,7 @@ target_compile_definitions(inventory-deposit-artifact-tests PRIVATE WIN32_LEAN_A
 add_dependencies(inventory-deposit-artifact-tests inventory-deposit)
 add_test(NAME inventory-deposit-artifact COMMAND inventory-deposit-artifact-tests "$<TARGET_FILE:inventory-deposit>")
 add_executable(inventory-deposit-settings-tests tests/settings_tests.cpp)
-target_include_directories(inventory-deposit-settings-tests PRIVATE src)
+target_include_directories(inventory-deposit-settings-tests PRIVATE src "${CMAKE_CURRENT_SOURCE_DIR}/..")
 add_test(NAME inventory-deposit-settings COMMAND inventory-deposit-settings-tests)
 add_executable(inventory-deposit-gold-anchor-tests tests/gold_anchor_policy_tests.cpp)
 target_include_directories(inventory-deposit-gold-anchor-tests PRIVATE src "${PLUGIN_SDK}/include")
@@ -82,13 +86,15 @@ target_include_directories(inventory-deposit-feedback-tests PRIVATE src "${PLUGI
 target_compile_definitions(inventory-deposit-feedback-tests PRIVATE INVENTORY_DEPOSIT_FEEDBACK_TESTS WIN32_LEAN_AND_MEAN NOMINMAX)
 target_compile_options(inventory-deposit-feedback-tests PRIVATE /W4)
 add_test(NAME inventory-deposit-feedback COMMAND inventory-deposit-feedback-tests)
-add_executable(inventory-deposit-wiring-tests tests/plugin_wiring_tests.cpp src/plugin_main.cpp)
-target_include_directories(inventory-deposit-wiring-tests PRIVATE src "${QOL}/include" "${PLUGIN_SDK}/include")
+add_executable(inventory-deposit-wiring-tests tests/plugin_wiring_tests.cpp src/plugin_main.cpp
+    "${CHAT_VENDOR}/src/native_commands.cpp" "${CHAT_VENDOR}/src/image_scan.cpp"
+    "${SETTINGS_VENDOR}/src/settings.cpp")
+target_include_directories(inventory-deposit-wiring-tests PRIVATE src "${CMAKE_CURRENT_SOURCE_DIR}/.." "${QOL}/include" "${CHAT_VENDOR}/include" "${SETTINGS_VENDOR}/include" "${PLUGIN_SDK}/include")
 target_compile_definitions(inventory-deposit-wiring-tests PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 target_compile_options(inventory-deposit-wiring-tests PRIVATE /W4)
 add_test(NAME inventory-deposit-wiring COMMAND inventory-deposit-wiring-tests)
 add_executable(inventory-deposit-eligibility-tests tests/deposit_eligibility_tests.cpp)
-target_include_directories(inventory-deposit-eligibility-tests PRIVATE src "${QOL}/src" "${PLUGIN_SDK}/include")
+target_include_directories(inventory-deposit-eligibility-tests PRIVATE src "${QOL}/src" "${QOL}/include" "${PLUGIN_SDK}/include")
 target_compile_definitions(inventory-deposit-eligibility-tests PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 target_compile_options(inventory-deposit-eligibility-tests PRIVATE /W4)
 add_test(NAME inventory-deposit-eligibility COMMAND inventory-deposit-eligibility-tests)
@@ -102,4 +108,14 @@ target_include_directories(inventory-deposit-item-code-tests PRIVATE src "${QOL}
 target_compile_definitions(inventory-deposit-item-code-tests PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 target_compile_options(inventory-deposit-item-code-tests PRIVATE /W4)
 target_link_libraries(inventory-deposit-item-code-tests PRIVATE bcrypt)
-add_test(NAME inventory-deposit-item-code COMMAND inventory-deposit-item-code-tests)
+add_dependencies(inventory-deposit-item-code-tests inventory-deposit)
+add_test(NAME inventory-deposit-item-code COMMAND inventory-deposit-item-code-tests "$<TARGET_FILE:inventory-deposit>")
+add_executable(inventory-deposit-coexistence-tests "${QOL}/tests/plugin_coexistence_tests.cpp")
+target_include_directories(inventory-deposit-coexistence-tests PRIVATE "${QOL}/src")
+target_compile_definitions(inventory-deposit-coexistence-tests PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_link_libraries(inventory-deposit-coexistence-tests PRIVATE bcrypt)
+add_test(NAME inventory-deposit-coexistence COMMAND inventory-deposit-coexistence-tests)
+add_executable(inventory-deposit-maps-quantity-tests "${QOL}/tests/maps_quantity_tests.cpp")
+target_include_directories(inventory-deposit-maps-quantity-tests PRIVATE "${QOL}/src")
+target_compile_definitions(inventory-deposit-maps-quantity-tests PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+add_test(NAME inventory-deposit-maps-quantity COMMAND inventory-deposit-maps-quantity-tests)

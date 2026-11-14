@@ -303,3 +303,36 @@ arguments; all 27 suites pass, including DLL ABI/exports. These do not execute
 the native purchase. Live qualification is pending: both scroll types with
 partial/empty tomes, missing/full tomes, multiple tomes, insufficient gold,
 ordinary vendor potion refill, and offline/private-server operation.
+
+## 2026-10-31: `d2rl-auto-belt-refill.dll` (v0.35.9) remote TCP/IP client scheduler patch and coexistence
+
+Original `d2rl-auto-belt-refill.dll` (`v0.35.9`, SHA-256 `77C7D1B9068C8CACC2FDED62FF1120B441001D601AD65A8EE3043E3B61C650DB`) dispatches all watch-chain polling, hotkey refills, and console commands through `FUN_18000be90` (`RVA 0xBE90`), which unconditionally calls `ThreadService::runOnGameThread` (`[rax + 0x10]`). On joined TCP/IP clients (`ReimaginedLadder`), `runOnGameThread` returns `D2RL::Threads::Result::Unavailable` (`2`), preventing the watch chain and refill pass from running.
+
+### `d2rl-auto-belt-refill.dll` internal RVA map
+
+| DLL RVA | Function / global | Role |
+| --- | --- | --- |
+| `0x7B10` | `LogAlways` | Unconditional info logger |
+| `0x7C00` | `LogDebug` | Diagnostic logger gated on `DAT_1801363e2` (`debug_logs`) |
+| `0x98C0` | `EnumerateBeltAndInventory` | Reads local player (`InventoryService::getLocalPlayer` `+0x50`) and enumerates `Belt`/`Inventory` items (`forEachInventoryItem` `+0x68`) |
+| `0xA510` | `ResolveNativeHelpers` | Resolves D2R native helpers (`0x8B2D0`, `0x9A480`, `0x2AA760`, `0x34A360`, `0x34A500`, `0x34B9D0`, `0x388C10`, `0x38ABA0`, `0x3862D0`, `0x15F660`) |
+| `0xB740` | `CanPutInBeltWrapper` | Inline hook wrapper for D2R `0x15A110` (`orig` at `0x136430`) |
+| `0xB7F0` | `BeltTransferWrapper` | Inline hook wrapper for D2R `0x15F660` (`orig` at `0x136438`, verified by `QolBeltCompat::Stored`) |
+| `0xBE90` | `DispatchTask` | Scheduler helper (`72` bytes `[0xBE90, 0xBED8)`) |
+| `0xBF40` | `StartWatchChain` | Queues initial `WatchTick` (`0xD240`) |
+| `0xC010` | `FillStep` | Multi-step inventory-to-belt refill state machine |
+| `0xD1E0` | `TriggerFill` | Resets fill state and dispatches `FillStep` |
+| `0xD240` | `WatchTick` | Polls belt occupancy every `auto_poll_frames` frames and triggers `FillStep` on potion consumption |
+| `0xE110` | `RequeueWatchTick` | Re-arms `WatchTick` for the next frame |
+| `0xE1B0` | `OnGameJoined` | `LifecycleService` listener (`event == GameJoined`) |
+| `0xF740` | `PlaceStep` | Submits client belt placement via `D2R+0x2AA760(itemUnit, playerUnit, 0, 1)` |
+| `0x10E20` | `InstallNativeHooks` |Resolves `D2R+0x36EF50` (`GetItemCode` into `0x136420`) and installs `HookService` inline hooks at `0x15A110` and `0x15F660` |
+| `0x110A0` | `D2RLoaderLoadPlugin` | Plugin entrypoint |
+| `0x1363C8` | `g_threadService` | Cached `const D2RL::ThreadService*` |
+
+### Binary patch and coexistence admission
+
+1. **`RVA 0xBE9F..0xBED2` (`DispatchTask` body):** Preserves the exact prologue (`0xBE90..0xBE9F`) and epilogue (`0xBED2..0xBED8`) for `.pdata` unwind compatibility, loads `g_threadService` (`0x1363C8`) into `rdi`, calls `runOnGameThread` (`[rdi + 0x10]`), and when `eax == 2` (`Unavailable`), falls back to `runOnUiThread` (`[rdi + 0x08]`).
+2. **`RVA 0x993B` (`EnumerateBeltAndInventory` no-local-player log):** Redirects `call 0x180007b10` (`LogAlways`) to `call 0x180007c00` (`LogDebug`) so UI-thread watch-chain ticks while on the main menu or between games do not log `"AutoBeltRefill: no local player. Join a game first."` unless `debug_logs = true`.
+3. **`RVA 0x13500C`, `RVA 0xFE088`, and `RVA 0x8EC6` (`auto_refill` default and config override):** Sets initial `g_autoRefill` (`0x13500C`) to `1`, updates the embedded default TOML template (`0xFE088`, file offset `0xFCA88`) from `auto_refill = false` to `auto_refill = true `, and points `ParseConfig`'s `auto_refill` boolean output at `0x8EC6` to `0x13500D` (unused padding byte) so `auto_refill` remains active even if an older generated `auto-belt-refill.toml` with `auto_refill = false` was carried over.
+4. **Coexistence (`QolAutoBeltProfile` / `QolBeltCompat::ReviewedHash`):** `BeltTransferWrapper` (`0xB7F0`) and `0x136438` are untouched. `QolAutoBeltProfile::PatchedHash` (`52B64F50189C3D5161806733092F521BB7BD181F67C817E2233E7F5C5D41E1D3`) is admitted alongside the original `QolAutoBeltProfile::Hash` in `src/auto_belt_profile.h` and `src/belt_compatibility.cpp`.

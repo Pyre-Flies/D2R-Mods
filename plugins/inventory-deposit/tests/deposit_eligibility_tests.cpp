@@ -1,4 +1,6 @@
 #include "deposit_eligibility.h"
+#include "bulk_stash_policy.h"
+#include "native_d2r.h"
 #include <cstdio>
 #include <cstdlib>
 #include <map>
@@ -120,7 +122,17 @@ void AvailabilityTests() {
     {
         Fixture f;
         f.Add(Item(1)); f.Add(Item(2));
-        Check(!f.Any() && f.inspections == 2, "all ineligible items disable the button");
+        Check(!f.Any() && f.inspections == 2, "all ineligible items (including full-stack materials) disable the button");
+    }
+    {
+        Fixture f;
+        // Full-stack or item-scoped locked material (Ineligible) before a non-full material (Eligible)
+        // must not abort the scan; the button stays enabled for the remaining eligible item.
+        f.Add(Item(1), Eligibility::Ineligible);
+        f.Add(Item(2), Eligibility::Ineligible);
+        f.Add(Item(3), Eligibility::Eligible);
+        Check(f.Any() && f.inspections == 3,
+            "full-stack or item-locked ineligible entries are skipped so later eligible materials keep the button enabled");
     }
     {
         Fixture f;
@@ -239,10 +251,147 @@ void FailureTests() {
         Check(!f.Any() && !f.playerReads, "missing required SDK function disables before reads");
     }
 }
+
+void StackCapacityTests() {
+    using Plan = QolBulkStash::Plan;
+    Check(!Plan::HasStackRoom(99, 99, false, 1) && !Plan::HasStackRoom(98, 99, true, 1),
+        "already-full or nativeFull advanced-stash counter has no stack room");
+    Check(Plan::HasStackRoom(98, 99, false, 1) && Plan::HasStackRoom(98, 99, false, 0) &&
+        Plan::HasStackRoom(98, 99, false, -3),
+        "single-unit and non-positive stack quantities normalize to 1 and fit at 98/99");
+    Check(!Plan::HasStackRoom(98, 99, false, 5) && !Plan::HasStackRoom(95, 99, false, 5),
+        "quantity-5 stack against 98/99 or 95/99 is refused instead of overshooting 99");
+    Check(Plan::HasStackRoom(94, 99, false, 5) && Plan::HasStackRoom(98, 500, false, 5),
+        "quantity-5 stack fits when remaining capacity is at least 5");
+
+    Plan plan{};
+    auto first = Item(1); first.classId = 610u; first.quantity = 5;
+    auto second = Item(2); second.classId = 610u; second.quantity = 5;
+    auto third = Item(3); third.classId = 610u; third.quantity = 4;
+    plan.Observe(first);
+    plan.Observe(second);
+    plan.Observe(third);
+
+    Check(plan.EffectiveCount(610u, 90u) == 90u &&
+        Plan::HasStackRoom(plan.EffectiveCount(610u, 90u), 99u, false, first.quantity),
+        "first quantity-5 stack fits at 90/99");
+    plan.Submitted(0);
+    Check(plan.SubmittedForClass(610u) == 5u && plan.EffectiveCount(610u, 90u) == 95u,
+        "submitted quantity-5 stack projects counter to 95/99");
+    Check(!Plan::HasStackRoom(plan.EffectiveCount(610u, 90u), 99u, false, second.quantity),
+        "second quantity-5 stack against projected 95/99 is refused");
+    Check(Plan::HasStackRoom(plan.EffectiveCount(610u, 90u), 99u, false, third.quantity),
+        "later quantity-4 stack against projected 95/99 still fits");
+
+    // Server/client stack cap mismatch (e.g. client limit 255 vs server limit 99):
+    // when a submitted deposit expires while the item remains unchanged in inventory,
+    // CheckRemote returns Rejected and Plan skips that item class while still attempting other classes.
+    Plan mismatchPlan{};
+    auto cappedA = Item(10); cappedA.classId = 610u; cappedA.quantity = 1;
+    auto cappedB = Item(11); cappedB.classId = 610u; cappedB.quantity = 1;
+    auto otherRune = Item(12); otherRune.classId = 611u; otherRune.quantity = 1;
+    mismatchPlan.Observe(cappedA);
+    mismatchPlan.Observe(cappedB);
+    mismatchPlan.Observe(otherRune);
+
+    Check(QolBulkStash::CheckRemote(cappedA, &cappedA, true, true) == QolBulkStash::RemoteStep::Rejected,
+        "expired remote submission with unchanged source is treated as per-class rejection rather than batch abort");
+    auto movedCapped = cappedA; ++movedCapped.x;
+    Check(QolBulkStash::CheckRemote(cappedA, &movedCapped, true, true) == QolBulkStash::RemoteStep::Stop,
+        "moved source during remote wait still stops the batch");
+
+    mismatchPlan.Submitted(0);
+    Check(mismatchPlan.submitted == 1u && mismatchPlan.SubmittedForClass(610u) == 1u,
+        "initial capped item submission recorded before server rejection");
+    mismatchPlan.RejectSubmitted(0);
+    Check(mismatchPlan.submitted == 0u && mismatchPlan.skipped == 1u &&
+        mismatchPlan.SubmittedForClass(610u) == 0u &&
+        mismatchPlan.IsClassRejected(610u, 1) && !mismatchPlan.IsClassRejected(611u, 1),
+        "RejectSubmitted rolls back unremoved submission, marks classId 610 rejected, and leaves classId 611 eligible");
+
+    Check(Plan::IsServerCapCandidate(99u, 255u, 1, 99u) &&
+        Plan::IsServerCapCandidate(97u, 255u, 5, 99u) &&
+        !Plan::IsServerCapCandidate(50u, 255u, 1, 99u) &&
+        !Plan::IsServerCapCandidate(99u, 99u, 1, 99u),
+        "only remote timeouts against the default 99 server cap when local limit > 99 qualify as server-cap rejections");
+    Check(Plan::ServerCapRejectedQuantity(99u, 99u) == 1u &&
+        Plan::ServerCapRejectedQuantity(97u, 99u) == 3u,
+        "ServerCapRejectedQuantity computes the overflow threshold quantity for both full and near-full counters");
+
+    Plan multiUnitMismatchPlan{};
+    auto stackFive = Item(20); stackFive.classId = 610u; stackFive.quantity = 5;
+    multiUnitMismatchPlan.Observe(stackFive);
+    multiUnitMismatchPlan.Submitted(0);
+    multiUnitMismatchPlan.RejectSubmitted(0, static_cast<int32_t>(Plan::ServerCapRejectedQuantity(99u, 99u)));
+    Check(multiUnitMismatchPlan.IsClassRejected(610u, 1),
+        "multi-unit stack rejected at count 99 also marks single-unit stacks of the same class rejected");
+
+    {
+        auto* fakeImage = static_cast<unsigned char*>(
+            VirtualAlloc(nullptr, D2R::Native::FindAdvancedStashCounterRva + 4096, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE));
+        Check(fakeImage != nullptr, "synthetic native image allocated");
+        const auto fakeBase = reinterpret_cast<uintptr_t>(fakeImage);
+        uint32_t fakeItem[4]{4u, 610u, 1u, 0u};
+        uint32_t fakePlayer[4]{0u, 0u, 1u, 0u};
+
+        Check(!D2R::Native::HasVerifiedAdvancedStashCounterContract(fakeBase) &&
+            !D2R::Native::DepositToAdvancedStash(fakeBase, fakeItem, fakePlayer, 0, 1),
+            "unwitnessed exeBase refuses DepositToAdvancedStash before calling native functions");
+
+        std::memcpy(fakeImage + D2R::Native::FindAdvancedStashCounterRva,
+            D2R::Native::FindAdvancedStashCounterWitness,
+            sizeof(D2R::Native::FindAdvancedStashCounterWitness));
+        std::memcpy(fakeImage + D2R::Native::GetAdvancedStashCounterByteRva,
+            D2R::Native::GetAdvancedStashCounterByteWitness,
+            sizeof(D2R::Native::GetAdvancedStashCounterByteWitness));
+        Check(D2R::Native::HasVerifiedAdvancedStashCounterContract(fakeBase),
+            "exact 0x46D8F0 + 0x46D9A0 witnesses admit advanced-stash counter contract");
+
+        Check(D2R::Native::VerifiedAdvancedStashCoreBase(fakeBase) == 0,
+            "unwitnessed D2RCore base falls back safely to 0 (default 99 cap, no D2RCore calls)");
+        std::memcpy(fakeImage + D2R::Native::CoreGetMaterialsLimitRva,
+            D2R::Native::CoreMaterialsLimitWitness,
+            sizeof(D2R::Native::CoreMaterialsLimitWitness));
+        std::memcpy(fakeImage + D2R::Native::CoreGetCounterFullStatusRva,
+            D2R::Native::CoreCounterFullWitness,
+            sizeof(D2R::Native::CoreCounterFullWitness));
+        Check(D2R::Native::VerifiedAdvancedStashCoreBase(fakeBase) == fakeBase,
+            "exact 0x1BB960 + 0x3A0F20 witnesses admit D2RCore stack-limit queries");
+        fakeImage[D2R::Native::CoreGetMaterialsLimitRva] ^= 0xFFu;
+        Check(D2R::Native::VerifiedAdvancedStashCoreBase(fakeBase) == 0,
+            "mutated D2RCore byte immediately rejects D2RCore stack-limit queries");
+
+        VirtualFree(fakeImage, 0, MEM_RELEASE);
+    }
+
+    D2R::Native::ClearAdvancedStashRejections();
+    Check(!D2R::Native::IsAdvancedStashCountRejected(610u, 99u, 1),
+        "no class is rejected before a deposit failure is observed");
+    D2R::Native::RecordAdvancedStashRejection(610u, 50u, 1);
+    Check(!D2R::Native::IsAdvancedStashCountRejected(610u, 50u, 1),
+        "failures below the default 99 server cap are not cached as server-cap rejections");
+    D2R::Native::RecordAdvancedStashRejection(610u, 99u, 5);
+    Check(D2R::Native::IsAdvancedStashCountRejected(610u, 99u, 1) &&
+        !D2R::Native::IsAdvancedStashCountRejected(611u, 99u, 1),
+        "session cap cache remembers server rejection for classId 610 at count 99 (even from a quantity-5 stack) without blocking classId 611");
+    Check(!D2R::Native::IsAdvancedStashCountRejected(610u, 98u, 1) &&
+        !D2R::Native::IsAdvancedStashCountRejected(610u, 99u, 1),
+        "changing counter count (e.g. withdrawing from stash) clears the cached rejection for classId 610");
+    D2R::Native::RecordAdvancedStashRejection(610u, 97u, 5);
+    Check(D2R::Native::IsAdvancedStashCountRejected(610u, 97u, 5) &&
+        D2R::Native::IsAdvancedStashCountRejected(610u, 97u, 3) &&
+        !D2R::Native::IsAdvancedStashCountRejected(610u, 97u, 2) &&
+        !D2R::Native::IsAdvancedStashCountRejected(610u, 97u, 1),
+        "multi-quantity rejection at 97 blocks overflow quantities (>= 3) while still allowing quantities 1..2");
+    D2R::Native::ClearAdvancedStashRejections();
+    Check(!D2R::Native::IsAdvancedStashCountRejected(610u, 97u, 5),
+        "ClearAdvancedStashRejections resets cached rejections on session change or shutdown");
+}
 }
 
 int main() {
     AvailabilityTests();
     FailureTests();
-    std::puts("inventory eligibility scope, bounded SDK reads, identity, failure, and session regressions passed");
+    StackCapacityTests();
+    std::puts("inventory eligibility scope, bounded SDK reads, identity, stack capacity, failure, and session regressions passed");
 }

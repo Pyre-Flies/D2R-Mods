@@ -1,5 +1,11 @@
 # Controller QOL changelog
 
+## 1.3.1+rev.97 - 2026-11-14
+
+- Route `QolBulkStash::Guard()`, `QolBulkStash::Remote()`, `QolClientTransfer::DepositGuard()`, and `QolBelt::Validate()` native guards through `QolItemCode::Check` (`PluginContext::CheckExpectedBytes`) so `Universal Chain Hook` is honored during bulk and single transfers, and structurally admit verified `D2RLoader` ABI-v4 plugin inline detours at `FinishInventoryInteraction` (`PlaySoundById`, `0x1A0780`) via `ValidateFinishInteractionDetour` without false-positive `D2RCore.dll` safety-check errors.
+- Add `/O2` Release forwarding and stat-reader witnesses (`QolChatForwarding::ReleaseProfile` / `ValidateRelease` and `QolMapsQuantity::ReleaseProfile` / `ValidateRelease`) alongside `/Od` profiles so `Controller QOL Updates` coexists with both Release and `dist/` builds of `d2rl-global-chat.dll` and `d2rl-maps.dll`.
+- Add advanced-stash stack capacity preflight (`0x46D8F0`, `itemData+0x9C`, `D2RCore.dll+0x1BB960` / `0x3A0F20`), per-`classId` in-flight batch projection (`QolBulkStash::Plan`), server-cap rejection caching (`RejectedAdvancedStashCap`), item-scoped pending-transaction skipping (`0x3351B0` state `0x36` vs `0x1C7360`), and remote-scheduler patched `d2rl-auto-belt-refill.dll` coexistence (`QolAutoBeltProfile::PatchedHash`).
+
 ## 1.3.1+rev.95 - 2026-10-28
 
 - Add native ground-loot and label visibility interop with **Pyre Loot Filter** (`pyre-lootfilter.dll`), and admit `pyre-lootfilter` dispatch trampolines and extended register (`r8`?`r15`) RIP-relative wrapper loads.

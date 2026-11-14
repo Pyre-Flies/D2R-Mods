@@ -41,6 +41,10 @@ struct Work {
     int64_t quantityBefore{};
 } work;
 template<class T>T At(uintptr_t rva) noexcept {return reinterpret_cast<T>(context->exeBase+rva);}
+bool MatchAddress(uintptr_t address,const unsigned char* bytes,size_t size) noexcept {
+    unsigned char actual[128]{};SIZE_T got{};
+    return size<=sizeof(actual) && ReadProcessMemory(GetCurrentProcess(),reinterpret_cast<const void*>(address),actual,size,&got) && got==size && !std::memcmp(actual,bytes,size);
+}
 bool Guard() noexcept {
     if(!context)return false;
     for(const auto& site:Profile::Sites)if(!QolItemCode::Check(context,site.rva,site.bytes,site.size))return false;
@@ -82,10 +86,16 @@ bool Guard() noexcept {
 bool Mode(int mode) noexcept {return At<bool(__fastcall*)(int)>(0xce500)(mode);}
 bool DepositGuard() noexcept {
     using namespace QolMaterials::Signatures;
-    return context->CheckExpectedBytes(0x15a0b0,QolStorageProfile::DepositEligible,sizeof(QolStorageProfile::DepositEligible)) &&
-        context->CheckExpectedBytes(0x46da50,CurrentOwner,sizeof(CurrentOwner)) &&
-        context->CheckExpectedBytes(0x23b980,PreviousSeason,sizeof(PreviousSeason)) &&
-        context->CheckExpectedBytes(0x1a0780,FinishInteraction,sizeof(FinishInteraction));
+    const auto core=reinterpret_cast<uintptr_t>(GetModuleHandleW(L"D2RCore.dll"));
+    return QolItemCode::Check(context,0x15a0b0,QolStorageProfile::DepositEligible,sizeof(QolStorageProfile::DepositEligible)) &&
+        QolItemCode::Check(context,0x46da50,CurrentOwner,sizeof(CurrentOwner)) &&
+        QolItemCode::Check(context,0x46d8f0,FindCounter,sizeof(FindCounter)) &&
+        QolItemCode::Check(context,0x46d9a0,HasCounter,sizeof(HasCounter)) &&
+        QolItemCode::Check(context,0x3351b0,HasUnitState,sizeof(HasUnitState)) &&
+        QolItemCode::Check(context,0x23b980,PreviousSeason,sizeof(PreviousSeason)) &&
+        QolItemCode::Check(context,0x1a0780,FinishInteraction,sizeof(FinishInteraction)) &&
+        (!core || (MatchAddress(core+D2R::Native::CoreGetMaterialsLimitRva,CoreMaterialsLimit,sizeof(CoreMaterialsLimit)) &&
+                   MatchAddress(core+D2R::Native::CoreGetCounterFullStatusRva,CoreCounterFull,sizeof(CoreCounterFull))));
 }
 void Finish(const char* reason) noexcept {
     if(context) {
@@ -159,6 +169,7 @@ bool ReadItem(Info& out) noexcept {
 // grid action's blocked/owner/eligibility checks before its native transfer helper.
 bool Submit() noexcept {
     const auto base=context->exeBase;
+    const auto core=reinterpret_cast<uintptr_t>(GetModuleHandleW(L"D2RCore.dll"));
     if(!QolStorageFocus::Matches(context,work.source))return false;
     auto player=D2R::Native::GetLocalPlayerUnit(base);
     auto item=static_cast<const uint32_t*>(At<void*(__fastcall*)(uint32_t,uint32_t)>(0x9a5d0)(work.source.runtimeId,4));
@@ -175,7 +186,7 @@ bool Submit() noexcept {
         if(route==StashRoute::Refuse)return false;
         if(work.advanced) {
             destination=At<void*(__fastcall*)(void*)>(0x46da50)(player);
-            if(!destination || !SourceQuantity(work.quantityBefore))return false;
+            if(!destination || !D2R::Native::HasAdvancedStashCapacity(base,core,destination,work.source.classId,0,nullptr,work.source.quantity) || !SourceQuantity(work.quantityBefore))return false;
         }
     }
     if(!work.advanced && work.destination==C::Cube && !HasCube())return false;
@@ -293,11 +304,15 @@ static BatchDepositResult BatchDepositUnsafe(const D2RL::PluginContext* ctx,cons
         auto item=static_cast<uint32_t*>(At<void*(__fastcall*)(uint32_t,uint32_t)>(0x9a5d0)(live.runtimeId,4));
         if(!player || !item || item[0]!=4 || item[1]!=live.classId || item[2]!=live.runtimeId || item[3]!=0 ||
            At<uint32_t(__fastcall*)(const void*)>(0x36ef50)(item)!=live.code ||
-           At<uint8_t(__fastcall*)(const void*)>(0x36cfe0)(item)!=0 || At<int(__fastcall*)(const void*)>(0x1c7360)(item) ||
+           At<uint8_t(__fastcall*)(const void*)>(0x36cfe0)(item)!=0 ||
+           At<int(__fastcall*)(const void*,uint32_t)>(0x3351b0)(player,0x36) ||
            At<void*(__fastcall*)()>(0x14f1e0)() || At<int(__fastcall*)()>(0x14f210)()==5)return BatchDepositResult::Refused;
-        if(!At<bool(__fastcall*)(const void*)>(0x15a0b0)(item))return BatchDepositResult::Ineligible;
         auto destination=At<void*(__fastcall*)(void*)>(0x46da50)(player);
         if(!destination)return BatchDepositResult::Refused;
+        const auto core=reinterpret_cast<uintptr_t>(GetModuleHandleW(L"D2RCore.dll"));
+        if(At<int(__fastcall*)(const void*)>(0x1c7360)(item) ||
+           !At<bool(__fastcall*)(const void*)>(0x15a0b0)(item) ||
+           !D2R::Native::HasAdvancedStashCapacity(ctx->exeBase,core,destination,live.classId,0,nullptr,live.quantity))return BatchDepositResult::Ineligible;
         alignas(8) unsigned char placement[16]{};
         (void)At<D2R::Native::TransferItemToInventoryPageFn>(0x15f8b0)(item,destination,4,0,true,placement);
         At<D2R::Native::FinishInventoryInteractionFn>(0x1a0780)(3,nullptr,0,0,false);

@@ -10,6 +10,7 @@ API. Config paths follow the loader's active global/mod scope; none are guessed.
 | Always Show Sockets | default/always/on/off/toggle, including bare command | `[always-show-sockets] enabled`, `always_visible` |
 | Pyre Loot Filter | on/off/toggle; minimap/sound/alt/autoreload [on\|off] | `[pyre-lootfilter] enabled`, `auto_reload`, `alt_pickup_override`, `minimap_icons`, `drop_sounds` |
 | Day Night Cycle | on/off/toggle/day/night/auto | `[day-night-cycle] enabled`, `mode` |
+| Inventory Deposit | rejuv [on/off/toggle] | `[inventory_deposit] deposit_rejuvenation_potions` |
 
 Socket size/opacity/ring/center/lift retain their existing per-setting autosave.
 Status/help/invalid or unavailable commands do not write configuration. Capture
