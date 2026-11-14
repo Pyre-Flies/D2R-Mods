@@ -32,14 +32,14 @@ No UI layout (`bankexpansionlayouthd.json`) edits or extra `.mpq` files are requ
 - **Expandable Side Tab Flyout & Custom Tab Names**
   - Click the `[<]` / `[>]` toggle on the left edge of the stash panel to open a vertical flyout listing `Personal` and all Shared Stash pages (`#1`..`#N`).
   - **Right-click any tab** in the flyout to assign a custom client-side name (e.g., `Runes`, `Bases`, `Uniques`). Press `Enter` to save or `Esc` to cancel; saving an empty name restores the default label.
-  - Custom tab names expand the flyout automatically, appear in search dropdown results (`Shared #2 (Runes)`), and persist in `d2rloader/config/plugins.toml`.
+  - Custom tab names expand the flyout automatically, appear in search dropdown results (`Shared #2 (Runes)`), and persist in `d2rloader/config/pyre-stashsearch.toml`.
 - **Quick Page Navigation**
   - **Slash Jump:** Type `/<page>` (for example, `/14`) and press `Enter` to jump straight to that shared stash page.
   - **Wheel Shortcuts:** Hold `Ctrl + Mouse Wheel` anywhere over the stash to cycle pages `1` at a time, or `Ctrl + Shift + Mouse Wheel` to jump `5` pages at a time.
 
 ## Configuration
 
-Settings and custom tab names are stored automatically in `d2rloader/config/plugins.toml` under `[pyre-stashsearch]`:
+Settings and custom tab names are stored automatically in `d2rloader/config/pyre-stashsearch.toml` under `[pyre-stashsearch]`. The `d2rloader` folder is the one the plugin is installed under: the game folder for a global install, or `mods/<Mod>/` for a mod install. Settings are read when the game starts; restart after editing.
 
 ```toml
 [pyre-stashsearch]

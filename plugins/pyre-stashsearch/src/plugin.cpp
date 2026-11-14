@@ -328,7 +328,7 @@ auto SnapshotPersistedConfigLocked() -> StashSearchConfig {
 	return cfg;
 }
 
-// Loads and saves `tab_flyout_expanded` and custom tab names in the user's D2RLoader plugin configuration (`stash-search.toml`)
+// Loads and saves `tab_flyout_expanded` and custom tab names in the user's D2RLoader plugin configuration (`d2rloader/config/pyre-stashsearch.toml`)
 constexpr size_t kMaxConfigBytes = 16384;
 
 void LoadPersistedConfig(const D2RL::PluginContext* ctx) noexcept {
