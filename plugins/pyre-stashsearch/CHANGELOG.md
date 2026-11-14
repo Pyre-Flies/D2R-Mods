@@ -15,7 +15,10 @@
   by default). Saving tab names keeps these lines unchanged.
 - New native reads: item mode at `unit + 0x0C` and the character name at
   `PlayerData + 0x00`. Both fail closed (no snapshot is written when the name
-  is unreadable). Live in-game verification is still pending; see
+  is unreadable). Both were verified live on vanilla D2R 3.3.94995; see
   [the reverse-engineering notes](../../docs/reverse-engineering/stash-search-1.10.12-decompilation.md#cross-character-search-additions).
+- Fixed runeword and Horadric Cube names showing a stray color character in
+  results (`4Spirit`, `>Horadric Cube`). The newer D2R color code (U+E07E plus
+  one character) is now stripped like the `ÿc` codes, in stash rows too.
 - Automated checks: new platform-independent `character_cache_tests`, plus
   config-key tests in `unit_tests`. Mercenary items are not covered.

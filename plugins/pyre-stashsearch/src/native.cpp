@@ -726,7 +726,28 @@ auto WideToUtf8Strict(std::wstring_view input, std::string& outUtf8) -> bool {
 	return true;
 }
 
-// 0xF710: Strips D2R color codes (0xFF 'c' X and UTF-8 0xC3 0xBF 'c' X), stops at '*', and collapses whitespace on narrow C-string
+namespace {
+
+// Newer D2R color code: private-use U+E07E followed by one color character
+// (e.g. "\xEE\x81\xBE" "4" before runeword names, ">" before Horadric Cube).
+// Same 4-byte form as the property-block prefix documented in
+// plugins/item-roll-ranges/docs/NATIVE-CONTRACT.md (0x0CD6E0).
+constexpr wchar_t kPrivateColorCodeMarker = static_cast<wchar_t>(0xE07E);
+
+// Returns the byte length of a U+E07E color code starting at raw[i], or 0 if none.
+auto NarrowPrivateColorCodeLength(const char* raw, size_t i, size_t len) -> size_t {
+	if (i + 2 >= len ||
+		static_cast<uint8_t>(raw[i]) != 0xEE ||
+		static_cast<uint8_t>(raw[i + 1]) != 0x81 ||
+		static_cast<uint8_t>(raw[i + 2]) != 0xBE) {
+		return 0;
+	}
+	return (i + 3 < len) ? 4 : 3;
+}
+
+} // namespace
+
+// 0xF710: Strips D2R color codes (0xFF 'c' X, UTF-8 0xC3 0xBF 'c' X and UTF-8 U+E07E X), stops at '*', and collapses whitespace on narrow C-string
 auto NormalizeNarrowTooltipLine(const char* raw) -> std::string {
 	std::string result;
 	if (raw == nullptr) {
@@ -750,6 +771,10 @@ auto NormalizeNarrowTooltipLine(const char* raw) -> std::string {
 		}
 		if (b == 0xC3 && i + 3 < len && static_cast<uint8_t>(raw[i + 1]) == 0xBF && raw[i + 2] == 'c') {
 			i += 4;
+			continue;
+		}
+		if (const size_t codeLen = NarrowPrivateColorCodeLength(raw, i, len); codeLen != 0) {
+			i += codeLen;
 			continue;
 		}
 		if (b == '\t' || b == '\n' || b == '\r' || std::isspace(static_cast<unsigned char>(b)) != 0) {
@@ -797,6 +822,10 @@ auto NormalizeNarrowAffixText(const char* raw) -> std::string {
 		}
 		if (b == 0xC3 && i + 3 < len && static_cast<uint8_t>(raw[i + 1]) == 0xBF && raw[i + 2] == 'c') {
 			i += 4;
+			continue;
+		}
+		if (const size_t codeLen = NarrowPrivateColorCodeLength(raw, i, len); codeLen != 0) {
+			i += codeLen;
 			continue;
 		}
 		if (b == '\t' || b == '\n' || b == '\r' || std::isspace(static_cast<unsigned char>(b)) != 0) {
@@ -944,6 +973,11 @@ auto NormalizeWideTooltipLine(std::wstring_view raw) -> std::wstring {
 		}
 		if (ch == 0x00C3 && i + 3 < raw.size() && raw[i + 1] == 0x00BF && raw[i + 2] == L'c') {
 			i += 4;
+			continue;
+		}
+		if (ch == kPrivateColorCodeMarker) {
+			// U+E07E + one color character (see NarrowPrivateColorCodeLength)
+			i += (i + 1 < raw.size()) ? 2 : 1;
 			continue;
 		}
 		if (ch == L'\r' || ch == L'\t' || ch == L'\n' || iswspace(static_cast<wint_t>(ch)) != 0) {

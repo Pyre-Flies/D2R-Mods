@@ -34,6 +34,24 @@ void TestTooltipNormalization() {
 		"short item display name preserves base item name when no unique name follows [N]");
 	Check(ExtractShortItemDisplayName("Monarch [E] (4)") == L"Monarch",
 		"short item display name strips both [E] and (4) on normal/socketed base item");
+
+	// Newer U+E07E color code (UTF-8 EE 81 BE) + one color character, seen live on runewords and the Horadric Cube
+	Check(NormalizeNarrowTooltipLine("Crystal Sword\n\xEE\x81\xBE" "4Spirit") == "Crystal Sword Spirit",
+		"narrow U+E07E runeword color code stripping");
+	Check(NormalizeNarrowTooltipLine("\xEE\x81\xBE" ">Horadric Cube") == "Horadric Cube",
+		"narrow U+E07E color code with non-digit color character");
+	Check(NormalizeNarrowTooltipLine("Shako\xEE\x81\xBE") == "Shako",
+		"narrow U+E07E color code truncated at end of string");
+	Check(NormalizeNarrowAffixText("\xEE\x81\xBE" "3+2 To All Skills") == "+2 To All Skills",
+		"affix text strips U+E07E color code");
+	Check(NormalizeWideTooltipLine(L"\xE07E" L"4Enigma") == L"Enigma",
+		"wide U+E07E color code stripping");
+	Check(ExtractShortItemDisplayName("Sacred Targe\n\xEE\x81\xBE" "4Spirit") == L"Spirit",
+		"short item display name strips U+E07E runeword color code");
+	Check(ExtractShortItemDisplayName("\xEE\x81\xBE" ">Horadric Cube") == L"Horadric Cube",
+		"short item display name strips U+E07E color code on Horadric Cube");
+	Check(NormalizeNarrowTooltipLine("Caf\xC3\xA9 \xEE\x80\x80" "x") == "Caf\xC3\xA9 \xEE\x80\x80" "x",
+		"other UTF-8 multi-byte sequences are preserved");
 }
 
 void TestCaseInsensitiveMatching() {
