@@ -81,6 +81,7 @@ struct MatchEntry {
 	std::wstring    hoverText;        // Full unabbreviated label for hover tooltip
 	std::wstring    shortTabSuffix;   // Right-side tab suffix (e.g. " - Sh.5" or " - P") preserved on ellipsis truncation
 	uint64_t        reserved = 0;
+	bool            displayOnly = false; // Item row with no stash page to jump to (inventory, cube, worn, other characters)
 };
 
 enum class SlashCommandState : uint8_t {
@@ -150,6 +151,8 @@ void AdjustDropdownSelectionAndScroll(
 	size_t& inOutScrollOffset) noexcept;
 struct StashSearchConfig {
 	bool                                           tabFlyoutExpanded = false;
+	bool                                           searchCarriedItems    = true; // search_carried_items (read-only key)
+	bool                                           searchOtherCharacters = true; // search_other_characters (read-only key)
 	std::wstring                                   personalTabName;
 	std::vector<std::pair<uint64_t, std::wstring>> sharedTabNames; // (0-based shared page index, custom label)
 };

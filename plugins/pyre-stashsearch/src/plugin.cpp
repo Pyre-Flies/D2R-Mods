@@ -1,3 +1,4 @@
+#include "character_cache.h"
 #include "native.h"
 #include "stash_search.h"
 #include <D2RLPlugin/api.h>
@@ -7,6 +8,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <ctime>
 #include <mutex>
 #include <string>
 #include <string_view>
@@ -71,6 +73,26 @@ bool                                           g_RenamingTabIsShared  = true;
 uint64_t                                       g_RenamingTabPageIndex = 0;
 std::wstring                                   g_TabRenameText;
 
+// Cross-character search (character_cache.h). Snapshots are written and read on the
+// game thread (BankPanel::Draw detour and D2RLoader gameplay listeners); the mutex
+// only guards against those two callers overlapping.
+std::atomic<bool>        g_SearchCarriedItems{ true };
+std::atomic<bool>        g_SearchOtherCharacters{ true };
+std::mutex               g_CharacterCacheMutex;
+std::wstring             g_CharacterCacheDir;          // <config dir>\pyre-stashsearch-characters\<mod>
+struct LoadedCharacterSnapshotFile {
+	std::wstring      fileName;
+	uint64_t          lastWriteTime = 0;
+	uint64_t          fileSize      = 0;
+	bool              valid         = false;
+	CharacterSnapshot snapshot;
+};
+std::vector<LoadedCharacterSnapshotFile> g_LoadedCharacterSnapshots;
+uint64_t                 g_LastCharacterCacheScanTickMs = 0;
+uint64_t                 g_LastCharacterSnapshotTickMs  = 0;
+std::wstring             g_LastSnapshotCharacterName;
+std::string              g_LastSnapshotBody;            // Serialized items with savedUnixSeconds = 0, to skip identical rewrites
+
 enum class ScrollbarDragMode : uint8_t {
 	None           = 0,
 	PagePicker     = 1,
@@ -106,6 +128,8 @@ std::atomic<bool>        g_LoggedFirstStashFrame{ false };
 constexpr uint64_t kLayoutActiveTimeoutMs  = 301;  // 0x12d ms in 0xC2B0 / 0xE620
 constexpr uint64_t kPeriodicRefreshMs      = 3000; // 3000 ms in 0xE460
 constexpr uint64_t kMinTabSwitchIntervalMs = 120;  // Coalesce rapid tab/page switches to prevent D2Render texture-cache & widget lifecycle thrashing
+constexpr uint64_t kCharacterSnapshotIntervalMs  = 30000; // Minimum gap between automatic snapshots of the logged-in character
+constexpr uint64_t kCharacterCacheScanIntervalMs = 5000;  // Minimum gap between cache directory rescans
 
 // 0xF5E0: Clears match list and bumps query generation (caller holds g_StateMutex)
 void MarkQueryChangedLocked() noexcept {
@@ -329,6 +353,8 @@ void LoadPersistedConfig(const D2RL::PluginContext* ctx) noexcept {
 	g_PagePickerOpen          = cfg.tabFlyoutExpanded;
 	g_CustomPersonalTabName   = std::move(cfg.personalTabName);
 	g_CustomSharedTabNames    = std::move(cfg.sharedTabNames);
+	g_SearchCarriedItems.store(cfg.searchCarriedItems, std::memory_order_release);
+	g_SearchOtherCharacters.store(cfg.searchOtherCharacters, std::memory_order_release);
 }
 
 void SavePersistedConfig(const D2RL::PluginContext* ctx, const StashSearchConfig& cfg) noexcept {
@@ -1880,13 +1906,64 @@ void StopInputWorkerThread() noexcept {
 	g_WorkerThreadId.store(0, std::memory_order_release);
 }
 
+// Adds a match row or bumps the "× N" count of an identical row. target == nullptr marks a
+// display-only row (no stash page to jump to); those only merge with other display-only rows.
+void AddOrMergeMatch(
+	std::wstring_view        shortName,
+	std::wstring_view        hoverItemName,
+	std::wstring_view        shortTabSuffix,
+	std::wstring_view        fullTabSuffix,
+	const StashPageTarget*   target,
+	std::vector<MatchEntry>& outMatches) {
+	std::wstring baseLabel;
+	baseLabel.reserve(shortName.size() + shortTabSuffix.size());
+	baseLabel.append(shortName);
+	baseLabel.append(shortTabSuffix);
+
+	const bool displayOnly = (target == nullptr);
+	for (auto& existing : outMatches) {
+		const bool sameDestination =
+			displayOnly ? existing.displayOnly
+						: (existing.hasTarget &&
+						   existing.target.isShared == target->isShared &&
+						   existing.target.pageIndex == target->pageIndex);
+		if (sameDestination && existing.baseLabel == baseLabel) {
+			++existing.count;
+			const std::wstring countStr = L" \x00D7 " + std::to_wstring(existing.count);
+			existing.displayText        = std::wstring(shortName) + countStr + std::wstring(shortTabSuffix);
+			existing.hoverText          = std::wstring(hoverItemName) + countStr + std::wstring(fullTabSuffix);
+			return;
+		}
+	}
+
+	if (outMatches.size() < kMaxMatches) {
+		std::wstring fullHoverBase;
+		fullHoverBase.reserve(hoverItemName.size() + fullTabSuffix.size());
+		fullHoverBase.append(hoverItemName);
+		fullHoverBase.append(fullTabSuffix);
+
+		MatchEntry entry{};
+		entry.displayText    = baseLabel;
+		entry.count          = 1;
+		if (!displayOnly) {
+			entry.target    = *target;
+			entry.hasTarget = true;
+		}
+		entry.displayOnly    = displayOnly;
+		entry.baseLabel      = std::move(baseLabel);
+		entry.hoverText      = std::move(fullHoverBase);
+		entry.shortTabSuffix = std::wstring(shortTabSuffix);
+		outMatches.push_back(std::move(entry));
+	}
+}
+
 // 0x37E0: Inspects one stash item, deduplicating identical labels on the same tab/page
 void ProcessInventoryItem(
 	uintptr_t                itemUnit,
 	std::wstring_view        normalizedQuery,
 	std::wstring_view        shortTabSuffix,
 	std::wstring_view        fullTabSuffix,
-	const StashPageTarget&   target,
+	const StashPageTarget*   target,
 	std::vector<MatchEntry>& outMatches) {
 	if (itemUnit == 0) {
 		return;
@@ -1898,42 +1975,341 @@ void ProcessInventoryItem(
 	if (fullTooltip.empty() || !EvaluateSearchQuery(normalizedQuery, fullTooltip)) {
 		return;
 	}
-
 	const std::wstring_view hoverItemName = fullNameLine.empty() ? std::wstring_view(shortName) : std::wstring_view(fullNameLine);
+	AddOrMergeMatch(shortName, hoverItemName, shortTabSuffix, fullTabSuffix, target, outMatches);
+}
 
-	std::wstring baseLabel;
-	baseLabel.reserve(shortName.size() + shortTabSuffix.size());
-	baseLabel.append(shortName);
-	baseLabel.append(shortTabSuffix);
+// Reads UnitAny::dwAnimMode (unit + 0x0C); for items this is the item mode
+// (0 stored, 1 equipped, 2 belt, 3 ground, 4 cursor, 5 dropping, 6 socketed).
+auto ReadItemMode(uintptr_t itemUnit, uint32_t* outMode) noexcept -> bool {
+	return itemUnit != 0 && SafeReadU32(reinterpret_cast<const uint32_t*>(itemUnit + 0x0C), outMode);
+}
 
-	std::wstring fullHoverBase;
-	fullHoverBase.reserve(hoverItemName.size() + fullTabSuffix.size());
-	fullHoverBase.append(hoverItemName);
-	fullHoverBase.append(fullTabSuffix);
+// Walks every item in an Inventory* (up to 2048) and classifies where it lives.
+// The callback returns false to stop the walk.
+template <typename Callback>
+void ForEachClassifiedInventoryItem(uintptr_t inventoryPtr, Callback&& callback) {
+	if (inventoryPtr == 0) {
+		return;
+	}
+	uintptr_t item = 0;
+	if (!SafeCall_PtrFromPtr(g_Native.fnInventoryGetFirstItem, inventoryPtr, &item)) {
+		return;
+	}
+	std::unordered_set<uintptr_t> visitedItems;
+	size_t                        steps = 0;
+	while (item != 0 && steps < 2048) {
+		if (!visitedItems.insert(item).second) {
+			break;
+		}
+		uint8_t  locPage = 0;
+		uint32_t mode    = 0;
+		if (!SafeCall_U8FromPtr(g_Native.fnItemGetLocationPage, item, &locPage)) {
+			break;
+		}
+		ItemSource source{};
+		if (ReadItemMode(item, &mode) && ClassifyCharacterItem(locPage, mode, &source)) {
+			if (!callback(item, source)) {
+				break;
+			}
+		}
+		uintptr_t nextItem = 0;
+		if (!SafeCall_PtrFromPtr(g_Native.fnItemGetNextInventoryItem, item, &nextItem)) {
+			break;
+		}
+		item = nextItem;
+		++steps;
+	}
+}
 
-	for (auto& existing : outMatches) {
-		if (existing.hasTarget &&
-			existing.target.isShared == target.isShared &&
-			existing.target.pageIndex == target.pageIndex &&
-			existing.baseLabel == baseLabel) {
-			++existing.count;
-			const std::wstring countStr = L" \x00D7 " + std::to_wstring(existing.count);
-			existing.displayText        = shortName + countStr + std::wstring(shortTabSuffix);
-			existing.hoverText          = std::wstring(hoverItemName) + countStr + std::wstring(fullTabSuffix);
-			return;
+// Reads the character name from PlayerData (unit + 0x10 -> char[16] at +0x00).
+// Fails closed: an unreadable or implausible name disables snapshot writing for this call.
+auto ReadPlayerCharacterName(uintptr_t playerUnit, std::wstring& outName) -> bool {
+	outName.clear();
+	uint32_t unitType = 0xFFFFFFFFu;
+	uint64_t playerData = 0;
+	if (playerUnit == 0 ||
+		!SafeReadU32(reinterpret_cast<const uint32_t*>(playerUnit), &unitType) || unitType != 0 ||
+		!SafeReadU64(reinterpret_cast<const uint64_t*>(playerUnit + 0x10), &playerData) || playerData == 0) {
+		return false;
+	}
+	char nameBuf[kMaxCharacterNameChars + 1]{};
+	if (!SafeReadMemory(static_cast<uintptr_t>(playerData), nameBuf, sizeof(nameBuf))) {
+		return false;
+	}
+	const size_t len = strnlen(nameBuf, sizeof(nameBuf));
+	if (len == 0 || len >= sizeof(nameBuf)) {
+		return false;
+	}
+	outName = CacheUtf8ToWide(std::string_view(nameBuf, len));
+	if (!IsValidCharacterName(outName)) {
+		outName.clear();
+		return false;
+	}
+	return true;
+}
+
+auto GetLocalPlayerUnitAndInventory(uintptr_t* outPlayerUnit, uintptr_t* outInventory) noexcept -> bool {
+	uint32_t  localSlot  = 0;
+	uintptr_t playerUnit = 0;
+	uintptr_t playerInv  = 0;
+	if (!SafeCall_GetU32NoArg(g_Native.fnGetLocalPlayerSlot, &localSlot) ||
+		!SafeCall_PtrFromU32(g_Native.fnGetLocalPlayerUnit, localSlot, &playerUnit) ||
+		playerUnit == 0 ||
+		!SafeCall_PtrFromPtr(g_Native.fnGetUnitInventory, playerUnit, &playerInv) ||
+		playerInv == 0) {
+		return false;
+	}
+	*outPlayerUnit = playerUnit;
+	*outInventory  = playerInv;
+	return true;
+}
+
+auto FileTimeToU64(const FILETIME& ft) noexcept -> uint64_t {
+	return (static_cast<uint64_t>(ft.dwHighDateTime) << 32) | ft.dwLowDateTime;
+}
+
+auto WriteFileAtomically(const std::wstring& path, std::string_view bytes) -> bool {
+	const std::wstring tmpPath = path + L".tmp";
+	HANDLE             file    = CreateFileW(tmpPath.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+	if (file == INVALID_HANDLE_VALUE) {
+		return false;
+	}
+	DWORD written = 0;
+	const bool ok = bytes.size() <= MAXDWORD &&
+					WriteFile(file, bytes.data(), static_cast<DWORD>(bytes.size()), &written, nullptr) != FALSE &&
+					written == bytes.size() &&
+					FlushFileBuffers(file) != FALSE;
+	CloseHandle(file);
+	if (!ok || MoveFileExW(tmpPath.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) == FALSE) {
+		DeleteFileW(tmpPath.c_str());
+		return false;
+	}
+	return true;
+}
+
+auto ReadSmallFile(const std::wstring& path, std::string& outBytes) -> bool {
+	outBytes.clear();
+	HANDLE file = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+	if (file == INVALID_HANDLE_VALUE) {
+		return false;
+	}
+	LARGE_INTEGER size{};
+	bool          ok = GetFileSizeEx(file, &size) != FALSE && size.QuadPart >= 0 &&
+			  static_cast<uint64_t>(size.QuadPart) <= kMaxSnapshotFileBytes;
+	if (ok) {
+		outBytes.resize(static_cast<size_t>(size.QuadPart));
+		DWORD read = 0;
+		ok = outBytes.empty() ||
+			 (ReadFile(file, outBytes.data(), static_cast<DWORD>(outBytes.size()), &read, nullptr) != FALSE && read == outBytes.size());
+	}
+	CloseHandle(file);
+	if (!ok) {
+		outBytes.clear();
+	}
+	return ok;
+}
+
+// Builds <directory of plugin config>\pyre-stashsearch-characters\<active mod>.
+// Snapshots are scoped per mod because item text and save folders differ between mods.
+auto ComputeCharacterCacheDir(const D2RL::PluginContext* ctx) -> std::wstring {
+	if (ctx == nullptr || ctx->pluginConfigPath == nullptr || ctx->pluginConfigPath[0] == L'\0') {
+		return {};
+	}
+	std::wstring dir(ctx->pluginConfigPath);
+	const size_t slash = dir.find_last_of(L"\\/");
+	if (slash == std::wstring::npos) {
+		return {};
+	}
+	dir.resize(slash);
+	dir.append(L"\\pyre-stashsearch-characters");
+
+	std::wstring modName = (ctx->activeMod != nullptr && ctx->activeMod[0] != '\0')
+							   ? CacheUtf8ToWide(ctx->activeMod)
+							   : std::wstring(L"_base");
+	for (auto& ch : modName) {
+		if (ch < 0x20 || ch == L'\\' || ch == L'/' || ch == L':' || ch == L'*' || ch == L'?' ||
+			ch == L'"' || ch == L'<' || ch == L'>' || ch == L'|') {
+			ch = L'_';
 		}
 	}
+	if (modName.empty() || modName == L"." || modName == L"..") {
+		modName = L"_base";
+	}
+	dir.push_back(L'\\');
+	dir.append(modName);
+	return dir;
+}
 
-	if (outMatches.size() < kMaxMatches) {
-		MatchEntry entry{};
-		entry.displayText    = baseLabel;
-		entry.count          = 1;
-		entry.target         = target;
-		entry.hasTarget      = true;
-		entry.baseLabel      = std::move(baseLabel);
-		entry.hoverText      = std::move(fullHoverBase);
-		entry.shortTabSuffix = std::wstring(shortTabSuffix);
-		outMatches.push_back(std::move(entry));
+auto EnsureDirectoryTree(const std::wstring& dir) -> bool {
+	if (dir.empty()) {
+		return false;
+	}
+	const DWORD attrs = GetFileAttributesW(dir.c_str());
+	if (attrs != INVALID_FILE_ATTRIBUTES) {
+		return (attrs & FILE_ATTRIBUTE_DIRECTORY) != 0;
+	}
+	const size_t slash = dir.find_last_of(L"\\/");
+	if (slash != std::wstring::npos && slash > 0 && !EnsureDirectoryTree(dir.substr(0, slash))) {
+		return false;
+	}
+	return CreateDirectoryW(dir.c_str(), nullptr) != FALSE || GetLastError() == ERROR_ALREADY_EXISTS;
+}
+
+// Captures every searchable item on the logged-in character (stash, inventory, cube,
+// equipped, belt, cursor, D2RLoader custom pages) into <cache dir>\<name>.txt so other
+// characters can find them later. Runs on the game thread. force bypasses the time throttle.
+void CaptureLocalCharacterSnapshot(uint64_t nowTickMs, bool force) {
+	if (!g_SearchOtherCharacters.load(std::memory_order_acquire) || g_ShuttingDown.load(std::memory_order_acquire)) {
+		return;
+	}
+	std::lock_guard<std::mutex> lock(g_CharacterCacheMutex);
+	if (g_CharacterCacheDir.empty()) {
+		return;
+	}
+	if (!force && g_LastCharacterSnapshotTickMs != 0 && (nowTickMs - g_LastCharacterSnapshotTickMs) < kCharacterSnapshotIntervalMs) {
+		return;
+	}
+	g_LastCharacterSnapshotTickMs = nowTickMs;
+
+	uintptr_t playerUnit = 0;
+	uintptr_t playerInv  = 0;
+	if (!GetLocalPlayerUnitAndInventory(&playerUnit, &playerInv)) {
+		return;
+	}
+	CharacterSnapshot snapshot{};
+	if (!ReadPlayerCharacterName(playerUnit, snapshot.name)) {
+		return;
+	}
+	ForEachClassifiedInventoryItem(playerInv, [&](uintptr_t item, ItemSource source) {
+		CachedCharacterItem cached{};
+		cached.source = source;
+		BuildItemFullTooltipText(item, cached.searchText, cached.shortName, &cached.fullName);
+		if (!cached.searchText.empty()) {
+			snapshot.items.push_back(std::move(cached));
+		}
+		return snapshot.items.size() < kMaxSnapshotItems;
+	});
+
+	// Skip the disk write when nothing changed since the last snapshot of this character.
+	const std::string body = SerializeCharacterSnapshot(snapshot);
+	if (CharacterNamesEqual(snapshot.name, g_LastSnapshotCharacterName) && body == g_LastSnapshotBody) {
+		return;
+	}
+	snapshot.savedUnixSeconds = static_cast<uint64_t>(std::time(nullptr));
+	const std::string text    = SerializeCharacterSnapshot(snapshot);
+	if (!EnsureDirectoryTree(g_CharacterCacheDir) ||
+		!WriteFileAtomically(g_CharacterCacheDir + L"\\" + snapshot.name + L".txt", text)) {
+		static bool s_LoggedWriteFailure = false;
+		if (g_PluginCtx != nullptr && !s_LoggedWriteFailure) {
+			s_LoggedWriteFailure = true;
+			g_PluginCtx->LogWarn("PyreStashSearch: failed to write character snapshot (further failures are not logged).");
+		}
+		return;
+	}
+	g_LastSnapshotCharacterName = snapshot.name;
+	g_LastSnapshotBody          = body;
+}
+
+// Rescans the cache directory (throttled) and reloads only files whose size or
+// last-write time changed. Caller holds g_CharacterCacheMutex.
+void RefreshLoadedCharacterSnapshotsLocked(uint64_t nowTickMs) {
+	if (g_CharacterCacheDir.empty()) {
+		g_LoadedCharacterSnapshots.clear();
+		return;
+	}
+	if (g_LastCharacterCacheScanTickMs != 0 && (nowTickMs - g_LastCharacterCacheScanTickMs) < kCharacterCacheScanIntervalMs) {
+		return;
+	}
+	g_LastCharacterCacheScanTickMs = nowTickMs;
+
+	std::vector<LoadedCharacterSnapshotFile> next;
+	WIN32_FIND_DATAW                         fd{};
+	const std::wstring                       pattern = g_CharacterCacheDir + L"\\*.txt";
+	HANDLE                                   find    = FindFirstFileExW(pattern.c_str(), FindExInfoBasic, &fd, FindExSearchNameMatch, nullptr, 0);
+	if (find == INVALID_HANDLE_VALUE) {
+		g_LoadedCharacterSnapshots.clear();
+		return;
+	}
+	do {
+		if ((fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0 || next.size() >= 512) {
+			continue;
+		}
+		LoadedCharacterSnapshotFile entry{};
+		entry.fileName      = fd.cFileName;
+		entry.lastWriteTime = FileTimeToU64(fd.ftLastWriteTime);
+		entry.fileSize      = (static_cast<uint64_t>(fd.nFileSizeHigh) << 32) | fd.nFileSizeLow;
+
+		bool reused = false;
+		for (auto& old : g_LoadedCharacterSnapshots) {
+			if (old.fileName == entry.fileName && old.lastWriteTime == entry.lastWriteTime && old.fileSize == entry.fileSize) {
+				entry  = std::move(old);
+				reused = true;
+				break;
+			}
+		}
+		if (!reused) {
+			std::string bytes;
+			entry.valid = ReadSmallFile(g_CharacterCacheDir + L"\\" + entry.fileName, bytes) &&
+						  ParseCharacterSnapshot(bytes, entry.snapshot);
+			if (!entry.valid) {
+				entry.snapshot = CharacterSnapshot{};
+			}
+		}
+		next.push_back(std::move(entry));
+	} while (FindNextFileW(find, &fd) != FALSE);
+	FindClose(find);
+
+	std::sort(next.begin(), next.end(), [](const auto& a, const auto& b) { return a.fileName < b.fileName; });
+	g_LoadedCharacterSnapshots = std::move(next);
+}
+
+// Adds display-only rows for the logged-in character's non-stash items
+// ("<Item> - Inv", "<Item> - Cube", "<Item> - Worn", "<Item> - Belt").
+void ScanCarriedItems(uintptr_t playerInv, std::wstring_view normalizedQuery, std::vector<MatchEntry>& outMatches) {
+	ForEachClassifiedInventoryItem(playerInv, [&](uintptr_t item, ItemSource source) {
+		if (source != ItemSource::PersonalStash) {
+			const std::wstring shortSuffix = L" - " + std::wstring(ItemSourceShortLabel(source));
+			const std::wstring fullSuffix  = L" - " + std::wstring(ItemSourceFullLabel(source));
+			ProcessInventoryItem(item, normalizedQuery, shortSuffix, fullSuffix, nullptr, outMatches);
+		}
+		return outMatches.size() < kMaxMatches;
+	});
+}
+
+// Adds display-only rows for items stored in other characters' snapshots
+// ("<Item> - MuleSorc (Cube)"; hover: "<Full name> - MuleSorc, Horadric Cube (snapshot 2 days ago)").
+void ScanOtherCharacterSnapshots(
+	std::wstring_view        currentCharacterName,
+	std::wstring_view        normalizedQuery,
+	uint64_t                 nowTickMs,
+	std::vector<MatchEntry>& outMatches) {
+	std::lock_guard<std::mutex> lock(g_CharacterCacheMutex);
+	RefreshLoadedCharacterSnapshotsLocked(nowTickMs);
+	const auto nowUnix = static_cast<uint64_t>(std::time(nullptr));
+	for (const auto& file : g_LoadedCharacterSnapshots) {
+		if (outMatches.size() >= kMaxMatches) {
+			return;
+		}
+		if (!file.valid || (!currentCharacterName.empty() && CharacterNamesEqual(file.snapshot.name, currentCharacterName))) {
+			continue;
+		}
+		const std::wstring age = FormatSnapshotAge(nowUnix, file.snapshot.savedUnixSeconds);
+		for (const auto& item : file.snapshot.items) {
+			if (outMatches.size() >= kMaxMatches) {
+				return;
+			}
+			if (!EvaluateSearchQuery(normalizedQuery, item.searchText)) {
+				continue;
+			}
+			const std::wstring_view shortName = item.shortName.empty() ? std::wstring_view(item.fullName) : std::wstring_view(item.shortName);
+			const std::wstring_view hoverName = item.fullName.empty() ? shortName : std::wstring_view(item.fullName);
+			const std::wstring shortSuffix =
+				L" - " + file.snapshot.name + L" (" + std::wstring(ItemSourceShortLabel(item.source)) + L")";
+			const std::wstring fullSuffix =
+				L" - " + file.snapshot.name + L", " + std::wstring(ItemSourceFullLabel(item.source)) + L" (snapshot " + age + L")";
+			AddOrMergeMatch(shortName, hoverName, shortSuffix, fullSuffix, nullptr, outMatches);
+		}
 	}
 }
 
@@ -1963,7 +2339,7 @@ void ScanInventoryItems(
 			break;
 		}
 		if (locPage == kItemLocationStashPage) {
-			ProcessInventoryItem(item, normalizedQuery, shortTabSuffix, fullTabSuffix, target, outMatches);
+			ProcessInventoryItem(item, normalizedQuery, shortTabSuffix, fullTabSuffix, &target, outMatches);
 			if (outMatches.size() >= kMaxMatches) {
 				break;
 			}
@@ -2102,6 +2478,17 @@ auto BuildSearchResults(std::wstring_view rawQuery) -> std::vector<MatchEntry> {
 			sharedNode = nextNode;
 			++nodeSteps;
 		}
+	}
+
+	// Display-only rows: the logged-in character's inventory/cube/equipped/belt items,
+	// then items from other characters' snapshots. Stash rows above stay first.
+	if (g_SearchCarriedItems.load(std::memory_order_acquire) && results.size() < kMaxMatches) {
+		ScanCarriedItems(playerInv, normalizedQuery, results);
+	}
+	if (g_SearchOtherCharacters.load(std::memory_order_acquire) && results.size() < kMaxMatches) {
+		std::wstring currentName;
+		(void)ReadPlayerCharacterName(playerUnit, currentName);
+		ScanOtherCharacterSnapshots(currentName, normalizedQuery, GetTickCount64(), results);
 	}
 
 	if (results.empty()) {
@@ -3841,7 +4228,8 @@ void RenderSearchBarAndDropdown(uintptr_t bankPanel) {
 		const size_t rows = std::min(layout.visibleRowCount, kMaxDropdownVisibleRows);
 		for (size_t i = 0; i < rows; ++i) {
 			const uint64_t matchIdx = layout.dropdownMatchIndices[i];
-			if (matchIdx == selectedIndex && matchIdx < matches.size() && matches[matchIdx].hasTarget) {
+			if (matchIdx == selectedIndex && matchIdx < matches.size() &&
+				(matches[matchIdx].hasTarget || matches[matchIdx].displayOnly)) {
 				DrawFilledRect(layout.dropdownRows[i], kColorDropdownRowSelBg);
 				break;
 			}
@@ -3998,6 +4386,58 @@ void __fastcall Detour_BankPanelDraw(void* panel) {
 	RefreshMatchesIfNeeded(nowTickMs);
 	DimNonMatchingGridItems(panelAddr);
 	RenderSearchBarAndDropdown(panelAddr);
+	CaptureLocalCharacterSnapshot(nowTickMs, false);
+}
+
+// D2RLoader gameplay listener (game/UI thread): refresh the logged-in character's
+// snapshot when it enters a game and whenever it changes area, so characters that
+// never open the stash are still captured. Throttled inside CaptureLocalCharacterSnapshot.
+void __cdecl OnGameplayEventForSnapshots(
+	const D2RL::PluginContext*            context,
+	const D2RL::Lifecycle::GameplayEvent* event,
+	void*) noexcept {
+	if (context == nullptr || !D2RL::Lifecycle::HasGameplayEventField(event, D2RL::Lifecycle::GameplayEventRequiredSize)) {
+		return;
+	}
+	if (g_ShuttingDown.load(std::memory_order_acquire) || g_Native.fnGetLocalPlayerUnit == 0) {
+		return;
+	}
+	const bool force = (event->kind == D2RL::Lifecycle::GameplayEventKind::LocalPlayerReady);
+	try {
+		CaptureLocalCharacterSnapshot(GetTickCount64(), force);
+	} catch (...) {
+		// Never let an allocation or I/O failure escape into D2RLoader.
+	}
+}
+
+// Registers optional lifecycle listeners. Failure only means snapshots are limited to
+// stash opens, so it never blocks plugin load.
+void RegisterSnapshotLifecycleListeners(const D2RL::PluginContext* ctx) noexcept {
+	const D2RL::LifecycleService* lifecycle = nullptr;
+	if (ctx->QueryService(&lifecycle) != D2RL::ServiceQueryResult::Success ||
+		!D2RL::HasLifecycleServiceField(lifecycle, D2RL::LifecycleServiceRequiredSize) ||
+		lifecycle->registerGameplayEventListener == nullptr) {
+		ctx->LogWarn("PyreStashSearch: lifecycle service unavailable; character snapshots update on stash open only.");
+		return;
+	}
+	constexpr D2RL::Lifecycle::GameplayEventKind kKinds[] = {
+		D2RL::Lifecycle::GameplayEventKind::LocalPlayerReady,
+		D2RL::Lifecycle::GameplayEventKind::LevelChanged,
+	};
+	for (const auto kind : kKinds) {
+		const D2RL::Lifecycle::GameplayEventListener listener{
+			.structSize = D2RL::Lifecycle::GameplayEventListenerSize,
+			.flags      = 0,
+			.kind       = kind,
+			.reserved   = 0,
+			.callback   = &OnGameplayEventForSnapshots,
+			.userData   = nullptr,
+		};
+		D2RL::Lifecycle::ListenerHandle handle = D2RL::Lifecycle::InvalidHandle;
+		if (lifecycle->registerGameplayEventListener(ctx, &listener, &handle) != D2RL::Lifecycle::Result::Success) {
+			ctx->LogWarn("PyreStashSearch: failed to register a gameplay listener; character snapshots may update less often.");
+		}
+	}
 }
 
 // 0xC5A0: Initializes plugin state, verifies D2R.exe + D2RCore.dll signatures, starts worker thread, installs hook
@@ -4011,6 +4451,15 @@ auto InitializePlugin(const D2RL::PluginContext* ctx) -> bool {
 	ResetSearchState();
 	g_ShuttingDown.store(false, std::memory_order_release);
 	LoadPersistedConfig(ctx);
+	{
+		std::lock_guard<std::mutex> lock(g_CharacterCacheMutex);
+		g_CharacterCacheDir = ComputeCharacterCacheDir(ctx);
+		g_LoadedCharacterSnapshots.clear();
+		g_LastCharacterCacheScanTickMs = 0;
+		g_LastCharacterSnapshotTickMs  = 0;
+		g_LastSnapshotCharacterName.clear();
+		g_LastSnapshotBody.clear();
+	}
 
 	const HMODULE coreModule = GetModuleHandleW(L"D2RCore.dll");
 	if (ctx->exeBase == 0 || coreModule == nullptr || !ResolveNativePointers(ctx->exeBase, coreModule)) {
@@ -4042,6 +4491,9 @@ auto InitializePlugin(const D2RL::PluginContext* ctx) -> bool {
 							&Detour_BankPanelDraw,
 							&g_Native.originalBankPanelDraw)) {
 						ctx->LogInfo("Pyre Stash Search 1.3.1+rev.1 initialized and BankPanel::Draw hook installed.");
+						if (g_SearchOtherCharacters.load(std::memory_order_acquire)) {
+							RegisterSnapshotLifecycleListeners(ctx);
+						}
 						return true;
 					}
 					ctx->LogError("PyreStashSearch: failed to install BankPanel::Draw inline hook.");

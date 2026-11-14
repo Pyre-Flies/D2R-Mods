@@ -1901,6 +1901,13 @@ auto ParseStashSearchConfig(std::string_view tomlText, bool defaultExpanded) -> 
 					} else if (val == "false" || val == "0") {
 						cfg.tabFlyoutExpanded = false;
 					}
+				} else if (key == "search_carried_items" || key == "search_other_characters") {
+					bool* target = (key == "search_carried_items") ? &cfg.searchCarriedItems : &cfg.searchOtherCharacters;
+					if (val == "true" || val == "1") {
+						*target = true;
+					} else if (val == "false" || val == "0") {
+						*target = false;
+					}
 				} else if (key == "tab_personal") {
 					cfg.personalTabName = ParseTomlStringValue(val);
 				} else {

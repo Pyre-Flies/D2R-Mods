@@ -14,6 +14,12 @@ No UI layout (`bankexpansionlayouthd.json`) edits or extra `.mpq` files are requ
   - Searches your **Personal Stash** and all **Shared Stash** pages simultaneously as you type.
   - Matches item names, base types, and full localized stat/affix text (including socketed runes, gems, and jewels).
   - Click any result in the dropdown (or use `Up` / `Down` / `Mouse Wheel` and `Enter`) to jump directly to that stash tab and center the tab strip on the target page.
+- **Search Every Character**
+  - Results also include the current character's **Inventory**, **Horadric Cube**, **Equipped** gear, **Belt** and D2RLoader extra pages (rows end in `- Inv`, `- Cube`, `- Worn`, `- Belt`, `- Page`).
+  - Each character's items are remembered when it enters a game, changes area, or has its stash open, and appear in every other character's search as `Shako - MuleSorc (Cube)`. Hover a row to see the full location and how old that snapshot is.
+  - Log each character in once to add it. A character's results reflect its last snapshot, so items moved by other tools (or in the final moments before quitting) appear after its next login.
+  - These rows are for finding items only: clicking them highlights the row but cannot switch to another character or open the cube.
+  - Mercenary gear is not included yet.
 - **Active-Page Item Highlighting**
   - Items on the currently open stash page that match your search query are highlighted with a gold border and tint directly on the stash grid so you can spot them immediately.
 - **Boolean Operators & Search Shorthands**
@@ -38,10 +44,22 @@ Settings and custom tab names are stored automatically in `d2rloader/config/plug
 ```toml
 [pyre-stashsearch]
 tab_flyout_expanded = false
+search_carried_items = true     # inventory, cube, equipped and belt of the current character
+search_other_characters = true  # remember and search every character's items
 # tab_name_personal = "Main"
 # tab_name_shared_1 = "Runes"
 # tab_name_shared_2 = "Bases"
 ```
+
+### Character snapshots
+
+Snapshots are plain UTF-8 text files stored next to the plugin configuration, one per character and per mod:
+
+```text
+d2rloader/config/pyre-stashsearch-characters/<mod>/<CharacterName>.txt
+```
+
+They contain the item names and tooltip text used for searching, never the save file itself. Delete a character's file to remove it from results (for example after deleting that character), or set `search_other_characters = false` to stop writing and reading snapshots.
 
 ## Credits
 

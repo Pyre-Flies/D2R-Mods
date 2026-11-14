@@ -2,6 +2,7 @@
 #include "stash_search.h"
 #include <cstdio>
 #include <cstdlib>
+#include <string>
 #include <string_view>
 
 namespace {
@@ -194,6 +195,26 @@ void TestConfigPersistence() {
 
 } // namespace
 
+void TestCrossCharacterConfigKeys() {
+	using namespace StashSearch;
+	const StashSearchConfig defaults = ParseStashSearchConfig("[pyre-stashsearch]\ntab_flyout_expanded = false\n", false);
+	Check(defaults.searchCarriedItems && defaults.searchOtherCharacters, "cross-character search defaults on");
+
+	const std::string_view toml =
+		"[pyre-stashsearch]\n"
+		"tab_flyout_expanded = true\n"
+		"search_carried_items = false # only stash\n"
+		"search_other_characters = 0\n";
+	const StashSearchConfig parsed = ParseStashSearchConfig(toml, false);
+	Check(!parsed.searchCarriedItems, "search_carried_items = false parsed");
+	Check(!parsed.searchOtherCharacters, "search_other_characters = 0 parsed");
+
+	// Saving tab names/flyout state must keep the user's cross-character settings verbatim.
+	const std::string saved = SerializeStashSearchConfig(toml, parsed);
+	Check(saved.find("search_carried_items = false # only stash") != std::string::npos, "search_carried_items line preserved on save");
+	Check(saved.find("search_other_characters = 0") != std::string::npos, "search_other_characters line preserved on save");
+}
+
 int main() {
 	TestTooltipNormalization();
 	TestCaseInsensitiveMatching();
@@ -202,6 +223,7 @@ int main() {
 	TestDropdownScrollMath();
 	TestScaleHelpers();
 	TestConfigPersistence();
+	TestCrossCharacterConfigKeys();
 	std::puts("PASS: Stash Search unit tests (tooltip normalization, case folding, boolean/shorthand queries, slash commands, scroll math, scaling, config persistence).");
 	return 0;
 }
