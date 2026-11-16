@@ -144,7 +144,7 @@ static constexpr D2RL::PluginInfo ControllerQoLPluginInfo {
     .abiVersion  = D2RL_PLUGIN_ABI_VERSION,
     .id          = "controller-qol-updates",
     .name        = "Controller QOL Updates",
-    .version     = "1.3.1+rev.97",
+    .version     = "1.3.1+rev.100",
     .author      = "PyreFly",
     .description = "Direct controller looting with filtered labels, inventory shortcuts, and stash navigation.",
     .flags       = D2RL::PluginFlags::Shared | D2RL::PluginFlags::NativeHooks,
@@ -1017,7 +1017,6 @@ static auto __cdecl OnItemInteraction(
 
     // Check if modifier is active
     bool modifierActive = false;
-    const bool btnA = isController && ControllerQoL::IsButtonAPressed();
     const bool btnX = isController && ControllerQoL::IsButtonXPressed();
 
     if (isController) {
@@ -2378,13 +2377,15 @@ D2RL_PLUGIN_EXPORT auto D2RLoaderLoadPlugin(const D2RL::PluginContext* context) 
             !QolBelt::Busy() && !QolMaterials::Busy() && !QolBulkStash::Busy() && !ControllerQoL::IsSyntheticHoldActive() &&
             s_MoveRequests.Empty() && s_CubeRequests.Empty() && s_PickupRequests.Empty();
     },+[](const QolConfig::Settings& next) noexcept {
-        ControllerQoL::SetTriggerThreshold(next.triggerThreshold);
+        ControllerQoL::SetTriggerThreshold(next.triggerThreshold); QolPortal::UpdatePriorities(next.prioritizePortals, next.prioritizeStashBoxes, next.prioritizeWaypoints, next.prioritizeShrines, next.prioritizeChests);
     });
-    context->LogInfo("[QOL] QOL v1.3.1+rev.97 loaded: controller item features and integrated v0.6 navigation/label hooks.");
+    QolOptionsSettings::Register(context);
+    context->LogInfo("[QOL] QOL v1.3.1+rev.100 loaded: controller item features and integrated v0.6 navigation/label hooks.");
     return true;
 }
 
 D2RL_PLUGIN_EXPORT void D2RLoaderUnloadPlugin() noexcept {
+    QolOptionsSettings::Shutdown();
     QolReload::Stop(); // Join file work before tearing down any callback dependency.
     QolAim::Shutdown();
     g_PollingRunning.store(false);

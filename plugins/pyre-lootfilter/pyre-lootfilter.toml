@@ -1,6 +1,8 @@
 [pyre-lootfilter]
 enabled = true
 auto_reload = true
+auto_show_items_on_join = true
 alt_pickup_override = true
 minimap_icons = true
 drop_sounds = true
+drop_sound_3d_attenuation = false

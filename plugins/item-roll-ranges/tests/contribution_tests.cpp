@@ -18,6 +18,8 @@ Affixes::Rolled roll(unsigned property,int low,int high,const char* name=nullptr
 }
 Affixes::Property property(unsigned fn,unsigned stat){Affixes::Property p{};p.bytes[0x18]=static_cast<unsigned char>(fn);put(p.bytes.data(),0x20,static_cast<std::uint16_t>(stat));return p;}
 void TestSamples(){
+    for(unsigned s:{11u,38u,111u,119u,120u,128u,150u,200u,205u,377u,378u,382u,389u,421u,422u,423u,424u,425u,426u,434u,435u,436u,441u})
+        check(ContributionModel::Supported(s));
     std::vector<Affixes::Property> p={property(8,93),property(1,7),property(6,0xffff),property(7,0xffff),property(1,149),property(1,48),property(1,49)};
     auto run=[&](unsigned stat,unsigned shift,std::vector<ContributionModel::Group> groups,const char* actual,const char* expected){
         auto label=ContributionModel::Build(RangeText::Analyze(actual).key,stat,shift,groups,p);check(label.has_value());
@@ -133,11 +135,27 @@ void TestCapture(){
     auto read=[&](std::uintptr_t at,void* out,std::size_t size){return m.Read(at,out,size);};
     auto capture=Contributions::Capture(host,read);check(capture&&Contributions::Value(capture->own,149)==-15);
     m.Put(root+0x1c,0xa0000000u);check(Contributions::Capture(host,read).has_value());
-    m.Put(root+0x1c,0xc0000000u);check(!Contributions::Capture(host,read));
-    m.Put(root+0x1c,0x20000000u);check(!Contributions::Capture(host,read));m.Put(root+0x1c,0x80000000u);
+    m.Put(root+0x1c,0xc0000000u);check(Contributions::Capture(host,read).has_value());
+    m.Put(root+0x1c,0x80000040u);check(Contributions::Capture(host,read).has_value());
+    m.Put(root+0x1c,0x20000000u);check(!Contributions::Capture(host,read));
+    m.Put(root+0x1c,0x7fffffffu);check(!Contributions::Capture(host,read));m.Put(root+0x1c,0x80000000u);
+    m.Put(child+0x1c,0x41u);check(Contributions::Capture(host,read).has_value());
+    m.Put(child+0x1c,0x20000040u);check(Contributions::Capture(host,read).has_value());
+    m.Put(child+0x1c,0x2040u);check(!Contributions::Capture(host,read));m.Put(child+0x1c,0x40u);
     m.Put(child+0x20,1u);check(!Contributions::Capture(host,read));m.Put(child+0x20,0u);
     m.Put(child+0x68,child);check(!Contributions::Capture(host,read));m.Put(child+0x68,std::uintptr_t{});
     m.Put(child+0x38,std::uint64_t{2049});check(!Contributions::Capture(host,read));m.Put(child+0x38,std::uint64_t{1});
+    // Auxiliary non-0x40 temporary effect lists are skipped cleanly without hiding host item stats.
+    constexpr std::uintptr_t auxChild=0x38000,auxEntries=0x58000;
+    m.Zero(auxChild,0xc0);m.Zero(auxEntries,0x20);
+    m.Put(auxChild,host);m.Put(auxChild+0x78,root);m.Put(auxChild+0x1c,0x02u);m.Put(auxChild+0x18,500);m.Put(auxChild+0x20,210u);
+    m.Put(auxChild+0x30,auxEntries);m.Put(auxChild+0x38,std::uint64_t{1});m.Put(auxChild+0x40,std::uint64_t{1});
+    m.Put(auxEntries,std::uint64_t{361}<<32);m.Put(auxEntries+8,std::uint64_t{1});
+    m.Put(child+0x68,auxChild);
+    capture=Contributions::Capture(host,read);
+    check(capture && Contributions::Value(capture->own,149)==-15 && Contributions::Value(capture->own,361)==0 &&
+          Contributions::Value(capture->auxiliary,361)==1);
+    m.Put(child+0x68,std::uintptr_t{});
     constexpr std::uintptr_t first=0x60000,second=0x70000,firstRoot=0x80000,secondRoot=0x90000,
         firstData=0xa0000,secondData=0xb0000,inventory=0xc0000,values=0xd0000;
     for(auto [unit,list,itemData,id]:std::array{
@@ -153,7 +171,9 @@ void TestCapture(){
     m.Zero(inventory,0x20);m.Put(host+0x90,inventory);m.Put(inventory,0x01020304u);m.Put(inventory+0x10,first);m.Put(firstData+0xb0,second);
     capture=Contributions::Capture(host,read);check(capture&&capture->sockets.size()==2&&capture->sockets[0].identity.id==2&&capture->sockets[1].identity.id==3);
     m.Put(firstRoot+0x1c,0xa0000000u);check(Contributions::Capture(host,read).has_value());
-    m.Put(firstRoot+0x1c,0xc0000000u);check(!Contributions::Capture(host,read));m.Put(firstRoot+0x1c,0x80000000u);
+    m.Put(firstRoot+0x1c,0xc0000000u);check(Contributions::Capture(host,read).has_value());
+    m.Put(firstRoot+0x1c,0x80000040u);check(Contributions::Capture(host,read).has_value());
+    m.Put(firstRoot+0x1c,0x40000000u);check(!Contributions::Capture(host,read));m.Put(firstRoot+0x1c,0x80000000u);
     m.Put(secondRoot+0xa0,first);check(!Contributions::Capture(host,read));m.Put(secondRoot+0xa0,second);
     m.Put(secondData+0xb0,first);check(!Contributions::Capture(host,read));m.Put(secondData+0xb0,std::uintptr_t{});
     m.Put(second+0x1bd,std::uint8_t{2});check(!Contributions::Capture(host,read));m.Put(second+0x1bd,std::uint8_t{3});

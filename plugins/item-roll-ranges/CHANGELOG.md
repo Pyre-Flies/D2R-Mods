@@ -1,5 +1,10 @@
 # Item Roll Ranges changelog
 
+## 1.3.1+rev.61 - 2026-11-16
+
+- Add tooltip render and contribution caching to eliminate hover FPS drops, plus `Options > Gameplay` `Always Show Roll Ranges` toggle wiring via `D2RL::Settings`.
+- Harden `StatList` bitmask handling, `PropertyGroups` `PickMode 0..2` attribute/socket-group breakdowns, scalar stats, and PE admission across D2R 3.3 and 3.4 builds.
+
 ## 1.3.1+rev.56 - 2026-10-29
 
 - Attribute permanent set (`[Set]`), crafted-recipe (`[Craft]`), and identified enchantment (`[E]`, including multi-step `419`/`420` upgrades) contributions alongside unique, affix, runeword, socket, and corruption sources.

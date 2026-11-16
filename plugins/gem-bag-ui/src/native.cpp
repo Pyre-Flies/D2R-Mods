@@ -5,6 +5,7 @@
 #include "filter_focus_signatures.h"
 #include "storage_focus_profile.h"
 #include "materials_signatures.h"
+#include "item_code_compatibility.h"
 #include "profile.h"
 #include "server_frame.h"
 #include "admission.h"
@@ -28,10 +29,14 @@ Testing::Publisher testPublisher{};
 constexpr unsigned char HostHash[]={0x93,0x02,0x1d,0xad,0x48,0x53,0x3b,0xcf,0xca,0x8a,0x95,0xc6,0x9a,0x0c,0xc0,0x0c,0xdb,0x90,0x08,0xa3,0xce,0x6c,0xeb,0xa1,0xd0,0x4c,0x7a,0xca,0x71,0x98,0x5a,0x10};
 constexpr unsigned char SetterBytes[]={0x56,0x57,0x55,0x53,0x48,0x83,0xec,0x48,0x44,0x89,0xc6};
 template<class T> bool Read(uintptr_t address,T& value) noexcept {
-    SIZE_T got{};return address>=0x10000 && ReadProcessMemory(GetCurrentProcess(),reinterpret_cast<void*>(address),&value,sizeof(value),&got) && got==sizeof(value);
+    if(address<0x10000)return false;
+    __try {std::memcpy(&value,reinterpret_cast<const void*>(address),sizeof(value));return true;}
+    __except(EXCEPTION_EXECUTE_HANDLER){return false;}
 }
 bool Bytes(uintptr_t address,const unsigned char* value,size_t size) noexcept {
-    unsigned char out[2048]{};SIZE_T got{};return size<=sizeof(out) && ReadProcessMemory(GetCurrentProcess(),reinterpret_cast<void*>(address),out,size,&got) && got==size && !std::memcmp(value,out,size);
+    if(address<0x10000||!value||size>2048)return false;
+    __try {return !std::memcmp(value,reinterpret_cast<const void*>(address),size);}
+    __except(EXCEPTION_EXECUTE_HANDLER){return false;}
 }
 bool SetterOwned() {return Bytes(core+0x831ed0,Profile::SetList,sizeof(Profile::SetList))&&Bytes(core+0x3d95c0,Profile::SetListInner,sizeof(Profile::SetListInner));}
 bool PublisherOwned(const D2RL::PluginContext* c) {
@@ -96,9 +101,10 @@ bool Capture(void* native,const Info& expected,Detail& out,unsigned hint=UINT32_
     uint8_t width{},height{};uintptr_t cells{};
     if(!Read(grid+0x10,width)||!Read(grid+0x11,height)||!Read(grid+0x18,cells)||!width||!height||width>16||height>16 ||
         expected.x<0||expected.y<0||expected.x>=width||expected.y>=height)return false;
-    std::array<uintptr_t,256> occupancy{};SIZE_T got{};
+    std::array<uintptr_t,256> occupancy{};
     const size_t size=static_cast<size_t>(width)*height*sizeof(uintptr_t);
-    if(!ReadProcessMemory(GetCurrentProcess(),reinterpret_cast<void*>(cells),occupancy.data(),size,&got)||got!=size ||
+    auto copyOccupancy=[](uintptr_t src,void* dst,size_t len) noexcept -> bool {if(src<0x10000||!dst)return false;__try{std::memcpy(dst,reinterpret_cast<const void*>(src),len);return true;}__except(EXCEPTION_EXECUTE_HANDLER){return false;}};
+    if(!copyOccupancy(cells,occupancy.data(),size) ||
        occupancy[static_cast<size_t>(expected.y)*width+expected.x]!=unit)return false;
     out.snapshot={expected,static_cast<unsigned>(total),FreeCell(width,height,occupancy),bank,width,height,out.definition->fingerprint,out.definition->mask};
     return true;
@@ -412,6 +418,13 @@ bool CursorFree(const D2RL::PluginContext* c) noexcept {
 }
 bool Controller(const D2RL::PluginContext* c) noexcept {
     uintptr_t manager{};unsigned mode{};return c && Read(c->exeBase+0x3440170,manager)&&manager&&Read(manager+0xdc,mode)&&mode==1;
+}
+bool PlaySound(const D2RL::PluginContext* c,int32_t soundId) noexcept {
+    if(!admitted||!c||!c->exeBase||soundId<=0||
+        !QolItemCode::Check(c,0x1a0780,QolMaterials::Signatures::FinishInteraction,sizeof(QolMaterials::Signatures::FinishInteraction)))return false;
+    using Fn=void(__fastcall*)(int32_t,void*,int32_t,int32_t,bool);
+    __try {reinterpret_cast<Fn>(c->exeBase+0x1a0780)(soundId,nullptr,0,0,false);return true;}
+    __except(EXCEPTION_EXECUTE_HANDLER){return false;}
 }
 bool Focus(const D2RL::PluginContext* c,uint32_t& id,uint32_t& cls) noexcept {
     if(!Controller(c)||!SafeUi(c) || !c->CheckExpectedBytes(0x2c49f0,QolNativeIdentifyProfile::Lookup,sizeof(QolNativeIdentifyProfile::Lookup)))return false;

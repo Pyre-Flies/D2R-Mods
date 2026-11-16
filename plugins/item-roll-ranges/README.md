@@ -1,6 +1,6 @@
 # Item Roll Ranges
 
-**1.3.1+rev.56 · by PyreFly**
+**1.3.1+rev.61 · by PyreFly**
 
 Shows possible modifier rolls and their sources beside the item's actual
 values. Ranges use the active game's definitions, including supported modded
@@ -56,7 +56,7 @@ Enter these in game chat. Feedback appears in the loader console.
 | `/AlwaysShowRolls off` | Return to holding Ctrl/RT for ranges. |
 | `/AlwaysShowRolls status` | Report the current state. |
 
-Lowercase `/alwaysshowrolls` also works. Setting commands save automatically
+Lowercase `/alwaysshowrolls` also works. You can also switch between **Hold Ctrl / RT** and **Always Show** directly in **Options > Gameplay > UI > Item Roll Ranges**. Setting commands and Options menu changes save automatically
 to the active `d2rloader/config/item-roll-ranges.toml` and survive restart.
 Status is read-only. A failed save leaves the prior state active and reports
 a warning. You can also edit this file with the game closed, then restart:

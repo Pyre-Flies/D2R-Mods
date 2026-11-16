@@ -18,6 +18,7 @@ bool Focus(const D2RL::PluginContext*,uint32_t&,uint32_t&) noexcept;
 bool Controller(const D2RL::PluginContext*) noexcept;
 bool CursorFree(const D2RL::PluginContext*) noexcept;
 bool SafeUi(const D2RL::PluginContext*) noexcept;
+bool PlaySound(const D2RL::PluginContext*,int32_t) noexcept;
 #ifdef GEMBAG_NATIVE_TESTS
 namespace Testing {
 using Setter=bool(__fastcall*)(uint8_t,void*,int32_t,int32_t,uint32_t);

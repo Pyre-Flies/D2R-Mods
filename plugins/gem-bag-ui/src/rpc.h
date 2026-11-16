@@ -1,6 +1,7 @@
 #pragma once
 #include "native.h"
 #include "protocol.h"
+#include <atomic>
 #include <deque>
 #include <map>
 #include <mutex>
@@ -23,9 +24,13 @@ public:
     bool Begin(const Info&,unsigned,bool,Ticket,bool deposit=false);
     void Tick();
     bool Pending();
+    bool HasClientWork() const noexcept {return clientWork.load(std::memory_order_acquire);}
+    bool HasScopedJobs() const noexcept {return scopedJobs.load(std::memory_order_acquire);}
     void EnableScopedPump(bool);
     void PumpScopedGame(); // Only from the qualified Core per-game frame scope.
 private:
+    void RefreshFastFlagsLocked() noexcept;
+    std::atomic<bool> clientWork{},scopedJobs{};
     struct Cached {Protocol::Request request{};Protocol::Reply reply{};bool done{};};
     struct Peer {
         uint64_t epoch{},clientSession{},serverSession{},highest{},lastSeen{},lease{},definition{};

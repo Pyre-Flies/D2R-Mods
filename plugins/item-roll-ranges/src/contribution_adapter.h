@@ -1,9 +1,67 @@
 // Included inside the plugin's private namespace after its native helpers.
 using DefinitionTable=ContributionDefinitions::Table;
+struct ContributionSnapshotCacheEntry {
+    bool valid{};
+    const void* source{};
+    std::array<unsigned char,0x18> unitHeader{};
+    unsigned char unitBank{};
+    std::array<unsigned char,0x64> itemDataBytes{};
+    bool hasRoot{};
+    std::array<unsigned char,0xb8> rootHeader{};
+    bool propertySources{};
+    std::optional<Contributions::Snapshot> snapshot{};
+};
+struct ContributionSnapshotCache {
+    ULONGLONG tick{};
+    std::array<ContributionSnapshotCacheEntry,8> entries{};
+};
+thread_local ContributionSnapshotCache contributionSnapshotCache{};
+void ClearContributionSnapshotCache() noexcept { contributionSnapshotCache={}; }
 std::optional<Contributions::Snapshot> CaptureItemContributions(const void* source) {
     if(!contributionsReady.load())return {};
-    return Contributions::Capture(reinterpret_cast<std::uintptr_t>(source),[](std::uintptr_t at,void* out,std::size_t size){
-        const auto* ptr=reinterpret_cast<const void*>(at);if(!Readable(ptr,size))return false;std::memcpy(out,ptr,size);return true;},propertySourcesReady.load()?171u:0u,propertySourcesReady.load());
+
+    const bool useCache=active.load(std::memory_order_relaxed);
+    const bool propSources=propertySourcesReady.load();
+    std::array<unsigned char,0x18> unitHeader{};
+    unsigned char unitBank{};
+    std::array<unsigned char,0x64> itemDataBytes{};
+    bool hasRoot=false;
+    std::array<unsigned char,0xb8> rootHeader{};
+    bool canKey=false;
+    if(useCache && Readable(source,0x1be)){
+        const auto* unitBytes=static_cast<const unsigned char*>(source);
+        const auto* itemData=Affixes::Read<const unsigned char*>(unitBytes,0x10);
+        if(reinterpret_cast<std::uintptr_t>(itemData)>=0x1001c && Readable(itemData-28,0x64)){
+            std::memcpy(unitHeader.data(),unitBytes,unitHeader.size());
+            unitBank=unitBytes[0x1bd];
+            std::memcpy(itemDataBytes.data(),itemData-28,itemDataBytes.size());
+            const auto* root=Affixes::Read<const unsigned char*>(unitBytes,0x88);
+            if(Readable(root,rootHeader.size())){
+                hasRoot=true;
+                std::memcpy(rootHeader.data(),root,rootHeader.size());
+            }
+            canKey=true;
+            const auto now=GetTickCount64()>>6;
+            if(contributionSnapshotCache.tick!=now){
+                contributionSnapshotCache.tick=now;
+                for(auto& e:contributionSnapshotCache.entries)e.valid=false;
+            } else {
+                for(const auto& e:contributionSnapshotCache.entries){
+                    if(e.valid && e.source==source && e.unitBank==unitBank && e.propertySources==propSources &&
+                       e.hasRoot==hasRoot && e.unitHeader==unitHeader && e.itemDataBytes==itemDataBytes &&
+                       (!hasRoot || e.rootHeader==rootHeader))
+                        return e.snapshot;
+                }
+            }
+        }
+    }
+    auto captured=Contributions::Capture(reinterpret_cast<std::uintptr_t>(source),[](std::uintptr_t at,void* out,std::size_t size){
+        const auto* ptr=reinterpret_cast<const void*>(at);if(!Readable(ptr,size))return false;std::memcpy(out,ptr,size);return true;},propSources?171u:0u,propSources);
+    if(canKey){
+        std::rotate(contributionSnapshotCache.entries.rbegin(),contributionSnapshotCache.entries.rbegin()+1,contributionSnapshotCache.entries.rend());
+        contributionSnapshotCache.entries[0]={true,source,unitHeader,unitBank,itemDataBytes,hasRoot,rootHeader,propSources,captured};
+    }
+    return captured;
 }
 std::optional<DefinitionTable> ContributionTable(D2RL::DataTables::TableId id,unsigned bank,
     unsigned stride,std::uint64_t& revision,bool allowEmpty=false) {
@@ -114,8 +172,9 @@ struct SourceGroups {
 };
 std::optional<SourceGroups> GatherSourceGroups(void* source,std::span<const Affixes::Rolled> hostDefinitions,
     std::span<const Affixes::Row> rows,std::size_t prefixIndex,std::size_t autoIndex,
-    std::span<const Affixes::Property> properties) {
-    auto capture=CaptureItemContributions(source);
+    std::span<const Affixes::Property> properties,
+    const std::optional<Contributions::Snapshot>& preCaptured={}) {
+    auto capture=preCaptured?preCaptured:CaptureItemContributions(source);
     if(!capture || !PermanentSetTotals(*capture))return {};
     long long upgradeTotal=0;unsigned activeUpgradeStat=0;
     for(unsigned stat:{392u,393u,394u,395u,419u,420u}){
@@ -176,9 +235,36 @@ std::optional<SourceGroups> GatherSourceGroups(void* source,std::span<const Affi
     }
     auto defStatBounds=[&](const Affixes::Rolled& d,unsigned stat,unsigned layer,int& lo,int& hi)->bool{
         if(layer || stat==83){
-            const auto b=PropertyRolls::LayerBounds(d,properties,stat,layer);
-            if(!b)return false;
-            lo=b->first;hi=b->second;return true;
+            int fixedLo=0,fixedHi=0;bool hasFixed=false;
+            if(const auto b=PropertyRolls::LayerBounds(d,properties,stat,layer,false)){
+                fixedLo=b->first;fixedHi=b->second;hasFixed=true;
+            }
+            int randLo=0,randHi=0;bool hasRand=false;
+            if(randomSkillsReady.load() && (stat==83 || stat==107 || stat==188) &&
+               d.unconditionalScalar && !(d.source&&(std::string_view(d.source)=="[U]"||std::string_view(d.source)=="[RW]")&&!d.uniqueScalar)){
+                for(unsigned n=0;n<3;++n){
+                    const int id=d.row.Number(0x24+16*n);
+                    if(id<0 || static_cast<std::size_t>(id)>=properties.size())continue;
+                    const auto* p=properties[static_cast<std::size_t>(id)].bytes.data();
+                    const int param=d.row.Number(0x28+16*n),sLo=d.row.Number(0x2c+16*n),sHi=d.row.Number(0x30+16*n);
+                    for(unsigned s=0;s<7;++s){
+                        if(p[0x18+s]!=12 || p[2+s] || Affixes::Read<std::uint16_t>(p,0x20+s*2)!=stat)continue;
+                        if(!Affixes::RandomLayerSpec(param,sLo,sHi,layer,static_cast<int>(stat)))continue;
+                        randLo+=(sLo==sHi)?param:0;
+                        randHi+=param;
+                        hasRand=true;
+                    }
+                }
+            }
+            if(hasFixed || hasRand){
+                lo=fixedLo+randLo;hi=fixedHi+randHi;return true;
+            }
+            if(stat>=195 && stat<=201 && layer>0){
+                if(const auto proc=ScalingAffixes::Proc(d,properties,static_cast<int>(stat),static_cast<int>(layer),{6,63,false})){
+                    lo=proc->first;hi=proc->first;return true;
+                }
+            }
+            return false;
         }
         if(ContributionModel::Bounds(d,properties,static_cast<int>(stat),lo,hi))return true;
         if((stat>=21 && stat<=24) || (stat>=48 && stat<=55)){
@@ -192,16 +278,75 @@ std::optional<SourceGroups> GatherSourceGroups(void* source,std::span<const Affi
             hi=(static_cast<int>(stat)==minStat)?mnHi:mxHi;
             return true;
         }
+        if(d.unconditionalScalar && !(d.source&&(std::string_view(d.source)=="[U]"||std::string_view(d.source)=="[RW]")&&!d.uniqueScalar)){
+            bool found=false;int sumLo=0,sumHi=0;
+            for(unsigned n=0;n<3;++n){
+                const int id=d.row.Number(0x24+16*n);
+                if(id<0 || static_cast<std::size_t>(id)>=properties.size())continue;
+                const auto* p=properties[static_cast<std::size_t>(id)].bytes.data();
+                for(unsigned s=0;s<7;++s){
+                    if(p[0x18+s]!=17 || p[2+s] || Affixes::Read<std::uint16_t>(p,0x20+s*2)!=stat)continue;
+                    const int param=d.row.Number(0x28+16*n),sLo=d.row.Number(0x2c+16*n),sHi=d.row.Number(0x30+16*n);
+                    const int vLo=param?param:sLo,vHi=param?param:sHi;
+                    if(vLo>vHi)return false;
+                    sumLo+=vLo;sumHi+=vHi;found=true;
+                }
+            }
+            if(found){lo=sumLo;hi=sumHi;return true;}
+        }
         return false;
     };
     auto sumStatBounds=[&](std::span<const Affixes::Rolled> defs,unsigned stat,unsigned layer,long long& totalLo,long long& totalHi)->bool{
         totalLo=0;totalHi=0;
+        const Affixes::LayerEncoding selectorEncoding{6,63,randomSkillsReady.load()};
         for(const auto& d:defs){
-            if(!Affixes::Contributes(d.row,properties,static_cast<int>(stat),static_cast<int>(layer)))continue;
+            if(!Affixes::Contributes(d.row,properties,static_cast<int>(stat),static_cast<int>(layer),selectorEncoding))continue;
             int lo{},hi{};
             if(!defStatBounds(d,stat,layer,lo,hi))return false;
             totalLo+=lo;totalHi+=hi;
         }
+        return true;
+    };
+    auto checkRandomLayerPool=[&](std::span<const Affixes::Rolled> baseDefs,unsigned t,
+                                  const ContributionDefinitions::Spec& spec,
+                                  bool requireUpperBound,bool& isExplained)->bool{
+        if((t!=83 && t!=107 && t!=188) || !randomSkillsReady.load() || spec.parameter<=0 || spec.low<0 || spec.low>spec.high || spec.high>65535)return false;
+        long long poolActual=0,poolBaseLo=0,poolBaseHi=0;
+        bool hasEligibleLayer=false,bPoolKnown=true;
+        for(const auto& entry:out.groups[0].values){
+            if(entry.value<=0 || static_cast<unsigned>(entry.key>>32)!=t)continue;
+            const unsigned lay=static_cast<unsigned>(entry.key&0xffffffffu);
+            if(!Affixes::RandomLayerSpec(spec.parameter,spec.low,spec.high,lay,static_cast<int>(t)))continue;
+            poolActual+=entry.value;
+            long long fLo=0,fHi=0;
+            if(sumStatBounds(baseDefs,t,lay,fLo,fHi) && entry.value>=fLo+spec.parameter)hasEligibleLayer=true;
+        }
+        for(const auto& d:baseDefs){
+            for(unsigned n=0;n<3;++n){
+                const int id=d.row.Number(0x24+16*n);
+                if(id<0 || static_cast<std::size_t>(id)>=properties.size())continue;
+                const auto* bp=properties[static_cast<std::size_t>(id)].bytes.data();
+                const int bParam=d.row.Number(0x28+16*n),bLo=d.row.Number(0x2c+16*n),bHi=d.row.Number(0x30+16*n);
+                for(unsigned s=0;s<7;++s){
+                    const unsigned bFn=bp[0x18+s];
+                    if(!bFn || Affixes::Read<std::uint16_t>(bp,0x20+s*2)!=t)continue;
+                    if(t==107 && (bFn==9 || bFn==22 || bFn==24) && bParam>=spec.low && bParam<=spec.high){poolBaseLo+=bLo;poolBaseHi+=bHi;}
+                    else if(t==83 && bFn==21){
+                        const int cls=Affixes::Read<std::uint16_t>(bp,0x0a+s*2);
+                        if(cls>=spec.low && cls<=spec.high){poolBaseLo+=bLo;poolBaseHi+=bHi;}
+                    }
+                    else if(t==188 && bFn==10 && bParam>=0 && bParam<24 && Affixes::RandomLayerSpec(spec.parameter,spec.low,spec.high,static_cast<unsigned>(bParam/3*8+bParam%3),188)){poolBaseLo+=bLo;poolBaseHi+=bHi;}
+                    else if(bFn==12 && bLo>=spec.low && bHi<=spec.high && bParam>0){poolBaseLo+=bParam;poolBaseHi+=bParam;}
+                    else if(bFn==12 && !(bHi<spec.low || bLo>spec.high))bPoolKnown=false;
+                }
+            }
+        }
+        if(!hasEligibleLayer)return false;
+        if(bPoolKnown){
+            if(poolActual<poolBaseLo+spec.parameter)return false;
+            if(requireUpperBound && poolActual>poolBaseHi+spec.parameter)return false;
+        }
+        isExplained=!bPoolKnown || poolActual>poolBaseHi;
         return true;
     };
     if(maybeCraft && items && types){
@@ -213,9 +358,9 @@ std::optional<SourceGroups> GatherSourceGroups(void* source,std::span<const Affi
                 if(entry.value<=0)continue;
                 const unsigned stat=static_cast<unsigned>(entry.key>>32);
                 const unsigned layer=static_cast<unsigned>(entry.key&0xffffffffu);
-                if(stat==83 && layer<8){
+                if((stat==83 && layer<8) || (stat==188 && layer<64) || (stat>=195 && stat<=201 && layer>0)){
                     long long bLo=0,bHi=0;
-                    if(sumStatBounds(baseDefs,83,layer,bLo,bHi) && entry.value>bHi){hasUnexplained=true;break;}
+                    if(sumStatBounds(baseDefs,stat,layer,bLo,bHi) && entry.value>bHi){hasUnexplained=true;break;}
                     continue;
                 }
                 if(layer!=0 || stat==7 || stat==9 || stat==11 || (stat>=21 && stat<=24) || stat==31 ||
@@ -251,6 +396,17 @@ std::optional<SourceGroups> GatherSourceGroups(void* source,std::span<const Affi
                             for(unsigned slot=0;slot<7;++slot){
                                 const unsigned fn=p[0x18+slot];if(!fn)continue;
                                 if(fn==17 && slot>0 && (spec.parameter==0 || Affixes::Read<std::uint16_t>(p.data(),0x20+slot*2)==160))continue;
+                                if(slot==0 && fn==21 && p[0x19]==3 && !p[0x1a] && !p[3] && Affixes::Read<std::uint16_t>(p.data(),0x0a)!=0 &&
+                                   !Contributions::Value(out.groups[0].values,Affixes::Read<std::uint16_t>(p.data(),0x20),Affixes::Read<std::uint16_t>(p.data(),0x0a)))continue;
+                                if(fn==12){
+                                    const unsigned t=Affixes::Read<std::uint16_t>(p.data(),0x20+slot*2);
+                                    bool isExplained=false;
+                                    if(!checkRandomLayerPool(baseDefs,t,spec,!enchanted && !out.unresolvedCorruption,isExplained)){valid=false;break;}
+                                    specHasTarget=true;
+                                    const std::uint64_t key=(std::uint64_t{t}<<32)|static_cast<unsigned>(spec.low);
+                                    if(checkedKeys.insert(key).second && isExplained)++explained;
+                                    continue;
+                                }
                                 std::vector<unsigned> targets;unsigned layer=0;
                                 if(fn==7)targets={17u,18u};
                                 else if(fn==5)targets={Contributions::Value(out.groups[0].values,21)?21u:23u};
@@ -263,12 +419,13 @@ std::optional<SourceGroups> GatherSourceGroups(void* source,std::span<const Affi
                                     else targets={t};
                                     if(fn==21)layer=Affixes::Read<std::uint16_t>(p.data(),0x0a+slot*2);
                                     else if(fn==10 && spec.parameter>=0 && spec.parameter<24)layer=static_cast<unsigned>(spec.parameter/3*8+spec.parameter%3);
-                                    else if((fn==22 || fn==24) && spec.parameter>=0 && spec.parameter<=65535)layer=static_cast<unsigned>(spec.parameter);
-                                    else if(fn!=1 && fn!=2 && fn!=3 && fn!=8 && fn!=15 && fn!=16 && fn!=17){valid=false;break;}
+                                    else if((fn==9 || fn==22 || fn==24) && spec.parameter>=0 && spec.parameter<=65535)layer=static_cast<unsigned>(spec.parameter);
+                                    else if(fn==11 && t>=195 && t<=201 && spec.parameter>=0 && spec.low>0 && spec.high>0 && spec.high<=63)layer=(static_cast<unsigned>(spec.parameter)<<6)|static_cast<unsigned>(spec.high);
+                                    else if(fn!=1 && fn!=2 && fn!=3 && fn!=4 && fn!=8 && fn!=15 && fn!=16 && fn!=17){valid=false;break;}
                                 }
                                 for(unsigned target:targets){
                                     specHasTarget=true;
-                                    const unsigned shift=(target==7 || target==9)?8u:0u;
+                                    const unsigned shift=(target==7 || target==9 || target==11)?8u:0u;
                                     const auto raw=Contributions::Value(out.groups[0].values,target,layer);
                                     const auto actualVal=Contributions::Normalize(raw,shift);
                                     if(!actualVal || *actualVal<=0){valid=false;break;}
@@ -302,7 +459,7 @@ std::optional<SourceGroups> GatherSourceGroups(void* source,std::span<const Affi
             }
         }
     }
-    if(enchanted && (upgradeTotal==1 || (upgradeTotal>1 && upgradeTotal<=5 && (activeUpgradeStat==419 || activeUpgradeStat==420))) && items && types && !out.unresolvedCorruption){
+    if(enchanted && (upgradeTotal==1 || (upgradeTotal>1 && upgradeTotal<=10 && (activeUpgradeStat==419 || activeUpgradeStat==420))) && items && types && !out.unresolvedCorruption){
         if(const auto cube=ContributionTable(D2RL::DataTables::TableId::CubeMain,out.capture.identity.bank,364,revision)){
             if(const auto candidates=ContributionDefinitions::ResolveEnchantmentCandidates(*cube,*items,*types,properties,
                 out.capture.identity.classId,out.capture.identity.quality,activeUpgradeStat,out.capture.identity.qualityRecord,upgradeTotal)){
@@ -331,6 +488,8 @@ std::optional<SourceGroups> GatherSourceGroups(void* source,std::span<const Affi
                         for(unsigned slot=0;slot<7;++slot){
                             const auto fn=p[0x18+slot];if(!fn)continue;
                             if(fn==17 && slot>0 && (spec.parameter==0 || Affixes::Read<std::uint16_t>(p.data(),0x20+slot*2)==160))continue;
+                            if(slot==0 && fn==21 && p[0x19]==3 && !p[0x1a] && !p[3] && Affixes::Read<std::uint16_t>(p.data(),0x0a)!=0 &&
+                               !Contributions::Value(out.groups[0].values,Affixes::Read<std::uint16_t>(p.data(),0x20),Affixes::Read<std::uint16_t>(p.data(),0x0a)))continue;
                             if(fn==20 && Affixes::Read<std::uint16_t>(p.data(),0x20+slot*2)==65535){
                                 specHasTarget=true;
                                 if(Contributions::Value(out.groups[0].values,152)<=0){allPresent=false;break;}
@@ -350,36 +509,11 @@ std::optional<SourceGroups> GatherSourceGroups(void* source,std::span<const Affi
                             }
                             if(fn==12){
                                 const unsigned t=Affixes::Read<std::uint16_t>(p.data(),0x20+slot*2);
-                                if(t!=107 || !selectorEncoding.randomSkills || spec.parameter<=0 || spec.low<0 || spec.low>spec.high || spec.high>65535){allPresent=false;break;}
+                                bool isExplained=false;
+                                if(!checkRandomLayerPool(baseDefs,t,spec,true,isExplained)){allPresent=false;break;}
                                 specHasTarget=true;
-                                long long poolActual=0,poolBaseLo=0,poolBaseHi=0;
-                                bool hasEligibleLayer=false,bPoolKnown=true;
-                                for(const auto& entry:out.groups[0].values){
-                                    if(entry.value<=0 || static_cast<unsigned>(entry.key>>32)!=107)continue;
-                                    const unsigned lay=static_cast<unsigned>(entry.key&0xffffffffu);
-                                    if(!Affixes::RandomLayerSpec(spec.parameter,spec.low,spec.high,lay))continue;
-                                    poolActual+=entry.value;
-                                    long long fLo=0,fHi=0;
-                                    if(sumStatBounds(baseDefs,107,lay,fLo,fHi) && entry.value>=fLo+spec.parameter)hasEligibleLayer=true;
-                                }
-                                for(const auto& d:baseDefs){
-                                    for(unsigned n=0;n<3;++n){
-                                        const int id=d.row.Number(0x24+16*n);
-                                        if(id<0 || static_cast<std::size_t>(id)>=properties.size())continue;
-                                        const auto* bp=properties[static_cast<std::size_t>(id)].bytes.data();
-                                        const int bParam=d.row.Number(0x28+16*n),bLo=d.row.Number(0x2c+16*n),bHi=d.row.Number(0x30+16*n);
-                                        for(unsigned s=0;s<7;++s){
-                                            const unsigned bFn=bp[0x18+s];
-                                            if(!bFn || Affixes::Read<std::uint16_t>(bp,0x20+s*2)!=107)continue;
-                                            if(bFn==22 && bParam>=spec.low && bParam<=spec.high){poolBaseLo+=bLo;poolBaseHi+=bHi;}
-                                            else if(bFn==12 && bLo==spec.low && bHi==spec.high && bParam>0){poolBaseLo+=bParam;poolBaseHi+=bParam;}
-                                            else if(bFn==12 && !(bHi<spec.low || bLo>spec.high))bPoolKnown=false;
-                                        }
-                                    }
-                                }
-                                if(!hasEligibleLayer || (bPoolKnown && (poolActual<poolBaseLo+spec.parameter || poolActual>poolBaseHi+spec.parameter))){allPresent=false;break;}
-                                const std::uint64_t key=(std::uint64_t{107}<<32)|static_cast<unsigned>(spec.low);
-                                if(checkedKeys.insert(key).second && (!bPoolKnown || poolActual>poolBaseHi))++explained;
+                                const std::uint64_t key=(std::uint64_t{t}<<32)|static_cast<unsigned>(spec.low);
+                                if(checkedKeys.insert(key).second && isExplained)++explained;
                                 continue;
                             }
                             std::vector<unsigned> targets;unsigned layer=0;
@@ -394,12 +528,13 @@ std::optional<SourceGroups> GatherSourceGroups(void* source,std::span<const Affi
                                 targets={t};
                                 if(fn==21)layer=Affixes::Read<std::uint16_t>(p.data(),0x0a+slot*2);
                                 else if(fn==10 && spec.parameter>=0 && spec.parameter<24)layer=static_cast<unsigned>(spec.parameter/3*8+spec.parameter%3);
-                                else if((fn==22 || fn==24) && spec.parameter>=0 && spec.parameter<=65535)layer=static_cast<unsigned>(spec.parameter);
-                                else if(fn!=1 && fn!=2 && fn!=3 && fn!=8 && fn!=15 && fn!=16 && fn!=17){allPresent=false;break;}
+                                else if((fn==9 || fn==22 || fn==24) && spec.parameter>=0 && spec.parameter<=65535)layer=static_cast<unsigned>(spec.parameter);
+                                else if(fn==11 && t>=195 && t<=201 && spec.parameter>=0 && spec.low>0 && spec.high>0 && spec.high<=63)layer=(static_cast<unsigned>(spec.parameter)<<6)|static_cast<unsigned>(spec.high);
+                                else if(fn!=1 && fn!=2 && fn!=3 && fn!=4 && fn!=8 && fn!=15 && fn!=16 && fn!=17){allPresent=false;break;}
                             }
                             for(unsigned target:targets){
                                 specHasTarget=true;
-                                const unsigned shift=(target==7 || target==9)?8u:0u;
+                                const unsigned shift=(target==7 || target==9 || target==11)?8u:0u;
                                 const auto raw=Contributions::Value(out.groups[0].values,target,layer);
                                 const auto actualVal=Contributions::Normalize(raw,shift);
                                 if(!actualVal || *actualVal<=0){allPresent=false;break;}
@@ -614,7 +749,7 @@ std::optional<SourceGroups> GatherSourceGroups(void* source,std::span<const Affi
                         const int res=static_cast<int>(entry.value-bLo);
                         for(std::size_t id=0;id<properties.size();++id){
                             const auto* p=properties[id].bytes.data();
-                            const bool match107=entryStat==107 && p[0x18]==22 && !p[0x19] && !p[2] && Affixes::Read<std::uint16_t>(p,0x20)==107;
+                            const bool match107=entryStat==107 && (p[0x18]==22 || p[0x18]==9) && !p[0x19] && !p[2] && Affixes::Read<std::uint16_t>(p,0x20)==107;
                             const bool match387=entryStat==387 && p[0x18]==22 && p[0x19]==24 && !p[0x1a] && !p[2] && !p[3] &&
                                 Affixes::Read<std::uint16_t>(p,0x20)==387 && Affixes::Read<std::uint16_t>(p,0x22)==97;
                             if(match107 || match387){residualSpecs.push_back({static_cast<unsigned>(id),static_cast<int>(layer),res,res});break;}
@@ -633,9 +768,66 @@ std::optional<SourceGroups> GatherSourceGroups(void* source,std::span<const Affi
             const auto actualVal=Contributions::Normalize(entry.value,shift);
             if(!actualVal || *actualVal<=0)continue;
             int bLo=0,bHi=0;bool bFixed=true;long long baseSum=0;
-            for(const auto& d:baseDefs){
+            for(std::size_t dIdx=0;dIdx<baseDefs.size();++dIdx){
+                const auto& d=baseDefs[dIdx];
                 if(!Affixes::Contributes(d.row,properties,static_cast<int>(stat),0))continue;
-                if(!defStatBounds(d,stat,0,bLo,bHi) || bLo!=bHi){bFixed=false;break;}
+                if(!defStatBounds(d,stat,0,bLo,bHi)){bFixed=false;break;}
+                if(bLo!=bHi){
+                    int groupSlot=-1;
+                    for(unsigned n=0;n<3;++n){
+                        const int id=d.row.Number(0x24+16*n);
+                        if(id<0 || static_cast<std::size_t>(id)>=properties.size())continue;
+                        const auto* bp=properties[static_cast<std::size_t>(id)].bytes.data();
+                        for(unsigned s=0;s<7;++s){
+                            if(bp[0x18+s] && Affixes::Read<std::uint16_t>(bp,0x20+s*2)==stat){
+                                groupSlot=(groupSlot==-1)?static_cast<int>(n):-2;break;
+                            }
+                        }
+                    }
+                    bool pinned=false;
+                    if(groupSlot>=0){
+                        const int id=d.row.Number(0x24+16*groupSlot);
+                        const auto* bp=properties[static_cast<std::size_t>(id)].bytes.data();
+                        if(bp[0x18]==1 && bp[0x19]==3 && bLo>0 &&
+                           d.row.Number(0x2c+16*groupSlot)==bLo && d.row.Number(0x30+16*groupSlot)==bHi){
+                            long long minImplied=LLONG_MAX;bool anySibling=false;
+                            for(unsigned s=0;s<7;++s){
+                                if((bp[0x18+s]!=1 && bp[0x18+s]!=3) || bp[2+s])continue;
+                                const unsigned t=Affixes::Read<std::uint16_t>(bp,0x20+s*2);
+                                if(t==stat || t>=4096)continue;
+                                bool otherSlotOnSameDef=false;
+                                for(unsigned m=0;m<3;++m){
+                                    if(static_cast<int>(m)==groupSlot)continue;
+                                    const int mid=d.row.Number(0x24+16*m);
+                                    if(mid>=0 && static_cast<std::size_t>(mid)<properties.size()){
+                                        const auto* mp=properties[static_cast<std::size_t>(mid)].bytes.data();
+                                        for(unsigned ms=0;ms<7;++ms)
+                                            if(mp[0x18+ms] && Affixes::Read<std::uint16_t>(mp,0x20+ms*2)==t)otherSlotOnSameDef=true;
+                                    }
+                                }
+                                if(otherSlotOnSameDef)continue;
+                                const unsigned tShift=(t==7 || t==9 || t==11)?8u:0u;
+                                const auto tActual=Contributions::Normalize(Contributions::Value(out.groups[0].values,t,0),tShift);
+                                if(!tActual)continue;
+                                long long otherSum=0;bool oFixed=true;
+                                for(std::size_t oIdx=0;oIdx<baseDefs.size();++oIdx){
+                                    if(oIdx==dIdx || !Affixes::Contributes(baseDefs[oIdx].row,properties,static_cast<int>(t),0))continue;
+                                    int obLo=0,obHi=0;
+                                    if(!defStatBounds(baseDefs[oIdx],t,0,obLo,obHi) || obLo!=obHi){oFixed=false;break;}
+                                    otherSum+=obLo;
+                                }
+                                if(!oFixed)continue;
+                                minImplied=std::min(minImplied,*tActual-otherSum);
+                                anySibling=true;
+                            }
+                            if(anySibling && minImplied>=bLo && minImplied<=bHi){
+                                bLo=bHi=static_cast<int>(minImplied);
+                                pinned=true;
+                            }
+                        }
+                    }
+                    if(!pinned){bFixed=false;break;}
+                }
                 baseSum+=bLo;
             }
             if(!bFixed || *actualVal<=baseSum)continue;
@@ -703,7 +895,8 @@ void AddOwnedSourceLabels(const SourceGroups& sources,std::vector<CapturedLine>&
         const auto shift=metadata[0x14];if(shift>16)continue;
         const bool isDamageEndpoint=(stat>=21&&stat<=24)||(stat>=48&&stat<=55);
         const bool paired=isDamageEndpoint && std::count(line.key.begin(),line.key.end(),'#')==2;
-        if(!paired&&Affixes::Read<std::uint16_t>(metadata,0x32)!=19)continue;
+        const auto desc=Affixes::Read<std::uint16_t>(metadata,0x32);
+        if(!paired && desc!=19 && desc!=1)continue;
         if(paired){stat=(stat>=21&&stat<=24)?((stat&1)?stat:stat-1):(stat&~1u);if(stat+1>=statCount||itemStats[(stat+1)*0x144+0x14]!=shift)continue;}
 
         auto input=sources.groups;
@@ -716,9 +909,13 @@ void AddOwnedSourceLabels(const SourceGroups& sources,std::vector<CapturedLine>&
             (paired&&Contributions::Value(input[n].values,stat+1)!=0);
         if(!external)continue;
         if(stat==17||stat==18){
-            bool agrees=true;for(const auto& g:input)agrees&=Contributions::Value(g.values,17)==Contributions::Value(g.values,18);
+            bool agrees=!Contributions::Value(sources.capture.auxiliary,17)&&!Contributions::Value(sources.capture.auxiliary,18);
+            for(const auto& g:input)agrees&=Contributions::Value(g.values,17)==Contributions::Value(g.values,18);
             if(!agrees)continue;
-        } else if(stat!=16 && stat!=20 && !(stat>=21&&stat<=24) && stat!=31){
+        } else if(stat==16 || stat==20 || (stat>=21&&stat<=24) || stat==31){
+            if(Contributions::Value(sources.capture.auxiliary,stat) ||
+               (paired && Contributions::Value(sources.capture.auxiliary,stat+1)))continue;
+        } else {
             long long sum=0,maxSum=0;for(const auto& g:input){sum+=Contributions::Value(g.values,stat);if(paired)maxSum+=Contributions::Value(g.values,stat+1);}
             if(sum!=Contributions::Value(sources.capture.total,stat)||(paired&&maxSum!=Contributions::Value(sources.capture.total,stat+1)))continue;
         }
@@ -777,6 +974,8 @@ void AddLinkedSourceLabels(const SourceGroups& sources,std::span<const CapturedL
                 admitted &= Affixes::Read<std::uint16_t>(row,0)==member && row[0x14]==0 &&
                     row[0x50]==(physical?0:13) && Affixes::Read<std::uint16_t>(row,0x32)==19;}
             if(stat==17 || stat==18)for(const auto& g:groups)admitted &= Contributions::Value(g.values,17)==Contributions::Value(g.values,18);
+            for(unsigned member=minimum;member<=maximum;++member)admitted &= !Contributions::Value(sources.capture.auxiliary,member);
+            if(stat==17 || stat==18)admitted &= !Contributions::Value(sources.capture.auxiliary,17) && !Contributions::Value(sources.capture.auxiliary,18);
             if(!admitted)continue;
             const auto owned=ContributionModel::Build(line.key,minimum,0,groups,properties,paired);
             if(!owned)continue;unsigned matches=0;bool renders=false;
@@ -929,7 +1128,7 @@ void AddLinkedSourceLabels(const SourceGroups& sources,std::span<const CapturedL
             continue;
         }
         const bool selector=!line.grouped && std::any_of(groups.begin(),groups.end(),[&](const auto& g){
-            return std::any_of(g.definitions.begin(),g.definitions.end(),[&](const auto& d){return line.layer>=0 && PropertyRolls::LayerBounds(d,properties,stat,static_cast<unsigned>(line.layer),selectorEncoding.randomSkills).has_value();});});
+            return std::any_of(g.definitions.begin(),g.definitions.end(),[&](const auto& d){return line.layer>=0 && PropertyRolls::LayerBounds(d,properties,stat,static_cast<unsigned>(line.layer),selectorEncoding.randomSkills,true).has_value();});});
         if(line.grouped){
             if(!line.group || line.layer)continue;
             for(std::size_t member=0;member<count;++member)
@@ -1002,7 +1201,7 @@ void AddLinkedSourceLabels(const SourceGroups& sources,std::span<const CapturedL
             continue;
         }
         const bool modOnly=!line.layer && !line.grouped && (stat==20 || stat==31);
-        if(modOnly)label.ownedTotal=static_cast<int>(sum);
+        if(modOnly){if(Contributions::Value(sources.capture.auxiliary,stat))continue;label.ownedTotal=static_cast<int>(sum);}
         if(!valid || (modOnly?(sum<=0 || (*total>0 && sum>*total)):(sum!=*total)) || label.ownedParts.empty() || label.ownedParts.size()>12)continue;
         if(stat==253 && !line.grouped && !line.layer){if(!quantityRateReady.load())continue;label.quantityRate=true;}
         unsigned matches=0;bool renders=false;
@@ -1018,7 +1217,8 @@ void AddIntrinsicUndeadLabel(void* source,const unsigned char* tables,
     const Contributions::Snapshot& capture,std::span<const Affixes::Rolled> definitions,
     std::span<const Affixes::Row> affixes,std::size_t prefixIndex,std::size_t autoIndex,
     std::span<const Affixes::Property> properties,const unsigned char* metadata,
-    std::size_t count,std::string_view actual,std::vector<RangeText::Label>& labels) {
+    std::size_t count,std::string_view actual,std::vector<RangeText::Label>& labels,
+    const std::optional<SourceGroups>& preGathered={}) {
     constexpr unsigned stat=122,type=57;constexpr int bonus=50;
     if(!getArmor || !originalSingle || stat>=count || !Readable(tables,0x1358) ||
        metadata[stat*0x144+0x14] || metadata[stat*0x144+0x50] ||
@@ -1032,7 +1232,7 @@ void AddIntrinsicUndeadLabel(void* source,const unsigned char* tables,
     const auto blunt=ContributionDefinitions::Type({typeRows,static_cast<std::size_t>(typeCount),232},
         Affixes::Read<std::int16_t>(row,0x12e),Affixes::Read<std::int16_t>(row,0x130),type);
     if(!blunt || !*blunt)return;
-    auto owned=GatherSourceGroups(source,definitions,affixes,prefixIndex,autoIndex,properties);
+    auto owned=preGathered?preGathered:GatherSourceGroups(source,definitions,affixes,prefixIndex,autoIndex,properties,capture);
     std::vector<ContributionModel::Group> groups;
     if(owned){if(!owned->corruption.empty()||!owned->craft.empty())return;groups=owned->groups;}
     else {

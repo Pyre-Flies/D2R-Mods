@@ -40,6 +40,17 @@ inline constexpr std::uintptr_t DrawUiFilledRect = 0x657B90;
 inline constexpr std::uintptr_t CorrectedGlyphB = 0x658510;
 inline constexpr std::uintptr_t CorrectedGlyphBCaller = 0x90857B;
 
+inline constexpr std::uintptr_t ShowItemsStatesPtr = 0x235D360;
+inline constexpr std::uintptr_t ShowItemsStatesCount = 0x235D368;
+inline constexpr std::uintptr_t SetShowItemsState = 0x1FAE90;
+inline constexpr std::uintptr_t RefreshShowItemsUi = 0xCE450;
+inline constexpr std::uintptr_t IsControllerMode = 0x77E10;
+inline constexpr std::uintptr_t IsLoadingScreenActive = 0x8D3D0;
+inline constexpr std::uintptr_t FindUiStatePanel = 0x846190;
+inline constexpr std::uintptr_t NativeUiStateTable = 0x2A2ADA0;
+inline constexpr std::size_t NativeUiItemLabelPanelIndex = 0xCU;
+inline constexpr std::uintptr_t OffsetWidgetIsVisible = 0x51U;
+
 inline constexpr std::size_t DirectCallBytes = 5U;
 inline constexpr std::size_t InnerNameBufferBytes = 0x80U;
 inline constexpr std::size_t InnerNamePrefixBytes = 4U;
@@ -95,6 +106,25 @@ inline constexpr std::array<std::uint8_t, 5> SharedPaintRectCallBytes{{
 inline constexpr std::array<std::uint8_t, 16> DrawUiFilledRectEntry{{
     0x44, 0x3B, 0xC1, 0x0F, 0x8C, 0xD3, 0x02, 0x00,
     0x00, 0x4C, 0x8B, 0xDC, 0x55, 0x41, 0x54, 0x41,
+}};
+inline constexpr std::array<std::uint8_t, 19> SetShowItemsStateEntry{{
+    0x40, 0x53, 0x48, 0x83, 0xEC, 0x30, 0x0F, 0xB6, 0xDA, 0x0F,
+    0xB6, 0xD1, 0x48, 0x3B, 0x15, 0xC5, 0x24, 0x16, 0x02,
+}};
+inline constexpr std::array<std::uint8_t, 18> RefreshShowItemsUiEntry{{
+    0x48, 0x83, 0xEC, 0x28, 0xE8, 0x27, 0xC9, 0x12, 0x00, 0x84,
+    0xC0, 0x74, 0x54, 0xE8, 0xAE, 0x99, 0xFA, 0xFF,
+}};
+inline constexpr std::array<std::uint8_t, 17> IsControllerModeEntry{{
+    0x48, 0x83, 0xEC, 0x28, 0xE8, 0xF7, 0xE1, 0xFF, 0xFF, 0x80,
+    0xB8, 0xC8, 0x0D, 0x00, 0x00, 0x00, 0x75,
+}};
+inline constexpr std::array<std::uint8_t, 8> IsLoadingScreenActiveEntry{{
+    0x0F, 0xB6, 0x05, 0x0E, 0x60, 0x99, 0x02, 0xC3,
+}};
+inline constexpr std::array<std::uint8_t, 19> FindUiStatePanelEntry{{
+    0x48, 0x83, 0xEC, 0x28, 0x48, 0x83, 0x3D, 0xD4, 0x9F, 0xBF,
+    0x02, 0x00, 0x74, 0x18, 0xE8, 0xFD, 0x18, 0x88, 0xFF,
 }};
 } // namespace Witnesses
 
@@ -163,6 +193,90 @@ using IsHdModeFn = bool(__fastcall*)() noexcept;
 using LegacyCoordToScreenFn = std::uint64_t(__fastcall*)(std::uint64_t) noexcept;
 using DrawUiFilledRectFn = void(__fastcall*)(
     std::int32_t, std::int32_t, std::int32_t, std::int32_t, const float*, std::int32_t) noexcept;
+using SetShowItemsStateFn = void(__fastcall*)(std::uint8_t, bool) noexcept;
+using RefreshShowItemsUiFn = void(__fastcall*)() noexcept;
+using IsControllerModeFn = bool(__fastcall*)() noexcept;
+using IsLoadingScreenActiveFn = bool(__fastcall*)() noexcept;
+using FindUiStatePanelFn = void*(__fastcall*)(int) noexcept;
+
+[[nodiscard]] inline bool IsLoadingScreenActive(std::uintptr_t exeBase) noexcept {
+    if (!exeBase) return false;
+    const auto isLoading =
+        reinterpret_cast<IsLoadingScreenActiveFn>(exeBase + Rva::IsLoadingScreenActive);
+    return isLoading();
+}
+
+[[nodiscard]] inline bool IsControllerUiMode(std::uintptr_t exeBase) noexcept {
+    if (!exeBase) return false;
+    const auto isController =
+        reinterpret_cast<IsControllerModeFn>(exeBase + Rva::IsControllerMode);
+    return isController();
+}
+
+[[nodiscard]] inline int ReadFilteredLabelState(std::uintptr_t exeBase) noexcept {
+    if (!exeBase) return -1;
+    std::uintptr_t count = 0;
+    const std::uint8_t* statesPtr = nullptr;
+    if (!Reader::CopyReadable(
+            reinterpret_cast<const void*>(exeBase + Rva::ShowItemsStatesCount),
+            &count, sizeof(count)) ||
+        count != 2U ||
+        !Reader::CopyReadable(
+            reinterpret_cast<const void*>(exeBase + Rva::ShowItemsStatesPtr),
+            &statesPtr, sizeof(statesPtr)) ||
+        !statesPtr) {
+        return -1;
+    }
+    std::uint8_t states[2]{0xFFU, 0xFFU};
+    if (!Reader::CopyReadable(statesPtr, states, sizeof(states)) ||
+        states[0] > 1U || states[1] > 1U) {
+        return -1;
+    }
+    return static_cast<int>(states[0]);
+}
+
+[[nodiscard]] inline bool IsItemLabelDisplayActive(std::uintptr_t exeBase) noexcept {
+    if (ReadFilteredLabelState(exeBase) != 1) return false;
+    if (IsControllerUiMode(exeBase)) {
+        return true;
+    }
+    std::uint8_t panelOpen = 0;
+    if (!Reader::CopyReadable(
+            reinterpret_cast<const void*>(
+                exeBase + Rva::NativeUiStateTable + Rva::NativeUiItemLabelPanelIndex),
+            &panelOpen, sizeof(panelOpen)) ||
+        panelOpen == 0U) {
+        return false;
+    }
+    const auto findPanel =
+        reinterpret_cast<FindUiStatePanelFn>(exeBase + Rva::FindUiStatePanel);
+    const void* const showItemsPanel = findPanel(static_cast<int>(Rva::NativeUiItemLabelPanelIndex));
+    std::uint8_t isVisible = 0;
+    if (!showItemsPanel ||
+        !Reader::CopyReadable(
+            reinterpret_cast<const std::uint8_t*>(showItemsPanel) + Rva::OffsetWidgetIsVisible,
+            &isVisible, sizeof(isVisible))) {
+        return false;
+    }
+    return isVisible != 0U;
+}
+
+// Enables D2R's filtered ground item label placards (channel 0) and refreshes the active
+// HUD/ShowItemsPanel state on the UI thread. Leaves channel 1 (unfiltered bypass) untouched.
+[[nodiscard]] inline bool EnableShowItemsPlacards(std::uintptr_t exeBase) noexcept {
+    if (!exeBase) return false;
+    if (ReadFilteredLabelState(exeBase) < 0) return false;
+    if (IsItemLabelDisplayActive(exeBase)) return true;
+    const auto setShowItems =
+        reinterpret_cast<SetShowItemsStateFn>(exeBase + Rva::SetShowItemsState);
+    const auto refreshShowItems =
+        reinterpret_cast<RefreshShowItemsUiFn>(exeBase + Rva::RefreshShowItemsUi);
+    setShowItems(0U, false);
+    refreshShowItems();
+    setShowItems(0U, true);
+    refreshShowItems();
+    return IsItemLabelDisplayActive(exeBase);
+}
 
 // Draws a 2px border around a ground label rectangle using D2R's native UI quad batcher
 // (0x657B90, the same primitive SharedLabelPaint 0x1FA8E0 calls at 0x1FA9AD).
@@ -228,5 +342,209 @@ struct ActiveFormatterScope {
 
 inline thread_local ActiveFormatterScope g_activeFormatter{};
 inline thread_local const float* g_activeGlyphColor = nullptr;
+
+inline constexpr std::uint64_t kShowItemsRetryIntervalMs = 250ULL;
+inline constexpr std::uint64_t kShowItemsRetryDeadlineMs = 10000ULL;
+inline constexpr std::uint64_t kJoinSettleWindowMs = 1000ULL;
+inline constexpr std::uint32_t kMaxJoinSettleRecoveries = 4U;
+
+enum class ShowItemsStepEvents : std::uint8_t {
+    None = 0U,
+    EnabledOnJoin = 1U << 0U,
+    JoinTimedOut = 1U << 1U,
+    SwapTimedOut = 1U << 2U,
+    AttemptedJoinEnable = 1U << 3U,
+};
+
+struct ShowItemsJoinSwapTracker {
+    std::atomic<bool> pendingJoin{true};
+    std::atomic<bool> pendingControllerSwap{false};
+    std::atomic<std::uint64_t> joinReadyStartTickMs{0};
+    std::atomic<std::uint64_t> joinSettleStartTickMs{0};
+    std::atomic<std::uint64_t> joinLastAttemptTickMs{0};
+    std::atomic<std::uint32_t> joinSettleRecoveries{0};
+    std::atomic<bool> joinObservedAltUp{false};
+    std::atomic<bool> joinLoggedShowItems{false};
+    std::atomic<std::uint64_t> swapRetryStartTickMs{0};
+    std::atomic<std::uint64_t> swapLastAttemptTickMs{0};
+    std::atomic<int> lastObservedControllerMode{-1};
+
+    void ClearJoinPending() noexcept {
+        pendingJoin.store(false, std::memory_order_release);
+        joinReadyStartTickMs.store(0, std::memory_order_release);
+        joinSettleStartTickMs.store(0, std::memory_order_release);
+        joinLastAttemptTickMs.store(0, std::memory_order_release);
+        joinSettleRecoveries.store(0, std::memory_order_release);
+        joinObservedAltUp.store(false, std::memory_order_release);
+        joinLoggedShowItems.store(false, std::memory_order_release);
+    }
+
+    void ClearSwapPending() noexcept {
+        pendingControllerSwap.store(false, std::memory_order_release);
+        swapRetryStartTickMs.store(0, std::memory_order_release);
+        swapLastAttemptTickMs.store(0, std::memory_order_release);
+    }
+
+    void ResetForGameJoin() noexcept {
+        pendingJoin.store(true, std::memory_order_release);
+        joinReadyStartTickMs.store(0, std::memory_order_release);
+        joinSettleStartTickMs.store(0, std::memory_order_release);
+        joinLastAttemptTickMs.store(0, std::memory_order_release);
+        joinSettleRecoveries.store(0, std::memory_order_release);
+        joinObservedAltUp.store(false, std::memory_order_release);
+        joinLoggedShowItems.store(false, std::memory_order_release);
+        ClearSwapPending();
+        lastObservedControllerMode.store(-1, std::memory_order_release);
+    }
+
+    void ClearAll() noexcept {
+        ClearJoinPending();
+        ClearSwapPending();
+        lastObservedControllerMode.store(-1, std::memory_order_release);
+    }
+
+    [[nodiscard]] bool HasPendingWork() const noexcept {
+        return pendingJoin.load(std::memory_order_acquire) ||
+               pendingControllerSwap.load(std::memory_order_acquire);
+    }
+
+    void ObserveControllerMode(std::uintptr_t exeBase, bool showItemsAdmitted) noexcept {
+        if (!showItemsAdmitted || !exeBase) {
+            return;
+        }
+        const int curMode = IsControllerUiMode(exeBase) ? 1 : 0;
+        const int prevMode = lastObservedControllerMode.exchange(curMode, std::memory_order_acq_rel);
+        if (curMode == 1) {
+            ClearSwapPending();
+            return;
+        }
+        if (prevMode == 1 && curMode == 0 && ReadFilteredLabelState(exeBase) == 1) {
+            // Native OnInputModeChanged closes ShowItemsPanel when switching
+            // from Controller -> Keyboard+Mouse while leaving ShowItemsState[0] == 1.
+            swapRetryStartTickMs.store(0, std::memory_order_release);
+            swapLastAttemptTickMs.store(0, std::memory_order_release);
+            pendingControllerSwap.store(true, std::memory_order_release);
+        }
+    }
+
+    [[nodiscard]] std::uint8_t StepOnUiThread(std::uintptr_t exeBase, bool showItemsAdmitted,
+                                              bool localPlayerReady, bool shouldAutoShow,
+                                              std::uint64_t rawNowMs,
+                                              bool altKeyHeld = false) noexcept {
+        if (!exeBase) return 0U;
+        if ((showItemsAdmitted && IsLoadingScreenActive(exeBase)) || !localPlayerReady) {
+            joinReadyStartTickMs.store(0, std::memory_order_release);
+            joinSettleStartTickMs.store(0, std::memory_order_release);
+            joinLastAttemptTickMs.store(0, std::memory_order_release);
+            joinSettleRecoveries.store(0, std::memory_order_release);
+            joinObservedAltUp.store(false, std::memory_order_release);
+            joinLoggedShowItems.store(false, std::memory_order_release);
+            return 0U;
+        }
+        const std::uint64_t nowMs = rawNowMs != 0U ? rawNowMs : 1U;
+        std::uint8_t events = 0U;
+
+        if (pendingJoin.load(std::memory_order_acquire)) {
+            if (!shouldAutoShow) {
+                ClearJoinPending();
+                events |= static_cast<std::uint8_t>(ShowItemsStepEvents::AttemptedJoinEnable);
+            } else {
+                auto readyStartMs = joinReadyStartTickMs.load(std::memory_order_acquire);
+                if (readyStartMs == 0U) {
+                    readyStartMs = nowMs;
+                    joinReadyStartTickMs.store(readyStartMs, std::memory_order_release);
+                }
+                const auto lastAttemptMs = joinLastAttemptTickMs.load(std::memory_order_acquire);
+                if (lastAttemptMs != 0U && !altKeyHeld) {
+                    joinObservedAltUp.store(true, std::memory_order_release);
+                }
+                if (lastAttemptMs != 0U && altKeyHeld &&
+                    joinObservedAltUp.load(std::memory_order_acquire)) {
+                    // Player manually pressed Alt after our initial activation attempt.
+                    ClearJoinPending();
+                    events |= static_cast<std::uint8_t>(ShowItemsStepEvents::AttemptedJoinEnable);
+                } else if (IsItemLabelDisplayActive(exeBase)) {
+                    events |= static_cast<std::uint8_t>(ShowItemsStepEvents::AttemptedJoinEnable);
+                    auto settleStartMs = joinSettleStartTickMs.load(std::memory_order_acquire);
+                    if (settleStartMs == 0U) {
+                        settleStartMs = nowMs;
+                        joinSettleStartTickMs.store(settleStartMs, std::memory_order_release);
+                        if (!joinLoggedShowItems.exchange(true, std::memory_order_acq_rel)) {
+                            events |= static_cast<std::uint8_t>(ShowItemsStepEvents::EnabledOnJoin);
+                        }
+                    }
+                    if (nowMs >= settleStartMs && (nowMs - settleStartMs) >= kJoinSettleWindowMs) {
+                        ClearJoinPending();
+                    }
+                } else {
+                    const bool wasSettling =
+                        joinSettleStartTickMs.exchange(0, std::memory_order_acq_rel) != 0U;
+                    if (nowMs >= readyStartMs &&
+                        (nowMs - readyStartMs) >= kShowItemsRetryDeadlineMs) {
+                        ClearJoinPending();
+                        events |=
+                            static_cast<std::uint8_t>(ShowItemsStepEvents::AttemptedJoinEnable) |
+                            static_cast<std::uint8_t>(ShowItemsStepEvents::JoinTimedOut);
+                    } else {
+                        const auto recoveries =
+                            joinSettleRecoveries.load(std::memory_order_acquire);
+                        const bool allowImmediateSettleRecovery =
+                            wasSettling && recoveries < kMaxJoinSettleRecoveries;
+                        if (lastAttemptMs == 0U || allowImmediateSettleRecovery ||
+                            (nowMs >= lastAttemptMs &&
+                             (nowMs - lastAttemptMs) >= kShowItemsRetryIntervalMs)) {
+                            if (allowImmediateSettleRecovery) {
+                                joinSettleRecoveries.store(recoveries + 1U,
+                                                           std::memory_order_release);
+                            }
+                            joinLastAttemptTickMs.store(nowMs, std::memory_order_release);
+                            if (!altKeyHeld) {
+                                joinObservedAltUp.store(true, std::memory_order_release);
+                            }
+                            const bool active = EnableShowItemsPlacards(exeBase);
+                            events |=
+                                static_cast<std::uint8_t>(ShowItemsStepEvents::AttemptedJoinEnable);
+                            if (active) {
+                                joinSettleStartTickMs.store(nowMs, std::memory_order_release);
+                                if (!joinLoggedShowItems.exchange(true,
+                                                                  std::memory_order_acq_rel)) {
+                                    events |= static_cast<std::uint8_t>(
+                                        ShowItemsStepEvents::EnabledOnJoin);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if (pendingControllerSwap.load(std::memory_order_acquire)) {
+            if (!showItemsAdmitted || IsControllerUiMode(exeBase) ||
+                ReadFilteredLabelState(exeBase) != 1 || IsItemLabelDisplayActive(exeBase)) {
+                ClearSwapPending();
+            } else {
+                auto swapStartMs = swapRetryStartTickMs.load(std::memory_order_acquire);
+                if (swapStartMs == 0U) {
+                    swapStartMs = nowMs;
+                    swapRetryStartTickMs.store(swapStartMs, std::memory_order_release);
+                }
+                const auto lastAttemptMs = swapLastAttemptTickMs.load(std::memory_order_acquire);
+                if (nowMs >= swapStartMs && (nowMs - swapStartMs) >= kShowItemsRetryDeadlineMs) {
+                    ClearSwapPending();
+                    events |= static_cast<std::uint8_t>(ShowItemsStepEvents::SwapTimedOut);
+                } else if (lastAttemptMs == 0U ||
+                           (nowMs >= lastAttemptMs &&
+                            (nowMs - lastAttemptMs) >= kShowItemsRetryIntervalMs)) {
+                    swapLastAttemptTickMs.store(nowMs, std::memory_order_release);
+                    if (EnableShowItemsPlacards(exeBase)) {
+                        ClearSwapPending();
+                    }
+                }
+            }
+        }
+
+        return events;
+    }
+};
 
 } // namespace PyreLootFilter::Labels

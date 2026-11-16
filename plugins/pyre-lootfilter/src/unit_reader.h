@@ -91,6 +91,18 @@ static_assert(sizeof(UnitHeader) == 0x18);
            out.unitId != UINT32_MAX;
 }
 
+struct StatEntry {
+    std::uint64_t key;
+    std::int32_t value;
+    std::uint32_t pad;
+};
+static_assert(sizeof(StatEntry) == 16U);
+static_assert(offsetof(StatEntry, key) == 0U);
+static_assert(offsetof(StatEntry, value) == 8U);
+
+inline constexpr std::uint32_t kMaxStackStats = 512U;
+inline constexpr std::uint64_t kMaxStatListEntries = 4096U;
+
 // Reads a stat directly from UnitAny's StatListEx (unit + 0x88) sorted 16-byte entry array.
 // Returns true if StatListEx is valid and readable; if the stat is not present in the sorted
 // array, outValue is 0 and returns true.
@@ -98,6 +110,7 @@ static_assert(sizeof(UnitHeader) == 0x18);
                                                  std::uint32_t statId, std::uint32_t layer,
                                                  std::int32_t& outValue) noexcept {
     outValue = 0;
+    if (!unit) return false;
     const auto unitAddr = reinterpret_cast<std::uintptr_t>(unit);
     std::uintptr_t statList{};
     if (!CopyReadable(reinterpret_cast<const void*>(unitAddr + 0x88U), &statList, sizeof(statList)))
@@ -106,14 +119,17 @@ static_assert(sizeof(UnitHeader) == 0x18);
         // An item unit with no StatListEx attached has 0 for dynamic stats (e.g. 0 sockets).
         return true;
     }
-    std::uint32_t ownerType{}, ownerId{}, listFlags{};
-    if (!CopyReadable(reinterpret_cast<const void*>(statList + 0x08U), &ownerType, sizeof(ownerType)) ||
-        !CopyReadable(reinterpret_cast<const void*>(statList + 0x0CU), &ownerId, sizeof(ownerId)) ||
-        !CopyReadable(reinterpret_cast<const void*>(statList + 0x1CU), &listFlags, sizeof(listFlags)))
+    std::array<std::uint32_t, 6> listHeader{};
+    if (!CopyReadable(reinterpret_cast<const void*>(statList + 0x08U), listHeader.data(),
+                      sizeof(listHeader))) {
         return false;
+    }
+    const std::uint32_t ownerType = listHeader[0];
+    const std::uint32_t ownerId = listHeader[1];
+    const std::uint32_t listFlags = listHeader[5];
     if (ownerType != UnitTypeItem || ownerId != expectedUnitId) return false;
 
-    const bool isExtended = (listFlags == 0x80000000U || listFlags == 0xA0000000U);
+    const bool isExtended = (listFlags & 0x80000000U) != 0U;
     const std::size_t vecOffset = isExtended ? 0xA8U : 0x30U;
 
     struct StatVecHeader {
@@ -124,27 +140,69 @@ static_assert(sizeof(UnitHeader) == 0x18);
 
     if (!CopyReadable(reinterpret_cast<const void*>(statList + vecOffset), &vec, sizeof(vec)))
         return false;
-    if (vec.count > 512U || vec.count > vec.capacity) return false;
+    if (vec.count > kMaxStatListEntries || vec.count > vec.capacity) return false;
     if (vec.count == 0) {
         if (!isExtended) return true;
         // Fallback to primary vector at +0x30 if aggregate vector at +0xA8 is empty
         if (!CopyReadable(reinterpret_cast<const void*>(statList + 0x30U), &vec, sizeof(vec)) ||
-            vec.count > 512U || vec.count > vec.capacity)
+            vec.count > kMaxStatListEntries || vec.count > vec.capacity)
             return false;
         if (vec.count == 0) return true;
     }
-    if (vec.data < 0x10000U || vec.data > 0x7FFFFFFFFFFFULL - vec.count * 16U) return false;
+    if (vec.data < 0x10000U ||
+        vec.data > 0x7FFFFFFFFFFFULL - vec.count * sizeof(StatEntry)) {
+        return false;
+    }
 
     const std::uint64_t targetKey = (static_cast<std::uint64_t>(statId) << 32U) | layer;
-    for (std::uint64_t i = 0; i < vec.count; ++i) {
-        std::uint64_t entry[2]{};
-        if (!CopyReadable(reinterpret_cast<const void*>(vec.data + i * 16U), entry, sizeof(entry)))
+    const auto totalCount = static_cast<std::size_t>(vec.count);
+
+    if (totalCount <= kMaxStackStats) {
+        std::array<StatEntry, kMaxStackStats> entries;
+        if (!CopyReadable(reinterpret_cast<const void*>(vec.data), entries.data(),
+                          totalCount * sizeof(StatEntry))) {
             return false;
-        if (entry[0] == targetKey) {
-            outValue = std::bit_cast<std::int32_t>(static_cast<std::uint32_t>(entry[1]));
-            return true;
         }
-        if (entry[0] > targetKey) break;
+        std::size_t lo = 0;
+        std::size_t hi = totalCount;
+        while (lo < hi) {
+            const std::size_t mid = lo + ((hi - lo) >> 1U);
+            if (entries[mid].key < targetKey) {
+                lo = mid + 1U;
+            } else {
+                hi = mid;
+            }
+        }
+        if (lo < totalCount && entries[lo].key == targetKey) {
+            outValue = entries[lo].value;
+        }
+        return true;
+    }
+
+    // Bounded O(log N) SEH binary search for oversized stat vectors (513..4096 entries).
+    std::size_t lo = 0;
+    std::size_t hi = totalCount;
+    StatEntry probed{};
+    while (lo < hi) {
+        const std::size_t mid = lo + ((hi - lo) >> 1U);
+        if (!CopyReadable(reinterpret_cast<const void*>(vec.data + mid * sizeof(StatEntry)),
+                          &probed, sizeof(probed))) {
+            return false;
+        }
+        if (probed.key < targetKey) {
+            lo = mid + 1U;
+        } else {
+            hi = mid;
+        }
+    }
+    if (lo < totalCount) {
+        if (!CopyReadable(reinterpret_cast<const void*>(vec.data + lo * sizeof(StatEntry)),
+                          &probed, sizeof(probed))) {
+            return false;
+        }
+        if (probed.key == targetKey) {
+            outValue = probed.value;
+        }
     }
     return true;
 }
@@ -179,11 +237,14 @@ static_assert(sizeof(UnitHeader) == 0x18);
         return true;
     }
 
-    std::uint32_t ownerType{}, ownerId{}, listFlags{};
-    if (!CopyReadable(reinterpret_cast<const void*>(statList + 0x08U), &ownerType, sizeof(ownerType)) ||
-        !CopyReadable(reinterpret_cast<const void*>(statList + 0x0CU), &ownerId, sizeof(ownerId)) ||
-        !CopyReadable(reinterpret_cast<const void*>(statList + 0x1CU), &listFlags, sizeof(listFlags)))
+    std::array<std::uint32_t, 6> listHeader{};
+    if (!CopyReadable(reinterpret_cast<const void*>(statList + 0x08U), listHeader.data(),
+                      sizeof(listHeader))) {
         return false;
+    }
+    const std::uint32_t ownerType = listHeader[0];
+    const std::uint32_t ownerId = listHeader[1];
+    const std::uint32_t listFlags = listHeader[5];
     if (ownerType != UnitTypeItem || ownerId != expectedUnitId) return false;
 
     struct StatVecHeader {
@@ -200,17 +261,23 @@ static_assert(sizeof(UnitHeader) == 0x18);
         if (!CopyReadable(reinterpret_cast<const void*>(listBase + vecOffset), &vec, sizeof(vec)))
             return false;
         if (vec.count == 0) return true;
-        if (vec.count > 512U || vec.count > vec.capacity) return false;
-        if (vec.data < 0x10000U || vec.data > 0x7FFFFFFFFFFFULL - vec.count * 16U) return false;
+        if (vec.count > kMaxStackStats || vec.count > vec.capacity) return false;
+        if (vec.data < 0x10000U ||
+            vec.data > 0x7FFFFFFFFFFFULL - vec.count * sizeof(StatEntry)) {
+            return false;
+        }
 
-        for (std::uint64_t i = 0; i < vec.count; ++i) {
-            std::uint64_t entry[2]{};
-            if (!CopyReadable(reinterpret_cast<const void*>(vec.data + i * 16U), entry,
-                              sizeof(entry)))
-                return false;
-            const auto layer = static_cast<std::uint32_t>(entry[0] & 0xFFFFFFFFULL);
-            const auto statId = static_cast<std::uint32_t>(entry[0] >> 32U);
-            const auto rawVal = std::bit_cast<std::int32_t>(static_cast<std::uint32_t>(entry[1]));
+        const auto count = static_cast<std::size_t>(vec.count);
+        std::array<StatEntry, kMaxStackStats> entries;
+        if (!CopyReadable(reinterpret_cast<const void*>(vec.data), entries.data(),
+                          count * sizeof(StatEntry))) {
+            return false;
+        }
+
+        for (std::size_t i = 0; i < count; ++i) {
+            const auto layer = static_cast<std::uint32_t>(entries[i].key & 0xFFFFFFFFULL);
+            const auto statId = static_cast<std::uint32_t>(entries[i].key >> 32U);
+            const auto rawVal = entries[i].value;
             if (statId > 1023U || layer > UINT16_MAX || rawVal == 0) continue;
 
             const auto s16 = static_cast<std::uint16_t>(statId);
@@ -312,6 +379,15 @@ struct NativeReaders {
         // another plugin hooks `0x2F5020`!
         getUnitStat = reinterpret_cast<GetUnitStatFn>(base + Rva::GetUnitStat);
         statReaderDirect = true;
+    }
+
+    [[nodiscard]] bool IsLocalPlayerReady() const noexcept {
+        if (!getLocalDataContext || !getLocalPlayer) return false;
+        __try {
+            return getLocalPlayer(getLocalDataContext()) != nullptr;
+        } __except (EXCEPTION_EXECUTE_HANDLER) {
+            return false;
+        }
     }
 
     [[nodiscard]] std::uint32_t ReadItemCode(void* unit) const noexcept {

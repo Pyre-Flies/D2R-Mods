@@ -8,7 +8,7 @@ API. Config paths follow the loader's active global/mod scope; none are guessed.
 | Floating Damage | on/off/toggle; motion on/off/toggle | `[floating-damage] enabled`, `falling_motion` |
 | Item Roll Ranges | on/off/toggle, including bare command | `[display] always_show_ranges` |
 | Always Show Sockets | default/always/on/off/toggle, including bare command | `[always-show-sockets] enabled`, `always_visible` |
-| Pyre Loot Filter | on/off/toggle; minimap/sound/alt/autoreload [on\|off] | `[pyre-lootfilter] enabled`, `auto_reload`, `alt_pickup_override`, `minimap_icons`, `drop_sounds` |
+| Pyre Loot Filter | on/off/toggle; minimap/sound/sound3d/alt/autoreload [on\|off] | `[pyre-lootfilter] enabled`, `auto_reload`, `alt_pickup_override`, `minimap_icons`, `drop_sounds`, `drop_sound_3d_attenuation` |
 | Day Night Cycle | on/off/toggle/day/night/auto | `[day-night-cycle] enabled`, `mode` |
 | Inventory Deposit | rejuv [on/off/toggle] | `[inventory_deposit] deposit_rejuvenation_potions` |
 

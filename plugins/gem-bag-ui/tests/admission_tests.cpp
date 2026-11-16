@@ -65,6 +65,7 @@ int wmain(int argc,wchar_t** argv) {
     Check(Has("D2RLoader.exe SHA-256 mismatch")&&Has("D2RCore.dll unavailable")&&!Has("active-mod"),"native admission remains guarded without a named-mod dependency");
     messages.clear();real.activeMod=nullptr;Check(!GemBag::Native::Initialize(&real)&&!Has("active-mod"),"generic installs use the same native checks");
     Check(!GemBag::Native::Initialize(nullptr),"null startup remains inert");
+    Check(!GemBag::Native::PlaySound(&real,GemBag::DepositSoundId)&&!GemBag::Native::PlaySound(nullptr,GemBag::DepositSoundId),"sound playback refuses unadmitted or null context");
     std::filesystem::remove(fixture);
     std::puts("Admission diagnostics: real file/module hashes, missing/locked files, native checks without mod-name dependency, byte witnesses and retained SDK refusal verified. No game mutation.");
 }

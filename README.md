@@ -8,15 +8,15 @@ Download individual runtime ZIPs from the
 
 | Plugin | Version | What it adds |
 | --- | --- | --- |
-| [Controller QOL Updates](plugins/controller-qol/README.md) | `1.3.1+rev.97` | Controller item shortcuts, direct ground looting, menu navigation, and right-stick skill aiming. |
+| [Controller QOL Updates](plugins/controller-qol/README.md) | `1.3.1+rev.100` | Controller item shortcuts, direct ground looting, menu navigation, and right-stick skill aiming. |
 | [Pyre Performance Optimizations](plugins/pyre-perf/README.md) | `1.3.1+rev.3` | High-density combat and projectile frame-pacing optimizations across damage stat caching, `NextDelay`, spatial collision, client sound/VFX budgeting, aura/AI room scans, and frozen shatter VFX (highly recommended with [Universal Chain Hook](plugins/chain-hook/README.md)). |
 | [Universal Chain Hook](plugins/chain-hook/README.md) | `1.3.1+rev.7` | Automatic load-order-independent native hook chaining and shared hotkey coordination so multiple D2RLoader plugins work together seamlessly. |
-| [Pyre Loot Filter](plugins/pyre-lootfilter/README.md) | `1.3.1+rev.3` | Clean-room native `filter.json` (v1/v2/v3) ground loot filter with custom label colors, stack prefixes, drop sounds, minimap icons, mouse pickup guard, and Controller QOL visibility interop. |
-| [Pyre Stash Search](plugins/pyre-stashsearch/README.md) | `1.3.1+rev.1` | Instant cross-page Personal and Shared Stash search with boolean operators, stat shorthands, active-page item highlighting, and an expandable Side Tab Flyout with custom tab names. |
+| [Pyre Loot Filter](plugins/pyre-lootfilter/README.md) | `1.3.1+rev.7` | Clean-room native `filter.json` (v1/v2/v3) ground loot filter with custom label colors, stack prefixes, drop sounds, minimap icons, mouse pickup guard, and Controller QOL visibility interop. |
+| [Pyre Stash Search](plugins/pyre-stashsearch/README.md) | `1.3.1+rev.7` | Instant cross-page Personal and Shared Stash search with boolean operators, stat shorthands, active-page item highlighting, and an expandable Side Tab Flyout with custom tab names. |
 | [Running Defense](plugins/running-defense/README.md) | `1.3.1+rev.1` | Configurable percentage Defense penalty while running (`defense_loss_percent`), actual running Defense on the Character Sheet with a running indicator icon, and optional running Shield Block penalty override. |
 | [Ultrawide](plugins/ultrawide/README.md) | `1.3.5+rev.3` | 21:9 and 32:9 ultrawide viewport support: pillarbox/vignette removal, mouse/placard/automap unclamp, centered or full-length HUD, corner HUD anchoring, 22×22 terrain cache, 7×7 monster pop-in fix, and configurable AI range. |
-| [Item Roll Ranges](plugins/item-roll-ranges/README.md) | `1.3.1+rev.56` | Stat roll ranges, prefix/suffix/runeword/set/craft/socket/corruption/enchantment source breakdowns, base damage/Defense, item levels (`Ilvl`/`Qlvl`), and max socket capacity. |
-| [Gem Bag UI](plugins/gem-bag-ui/README.md) | `1.3.1+rev.2` | Interactive gem picker for withdrawing gems and one-step shortcut for depositing loose gems and gem clusters. |
+| [Item Roll Ranges](plugins/item-roll-ranges/README.md) | `1.3.1+rev.61` | Stat roll ranges, prefix/suffix/runeword/set/craft/socket/corruption/enchantment source breakdowns, base damage/Defense, item levels (`Ilvl`/`Qlvl`), and max socket capacity. |
+| [Gem Bag UI](plugins/gem-bag-ui/README.md) | `1.3.1+rev.5` | Interactive gem picker for withdrawing gems and one-step shortcut for depositing loose gems and gem clusters. |
 | [Inventory Deposit](plugins/inventory-deposit/README.md) | `1.3.1+rev.16` | Keyboard/mouse **Deposit All** button beside inventory gold for moving eligible inventory gems, runes, materials, and rejuvenation potions into advanced storage, with `/autodeposit rejuv` toggle. |
 | [Floating Damage](plugins/floating-damage/README.md) | `1.3.1+rev.13` | Local single-player enemy HP-loss numbers with elemental damage colors and critical-hit emphasis. |
 | [Always Show Sockets](plugins/always-show-sockets/README.md) | `1.3.1+rev.2` | Continuous or hover-based styled socket display with configurable size, opacity, ring, and lift. |

@@ -84,6 +84,10 @@ void LayerSelectors(){
  std::vector<Affixes::Property> p={property({83}),property({97}),property({188}),property({107,97})};
  p[0].bytes[0x18]=21;put(p[0].bytes.data(),0x0a,std::uint16_t{0});
  auto d=roll(0,1,3,"[RW]");check(PropertyRolls::LayerBounds(d,p,83,0)==PropertyRolls::Interval{1,3});check(!PropertyRolls::LayerBounds(d,p,83,1));
+ p[1].bytes[0x18]=24;d=roll(1,3,6,"[RW]");put(d.row.bytes.data(),0x28,133);d=roll(1,3,6,"[RW]");put(d.row.bytes.data(),0x28,133);
+ check(PropertyRolls::LayerBounds(d,p,97,133)==PropertyRolls::Interval{3,6});check(!PropertyRolls::LayerBounds(d,p,97,132));
+ p[1].bytes[0x18]=9;
+ check(PropertyRolls::LayerBounds(d,p,97,133)==PropertyRolls::Interval{3,6});check(!PropertyRolls::LayerBounds(d,p,97,132));
  p[1].bytes[0x18]=24;d=roll(1,3,6,"[RW]");put(d.row.bytes.data(),0x28,133);
  check(PropertyRolls::LayerBounds(d,p,97,133)==PropertyRolls::Interval{3,6});check(!PropertyRolls::LayerBounds(d,p,97,132));
  p[2].bytes[0x18]=10;d=roll(2,1,4,"[RW]");put(d.row.bytes.data(),0x28,7);
@@ -153,6 +157,10 @@ void RandomLayers(){
   auto r=roll(id,0,50,"[RW]");put(r.row.bytes.data(),0x28,2);
   label=PropertyRolls::LayerLabel(std::span(&r,1),p,owned(stat,{{layer,2}}),stat,layer,"selector",normalized,true,proved);
   check(proved && label && label->ownedParts[0].low==2);
+  auto tabRand=roll(3,6,8,"[RW]");put(tabRand.row.bytes.data(),0x28,2);
+  check(PropertyRolls::LayerBounds(tabRand,p,188,17,true)==PropertyRolls::Interval{2,2});
+  label=PropertyRolls::LayerLabel(std::span(&tabRand,1),p,owned(188,{{17,2}}),188,17,"tab",normalized,true,proved);
+  check(proved && label && label->ownedParts.size()==1 && label->ownedParts[0].low==2 && label->ownedParts[0].high==2);
  }
 }
 void Choices(){
@@ -182,6 +190,41 @@ void Choices(){
  s=PropertyRolls::SolveSources(d,unqualified,stats({{0,6},{1,6},{2,6},{3,6}}),normalize);check(!PropertyRolls::Label(s,"attributes",0,6,group));
  d.clear();for(unsigned entry=1;entry<=129;++entry){auto v=a;v.choiceEntry=entry;d.push_back(v);}
  s=PropertyRolls::SolveSources(d,p,stats({{0,6},{1,6},{2,6},{3,6}}),normalize);check(!PropertyRolls::Label(s,"attributes",0,6,group));
+ // Sparse PropertyGroup entries skip UINT32_MAX/all-zero slots while admitting Chance==0 entries (clamped to 1 in engine).
+ std::set<unsigned> sparseBlocked;std::vector<Affixes::PropertyGroup> sparseGroups(1);
+ auto zeroChanceProp=property({188});zeroChanceProp.bytes[0x18]=10;
+ std::vector<Affixes::Property> sp={p[0],p[1],zeroChanceProp};
+ put(sparseGroups[0].bytes.data(),8,UINT32_MAX);put(sparseGroups[0].bytes.data(),28,1);
+ put(sparseGroups[0].bytes.data(),32,1u);put(sparseGroups[0].bytes.data(),52,1);
+ put(sparseGroups[0].bytes.data(),56,2u);put(sparseGroups[0].bytes.data(),60,21);put(sparseGroups[0].bytes.data(),64,23);put(sparseGroups[0].bytes.data(),68,1);put(sparseGroups[0].bytes.data(),72,1);put(sparseGroups[0].bytes.data(),76,0);
+ check(PropertyRolls::BlockPossible(UINT32_MAX,sp,sparseGroups,sparseBlocked) && sparseBlocked.empty());
+ check(PropertyRolls::BlockPossible(0x10000u,sp,sparseGroups,sparseBlocked) && sparseBlocked==(std::set<unsigned>{96,188}));
+ // LayerBounds allows choicePool only when explicitly enabled (layer == 0 choicePool entry on Wraithstep-like items).
+ auto tabChoice=roll(2,1,1,"[U]");put(tabChoice.row.bytes.data(),0x28,0);
+ tabChoice.unconditionalScalar=false;tabChoice.uniqueScalar=true;tabChoice.choicePool=1;tabChoice.choiceEntry=1;
+ check(!PropertyRolls::LayerBounds(tabChoice,sp,188,0,false,false));
+ check(PropertyRolls::LayerBounds(tabChoice,sp,188,0,false,true)==PropertyRolls::Interval{1,1});
+ // fn==12 inside a choicePool is conservatively refused.
+ auto randInPool=roll(0,251,280,"[U]");put(randInPool.row.bytes.data(),0x28,3);
+ auto randProp=property({107});randProp.bytes[0x18]=12;
+ randInPool.unconditionalScalar=false;randInPool.uniqueScalar=true;randInPool.choicePool=2;randInPool.choiceEntry=1;
+ bool randPoolProved=true;
+ check(!PropertyRolls::LayerLabel(std::span(&randInPool,1),std::span(&randProp,1),Contributions::Stats{{(std::uint64_t{107}<<32)|262,3}},107,262,"skill",[](std::int64_t v){return Contributions::Normalize(v,0);},true,randPoolProved) && !randPoolProved);
+ // Partial choice pools inside LayerLabel emit a null-choice dummy so unselected entries do not force or fail.
+ auto layerProp=property({107});layerProp.bytes[0x18]=9;
+ std::vector<Affixes::Property> lp={layerProp,property({79})};
+ auto fixedLayer=roll(0,1,3,"[U]");put(fixedLayer.row.bytes.data(),0x28,262);
+ auto optLayer=roll(0,2,5,"[U]");put(optLayer.row.bytes.data(),0x28,262);
+ optLayer.unconditionalScalar=false;optLayer.choicePool=1;optLayer.choiceEntry=1;
+ auto optOther=roll(1,10,20,"[U]");
+ optOther.unconditionalScalar=false;optOther.choicePool=1;optOther.choiceEntry=2;
+ bool layerProved=false;
+ const auto layerNormalize=[](std::int64_t value){return Contributions::Normalize(value,0);};
+ std::vector<Affixes::Rolled> ld={fixedLayer,optLayer,optOther};
+ auto ll=PropertyRolls::LayerLabel(ld,lp,Contributions::Stats{{(std::uint64_t{107}<<32)|262,2}},107,262,"skill",layerNormalize,true,layerProved);
+ check(layerProved && ll && ll->ownedTotal==2 && ll->ownedParts.size()==1 && ll->ownedParts[0].low==1 && ll->ownedParts[0].high==3);
+ ll=PropertyRolls::LayerLabel(ld,lp,Contributions::Stats{{(std::uint64_t{107}<<32)|262,6}},107,262,"skill",layerNormalize,true,layerProved);
+ check(layerProved && ll && ll->ownedTotal==6 && ll->ownedParts.size()==2 && ll->ownedParts[0].low==1 && ll->ownedParts[1].low==2);
 }
 }
 #include "active_property_audit.h"

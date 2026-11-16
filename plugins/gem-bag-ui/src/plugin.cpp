@@ -36,6 +36,7 @@ Lifecycle::ListenerHandle readyListener{},leftListener{};
 Overlay::CallbackHandle drawListener{};
 std::recursive_mutex mutex;
 bool stopping{},open{},busy{},ready{},halted{},inputInstalled{};
+std::atomic<bool> mouseOpen{},anyKeyOwned{};
 uint64_t generation{1},serial{},presentation{},pendingSerial{},lastRefresh{};
 unsigned selected{},pendingGem{};
 bool pendingWithdrawal{},pendingDeposit{},directDeposit{};
@@ -68,14 +69,14 @@ Caller originalCaller{};
 thread_local bool insideCaller{};
 
 template<class T> bool Read(uintptr_t p,T& out) noexcept {
-    SIZE_T n{};return p>=0x10000&&ReadProcessMemory(GetCurrentProcess(),reinterpret_cast<void*>(p),&out,sizeof(out),&n)&&n==sizeof(out);
+    if(p<0x10000)return false;__try{out=*reinterpret_cast<const T*>(p);return true;}__except(EXCEPTION_EXECUTE_HANDLER){return false;}
 }
 bool PanelOpen() {
     Panels::PanelInfo info{.structSize=Panels::PanelInfoSize};
     return panels&&panel&&panels->getPanelInfo(ctx,panel,&info)==Panels::Result::Success&&info.presentationState==Panels::PresentationState::Open;
 }
 void Close() {
-    open=false;directDeposit=false;ready=false;busy=false;pendingSerial=++serial;++presentation;
+    open=false;mouseOpen.store(false,std::memory_order_relaxed);directDeposit=false;ready=false;busy=false;pendingSerial=++serial;++presentation;
     if(panels&&panel)panels->closePanel(ctx,panel);
 }
 bool ReadInfo(ItemHandle h,Info& info) {
@@ -84,7 +85,7 @@ bool ReadInfo(ItemHandle h,Info& info) {
 void RefreshGemNames();
 void Update() {
     if(!open)return;
-    if(!PanelOpen()){open=false;++serial;return;}
+    if(!PanelOpen()){open=false;mouseOpen.store(false,std::memory_order_relaxed);++serial;return;}
     Info now{};
     if(!Native::SafeUi(ctx)||!ReadInfo(chosen.handle,now)||!Same(now,chosen)){Close();return;}
     if(!Catalog::Candidate(now)){Close();return;}
@@ -133,6 +134,7 @@ void HostResult(const Rpc::Result& result) {
         std::lock_guard lock(mutex);
         if(stopping||(!open&&!directDeposit)||result.ticket.generation!=generation||result.ticket.presentation!=presentation||result.ticket.serial!=pendingSerial)return;
         const auto& reply=result.reply;const bool ok=(reply.flags&Protocol::Success)!=0;
+        const bool wasReady=ready;const uint32_t previousCredits=snapshot.credits;
         busy=false;halted|=(reply.flags&Protocol::Halted)!=0;ready=(reply.flags&Protocol::HasSnapshot)!=0;
         snapshot={};
         if(ready) {
@@ -147,6 +149,7 @@ void HostResult(const Rpc::Result& result) {
             if(reply.flags&Protocol::HasCell)snapshot.cell=Cell{reply.cellX,reply.cellY};
         }
         message=reply.message;requestFailed=!ok;
+        if(const auto sound=ActionSoundId(ok,wasReady,ready,pendingWithdrawal,pendingDeposit,pendingGem,previousCredits,snapshot.credits))Native::PlaySound(ctx,sound);
         char line[320];std::snprintf(line,sizeof(line),"[GemBag/Client] %s reply success=%u credits=%u: %s",pendingDeposit?"Deposit":pendingWithdrawal?Gems[pendingGem].name:"Inspection",ok?1u:0u,snapshot.credits,message.c_str());
         if(ok)ctx->LogInfo(line);else ctx->LogWarn(line);
         if(directDeposit) {
@@ -206,7 +209,7 @@ bool Open(ItemHandle h,const Info& info,POINT anchor,bool controller) {
     const auto opened=panels->openPanel(ctx,panel);
     if(opened!=Panels::Result::Success){char line[120];std::snprintf(line,sizeof(line),"[GemBag] Native selector open failed, result=%u.",static_cast<unsigned>(opened));ctx->LogWarn(line);return false;}
     ctx->LogInfo("[GemBag] Native selector opened.");
-    open=true;ready=false;chosen=info;chosen.handle=h;selected=0;snapshot={};++presentation;
+    open=true;mouseOpen.store(true,std::memory_order_relaxed);ready=false;chosen=info;chosen.handle=h;selected=0;snapshot={};++presentation;
     while(selected<7&&!(definition->mask&(1u<<selected)))++selected;
     popupAnchor=anchor;popupController=controller;positioned=false;showFocus=controller;requestFailed=false;labelsReady=false;
     QueueWork(false);return true;
@@ -355,10 +358,15 @@ bool __fastcall ControllerCaller(void* event) noexcept {
 LRESULT CALLBACK Mouse(int code,WPARAM removed,LPARAM value) {
     if(code>=0&&removed==PM_REMOVE&&value) {
         const auto& m=*reinterpret_cast<const MSG*>(value);
+        const bool isOpen=mouseOpen.load(std::memory_order_relaxed);
+        const bool isButton=m.message==WM_RBUTTONDOWN||m.message==WM_RBUTTONDBLCLK||m.message==WM_RBUTTONUP||m.message==WM_LBUTTONDOWN||m.message==WM_LBUTTONDBLCLK||m.message==WM_LBUTTONUP;
+        const bool isKey=(m.message==WM_KEYUP&&(isOpen||anyKeyOwned.load(std::memory_order_relaxed)))||(isOpen&&m.message==WM_KEYDOWN);
+        const bool isMove=isOpen&&m.message==WM_MOUSEMOVE;
+        if(!isButton&&!isKey&&!isMove)return CallNextHookEx(mouseHook,code,removed,value);
         std::lock_guard lock(mutex);
         if(m.message==WM_RBUTTONDOWN||m.message==WM_RBUTTONDBLCLK||m.message==WM_LBUTTONDOWN||m.message==WM_LBUTTONDBLCLK) {
             rightMouse=m.message==WM_RBUTTONDOWN||m.message==WM_RBUTTONDBLCLK;mouseTick=GetTickCount64();++mouseSerial;
-            if(rightMouse&&rightSeen++<4) {
+            if(rightMouse&&hover.valid&&rightSeen++<4) {
                 char line[180];std::snprintf(line,sizeof(line),"[GemBag] Right-button observed; bagHover=%u age=%llu delta=(%ld,%ld).",hover.valid?1u:0u,static_cast<unsigned long long>(mouseTick-hover.tick),m.pt.x-hover.point.x,m.pt.y-hover.point.y);ctx->LogInfo(line);
             }
         }
@@ -386,7 +394,7 @@ LRESULT CALLBACK Mouse(int code,WPARAM removed,LPARAM value) {
             POINT point=m.pt;if(gameWindow&&ScreenToClient(gameWindow,&point))QueueCommand(UiAction::HoverAt,0,0,point);
         }
         if(m.message==WM_KEYUP&&m.wParam<keyboardOwned.size()&&keyboardOwned[m.wParam]) {
-            keyboardOwned[m.wParam]=false;reinterpret_cast<MSG*>(value)->message=WM_NULL;
+            keyboardOwned[m.wParam]=false;anyKeyOwned.store(std::any_of(keyboardOwned.begin(),keyboardOwned.end(),[](bool v){return v;}),std::memory_order_relaxed);reinterpret_cast<MSG*>(value)->message=WM_NULL;
         } else if(open&&m.message==WM_KEYDOWN&&m.wParam<keyboardOwned.size()) {
             bool consumed=false;const bool repeated=(m.lParam&(1LL<<30))!=0;
             if(m.wParam==VK_ESCAPE)consumed=repeated||QueueCommand(UiAction::Close);
@@ -395,7 +403,7 @@ LRESULT CALLBACK Mouse(int code,WPARAM removed,LPARAM value) {
             else if(m.wParam==VK_DOWN)consumed=QueueCommand(UiAction::Down);
             else if(m.wParam==VK_LEFT)consumed=QueueCommand(UiAction::Left);
             else if(m.wParam==VK_RIGHT)consumed=QueueCommand(UiAction::Right);
-            if(consumed){keyboardOwned[m.wParam]=true;reinterpret_cast<MSG*>(value)->message=WM_NULL;}
+            if(consumed){keyboardOwned[m.wParam]=true;anyKeyOwned.store(true,std::memory_order_relaxed);reinterpret_cast<MSG*>(value)->message=WM_NULL;}
         }
     }
     return CallNextHookEx(mouseHook,code,removed,value);
@@ -448,9 +456,10 @@ void __cdecl Tooltip(const PluginContext*,SharedEvents::ItemTooltipEvent* e,void
     }catch(...){ }
 }
 void __cdecl Draw(const PluginContext*,const Overlay::Frame* f,void*) noexcept {
+    if(!f||(!mouseOpen.load(std::memory_order_relaxed)&&!transport.HasClientWork()))return;
     try {
         std::lock_guard lock(mutex);
-        if(stopping||!f)return;
+        if(stopping)return;
         transport.Tick();
         if(!open)return;
         const auto now=GetTickCount64();
@@ -555,7 +564,7 @@ void Unload() {
     for(auto h:ownedPanels)if(panels&&h)panels->unregisterPanel(ctx,h);
     for(auto h:resource)if(resources&&h)resources->unregisterResource(ctx,h);
 }
-constexpr PluginInfo InfoBlock{.infoSize=PluginInfoSize,.abiVersion=D2RL_PLUGIN_ABI_VERSION,.id="gem-bag-ui",.name="Gem Bag UI",.version="1.3.1+rev.2",
+constexpr PluginInfo InfoBlock{.infoSize=PluginInfoSize,.abiVersion=D2RL_PLUGIN_ABI_VERSION,.id="gem-bag-ui",.name="Gem Bag UI",.version="1.3.1+rev.5",
     .author="PyreFly",.description="Choose any gem from a Gem Bag with server-authoritative withdrawal.",.flags=PluginFlags::Shared|PluginFlags::NativeHooks};
 }
 extern "C" __declspec(dllexport) const D2RL::PluginInfo* D2RLoaderGetPluginInfo() noexcept {return &InfoBlock;}

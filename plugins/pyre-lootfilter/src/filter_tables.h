@@ -133,32 +133,88 @@ inline bool ReadTsvLines(const fs::path& path, std::vector<std::string>& lines,
     return true;
 }
 
-inline fs::path DiscoverExcel(const fs::path& configPath) {
+[[nodiscard]] constexpr bool EqualsIgnoreCase(std::wstring_view a, std::wstring_view b) noexcept {
+    if (a.size() != b.size()) return false;
+    const auto toLower = [](wchar_t ch) noexcept -> wchar_t {
+        return (ch >= L'A' && ch <= L'Z') ? static_cast<wchar_t>(ch + (L'a' - L'A')) : ch;
+    };
+    for (std::size_t i = 0; i < a.size(); ++i) {
+        if (toLower(a[i]) != toLower(b[i])) return false;
+    }
+    return true;
+}
+
+inline fs::path ProbeExcelInDirectory(const fs::path& root, bool& outAmbiguous) {
+    outAmbiguous = false;
     const auto hasPair = [](const fs::path& dir) {
         std::error_code ec;
         if (!fs::is_regular_file(dir / L"weapons.txt", ec) || ec) return false;
         ec.clear();
         return fs::is_regular_file(dir / L"armor.txt", ec) && !ec;
     };
-    for (auto root = configPath.parent_path(); !root.empty();) {
-        if (hasPair(root)) return root;
-        if (hasPair(root / L"data" / L"global" / L"excel"))
-            return root / L"data" / L"global" / L"excel";
-        const auto ownMpq = root / (root.filename().wstring() + L".mpq") / L"data" / L"global" / L"excel";
-        if (hasPair(ownMpq)) return ownMpq;
-        std::vector<fs::path> candidates;
-        std::error_code ec;
-        for (fs::directory_iterator it(root, ec), end; !ec && it != end; it.increment(ec)) {
-            if (!it->is_directory(ec)) {
-                if (ec) break;
-                continue;
-            }
-            if (it->path().extension() != L".mpq") continue;
-            const auto excel = it->path() / L"data" / L"global" / L"excel";
-            if (hasPair(excel)) candidates.push_back(excel);
+    if (hasPair(root)) return root;
+    if (hasPair(root / L"data" / L"global" / L"excel"))
+        return root / L"data" / L"global" / L"excel";
+    const auto ownMpq = root / (root.filename().wstring() + L".mpq") / L"data" / L"global" / L"excel";
+    if (hasPair(ownMpq)) return ownMpq;
+    std::vector<fs::path> candidates;
+    std::error_code ec;
+    for (fs::directory_iterator it(root, ec), end; !ec && it != end; it.increment(ec)) {
+        if (!it->is_directory(ec)) {
+            if (ec) break;
+            continue;
         }
-        if (candidates.size() == 1) return candidates.front();
-        if (candidates.size() > 1) return {};
+        if (!EqualsIgnoreCase(it->path().extension().wstring(), L".mpq")) continue;
+        const auto excel = it->path() / L"data" / L"global" / L"excel";
+        if (hasPair(excel)) candidates.push_back(excel);
+    }
+    if (candidates.size() == 1) return candidates.front();
+    if (candidates.size() > 1) outAmbiguous = true;
+    return {};
+}
+
+inline fs::path DiscoverExcel(const fs::path& configPath, const fs::path& modRootHint = {}) {
+    if (!modRootHint.empty()) {
+        for (auto root = modRootHint; !root.empty();) {
+            bool ambiguous = false;
+            const auto found = ProbeExcelInDirectory(root, ambiguous);
+            if (!found.empty()) return found;
+            if (ambiguous) break;
+            const auto parent = root.parent_path();
+            if (parent == root) break;
+            root = parent;
+        }
+    }
+    for (auto root = configPath.parent_path(); !root.empty();) {
+        bool ambiguous = false;
+        const auto found = ProbeExcelInDirectory(root, ambiguous);
+        if (!found.empty()) return found;
+        if (ambiguous) return {};
+
+        std::error_code ec;
+        const auto modsDir = root / L"mods";
+        if (fs::is_directory(modsDir, ec) && !ec) {
+            std::vector<fs::path> modCandidates;
+            fs::path reimaginedCandidate;
+            for (fs::directory_iterator it(modsDir, ec), end; !ec && it != end; it.increment(ec)) {
+                if (!it->is_directory(ec)) {
+                    if (ec) break;
+                    continue;
+                }
+                bool modAmbiguous = false;
+                const auto modExcel = ProbeExcelInDirectory(it->path(), modAmbiguous);
+                if (!modExcel.empty()) {
+                    modCandidates.push_back(modExcel);
+                    if (EqualsIgnoreCase(it->path().filename().wstring(), L"Reimagined")) {
+                        reimaginedCandidate = modExcel;
+                    }
+                }
+            }
+            if (modCandidates.size() == 1) return modCandidates.front();
+            if (!reimaginedCandidate.empty()) return reimaginedCandidate;
+            if (modCandidates.size() > 1) return {};
+        }
+
         const auto parent = root.parent_path();
         if (parent == root) break;
         root = parent;

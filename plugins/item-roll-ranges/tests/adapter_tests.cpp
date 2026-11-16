@@ -226,11 +226,16 @@ int main(int argc,char** argv) {
     std::vector<Affixes::Rolled> expanded;
     AddUniqueSource(spec,group,1,1,expanded);
     check(expanded.size()==1 && expanded[0].row.Number(0x28)==4 && expanded[0].source);
-    check(!expanded[0].uniqueScalar); // No verified exactly-one selection yet.
+    check(expanded[0].uniqueScalar); // PickMode 2 clamps 0..0 count to 1 pick.
     std::memcpy(spec+8,&lo,4); std::memcpy(spec+12,&hi,4); expanded.clear();
     AddUniqueSource(spec,group,1,1,expanded); check(expanded.size()==1 && expanded[0].uniqueScalar);
+    const int two=2; std::memcpy(spec+12,&two,4); expanded.clear();
+    AddUniqueSource(spec,group,1,1,expanded); check(expanded.size()==1 && !expanded[0].uniqueScalar);
+    std::memcpy(spec+8,&two,4); expanded.clear();
+    AddUniqueSource(spec,group,1,1,expanded); check(expanded.size()==1 && !expanded[0].uniqueScalar);
     group[4]=0; expanded.clear(); AddUniqueSource(spec,group,1,1,expanded);
-    check(expanded.size()==1 && !expanded[0].uniqueScalar); group[4]=2;
+    check(expanded.size()==1 && expanded[0].uniqueScalar); group[4]=2;
+    std::memcpy(spec+8,&lo,4); std::memcpy(spec+12,&hi,4);
     std::memcpy(group+8,&groupId,4); expanded.clear();
     AddUniqueSource(spec,group,1,1,expanded); check(expanded.empty()); // cycle bounded
     groupId=0x10001; std::memcpy(spec,&groupId,4);
@@ -299,7 +304,7 @@ int main(int argc,char** argv) {
     check(!D2RLoaderLoadPlugin(nullptr));
     auto info=D2RLoaderGetPluginInfo();
     check(std::strcmp(info->id,"item-roll-ranges")==0);
-    check(std::strcmp(info->version,"1.3.1+rev.56")==0);
+    check(std::strcmp(info->version,"1.3.1+rev.61")==0);
     std::puts("Passed real adapter passthrough/ABI, inactive late calls, atomic slot conflict/restore, exported identity.");
 }
 
@@ -340,7 +345,8 @@ const char* __fastcall FakeHeaderLookup(const NativeText* resource,const NativeT
     return "Defense: %d";
 }
 unsigned char fakeTables[0x1870]{};
-const unsigned char* __fastcall FakeTables(unsigned char bank) { check(bank==2); return fakeTables; }
+unsigned fakeTableCalls{};
+const unsigned char* __fastcall FakeTables(unsigned char bank) { check(bank==2); ++fakeTableCalls; return fakeTables; }
 int __fastcall FakeEligible(void*,const void*) { return 1; }
 template<class T> void put(unsigned char* p,std::size_t at,T value) { std::memcpy(p+at,&value,sizeof(value)); }
 void TestCalculatedHeaders() {
@@ -457,6 +463,39 @@ void TestAffixRead() {
     check(RenderProperties(unit,unit,noCloneOutput,256,1,0,0,0,0,nullptr,nullptr)==0xfedcba9876543210ull);
     check(noCloneCalls==1);
     check(std::strstr(noCloneOutput,"+118 Defense") && std::strstr(noCloneOutput,"[U]"));
+    active.store(true); propertyRenderCache={};
+    const auto tablesBefore=fakeTableCalls;
+    std::memset(noCloneOutput,0,sizeof(noCloneOutput));
+    check(RenderProperties(unit,unit,noCloneOutput,256,1,0,0,0,0,nullptr,nullptr)==0xfedcba9876543210ull);
+    const auto tablesAfterMiss=fakeTableCalls,callsAfterMiss=noCloneCalls;
+    check(tablesAfterMiss>tablesBefore && std::strstr(noCloneOutput,"[U]"));
+    std::memset(noCloneOutput,0,sizeof(noCloneOutput));
+    check(RenderProperties(unit,unit,noCloneOutput,256,1,0,0,0,0,nullptr,nullptr)==0xfedcba9876543210ull);
+    check(fakeTableCalls==tablesAfterMiss && noCloneCalls==callsAfterMiss && std::strstr(noCloneOutput,"[U]"));
+    put(data,0x34,1); // Mutating itemData invalidates cache.
+    std::memset(noCloneOutput,0,sizeof(noCloneOutput));
+    check(RenderProperties(unit,unit,noCloneOutput,256,1,0,0,0,0,nullptr,nullptr)==0xfedcba9876543210ull);
+    check(fakeTableCalls>tablesAfterMiss && !std::strstr(noCloneOutput,"[U]"));
+    put(data,0x34,0);
+    unsigned char fakeFrame[0x1900]{};
+    const auto hdrKey1=CaptureHeaderBuilderCacheKey(reinterpret_cast<void*>(1),nullptr,unit,5,6,7,nullptr,nullptr,fakeFrame);
+    const auto hdrKey2=CaptureHeaderBuilderCacheKey(reinterpret_cast<void*>(1),nullptr,unit,5,6,7,nullptr,nullptr,fakeFrame);
+    check(hdrKey1 && hdrKey2 && *hdrKey1==*hdrKey2);
+    fakeFrame[0x18b0]=1;
+    const auto hdrKey3=CaptureHeaderBuilderCacheKey(reinterpret_cast<void*>(1),nullptr,unit,5,6,7,nullptr,nullptr,fakeFrame);
+    check(hdrKey3 && *hdrKey1!=*hdrKey3);
+    possibleRollPropertyCache={};
+    unsigned char rollDefs[16]{1,2,3,4},rollCount[16]{};
+    put(rollCount,0,std::uint64_t{1});rollCount[8]=1;
+    std::memset(noCloneOutput,0,sizeof(noCloneOutput));
+    const auto callsBeforeRoll=noCloneCalls;
+    check(TryPossibleRollProperties(unit,noCloneOutput,256,1,0,0xab,0x40,1,rollDefs,rollCount)==std::optional<std::uint64_t>{0xfedcba9876543210ull});
+    check(noCloneCalls==callsBeforeRoll+1 && std::strcmp(noCloneOutput,"+118 Defense")==0);
+    std::memset(noCloneOutput,0,sizeof(noCloneOutput));rollCount[8]=1;
+    check(TryPossibleRollProperties(unit,noCloneOutput,256,1,0,0xab,0x40,1,rollDefs,rollCount)==std::optional<std::uint64_t>{0xfedcba9876543210ull});
+    check(noCloneCalls==callsBeforeRoll+1 && std::strcmp(noCloneOutput,"+118 Defense")==0);
+    possibleRollPropertyCache={};
+    active.store(false); propertyRenderCache={};
     put(data,0,4); auto grouped=lines; grouped[0].grouped=true;
     check(AffixLabels(unit,grouped).empty());
     put(fakeTables,0x1608,rows+3); check(AffixLabels(unit,lines).empty());

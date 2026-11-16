@@ -1,7 +1,7 @@
 # Gem Bag UI
 
 Withdraw gems directly from a compatible Gem Bag, or deposit eligible gems and
-gem clusters with Shift + right-click or LB+B. Version **1.3.1+rev.2** supports
+gem clusters with Shift + right-click or LB+B. Version **1.3.1+rev.5** supports
 mouse, keyboard and controller use with D2RLoader.
 
 ## Controls

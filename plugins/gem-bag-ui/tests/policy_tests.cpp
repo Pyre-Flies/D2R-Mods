@@ -117,6 +117,15 @@ int main(int argc,char** argv) {
         }
     }
     Check(!Ui::Placement(Ui::Card,0,0,0,1920,1080,0,0,false)&&!Ui::Placement(Ui::Card,0,0,1,50,50,0,0,false),"unknown scale or undersized viewport refused");
+    for(unsigned gem=0;gem<Gems.size();++gem) {
+        const auto expected=gem==6?SkullDropSoundId:GemDropSoundId;
+        Check(WithdrawSoundId(gem)==expected,"withdrawal sound matches gem or skull inventory placement");
+        Check(ActionSoundId(true,true,true,true,false,gem,10,9)==expected,"successful credit-spending withdrawal plays placement sound");
+        Check(!ActionSoundId(false,true,true,true,false,gem,10,9)&&!ActionSoundId(true,true,true,true,false,gem,10,10),"refused or unchanged-credit withdrawal stays silent");
+    }
+    Check(!WithdrawSoundId(8)&&!ActionSoundId(true,true,true,true,false,8,10,9),"out-of-range gem index stays silent");
+    Check(ActionSoundId(true,true,true,true,true,0,10,15)==DepositSoundId,"credit-adding deposit plays convert sound");
+    Check(!ActionSoundId(true,true,true,true,true,0,10,10)&&!ActionSoundId(true,false,true,true,true,0,10,15)&&!ActionSoundId(true,true,false,true,true,0,10,15)&&!ActionSoundId(true,true,true,false,false,0,0,10),"no-op deposit, unready state and inspection stay silent");
     if(argc==2){std::ofstream f(argv[1]);f<<layout;}
     std::printf("%u placement/storage/conservation cases plus failure and gesture checks passed.\n",checks);
 }

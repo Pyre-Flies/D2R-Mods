@@ -634,20 +634,35 @@ private:
 
 namespace OverlayRender {
 
+[[nodiscard]] constexpr float ClampColorChannel(float c) noexcept {
+    return !(c >= 0.0f) ? 0.0f : (c > 1.0f ? 1.0f : (c == 0.0f ? 0.0f : c));
+}
+
+[[nodiscard]] constexpr D2RL::Overlay::Color ClampOverlayColor(
+    const D2RL::Overlay::Color& color) noexcept {
+    return {
+        ClampColorChannel(color.red),
+        ClampColorChannel(color.green),
+        ClampColorChannel(color.blue),
+        ClampColorChannel(color.alpha),
+    };
+}
+
 [[nodiscard]] constexpr D2RL::Overlay::Color ToOverlayColor(const std::array<float, 4>& c) noexcept {
-    return {c[0], c[1], c[2], c[3]};
+    return ClampOverlayColor({c[0], c[1], c[2], c[3]});
 }
 
 inline void DrawLine(const D2RL::PluginContext* ctx, const D2RL::OverlayService* overlay,
                      D2RL::Overlay::CanvasHandle canvas, float x0, float y0, float x1, float y1,
                      const D2RL::Overlay::Color& color, float thickness) noexcept {
+    if (!overlay || !overlay->drawLine) return;
     const D2RL::Overlay::LineRequest req{
         .structSize = sizeof(req),
         .flags = 0,
         .canvas = canvas,
         .start = {x0, y0},
         .end = {x1, y1},
-        .color = color,
+        .color = ClampOverlayColor(color),
         .thickness = thickness,
         .reserved = 0,
     };
@@ -657,10 +672,12 @@ inline void DrawLine(const D2RL::PluginContext* ctx, const D2RL::OverlayService*
 inline void DrawPolygonScanlines(const D2RL::PluginContext* ctx, const D2RL::OverlayService* overlay,
                                  D2RL::Overlay::CanvasHandle canvas,
                                  const D2RL::Overlay::Point* pts, std::size_t n,
-                                 const D2RL::Overlay::Color& fill,
-                                 const D2RL::Overlay::Color& border,
+                                 const D2RL::Overlay::Color& rawFill,
+                                 const D2RL::Overlay::Color& rawBorder,
                                  float radiusPx) noexcept {
     if (n < 3) return;
+    const D2RL::Overlay::Color fill = ClampOverlayColor(rawFill);
+    const D2RL::Overlay::Color border = ClampOverlayColor(rawBorder);
     if (fill.alpha > 0.001f) {
         float minY = pts[0].y, maxY = pts[0].y;
         for (std::size_t i = 1; i < n; ++i) {

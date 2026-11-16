@@ -1135,7 +1135,7 @@ retains the ordinary SDK scheduling route.
 Only SDK scheduling Unavailable routes a copied request to this scoped pump.
 Each game pass attempts at most the currently queued 64 scoped jobs; ordinary
 SDK callbacks drain only ordinary jobs. getPeerPlayer runs inside the current
-native game scope. NotFound defers the value job until a matching game's frame,
+native game scope. In `Core+0x4578D0`, return code `5` (`Network::Result::NotFound`) indicates a missing channel entry in `Core+0x7DEC20..0x7DEC28`, whereas when the channel exists and the peer's client id (`peerRecord+0x10`) is not present in the active `TLS+0x1C38` game's client list (for example while `d2rds` ticks standing games ahead of the player's game), `Core+0x4578D0` returns `0xC` (`12`, `Network::Result::NotConnected`). Both `NotFound` and `NotConnected` defer the value job until a matching game's frame,
 for at most seven seconds, before the client's eight-second timeout. No bag
 inspection, credit debit or creation happens in an unresolved game. Other peer
 errors refuse. Peer epochs, leases, replay cache, owner halt and compensation
@@ -1327,4 +1327,9 @@ notes.
 
 
 Investigation helpers referenced above remain in the research repository under
+Investigation helpers referenced above remain in the research repository under
 `experiments/gem-bag-ui/tools/`; they are not runtime dependencies.
+Client audio playback (`1.3.1+rev.4`) calls `D2R.exe+0x1A0780` (`SOUND_PlayUnitSound`)
+on the UI thread after verifying `QolMaterials::Signatures::FinishInteraction`
+(`cursor_convert_item = 11` on credit-increasing deposits, `item_gem = 217` /
+`item_monsterbone = 232` on credit-spending withdrawals; see [DEPOSITS.md](DEPOSITS.md)).

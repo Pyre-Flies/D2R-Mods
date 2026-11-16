@@ -22,6 +22,18 @@ inline constexpr std::array<Gem,8> Gems{{
 }};
 inline constexpr uint32_t BagCode=D2RL::Items::MakeItemCode("bag");
 inline constexpr uint32_t CreditStat=386;
+inline constexpr int32_t DepositSoundId=11;
+inline constexpr int32_t GemDropSoundId=217;
+inline constexpr int32_t SkullDropSoundId=232;
+inline constexpr int32_t WithdrawSoundId(unsigned gem) noexcept {
+    if(gem>=Gems.size())return 0;
+    return Gems[gem].code==D2RL::Items::MakeItemCode("gmk")?SkullDropSoundId:GemDropSoundId;
+}
+inline constexpr int32_t ActionSoundId(bool ok,bool wasReady,bool ready,bool withdraw,bool deposit,unsigned gem,uint32_t previousCredits,uint32_t currentCredits) noexcept {
+    if(!wasReady||!ready||!withdraw)return 0;
+    if(deposit)return currentCredits>previousCredits?DepositSoundId:0;
+    return ok&&currentCredits<previousCredits?WithdrawSoundId(gem):0;
+}
 inline constexpr uint32_t StorageMask=D2RL::Items::ContainerBit(Container::Inventory)|
     D2RL::Items::ContainerBit(Container::Cube)|D2RL::Items::ContainerBit(Container::PersonalStash)|
     D2RL::Items::ContainerBit(Container::SharedStash);

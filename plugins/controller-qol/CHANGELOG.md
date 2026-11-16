@@ -1,5 +1,10 @@
 # Controller QOL changelog
 
+## 1.3.1+rev.100 - 2026-11-16
+
+- Add in-game `Options > Gameplay` controller settings via `D2RL::Settings` (portal/stash/chest priority toggles, target snapping, reticle overlay visibility/colors/thickness/size, reticle speed, snap radius, and overlay smoothing), add `reticle_size_percent`, trim unused shortcut/debug toggles from the settings panel, and allow portal priority toggles to live-reload.
+- Scope remote server-cap rejection tracking to `99+` stack overflows, heap-allocate the config-reload worker thread (`*new std::thread`) to avoid process-exit termination crashes, and reset cached native button/trigger tracking in `ResetNativeTracking()`.
+
 ## 1.3.1+rev.97 - 2026-11-14
 
 - Route `QolBulkStash::Guard()`, `QolBulkStash::Remote()`, `QolClientTransfer::DepositGuard()`, and `QolBelt::Validate()` native guards through `QolItemCode::Check` (`PluginContext::CheckExpectedBytes`) so `Universal Chain Hook` is honored during bulk and single transfers, and structurally admit verified `D2RLoader` ABI-v4 plugin inline detours at `FinishInventoryInteraction` (`PlaySoundById`, `0x1A0780`) via `ValidateFinishInteractionDetour` without false-positive `D2RCore.dll` safety-check errors.

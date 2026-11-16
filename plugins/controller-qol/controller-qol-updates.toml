@@ -5,7 +5,7 @@
 # R3 saves there immediately. Rev.82 reloads active files automatically after save,
 # or use /qol reload in the loader console. No extra configuration file is needed.
 # Invalid edits retain the last valid settings. Release held controls to apply.
-# Hook switches, bindings, Cube controls and portal priorities require restart.
+# Hook switches, bindings, Cube controls and portal priority radius/diagnostics require restart.
 # The matching .catalog.toml is generated reference data, NOT your active settings.
 # Existing skill sections from older configs are migrated with backups; do not
 # copy skill sections back here. See docs/SKILL-DISCOVERY-CONFIG.md for recovery.
@@ -69,6 +69,7 @@ overlay_enabled = true
 ground_reticle_color = "#8FE8FF"
 lock_reticle_color = "#FFD166"
 reticle_thickness = 2.0 # colored line-width multiplier, 0.5..4; dark border stays narrow
+reticle_size_percent = 100 # overall reticle size percentage, 50..250
 debug_overlay = false # verbose HUD, outer range circle, ticks and LAST CAST
 # Optional cast diagnostics and Teleport measurements.
 # true keeps full functionality when available; conflicts auto-skip only this hook.

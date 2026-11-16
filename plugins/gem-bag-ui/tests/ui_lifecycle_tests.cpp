@@ -29,6 +29,7 @@ template<class T>T Unexpected(){if(abortOnUnexpected)std::abort();return T{};}
 uint64_t nextHandle=1;
 Info bag{};
 std::vector<std::string> layouts;
+std::vector<int32_t> playedSounds;
 template<class R,class T> R Register(const PluginContext*,const T*,uint64_t* handle) noexcept {*handle=nextHandle++;++listeners;return R::Success;}
 template<class R> R Unregister(const PluginContext*,uint64_t) noexcept {return R::Success;}
 
@@ -79,7 +80,7 @@ NetworkService networkService{.serviceSize=NetworkServiceSize,.serviceVersion=Ne
     .sendToHost=[](const PluginContext* context,uint64_t channel,uint16_t messageId,const void* data,uint32_t size) noexcept {
         Protocol::Request request{};Check(messageId==Protocol::RequestMessage&&Protocol::Copy(data,size,request),"UI emits valid copied server requests");
         Protocol::Reply reply{};reply.request=request;reply.serverSession=55;reply.flags=Protocol::Success;reply.status=Protocol::Status::Ok;
-        if(request.action!=Protocol::Action::Hello){++gameJobs;reply.lease=request.sequence+100;reply.flags|=Protocol::HasSnapshot|Protocol::HasCell;reply.credits=10;reply.width=10;reply.height=8;
+        if(request.action!=Protocol::Action::Hello){++gameJobs;reply.lease=request.sequence+100;reply.flags|=Protocol::HasSnapshot|Protocol::HasCell;reply.credits=request.action==Protocol::Action::Deposit?15:request.action==Protocol::Action::Withdraw?9:10;reply.width=10;reply.height=8;
             const auto definition=Catalog::Find(3,bag);Check(definition!=nullptr,"UI request waits for discovered bag definitions");
             reply.definition=definition->fingerprint;reply.bank=3;reply.gemMask=definition->mask;
             if(hostNameDifferences) {
@@ -137,6 +138,7 @@ bool Execute(const D2RL::PluginContext*,const D2RL::ItemService*,D2RL::PlayerHan
 bool Focus(const D2RL::PluginContext*,uint32_t& id,uint32_t& cls) noexcept{if(!Test::focusedPresent)return false;id=Test::focusedId;cls=Test::focusedClass;return true;}
 bool Controller(const D2RL::PluginContext*) noexcept{return Test::controllerActive;}
 bool SafeUi(const D2RL::PluginContext*) noexcept{return true;}
+bool PlaySound(const D2RL::PluginContext*,int32_t soundId) noexcept{Test::playedSounds.push_back(soundId);return true;}
 }
 namespace GemBag::Geometry {
 bool Initialize(const D2RL::PluginContext*,const D2RL::WidgetService*) noexcept{return true;}
@@ -214,29 +216,31 @@ int main(int argc,char** argv) {
     Check(Open(bag.handle,bag,{},false)&&labelsReady&&appliedLabels[0]=="Nom localis\xc3\xa9","client applies its own UTF-8 translation");DrainUi(&context);
     Check(ready&&!requestFailed&&snapshot.definition==Catalog::Find(3,bag)->fingerprint,"host with different name IDs passes the actual client definition check");
     const auto beforeWithdraw=gameJobs;QueueWork(true);DrainUi(&context);
-    Check(ready&&!requestFailed&&gameJobs==beforeWithdraw+1&&appliedLabels[5]=="Nom localis\xc3\xa9","localized picker still routes withdrawal through host transport");
+    Check(ready&&!requestFailed&&gameJobs==beforeWithdraw+1&&appliedLabels[5]=="Nom localis\xc3\xa9"&&playedSounds==std::vector<int32_t>{GemDropSoundId},"localized picker still routes withdrawal through host transport");
+    snapshot.credits=10;selected=6;QueueWork(true);DrainUi(&context);
+    Check(playedSounds==(std::vector<int32_t>{GemDropSoundId,SkullDropSoundId}),"skull withdrawal plays monsterbone placement sound");
     Close();hostEffectMismatch=true;
     Check(Open(bag.handle,bag,{},false),"open for semantic host mismatch inspection");DrainUi(&context);
     Check(!ready&&requestFailed,"changed host gem effects still disable client withdrawals despite name neutrality");
     const auto beforeRefusal=gameJobs;QueueWork(true);Check(gameJobs==beforeRefusal,"host definition mismatch sends no withdrawal");Close();
     hostEffectMismatch=false;TestData::AddDeposits(tableFixture);dataListener.callback(&context,&loaded,nullptr);
-    const auto beforeDirect=gameJobs,beforePanels=openedPanels;
+    const auto beforeDirect=gameJobs,beforePanels=openedPanels;playedSounds.clear();
     StartDeposit(bag);StartDeposit(bag);DrainUi(&context);
     if(gameJobs!=beforeDirect+2||directDeposit)std::fprintf(stderr,"Direct pending=%u busy=%u open=%u jobs=%u before=%u ready=%u failed=%u message=%s\n",directDeposit,busy,open,gameJobs,beforeDirect,ready,requestFailed,message.c_str());
-    Check(!directDeposit&&!busy&&!open&&gameJobs==beforeDirect+2&&openedPanels==beforePanels,"bag gesture inspects then deposits once without opening a panel");
+    Check(!directDeposit&&!busy&&!open&&gameJobs==beforeDirect+2&&openedPanels==beforePanels&&playedSounds==std::vector<int32_t>{DepositSoundId},"bag gesture inspects then deposits once without opening a panel");
     focusedPresent=true;focusedId=bag.runtimeId;focusedClass=bag.classId;controllerActive=true;
     char tooltipBuffer[128]{};SharedEvents::ItemTooltipEvent tipEvent{.structSize=SharedEvents::ItemTooltipEventSize,.item=bag.handle,.text=tooltipBuffer,.capacity=sizeof(tooltipBuffer)};
     Check(tooltipRegistration.callback!=nullptr,"tooltip listener registered");tooltipRegistration.callback(&context,&tipEvent,nullptr);
     Check(!std::strcmp(tooltipBuffer,"LB+A: Choose gem\nLB+B: Deposit gems + clusters"),"controller tooltip advertises LB+A picker and LB+B deposit");
     Check(QueueCommand(UiAction::DepositFocused,bag.runtimeId,bag.classId),"controller LB+B queues focused bag deposit");
     DrainUi(&context);
-    Check(!directDeposit&&!busy&&!open&&gameJobs==beforeDirect+4&&openedPanels==beforePanels,"controller focused deposit inspects then deposits without opening a panel");
+    Check(!directDeposit&&!busy&&!open&&gameJobs==beforeDirect+4&&openedPanels==beforePanels&&playedSounds==(std::vector<int32_t>{DepositSoundId,DepositSoundId}),"controller focused deposit inspects then deposits without opening a panel");
     Check(QueueCommand(UiAction::DepositFocused,bag.runtimeId+1,bag.classId),"stale focused bag command queued");
     DrainUi(&context);
     Check(gameJobs==beforeDirect+4,"moved focus before UI callback refuses controller deposit");
     focusedPresent=false;controllerActive=false;
     hostEffectMismatch=true;StartDeposit(bag);DrainUi(&context);
-    Check(!directDeposit&&!ready&&gameJobs==beforeDirect+5,"direct deposit refuses mismatched host definitions and clears pending state");
+    Check(!directDeposit&&!ready&&gameJobs==beforeDirect+5&&playedSounds==(std::vector<int32_t>{DepositSoundId,DepositSoundId}),"direct deposit refuses mismatched host definitions and clears pending state");
     D2RLoaderUnloadPlugin();
     Check(registeredResources==0&&removedResources==4,"unload releases all owned startup layouts");
     if(argc==2){std::ofstream out(argv[1]);out<<layouts[0];}

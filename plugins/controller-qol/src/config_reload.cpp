@@ -17,8 +17,10 @@ namespace {
 const D2RL::PluginContext* owner{};
 QolConfig::Settings startup{};
 std::atomic<std::shared_ptr<const QolConfig::Settings>> published{};
-std::atomic<bool> running{},requested{};
-std::thread worker;
+std::atomic<bool> running{},requested{},quietRequested{};
+// Never destroyed: a global std::thread still joinable when the process exits
+// without unloading plugins is std::terminate, a 0xC0000409 crash (see time-played).
+std::thread& worker = *new std::thread;
 std::condition_variable wake;
 std::mutex wakeMutex;
 QolReload::Idle idle{};
@@ -63,6 +65,7 @@ void Commit(void* value) noexcept {
 void Poll(std::uint64_t now) {
     const auto files=Files();
     bool manual=requested.exchange(false);
+    if(quietRequested.exchange(false))watcher.Touch(files,now);
     const bool automatic=watcher.Observe(files,now);
     if(pending && !(pending->files==files)) {
         manual=manual || pending->manual;
@@ -121,6 +124,10 @@ bool QolReload::Request() noexcept {
     if(!running.load())return false;
     requested.store(true);wake.notify_one();return true;
 }
+void QolReload::RequestQuiet() noexcept {
+    if(!running.load())return;
+    quietRequested.store(true,std::memory_order_release);
+}
 D2RL::ConsoleCommandResult QolReload::Command(D2R::Game::Client* client,const D2RL::ConsoleCommandContext* command,void* data) noexcept {
     if(!command || (command->argsLength && !command->args) || command->argsLength>256)return D2RL::ConsoleCommandResult::InvalidArguments;
     const auto args=QolAim::Trim(std::string_view(command->args?command->args:"",command->argsLength));
@@ -143,7 +150,7 @@ bool QolReload::Start(const D2RL::PluginContext* context,const QolConfig::Settin
         owner=context;startup=settings;idle=canApply;apply=update;
         if(!owner || !owner->pluginConfigPath || !*owner->pluginConfigPath)return false;
         published.store(std::make_shared<const QolConfig::Settings>(startup));
-        pending.reset();requested.store(false);generation=0;watcher.Resync(Files());
+        pending.reset();requested.store(false);quietRequested.store(false);generation=0;watcher.Resync(Files());
         running.store(true);
         worker=std::thread([] {
             while(running.load()) {
@@ -163,7 +170,7 @@ bool QolReload::Start(const D2RL::PluginContext* context,const QolConfig::Settin
     }catch(...) {running.store(false);if(owner)owner->LogWarn("[QOL/Reload] Watcher unavailable; keep the current settings and restart after edits.");return false;}
 }
 void QolReload::Stop() noexcept {
-    running.store(false);requested.store(false);wake.notify_all();
+    running.store(false);requested.store(false);quietRequested.store(false);wake.notify_all();
     if(worker.joinable())worker.join();
     pending.reset(); // Keep published data alive for late resident callbacks.
 }

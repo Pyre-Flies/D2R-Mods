@@ -12,12 +12,14 @@ if(NOT EXISTS "${PLUGIN_SDK}/CMakeLists.txt")
 endif()
 
 set(CHAT_VENDOR "${CMAKE_CURRENT_SOURCE_DIR}/../always-show-sockets/vendor")
+set(SETTINGS_VENDOR "${CMAKE_CURRENT_SOURCE_DIR}/vendor/D2RLSettings")
 
 add_library(pyre-lootfilter SHARED
     src/plugin.cpp
     src/version.rc
     "${CHAT_VENDOR}/src/native_commands.cpp"
     "${CHAT_VENDOR}/src/image_scan.cpp"
+    "${SETTINGS_VENDOR}/src/settings.cpp"
 )
 
 include("${PLUGIN_SDK}/cmake/D2RLPluginEmbedConfig.cmake")
@@ -29,6 +31,7 @@ d2rlplugin_embed_config(
 target_include_directories(pyre-lootfilter PRIVATE
     "${PLUGIN_SDK}/include"
     "${CHAT_VENDOR}/include"
+    "${SETTINGS_VENDOR}/include"
     "${CMAKE_CURRENT_SOURCE_DIR}/src"
 )
 
@@ -41,7 +44,6 @@ target_compile_options(pyre-lootfilter PRIVATE
     "$<$<COMPILE_LANGUAGE:CXX>:/W4;/WX;/guard:cf>"
 )
 target_link_options(pyre-lootfilter PRIVATE /guard:cf)
-target_link_libraries(pyre-lootfilter PRIVATE bcrypt)
 
 set_target_properties(pyre-lootfilter PROPERTIES
     OUTPUT_NAME "pyre-lootfilter"
