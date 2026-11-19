@@ -141,6 +141,20 @@ void TestAge() {
 	Check(FormatSnapshotAge(1000000, 1000000 - 3 * 86400) == L"3 days ago", "days");
 }
 
+void TestBaseTypeName() {
+	// Examples from live vanilla snapshots
+	Check(SnapshotBaseTypeName(L"Monarch Spirit", L"Spirit") == L"Monarch", "runeword base type");
+	Check(SnapshotBaseTypeName(L"Shako Harlequin Crest", L"Harlequin Crest") == L"Shako", "unique base type");
+	Check(SnapshotBaseTypeName(L"Ancient Armor Milabrega's Robe", L"Milabrega's Robe") == L"Ancient Armor", "multi-word base type");
+	Check(SnapshotBaseTypeName(L"Hawk Branded Amulet of Enlightenment", L"Hawk Branded Amulet of Enlightenment").empty(),
+		"magic item with no separate type");
+	Check(SnapshotBaseTypeName(L"Horadric Cube", L"Horadric Cube").empty(), "full name equals short name");
+	Check(SnapshotBaseTypeName(L"Monarch Spirit", L"").empty(), "empty short name");
+	Check(SnapshotBaseTypeName(L"MonarchSpirit", L"Spirit").empty(), "suffix must be a separate word");
+	Check(SnapshotBaseTypeName(L"Monarch Spirit", L"Enigma").empty(), "unrelated short name");
+	Check(SnapshotBaseTypeName(L" Spirit", L"Spirit").empty(), "blank base type");
+}
+
 void TestUtf8() {
 	Check(CacheUtf8ToWide("\xC3\xA9") == L"\x00E9", "2-byte UTF-8");
 	Check(CacheUtf8ToWide("\xF0\x9F\x94\xA5") == L"\U0001F525", "4-byte UTF-8");
@@ -158,6 +172,7 @@ int main() {
 	TestRoundTrip();
 	TestRejects();
 	TestAge();
+	TestBaseTypeName();
 	TestUtf8();
 	std::puts("pyre-stashsearch character cache tests passed.");
 	return 0;

@@ -75,6 +75,11 @@ auto IsValidCharacterName(std::wstring_view name) noexcept -> bool;
 auto SerializeCharacterSnapshot(const CharacterSnapshot& snapshot) -> std::string;
 auto ParseCharacterSnapshot(std::string_view text, CharacterSnapshot& outSnapshot) -> bool;
 
+// Base item type shown before the item name in a snapshot's full name line:
+// ("Monarch Spirit", "Spirit") -> "Monarch". Empty when the full name does not
+// end with " " + shortName (magic/rare names, Horadric Cube, ...).
+auto SnapshotBaseTypeName(std::wstring_view fullName, std::wstring_view shortName) -> std::wstring;
+
 // "just now", "5 min ago", "3 h ago", "2 days ago"
 auto FormatSnapshotAge(uint64_t nowUnixSeconds, uint64_t savedUnixSeconds) -> std::wstring;
 

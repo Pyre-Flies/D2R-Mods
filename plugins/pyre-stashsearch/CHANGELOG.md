@@ -18,7 +18,10 @@
   is unreadable). Both were verified live on vanilla D2R 3.3.94995; see
   [the reverse-engineering notes](../../docs/reverse-engineering/stash-search-1.10.12-decompilation.md#cross-character-search-additions).
 - Current-character rows get the same multi-line item hover tooltip as stash
-  rows; other characters' rows show a one-line hover. Only stash items count
+  rows; other characters' rows show a short hover laid out like the live one
+  (item name, then base type such as `Monarch` when the item shows one, a
+  divider, then character and location and the snapshot age), so the age is
+  never cut off by the tooltip's line-width limit. Only stash items count
   for the duplicate search term, so carried and snapshot rows never match it.
 - The U+E07E color-code stripping (also fixed in `1.3.1+rev.7`) now
   also drops a code cut off at the end of a line instead of leaving its bytes

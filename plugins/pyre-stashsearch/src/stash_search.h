@@ -138,6 +138,7 @@ struct MatchEntry {
 	bool                      matchedWithoutDuplicate = false;
 	std::vector<uintptr_t>    matchedUnits;
 	bool                      displayOnly             = false; // Item row with no stash page to jump to (inventory, cube, worn, other characters)
+	bool                      snapshotRow             = false; // Display-only row read from another character's snapshot file
 	uint64_t                  reserved = 0;
 };
 

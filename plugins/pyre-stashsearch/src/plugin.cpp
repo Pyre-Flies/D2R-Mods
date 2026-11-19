@@ -2210,12 +2210,16 @@ void ScanInventoryItems(
 }
 
 // Adds a display-only row for a snapshot item (no live unit, no stash page), or bumps the
-// "x N" count of an identical display-only row.
+// "x N" count of an identical snapshot row. The hover mirrors the live tooltip header
+// (item name, then base type when there is one), then "<Character> - <Location>" and
+// "Snapshot <age>" as short body lines so the width-capped renderer never cuts them off.
 void AddOrMergeSnapshotMatch(
 	std::wstring_view        shortName,
 	std::wstring_view        hoverItemName,
+	std::wstring_view        baseTypeName,
 	std::wstring_view        shortTabSuffix,
-	std::wstring_view        fullTabSuffix,
+	std::wstring_view        locationLine,
+	std::wstring_view        ageLine,
 	std::vector<MatchEntry>& outMatches) {
 	std::wstring baseLabel;
 	baseLabel.reserve(shortName.size() + shortTabSuffix.size());
@@ -2223,24 +2227,35 @@ void AddOrMergeSnapshotMatch(
 	baseLabel.append(shortTabSuffix);
 
 	for (auto& existing : outMatches) {
-		if (existing.displayOnly && existing.tooltipLines.empty() && existing.baseLabel == baseLabel) {
+		if (existing.snapshotRow && existing.baseLabel == baseLabel) {
 			++existing.count;
 			const std::wstring countStr = L" \x00D7 " + std::to_wstring(existing.count);
 			existing.displayText        = std::wstring(shortName) + countStr + std::wstring(shortTabSuffix);
-			existing.hoverText          = std::wstring(hoverItemName) + countStr + std::wstring(fullTabSuffix);
+			existing.hoverText          = std::wstring(hoverItemName) + countStr;
+			if (!existing.tooltipLines.empty()) {
+				existing.tooltipLines[0] = existing.hoverText;
+			}
 			return;
 		}
 	}
 
 	if (outMatches.size() < kMaxMatches) {
 		MatchEntry entry{};
-		entry.displayText    = baseLabel;
-		entry.count          = 1;
-		entry.displayOnly    = true;
-		entry.shortName      = std::wstring(shortName);
-		entry.baseLabel      = std::move(baseLabel);
-		entry.hoverText      = std::wstring(hoverItemName) + std::wstring(fullTabSuffix);
-		entry.shortTabSuffix = std::wstring(shortTabSuffix);
+		entry.displayText     = baseLabel;
+		entry.count           = 1;
+		entry.displayOnly     = true;
+		entry.snapshotRow     = true;
+		entry.shortName       = std::wstring(shortName);
+		entry.baseLabel       = std::move(baseLabel);
+		entry.hoverText       = std::wstring(hoverItemName);
+		entry.shortTabSuffix  = std::wstring(shortTabSuffix);
+		entry.tooltipLines.push_back(entry.hoverText);
+		if (!baseTypeName.empty()) {
+			entry.tooltipLines.emplace_back(baseTypeName);
+		}
+		entry.headerLineCount = entry.tooltipLines.size();
+		entry.tooltipLines.emplace_back(locationLine);
+		entry.tooltipLines.emplace_back(ageLine);
 		outMatches.push_back(std::move(entry));
 	}
 }
@@ -2544,7 +2559,7 @@ void ScanCarriedItems(uintptr_t playerInv, std::wstring_view normalizedQuery, st
 }
 
 // Adds display-only rows for items stored in other characters' snapshots
-// ("<Item> - MuleSorc (Cube)"; hover: "<Full name> - MuleSorc, Horadric Cube (snapshot 2 days ago)").
+// ("<Item> - MuleSorc (Cube)"; hover lines: "<Full name>", "MuleSorc - Horadric Cube", "Snapshot 2 days ago").
 void ScanOtherCharacterSnapshots(
 	std::wstring_view        currentCharacterName,
 	std::wstring_view        normalizedQuery,
@@ -2560,7 +2575,7 @@ void ScanOtherCharacterSnapshots(
 		if (!file.valid || (!currentCharacterName.empty() && CharacterNamesEqual(file.snapshot.name, currentCharacterName))) {
 			continue;
 		}
-		const std::wstring age = FormatSnapshotAge(nowUnix, file.snapshot.savedUnixSeconds);
+		const std::wstring ageLine = L"Snapshot " + FormatSnapshotAge(nowUnix, file.snapshot.savedUnixSeconds);
 		for (const auto& item : file.snapshot.items) {
 			if (outMatches.size() >= kMaxMatches) {
 				return;
@@ -2572,9 +2587,12 @@ void ScanOtherCharacterSnapshots(
 			const std::wstring_view hoverName = item.fullName.empty() ? shortName : std::wstring_view(item.fullName);
 			const std::wstring shortSuffix =
 				L" - " + file.snapshot.name + L" (" + std::wstring(ItemSourceShortLabel(item.source)) + L")";
-			const std::wstring fullSuffix =
-				L" - " + file.snapshot.name + L", " + std::wstring(ItemSourceFullLabel(item.source)) + L" (snapshot " + age + L")";
-			AddOrMergeSnapshotMatch(shortName, hoverName, shortSuffix, fullSuffix, outMatches);
+			const std::wstring locationLine =
+				file.snapshot.name + L" - " + std::wstring(ItemSourceFullLabel(item.source));
+			// "Monarch Spirit" -> header "Spirit" + type line "Monarch", like the live tooltip.
+			const std::wstring      baseType   = SnapshotBaseTypeName(hoverName, shortName);
+			const std::wstring_view headerName = baseType.empty() ? hoverName : shortName;
+			AddOrMergeSnapshotMatch(shortName, headerName, baseType, shortSuffix, locationLine, ageLine, outMatches);
 		}
 	}
 }

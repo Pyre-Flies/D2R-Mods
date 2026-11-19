@@ -330,6 +330,22 @@ auto ParseCharacterSnapshot(std::string_view text, CharacterSnapshot& outSnapsho
 	return sawVersion && sawName && IsValidCharacterName(outSnapshot.name);
 }
 
+auto SnapshotBaseTypeName(std::wstring_view fullName, std::wstring_view shortName) -> std::wstring {
+	if (shortName.empty() || fullName.size() <= shortName.size() + 1 ||
+		fullName.substr(fullName.size() - shortName.size()) != shortName ||
+		fullName[fullName.size() - shortName.size() - 1] != L' ') {
+		return {};
+	}
+	std::wstring_view base = fullName.substr(0, fullName.size() - shortName.size() - 1);
+	while (!base.empty() && base.back() == L' ') {
+		base.remove_suffix(1);
+	}
+	while (!base.empty() && base.front() == L' ') {
+		base.remove_prefix(1);
+	}
+	return std::wstring(base);
+}
+
 auto FormatSnapshotAge(uint64_t nowUnixSeconds, uint64_t savedUnixSeconds) -> std::wstring {
 	if (savedUnixSeconds == 0) {
 		return L"unknown age";
