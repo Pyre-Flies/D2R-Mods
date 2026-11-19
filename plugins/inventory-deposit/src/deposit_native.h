@@ -1,7 +1,19 @@
 #pragma once
 #include <D2RLPlugin/api.h>
+#include "settings.h"
+#include <atomic>
 
 namespace InventoryDepositNative {
+inline std::atomic<bool> rejuvenationDepositEnabled{true};
+inline void SetRejuvenationDepositEnabled(bool enabled) noexcept {
+    rejuvenationDepositEnabled.store(enabled,std::memory_order_release);
+}
+inline bool RejuvenationDepositEnabled() noexcept {
+    return rejuvenationDepositEnabled.load(std::memory_order_acquire);
+}
+inline bool AllowItem(const D2RL::Items::ItemInfo& item) noexcept {
+    return RejuvenationDepositEnabled() || !InventoryDeposit::IsRejuvenationPotionCode(item.code);
+}
 // Admission is read-only: no input hooks or native patches are installed.
 bool Initialize(const D2RL::PluginContext* context) noexcept;
 void Shutdown() noexcept;

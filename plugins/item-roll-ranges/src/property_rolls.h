@@ -48,8 +48,9 @@ inline bool BlockPossible(std::uint32_t id,std::span<const Affixes::Property> pr
     }
     if((id>>16)!=1 || (id&0xffff)>=groups.size())return false;
     const auto* row=groups[id&0xffff].bytes.data();
-    for(unsigned n=0;n<8;++n){const auto* entry=row+8+n*24;if(Affixes::Read<int>(entry,20)<=0)continue;
-        if(!BlockPossible(Affixes::Read<std::uint32_t>(entry,0),properties,groups,blocked,depth+1))return false;}
+    for(unsigned n=0;n<8;++n){const auto* entry=row+8+n*24;const auto prop=Affixes::Read<std::uint32_t>(entry,0);
+        if(prop==UINT32_MAX || std::all_of(entry,entry+24,[](unsigned char b){return b==0;}))continue;
+        if(!BlockPossible(prop,properties,groups,blocked,depth+1))return false;}
     return true;
 }
 inline Model Compile(std::span<const Affixes::Rolled> sources,std::span<const Affixes::Property> properties,
@@ -86,19 +87,19 @@ inline Model Compile(std::span<const Affixes::Rolled> sources,std::span<const Af
                 if(BlockImplicit(fn,stat,row[2+slot],affected)){valid=false;previous.reset();continue;}
                 // Compiled uint16 property id, then seven replacement flags.
                 if(stat>=4096 || row[2+slot]){if(stat>=4096 && fn!=5 && fn!=6 && fn!=7)out.complete=false;valid=false;previous.reset();continue;}
-                if(fn==1 || fn==8 || fn==17){
+                if(fn==1 || fn==4 || fn==8 || fn==17){
                     // Function 8 has reuse operands too; only its independent
                     // single-handler form is included in this linear model.
                     if(fn==8 && (!pending.empty() || std::count_if(row.begin()+0x18,row.begin()+0x1f,[](unsigned char f){return f!=0;})!=1))valid=false;
-                    if(fn==17 && std::count_if(row.begin()+0x18,row.begin()+0x1f,[](unsigned char f){return f!=0;})!=1)valid=false;
+                    if(fn==17 && (slot!=0 || std::any_of(row.begin()+0x19,row.begin()+0x1f,[](unsigned char f){return f!=0 && f!=3;})))valid=false;
                     const int parameter=definition.row.Number(0x28+n*16);
                     if(fn==17 && (parameter<0 || parameter>1000000))valid=false;
                     pending.push_back({fn==17&&parameter?parameter:low,fn==17&&parameter?parameter:high,source,{stat}});previous=pending.size()-1;
-                }else if(fn==3 && previous && (low>0 || high<0)){
+                }else if(fn==3 && previous && (pending[*previous].low>0 || pending[*previous].high<0)){
                     const bool duplicate=std::any_of(pending.begin(),pending.end(),[&](const Variable& v){
                         return std::find(v.stats.begin(),v.stats.end(),stat)!=v.stats.end();});
                     if(duplicate)valid=false;
-                    else if(low==high)pending.push_back({low,high,source,{stat}});
+                    else if(pending[*previous].low==pending[*previous].high)pending.push_back({pending[*previous].low,pending[*previous].high,source,{stat}});
                     else pending[*previous].stats.push_back(stat);
                 }else if(slot==0 && fn==21 && row[0x19]==3 && !row[0x1a] && !row[3] &&
                          Affixes::Read<std::uint16_t>(row.data(),0x0a)!=0 && (low>0 || high<0)){
@@ -124,8 +125,9 @@ using Interval=std::pair<int,int>;
 // Skill/class/tab selectors are stored as stat layers. This establishes their
 // marginal bounds; it does not treat packed proc/charge layers as scalar rolls.
 inline std::optional<Interval> LayerBounds(const Affixes::Rolled& definition,
-    std::span<const Affixes::Property> properties,unsigned stat,unsigned layer,bool randomSkills=false){
-    if(!definition.unconditionalScalar || (definition.source && (std::string_view(definition.source)=="[U]" || std::string_view(definition.source)=="[RW]") && !definition.uniqueScalar))return {};
+    std::span<const Affixes::Property> properties,unsigned stat,unsigned layer,bool randomSkills=false,bool allowChoicePool=false){
+    if((!definition.unconditionalScalar && !(allowChoicePool && definition.choicePool)) ||
+       (definition.source && (std::string_view(definition.source)=="[U]" || std::string_view(definition.source)=="[RW]") && !definition.uniqueScalar))return {};
     long long low=0,high=0;bool found=false;
     for(unsigned n=0;n<3;++n){
         const int id=definition.row.Number(0x24+n*16);if(id==-1)continue;
@@ -138,10 +140,10 @@ inline std::optional<Interval> LayerBounds(const Affixes::Rolled& definition,
             bool match=false;
             if(fn==21)match=layer==Affixes::Read<std::uint16_t>(row,0x0a+slot*2);
             else if(fn==10)match=param>=0 && param<24 && layer==static_cast<unsigned>(param/3*8+param%3);
-            else if(fn==22 || fn==24)match=param>=0 && param<=65535 && layer==static_cast<unsigned>(param);
+            else if(fn==9 || fn==22 || fn==24)match=param>=0 && param<=65535 && layer==static_cast<unsigned>(param);
             else if(fn==12 && randomSkills) {
                 if(std::count_if(row+0x18,row+0x1f,[](unsigned char f){return f!=0;})!=1)return {};
-                match=Affixes::RandomLayerSpec(param,lo,hi,layer);
+                match=Affixes::RandomLayerSpec(param,lo,hi,layer,static_cast<int>(stat));
             }
             else return {};
             if(!match)continue;
@@ -348,13 +350,21 @@ template<class Normalize> inline std::optional<RangeText::Label> LayerLabel(
         virtualProperties.push_back(p);cells[selected]=id;return id;
     };
     for(const auto& [selected,value]:values){(void)value;cell(selected);}
-    const auto append=[&](Affixes::Rolled d,unsigned selected,int low,int high,unsigned pool) {
-        const auto id=cell(selected);d.choicePool=pool;d.choiceEntry=pool?id+1:0;d.unconditionalScalar=!pool;
+    const auto append=[&](Affixes::Rolled d,unsigned selected,int low,int high,unsigned pool,unsigned entryId) {
+        const auto id=cell(selected);d.choicePool=pool;d.choiceEntry=pool?(entryId?entryId:id+1):0;d.unconditionalScalar=!pool;
         for(unsigned n=0;n<3;++n){const int absent=-1;std::memcpy(d.row.bytes.data()+0x24+n*16,&absent,4);}
         std::memcpy(d.row.bytes.data()+0x24,&id,4);std::memcpy(d.row.bytes.data()+0x2c,&low,4);std::memcpy(d.row.bytes.data()+0x30,&high,4);
         projected.push_back(d);
     };
-    unsigned pool=0;
+    unsigned maxSourcePool=0;
+    std::map<unsigned,std::set<unsigned>> allPoolEntries,emittedPoolEntries;
+    std::map<unsigned,Affixes::Rolled> poolTemplates;
+    for(const auto& d:definitions)if(d.choicePool){
+        maxSourcePool=std::max(maxSourcePool,d.choicePool);
+        if(d.choiceEntry)allPoolEntries[d.choicePool].insert(d.choiceEntry);
+        poolTemplates.try_emplace(d.choicePool,d);
+    }
+    unsigned pool=maxSourcePool;
     for(const auto& d:definitions)for(unsigned n=0;n<3;++n) {
         const int id=d.row.Number(0x24+n*16);if(id==-1)continue;if(id<0)return {};
         if(static_cast<std::size_t>(id)>=properties.size()) {
@@ -368,38 +378,51 @@ template<class Normalize> inline std::optional<RangeText::Label> LayerLabel(
             const unsigned target=Affixes::Read<std::uint16_t>(p,0x20+slot*2);
             if(target>=4096 && fn!=5 && fn!=6 && fn!=7 && fn!=20 && fn!=23)return {};
             if(target!=stat)continue;
-            if(p[2+slot] || !d.unconditionalScalar ||
+            if(p[2+slot] || (!d.unconditionalScalar && !d.choicePool) ||
                (d.source && (std::string_view(d.source)=="[U]" || std::string_view(d.source)=="[RW]") && !d.uniqueScalar))return {};
             if(fn==12) {
-                if(!randomSkills || std::count_if(p+0x18,p+0x1f,[](unsigned char f){return f!=0;})!=1 ||
+                if(d.choicePool || !randomSkills || std::count_if(p+0x18,p+0x1f,[](unsigned char f){return f!=0;})!=1 ||
                    !Affixes::RandomLayerSpec(param,low,high,static_cast<unsigned>(low)))return {};
                 ++pool;const auto before=projected.size();
-                for(const auto& [selected,value]:values)if(value>0 && Affixes::RandomLayerSpec(param,low,high,selected))append(d,selected,param,param,pool);
+                for(const auto& [selected,value]:values)if(value>0 && Affixes::RandomLayerSpec(param,low,high,selected,static_cast<int>(stat)))append(d,selected,param,param,pool,0);
                 if(projected.size()==before)return {};
             }else {
                 unsigned selected{};
                 if(fn==21)selected=Affixes::Read<std::uint16_t>(p,0x0a+slot*2);
                 else if(fn==10 && param>=0 && param<24)selected=static_cast<unsigned>(param/3*8+param%3);
-                else if((fn==22 || fn==24) && param>=0 && param<=65535)selected=static_cast<unsigned>(param);
+                else if((fn==9 || fn==22 || fn==24) && param>=0 && param<=65535)selected=static_cast<unsigned>(param);
                 else return {};
                 // Nonnegative bonuses ensure an unobserved zero layer cannot
                 // conceal a selected random bonus through cancellation.
                 if(low<(hasRandom?0:-1000000) || low>high || high>1000000)return {};
-                append(d,selected,low,high,0);
+                if(d.choicePool)emittedPoolEntries[d.choicePool].insert(d.choiceEntry);
+                append(d,selected,low,high,d.choicePool,d.choiceEntry);
             }
             if(projected.size()>128 || cells.size()>512)return {};
         }
     }
+    for(const auto& [poolId,allEntries]:allPoolEntries){
+        const auto& emitted=emittedPoolEntries[poolId];
+        if(emitted.empty() || emitted.size()>=allEntries.size())continue;
+        Affixes::Rolled zeroChoice=poolTemplates[poolId];
+        zeroChoice.choicePool=poolId;zeroChoice.choiceEntry=UINT_MAX;zeroChoice.unconditionalScalar=false;
+        for(unsigned n=0;n<3;++n){const int absent=-1;std::memcpy(zeroChoice.row.bytes.data()+0x24+n*16,&absent,4);}
+        projected.push_back(std::move(zeroChoice));
+        if(projected.size()>128)return {};
+    }
+    auto cellValue=[&](unsigned selected)->int {
+        const auto it=values.find(selected);return it!=values.end()?it->second:0;
+    };
     Contributions::Stats actual;
-    for(const auto& [selected,id]:cells)actual.push_back({std::uint64_t{id}<<32,values[selected]});
+    for(const auto& [selected,id]:cells)actual.push_back({std::uint64_t{id}<<32,cellValue(selected)});
     std::sort(actual.begin(),actual.end(),[](const auto& a,const auto& b){return a.key<b.key;});
     const auto solution=SolveSources(projected,virtualProperties,actual,[](unsigned,std::int64_t value){return Contributions::Normalize(value,0);});
     if(!solution.model.complete)return {};
-    for(const auto& [selected,id]:cells)if(values[selected] && (!solution.model.terms.contains(id) || solution.impossible.contains(id)))return {};
+    for(const auto& [selected,id]:cells)if(cellValue(selected) && (!solution.model.terms.contains(id) || solution.impossible.contains(id)))return {};
     const auto found=cells.find(layer);if(found==cells.end()){proved=true;return {};}
     const unsigned id=found->second;
     if(solution.model.blocked.contains(id) || solution.impossible.contains(id))return {};
-    if(!solution.model.terms.contains(id)){proved=values[layer]==0;return {};}
-    auto result=Label(solution,std::move(key),id,values[layer]);proved=result.has_value();return result;
+    if(!solution.model.terms.contains(id)){proved=cellValue(layer)==0;return {};}
+    auto result=Label(solution,std::move(key),id,cellValue(layer));proved=result.has_value();return result;
 }
 }

@@ -12,7 +12,11 @@ bool Match(uintptr_t address,const unsigned char* expected,size_t size) noexcept
 }
 bool ReviewedHash(HMODULE module) noexcept {
     static std::once_flag once;static HMODULE reviewed{};static bool hashOk{};
-    std::call_once(once,[module]{reviewed=module;hashOk=QolCore::VerifyFileHash(module,QolAutoBeltProfile::Hash);});
+    std::call_once(once,[module]{
+        reviewed=module;
+        hashOk=QolCore::VerifyFileHash(module,QolAutoBeltProfile::Hash)
+            || QolCore::VerifyFileHash(module,QolAutoBeltProfile::PatchedHash);
+    });
     return module==reviewed && hashOk;
 }
 bool Stored(uintptr_t entry) noexcept {

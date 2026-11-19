@@ -129,6 +129,36 @@ int main() {
     props[0].bytes[0x18]=24; number(defense,0x28,7);
     check(Affixes::Contributes(defense,props,31,7));
     check(!Affixes::Contributes(defense,props,31,0));
+    props[0].bytes[0x18]=9; number(defense,0x28,7);
+    check(Affixes::Contributes(defense,props,31,7));
+    check(!Affixes::Contributes(defense,props,31,8));
+    number(defense,0x2c,1); number(defense,0x30,3);
+    check(Affixes::ScalarBounds({1,defense,true,1},props,31,7,low,high) && low==1 && high==3);
+    props[0].bytes[0x18]=10; number(defense,0x28,7);
+    check(Affixes::ScalarBounds({1,defense,true,1},props,31,17,low,high) && low==1 && high==3);
+    props[0].bytes[0x18]=12; props[0].bytes[0x20]=188;
+    number(defense,0x28,2); number(defense,0x2c,6); number(defense,0x30,8);
+    check(Affixes::Contributes(defense,props,188,17,{6,63,true}));
+    check(!Affixes::Contributes(defense,props,188,19,{6,63,true}));
+    props[0].bytes[0x20]=31;
+    check(Affixes::CalculateAffixLevel(50,30,0)==35);
+    check(Affixes::CalculateAffixLevel(85,50,0)==71);
+    check(Affixes::CalculateAffixLevel(50,30,10)==60);
+    {
+        std::vector<Affixes::Row> fRows={row(1),row(10),row(30)};
+        for(std::size_t idx=0;idx<fRows.size();++idx){
+            number(fRows[idx],0x24,0);number(fRows[idx],0x28,0);
+            number(fRows[idx],0x2c,static_cast<int>(idx*10+1));number(fRows[idx],0x30,static_cast<int>((idx+1)*10));
+        }
+        props[0].bytes[0x18]=1; props[0].bytes[0x20]=31;
+        const auto ts=Affixes::EvaluateTier(fRows[0],fRows,true,100,15,0,yes,props);
+        check(ts.tier==3 && ts.totalTiers==3 && ts.bestTierAtAlvl==2 && ts.spawnWeight==1);
+        int fLo=0,fHi=0;
+        check(Affixes::FamilyScalarBounds({1,fRows[1],true,2},fRows,props,true,100,31,0,fLo,fHi,yes) && fLo==1 && fHi==30);
+    }
+    props[0].bytes[0x18]=24; props[0].bytes[0x20]=31; number(defense,0x28,7);
+    check(Affixes::Contributes(defense,props,31,7));
+    check(!Affixes::Contributes(defense,props,31,0));
     for (auto fn:{11,19}) {
         props[0].bytes[0x18]=static_cast<unsigned char>(fn); number(defense,0x30,3);
         check(Affixes::Contributes(defense,props,31,(7<<6)|3));

@@ -8,7 +8,7 @@
 #include <optional>
 #include <vector>
 namespace Contributions {
-struct Stat {std::uint64_t key{}; std::int64_t value{};};
+struct Stat {std::uint64_t key{}; std::int64_t value{}; bool operator==(const Stat&) const = default;};
 using Stats=std::vector<Stat>;
 inline std::int64_t Value(const Stats& values,unsigned stat,unsigned layer=0) {
     const auto key=(std::uint64_t{stat}<<32)|layer;
@@ -28,10 +28,12 @@ struct Identity {
     unsigned id{},classId{},quality{},version{},bank{},flags{},autoId{};
     std::array<unsigned,6> affixes{};
     int qualityRecord{-1};
+    bool operator==(const Identity&) const = default;
 };
-struct Socket {Identity identity;Stats values;};
-struct Snapshot {Identity identity;Stats own,primary,total;std::vector<Socket> sockets;Stats word{},activeSet{};};
-inline bool ExtendedFlags(unsigned flags) {return flags==0x80000000u || flags==0xa0000000u;}
+struct Socket {Identity identity;Stats values; bool operator==(const Socket&) const = default;};
+struct Snapshot {Identity identity;Stats own,primary,total;std::vector<Socket> sockets;Stats word{},activeSet{},auxiliary{}; bool operator==(const Snapshot&) const = default;};
+// Bit 31 (SIGN bit) marks an extended StatListEx (+0xA8 aggregate vector).
+inline bool ExtendedFlags(unsigned flags) {return (flags&0x80000000u)!=0u;}
 // No pointer escapes: source metadata and values are owned copies. Nested socket
 // original modifier children duplicate the attached aggregate and are not walked.
 template<class Read> std::optional<Snapshot> Capture(std::uintptr_t unit,Read read,unsigned wordState=0,bool isolateSetStates=false) {
@@ -41,10 +43,13 @@ template<class Read> std::optional<Snapshot> Capture(std::uintptr_t unit,Read re
         if(!load(list+offset,v)||v[1]>2048||v[1]>v[2]||
            (v[1] && (v[0]<0x10000||v[0]>0x7fffffffffffULL-v[1]*16)))return {};
         Stats out;
-        for(std::uint64_t n=0;n<v[1];++n){
-            std::array<std::uint64_t,2> entry{};
-            if(!load(static_cast<std::uintptr_t>(v[0])+n*16,entry)||
-               (n && entry[0]<=out.back().key))return {};
+        if(!v[1])return out;
+        std::vector<std::array<std::uint64_t,2>> raw(static_cast<std::size_t>(v[1]));
+        if(!read(static_cast<std::uintptr_t>(v[0]),raw.data(),raw.size()*sizeof(raw[0])))return {};
+        out.reserve(raw.size());
+        for(std::size_t n=0;n<raw.size();++n){
+            const auto& entry=raw[n];
+            if(n && entry[0]<=out.back().key)return {};
             // Native scalar accessor reads the signed low DWORD, not an int64
             // sign inferred from the unused high DWORD of a stat entry.
             out.push_back({entry[0],std::bit_cast<std::int32_t>(static_cast<std::uint32_t>(entry[1]))});
@@ -74,17 +79,20 @@ template<class Read> std::optional<Snapshot> Capture(std::uintptr_t unit,Read re
            !load(child+0x20,state)||!load(child+0x18,expiry))return {};
         const bool word=wordState && state==wordState && (host->flags&0x04000000u);
         const bool setBonus=isolateSetStates && host->quality==5 && state>=165 && state<=170;
-        if(state && !word && !setBonus)return {};
         if(ExtendedFlags(flags)){
             std::uintptr_t ownerRoot{};
             if(state||expiry||attached.size()>=6||!load(child+0xa0,owner)||owner==unit||!load(owner+0x88,ownerRoot)||ownerRoot!=child)return {};
             const auto id=identity(owner);const auto values=vector(child,0xa8);
             if(!id||!values||id->bank!=host->bank||std::any_of(attached.begin(),attached.end(),[&](const Attached& a){return a.unit==owner||a.socket.identity.id==id->id;}))return {};
             attached.push_back({owner,{*id,*values}});
-        } else {
-            if(flags!=0x40||expiry!=-1||!load(child,owner)||owner!=unit)return {};
+        } else if(flags&0x40u){
+            if((flags&0x2000u)||(state&&!word&&!setBonus)||expiry!=-1||!load(child,owner)||owner!=unit)return {};
             const auto values=vector(child,0x30);if(!values||!Add(setBonus?out.activeSet:out.own,*values))return {};
             if(word && (++wordLists!=1 || !Add(out.word,*values)))return {};
+        } else {
+            // Record auxiliary non-0x40 effect/state lists after verifying structure so exempt stats cannot mis-attribute.
+            if((flags&0x2000u)||!load(child,owner)||owner<0x10000)return {};
+            const auto values=vector(child,0x30);if(!values||!Add(out.auxiliary,*values))return {};
         }
         if(!load(child+0x68,child))return {};
     }

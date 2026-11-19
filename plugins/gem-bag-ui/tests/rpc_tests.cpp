@@ -75,7 +75,7 @@ NetworkService network{.serviceSize=NetworkServiceSize,.serviceVersion=NetworkSe
     .getPeerPlayer=[](const PluginContext* context,uint64_t,uint64_t peer,PlayerHandle* player) noexcept {
         auto& host=Of(context);Check(gameThread==&host&&!uiThread,"peer is resolved only on the scheduled host game thread");
         for(auto node:nodes)if(node->server==&host&&node->peer==peer&&node->peerAvailable&&(!host.frameOwner||host.frameOwner==node->owner)){*player=node->owner;return Network::Result::Success;}
-        return Network::Result::NotFound;
+        return host.frameOwner?Network::Result::NotConnected:Network::Result::NotFound;
     }};
 ThreadService threads{.serviceSize=ThreadServiceSize,.serviceVersion=ThreadService::AbiVersion,
     .runOnUiThread=[](const PluginContext* context,Threads::Callback callback,void* data) noexcept {tasks.push_back({&Of(context),false,callback,data});return Threads::Result::Success;},

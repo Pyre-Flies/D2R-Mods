@@ -7,6 +7,7 @@
 #include <windows.h>
 #include <array>
 #include <atomic>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -18,6 +19,14 @@ inline constexpr std::uintptr_t NativeDropPlayer = 0x1C8130;
 inline constexpr std::uintptr_t DropCallerReturn1 = 0x1C36A0;
 inline constexpr std::uintptr_t DropCallerReturn2 = 0x1C6C9E;
 inline constexpr std::uintptr_t LoaderPlayNamedSound = 0x1A0C00;
+inline constexpr std::uintptr_t SetSoundHandleVolume = 0x19F900;
+inline constexpr std::uintptr_t SoundChannelsArray = 0x246CA30;
+inline constexpr std::uintptr_t SoundChannelsCount = 0x246CA38;
+inline constexpr std::size_t SoundChannelStride = 0x98U;
+inline constexpr std::size_t SoundChannelHashOffset = 0x80U;
+inline constexpr std::size_t SoundChannelSliderOffset = 0x94U;
+inline constexpr std::uint32_t HashChannelSfx = 0xD01EC7FCU;      // FNV1a32("sfx")
+inline constexpr std::uint32_t HashChannelItemsHd = 0x86ED69F0U;  // FNV1a32("sfx/items_hd")
 
 inline constexpr std::uintptr_t NativeActionDispatch = 0xFABE0;
 inline constexpr std::uintptr_t NativeItemLookup = 0x9A5D0;
@@ -34,6 +43,10 @@ inline constexpr std::array<std::uint8_t, 20> NativeDropPlayerEntry{{
 inline constexpr std::array<std::uint8_t, 11> LoaderPlayNamedEntry{{
     0x48, 0x89, 0x5C, 0x24, 0x08, 0x48, 0x89, 0x74, 0x24, 0x10, 0x57,
 }};
+inline constexpr std::array<std::uint8_t, 16> SetSoundHandleVolumeEntry{{
+    0x44, 0x8B, 0xD2, 0x48, 0x85, 0xC9, 0x74, 0x2F,
+    0x48, 0x8B, 0x05, 0x91, 0x67, 0x8F, 0x02, 0x4C,
+}};
 inline constexpr std::array<std::uint8_t, 21> NativeActionDispatchEntry{{
     0x40, 0x55, 0x53, 0x41, 0x55, 0x41, 0x56, 0x41, 0x57,
     0x48, 0x8D, 0x6C, 0x24, 0xC9, 0x48, 0x81, 0xEC, 0xA0, 0x00, 0x00, 0x00,
@@ -42,9 +55,69 @@ inline constexpr std::array<std::uint8_t, 21> NativeActionDispatchEntry{{
 
 using NativeDropPlayerFn = void(__fastcall*)(void*) noexcept;
 using PlayNamedSoundFn = void*(__fastcall*)(const char*, void*, int, int) noexcept;
+using SetSoundHandleVolumeFn = void(__fastcall*)(void*, std::uint8_t) noexcept;
 using NativeActionDispatchFn = void(__fastcall*)(std::uint32_t, void*, std::uint32_t,
                                                  std::uint32_t) noexcept;
 using NativeItemLookupFn = void*(__fastcall*)(std::uint32_t, std::uint32_t) noexcept;
+
+// Reads the user's Audio Options "Sound Effects" ("sfx" +0x94) and "Items" ("sfx/items_hd" +0x94)
+// slider multipliers (0.0f..1.0f) from the runtime soundchannels.json table so custom drop sounds
+// routed through the unattenuated "master" bus still honor the Items and Sound Effects sliders.
+[[nodiscard]] inline std::uint8_t ReadItemsSliderVolumeByte(std::uintptr_t exeBase) noexcept {
+    if (!exeBase) return 0xFFU;
+    std::uintptr_t arrayPtr = 0;
+    std::uint64_t count = 0;
+    if (!Reader::CopyReadable(reinterpret_cast<const void*>(exeBase + Rva::SoundChannelsArray),
+                              &arrayPtr, sizeof(arrayPtr)) ||
+        !Reader::CopyReadable(reinterpret_cast<const void*>(exeBase + Rva::SoundChannelsCount),
+                              &count, sizeof(count)) ||
+        !arrayPtr || count == 0 || count > 256U) {
+        return 0xFFU;
+    }
+
+    float sfxSlider = 1.0f;
+    float itemsSlider = 1.0f;
+    bool foundSfx = false;
+    bool foundItems = false;
+    for (std::uint64_t i = 0; i < count && (!foundSfx || !foundItems); ++i) {
+        const std::uintptr_t entry = arrayPtr + static_cast<std::uintptr_t>(i * Rva::SoundChannelStride);
+        std::uint32_t idHash = 0;
+        float slider = 1.0f;
+        if (!Reader::CopyReadable(reinterpret_cast<const void*>(entry + Rva::SoundChannelHashOffset),
+                                  &idHash, sizeof(idHash)) ||
+            !Reader::CopyReadable(reinterpret_cast<const void*>(entry + Rva::SoundChannelSliderOffset),
+                                  &slider, sizeof(slider)) ||
+            !std::isfinite(slider)) {
+            continue;
+        }
+        const float clamped = slider < 0.0f ? 0.0f : (slider > 1.0f ? 1.0f : slider);
+        if (idHash == Rva::HashChannelSfx) {
+            sfxSlider = clamped;
+            foundSfx = true;
+        } else if (idHash == Rva::HashChannelItemsHd) {
+            itemsSlider = clamped;
+            foundItems = true;
+        }
+    }
+
+    const float combined = sfxSlider * itemsSlider;
+    const long scaled = std::lround(combined * 255.0f);
+    if (scaled <= 0L) return 0U;
+    if (scaled >= 255L) return 0xFFU;
+    return static_cast<std::uint8_t>(scaled);
+}
+
+[[nodiscard]] inline SetSoundHandleVolumeFn QualifySetSoundHandleVolume(
+    std::uintptr_t exeBase) noexcept {
+    if (!exeBase) return nullptr;
+    std::array<std::uint8_t, Witnesses::SetSoundHandleVolumeEntry.size()> entry{};
+    if (!Reader::CopyReadable(reinterpret_cast<const void*>(exeBase + Rva::SetSoundHandleVolume),
+                              entry.data(), entry.size()) ||
+        entry != Witnesses::SetSoundHandleVolumeEntry) {
+        return nullptr;
+    }
+    return reinterpret_cast<SetSoundHandleVolumeFn>(exeBase + Rva::SetSoundHandleVolume);
+}
 
 [[nodiscard]] constexpr bool IsKeyboardCtrlHeld(short leftState, short rightState) noexcept {
     return ((static_cast<std::uint16_t>(leftState) | static_cast<std::uint16_t>(rightState)) &
@@ -116,7 +189,9 @@ enum class DropSoundAction : std::uint8_t {
     void* unit, std::uintptr_t callerRva, std::uintptr_t loaderBase,
     bool dropSoundsEnabled, const Schema::FilterRuleTable* table,
     const Reader::NativeReaders& readers,
-    Cache::UnitEvaluationCache& cache) noexcept {
+    Cache::UnitEvaluationCache& cache,
+    bool dropSound3dAttenuation = false,
+    bool* outMissingCustomSound = nullptr) noexcept {
     if (!unit || !table || (table->soundRules == 0 && table->hiddenRules == 0)) {
         return DropSoundAction::PlayVanilla;
     }
@@ -149,10 +224,23 @@ enum class DropSoundAction : std::uint8_t {
     }
 
     if (dropSoundsEnabled && loaderBase && decision.hasDropSound && decision.dropSound[0]) {
+        const std::uint8_t sliderVolByte = ReadItemsSliderVolumeByte(loaderBase);
+        if (sliderVolByte == 0U) {
+            return DropSoundAction::PlayedCustom;
+        }
         auto* playNamed = reinterpret_cast<PlayNamedSoundFn>(loaderBase + Rva::LoaderPlayNamedSound);
+        auto* setHandleVol = sliderVolByte < 0xFFU ? QualifySetSoundHandleVolume(loaderBase) : nullptr;
+        void* const soundUnit = dropSound3dAttenuation ? unit : nullptr;
         __try {
-            if (playNamed(decision.dropSound.data(), unit, 0, 0) != nullptr) {
+            if (void* const handle = playNamed(decision.dropSound.data(), soundUnit, 0, 0);
+                handle != nullptr) {
+                if (setHandleVol) {
+                    setHandleVol(handle, sliderVolByte);
+                }
                 return DropSoundAction::PlayedCustom;
+            } else if (outMissingCustomSound &&
+                       std::strncmp(decision.dropSound.data(), "Filter", 6) == 0) {
+                *outMissingCustomSound = true;
             }
         } __except (EXCEPTION_EXECUTE_HANDLER) {
         }
@@ -165,8 +253,10 @@ enum class DropSoundAction : std::uint8_t {
     void* unit, std::uintptr_t callerRva, std::uintptr_t loaderBase,
     const Schema::FilterRuleTable* table,
     const Reader::NativeReaders& readers,
-    Cache::UnitEvaluationCache& cache) noexcept {
-    return EvaluateDropSound(unit, callerRva, loaderBase, true, table, readers, cache) ==
+    Cache::UnitEvaluationCache& cache,
+    bool dropSound3dAttenuation = false) noexcept {
+    return EvaluateDropSound(unit, callerRva, loaderBase, true, table, readers, cache,
+                             dropSound3dAttenuation) ==
            DropSoundAction::PlayedCustom;
 }
 

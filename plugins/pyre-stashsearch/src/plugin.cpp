@@ -1,6 +1,6 @@
-#include "character_cache.h"
 #include "native.h"
 #include "stash_search.h"
+#include "character_cache.h"
 #include <D2RLPlugin/api.h>
 #include <imm.h>
 #include <algorithm>
@@ -12,6 +12,7 @@
 #include <mutex>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <unordered_set>
 #include <utility>
 #include <vector>
@@ -73,6 +74,28 @@ bool                                           g_RenamingTabIsShared  = true;
 uint64_t                                       g_RenamingTabPageIndex = 0;
 std::wstring                                   g_TabRenameText;
 
+enum class ScrollbarDragMode : uint8_t {
+	None           = 0,
+	PagePicker     = 1,
+	SearchDropdown = 2,
+};
+std::atomic<uint8_t>     g_ScrollbarDragMode{ 0 };
+int                      g_ScrollbarDragGrabOffsetY = 0;
+
+struct GridItemTooltipCacheEntry {
+	uintptr_t    itemUnit = 0;
+	std::wstring fullTooltip;
+	std::wstring shortName;
+};
+std::vector<GridItemTooltipCacheEntry> g_GridTooltipCache;
+uint64_t                               g_GridTooltipCacheTickMs = 0;
+std::atomic<bool>                      g_GridTooltipCacheInvalidated{ true };
+
+bool            g_LockedMatchActive = false;
+StashPageTarget g_LockedMatchTarget{};
+std::wstring    g_LockedMatchShortName;
+std::wstring    g_LockedMatchFullTooltip;
+
 // Cross-character search (character_cache.h). Snapshots are written and read on the
 // game thread (BankPanel::Draw detour and D2RLoader gameplay listeners); the mutex
 // only guards against those two callers overlapping.
@@ -93,22 +116,15 @@ uint64_t                 g_LastCharacterSnapshotTickMs  = 0;
 std::wstring             g_LastSnapshotCharacterName;
 std::string              g_LastSnapshotBody;            // Serialized items with savedUnixSeconds = 0, to skip identical rewrites
 
-enum class ScrollbarDragMode : uint8_t {
-	None           = 0,
-	PagePicker     = 1,
-	SearchDropdown = 2,
-};
-std::atomic<uint8_t>     g_ScrollbarDragMode{ 0 };
-int                      g_ScrollbarDragGrabOffsetY = 0;
-
-struct GridItemTooltipCacheEntry {
-	uintptr_t    itemUnit = 0;
-	std::wstring fullTooltip;
-};
-std::vector<GridItemTooltipCacheEntry> g_GridTooltipCache;
-uint64_t                               g_GridTooltipCacheTickMs = 0;
+std::unordered_set<uintptr_t> g_DuplicateItemUnits;
+bool                          g_HasTrackedActiveStashPage  = false;
+StashPageTarget               g_TrackedActiveStashPage{};
+size_t                        g_TrackedActivePageItemCount = 0;
+uint64_t                      g_TrackedActivePageItemsXor  = 0;
+uint64_t                      g_TrackedActivePageItemsAdd  = 0;
 
 SearchBarLayout          g_CurrentLayout{};                  // 0x1b290..0x1b3a0
+std::atomic<uintptr_t>   g_ActiveBankPanelAddr{ 0 };
 uint64_t                 g_LastRenderTickMs     = 0;         // 0x1b3a8
 uint64_t                 g_BuiltGeneration      = 0;         // 0x1b3b0
 uint64_t                 g_LastBuildTickMs      = 0;         // 0x1b3b8
@@ -122,8 +138,45 @@ HHOOK                    g_KeyboardHook         = nullptr;   // 0x1b3e0
 HWND                     g_EditHwnd             = nullptr;   // 0x1b3e8
 uint8_t                  g_ForwardedKeyDown[256]{};          // 0x1b3f0..0x1b4ef
 WNDPROC                  g_OriginalEditWndProc  = nullptr;   // 0x1b4f0
-const D2RL::PluginContext* g_PluginCtx          = nullptr;
-std::atomic<bool>        g_LoggedFirstStashFrame{ false };
+const D2RL::PluginContext*          g_PluginCtx                     = nullptr;
+const D2RL::SharedEventService*     g_SharedEventService            = nullptr;
+D2RL::SharedEvents::ListenerHandle  g_UiMessageHandle               = D2RL::SharedEvents::InvalidHandle;
+std::atomic<bool>                   g_HoverWasSuppressed{ false };
+std::atomic<bool>                   g_LoggedFirstStashFrame{ false };
+
+XInputGetStateFn            g_FnXInputGetState              = nullptr;
+bool                        g_XInputResolved                = false;
+XInputPollCache             g_XInputPollCache{};
+bool                        g_PrevControllerADown           = false;
+ControllerFlyoutCursorState g_ControllerFlyoutCursor{};
+uint64_t                    g_ControllerLastStickStepTickMs = 0;
+int                         g_ControllerLastStickDir        = 0;
+
+auto ResolveXInputGetState() noexcept -> XInputGetStateFn {
+	if (g_XInputResolved) {
+		return g_FnXInputGetState;
+	}
+	g_XInputResolved = true;
+	constexpr const wchar_t* kXInputDlls[] = {
+		L"xinput1_4.dll",
+		L"xinput1_3.dll",
+		L"xinput9_1_0.dll",
+	};
+	for (const wchar_t* dllName : kXInputDlls) {
+		HMODULE mod = GetModuleHandleW(dllName);
+		if (mod == nullptr) {
+			mod = LoadLibraryW(dllName);
+		}
+		if (mod != nullptr) {
+			auto fn = reinterpret_cast<XInputGetStateFn>(GetProcAddress(mod, "XInputGetState"));
+			if (fn != nullptr) {
+				g_FnXInputGetState = fn;
+				return fn;
+			}
+		}
+	}
+	return nullptr;
+}
 
 constexpr uint64_t kLayoutActiveTimeoutMs  = 301;  // 0x12d ms in 0xC2B0 / 0xE620
 constexpr uint64_t kPeriodicRefreshMs      = 3000; // 3000 ms in 0xE460
@@ -131,10 +184,19 @@ constexpr uint64_t kMinTabSwitchIntervalMs = 120;  // Coalesce rapid tab/page sw
 constexpr uint64_t kCharacterSnapshotIntervalMs  = 30000; // Minimum gap between automatic snapshots of the logged-in character
 constexpr uint64_t kCharacterCacheScanIntervalMs = 5000;  // Minimum gap between cache directory rescans
 
+void ClearLockedMatchSelectionLocked() noexcept {
+	g_LockedMatchActive = false;
+	g_LockedMatchTarget = StashPageTarget{};
+	g_LockedMatchShortName.clear();
+	g_LockedMatchFullTooltip.clear();
+}
+
 // 0xF5E0: Clears match list and bumps query generation (caller holds g_StateMutex)
 void MarkQueryChangedLocked() noexcept {
 	g_Matches.clear();
+	g_DuplicateItemUnits.clear();
 	g_HasPendingJump = false;
+	ClearLockedMatchSelectionLocked();
 	g_EditSyncedQuery.clear();
 	g_SelectedIndex = 0;
 	g_ScrollOffset  = 0;
@@ -142,14 +204,52 @@ void MarkQueryChangedLocked() noexcept {
 	g_MatchesDirty.store(true, std::memory_order_release);
 }
 
-// 0xC2B0: Checks whether BankPanel was rendered within the last 301ms (caller holds g_StateMutex)
+auto IsLocalPlayerInGame() noexcept -> bool {
+	if (g_Native.fnGetLocalPlayerSlot == 0 || g_Native.fnGetLocalPlayerUnit == 0) {
+		return false;
+	}
+	uint32_t  localSlot  = 0;
+	uintptr_t playerUnit = 0;
+	return SafeCall_GetU32NoArg(g_Native.fnGetLocalPlayerSlot, &localSlot) &&
+		   SafeCall_PtrFromU32(g_Native.fnGetLocalPlayerUnit, localSlot, &playerUnit) &&
+		   playerUnit != 0;
+}
+
+auto IsPanelEnabledAndVisibleAt(uintptr_t panelAddr) noexcept -> bool {
+	if (panelAddr == 0 || panelAddr > UINTPTR_MAX - 0x60) {
+		return false;
+	}
+	uint8_t isEnabled = 0;
+	uint8_t isVisible = 0;
+	return SafeReadU8(reinterpret_cast<const uint8_t*>(panelAddr + 0x50), &isEnabled) &&
+		   SafeReadU8(reinterpret_cast<const uint8_t*>(panelAddr + 0x51), &isVisible) &&
+		   isEnabled != 0 &&
+		   isVisible != 0;
+}
+
+auto IsBankPanelVisibleAt(uintptr_t bankPanel) noexcept -> bool {
+	return IsLocalPlayerInGame() && IsPanelEnabledAndVisibleAt(bankPanel);
+}
+
+// 0xC2B0: Checks whether BankPanel is currently visible in-game and was rendered within the last 301ms (caller holds g_StateMutex)
 auto IsSearchBarActiveLocked(uint64_t nowTickMs) noexcept -> bool {
+	const uintptr_t bankPanel    = g_ActiveBankPanelAddr.load(std::memory_order_acquire);
+	const bool      panelVisible = (bankPanel != 0) && IsBankPanelVisibleAt(bankPanel);
 	if (!g_ShuttingDown.load(std::memory_order_acquire) &&
 		g_CurrentLayout.valid &&
+		panelVisible &&
 		g_LastRenderTickMs != 0 &&
 		nowTickMs >= g_LastRenderTickMs &&
 		(nowTickMs - g_LastRenderTickMs) < kLayoutActiveTimeoutMs) {
 		return true;
+	}
+	if (bankPanel != 0 && !panelVisible) {
+		g_ActiveBankPanelAddr.store(0, std::memory_order_release);
+		g_CurrentLayout.valid       = false;
+		g_WasPanelActive            = false;
+		g_HasTrackedActiveStashPage = false;
+		g_GridTooltipCacheInvalidated.store(true, std::memory_order_release);
+		(void)UpdateControllerOverlayAPressLatch(g_ControllerFlyoutCursor, false);
 	}
 	g_IsFocused     = false;
 	g_IsRenamingTab = false;
@@ -190,13 +290,21 @@ void ResetSearchState() {
 	g_WorkerFocusRequested.store(false, std::memory_order_release);
 	g_MatchesDirty.store(true, std::memory_order_release);
 	g_QueryGeneration.store(1, std::memory_order_release);
-	g_BuiltGeneration = 0;
-	g_LastBuildTickMs = 0;
+	g_GridTooltipCacheInvalidated.store(true, std::memory_order_release);
 
 	std::lock_guard<std::mutex> lock(g_StateMutex);
+	g_BuiltGeneration = 0;
+	g_LastBuildTickMs = 0;
 	g_QueryText.clear();
 	g_Matches.clear();
+	g_DuplicateItemUnits.clear();
+	g_HasTrackedActiveStashPage  = false;
+	g_TrackedActiveStashPage     = StashPageTarget{};
+	g_TrackedActivePageItemCount = 0;
+	g_TrackedActivePageItemsXor  = 0;
+	g_TrackedActivePageItemsAdd  = 0;
 	g_HasPendingJump    = false;
+	ClearLockedMatchSelectionLocked();
 	g_IsFocused         = false;
 	g_EditSyncedQuery.clear();
 	g_SearchPlaceholder   = L"Search";
@@ -233,11 +341,16 @@ void ResetSearchState() {
 	g_TabRenameText.clear();
 	g_ScrollbarDragMode.store(static_cast<uint8_t>(ScrollbarDragMode::None), std::memory_order_release);
 	g_ScrollbarDragGrabOffsetY = 0;
-	g_GridTooltipCache.clear();
-	g_GridTooltipCacheTickMs = 0;
-	g_CurrentLayout     = SearchBarLayout{};
-	g_LastRenderTickMs  = 0;
-	g_LastTabSwitchTickMs = 0;
+	g_CurrentLayout            = SearchBarLayout{};
+	g_ActiveBankPanelAddr.store(0, std::memory_order_release);
+	g_LastRenderTickMs       = 0;
+	g_LastTabSwitchTickMs    = 0;
+	g_XInputPollCache               = XInputPollCache{};
+	g_PrevControllerADown           = false;
+	g_HoverWasSuppressed.store(false, std::memory_order_release);
+	ResetControllerFlyoutCursorState(g_ControllerFlyoutCursor);
+	g_ControllerLastStickStepTickMs = 0;
+	g_ControllerLastStickDir        = 0;
 }
 
 // Helpers for looking up and updating client-side custom tab names (caller holds g_StateMutex)
@@ -348,13 +461,13 @@ void LoadPersistedConfig(const D2RL::PluginContext* ctx) noexcept {
 			cfg = ParseStashSearchConfig(std::string_view(buf, len), false);
 		}
 	}
+	g_SearchCarriedItems.store(cfg.searchCarriedItems, std::memory_order_release);
+	g_SearchOtherCharacters.store(cfg.searchOtherCharacters, std::memory_order_release);
 	std::lock_guard<std::mutex> lock(g_StateMutex);
 	g_PersistedPagePickerOpen = cfg.tabFlyoutExpanded;
 	g_PagePickerOpen          = cfg.tabFlyoutExpanded;
 	g_CustomPersonalTabName   = std::move(cfg.personalTabName);
 	g_CustomSharedTabNames    = std::move(cfg.sharedTabNames);
-	g_SearchCarriedItems.store(cfg.searchCarriedItems, std::memory_order_release);
-	g_SearchOtherCharacters.store(cfg.searchOtherCharacters, std::memory_order_release);
 }
 
 void SavePersistedConfig(const D2RL::PluginContext* ctx, const StashSearchConfig& cfg) noexcept {
@@ -633,15 +746,20 @@ auto HandleEnterKey() -> bool {
 				unfocus          = true;
 			} else if (slashCmd.state == SlashCommandState::None) {
 				if (g_SelectedIndex < g_Matches.size() && g_Matches[g_SelectedIndex].hasTarget) {
-					g_PendingJumpIsShared   = g_Matches[g_SelectedIndex].target.isShared;
-					g_PendingJumpPageIndex  = g_Matches[g_SelectedIndex].target.pageIndex;
+					const auto& entry       = g_Matches[g_SelectedIndex];
+					g_PendingJumpIsShared   = entry.target.isShared;
+					g_PendingJumpPageIndex  = entry.target.pageIndex;
 					g_PendingJumpClearFlag  = false;
 					g_PendingJumpRetryCount = 0;
 					g_HasPendingJump        = true;
+					g_LockedMatchActive      = true;
+					g_LockedMatchTarget      = entry.target;
+					g_LockedMatchShortName   = entry.shortName;
+					g_LockedMatchFullTooltip = entry.fullTooltip;
 					if (g_PendingJumpIsShared) {
 						CenterPagePickerOnSharedPageLocked(static_cast<size_t>(g_PendingJumpPageIndex));
 					}
-					// Keep g_QueryText intact so the matching item stays highlighted on the target page!
+					// Keep g_QueryText intact and isolate highlight to the selected dropdown item on the target page
 					g_IsFocused = false;
 					g_EditSyncedQuery.clear();
 					g_ImeCompositionText.clear();
@@ -1186,9 +1304,15 @@ auto HandleMouseClick(int clientX, int clientY) -> bool {
 			g_PersistedPagePickerOpen = g_PagePickerOpen;
 			g_PagePickerScrollRow     = 0;
 			g_PendingCenterPagePicker = false;
+			OnControllerFlyoutToggled(
+				g_ControllerFlyoutCursor,
+				g_CurrentLayout,
+				g_PagePickerOpen,
+				POINT{ clientX, clientY });
 			saveConfig                = true;
 			consumed                  = true;
 		} else if (g_CurrentLayout.searchBox.Contains(clientX, clientY)) {
+			ClearLockedMatchSelectionLocked();
 			g_IsFocused = true;
 			g_EditSyncedQuery.clear();
 			if (g_QueryText.empty()) {
@@ -1272,6 +1396,10 @@ auto HandleMouseClick(int clientX, int clientY) -> bool {
 					g_PendingJumpClearFlag  = false;
 					g_PendingJumpRetryCount = 0;
 					g_HasPendingJump        = true;
+					g_LockedMatchActive      = true;
+					g_LockedMatchTarget      = entry.target;
+					g_LockedMatchShortName   = entry.shortName;
+					g_LockedMatchFullTooltip = entry.fullTooltip;
 					if (entry.target.isShared) {
 						CenterPagePickerOnSharedPageLocked(static_cast<size_t>(entry.target.pageIndex));
 					}
@@ -1757,9 +1885,10 @@ auto CheckAndExpireInactivePanel() -> bool {
 		g_PendingWheelSteps       = 0;
 		g_ScrollbarDragMode.store(static_cast<uint8_t>(ScrollbarDragMode::None), std::memory_order_release);
 		g_ScrollbarDragGrabOffsetY = 0;
-		g_GridTooltipCache.clear();
-		g_GridTooltipCacheTickMs = 0;
-		g_CurrentLayout       = SearchBarLayout{};
+		g_GridTooltipCacheInvalidated.store(true, std::memory_order_release);
+		g_CurrentLayout = SearchBarLayout{};
+		g_ActiveBankPanelAddr.store(0, std::memory_order_release);
+		(void)UpdateControllerOverlayAPressLatch(g_ControllerFlyoutCursor, false);
 		g_LastRenderTickMs    = 0;
 	}
 	g_WorkerFocusRequested.store(false, std::memory_order_release);
@@ -1906,19 +2035,79 @@ void StopInputWorkerThread() noexcept {
 	g_WorkerThreadId.store(0, std::memory_order_release);
 }
 
-// Adds a match row or bumps the "× N" count of an identical row. target == nullptr marks a
-// display-only row (no stash page to jump to); those only merge with other display-only rows.
-void AddOrMergeMatch(
-	std::wstring_view        shortName,
-	std::wstring_view        hoverItemName,
-	std::wstring_view        shortTabSuffix,
-	std::wstring_view        fullTabSuffix,
-	const StashPageTarget*   target,
-	std::vector<MatchEntry>& outMatches) {
+namespace {
+
+struct StashPageScanTarget {
+	uintptr_t       inventoryPtr = 0;
+	std::wstring    shortTabSuffix;
+	std::wstring    fullTabSuffix;
+	StashPageTarget target{};
+};
+
+struct DuplicateGroupSlot {
+	uintptr_t firstUnit = 0;
+	size_t    count     = 0;
+};
+
+[[nodiscard]] constexpr auto MixItemFingerprint(uint64_t x) noexcept -> uint64_t {
+	x ^= x >> 30;
+	x *= 0xBF58476D1CE4E5B9ULL;
+	x ^= x >> 27;
+	x *= 0x94D049BB133111EBULL;
+	x ^= x >> 31;
+	return x;
+}
+
+} // namespace
+
+// 0x37E0: Inspects one item, deduplicating identical labels + affix tooltips on the same tab/page.
+// target == nullptr marks a display-only row (inventory, cube, worn...) with no stash page to jump to;
+// those only merge with other display-only rows.
+void ProcessInventoryItem(
+	uintptr_t                            itemUnit,
+	std::wstring_view                    normalizedQuery,
+	std::wstring_view                    shortTabSuffix,
+	std::wstring_view                    fullTabSuffix,
+	const StashPageTarget*               target,
+	const std::unordered_set<uintptr_t>* duplicateUnits,
+	bool                                 populateDuplicateKey,
+	std::vector<MatchEntry>&             outMatches) {
+	if (itemUnit == 0) {
+		return;
+	}
+	std::wstring              fullTooltip;
+	std::wstring              shortName;
+	std::wstring              fullNameLine;
+	std::vector<std::wstring> tooltipLines;
+	size_t                    headerLineCount = 1;
+	BuildItemFullTooltipText(
+		itemUnit,
+		fullTooltip,
+		shortName,
+		&fullNameLine,
+		fullTabSuffix,
+		&tooltipLines,
+		&headerLineCount);
+	const bool isDuplicate =
+		(duplicateUnits != nullptr) && (duplicateUnits->find(itemUnit) != duplicateUnits->end());
+	if (fullTooltip.empty() || !DoesItemMatchQuery(itemUnit, normalizedQuery, fullTooltip, isDuplicate)) {
+		return;
+	}
+	const bool matchedWithoutDupe =
+		populateDuplicateKey &&
+		(!isDuplicate || DoesItemMatchQuery(itemUnit, normalizedQuery, fullTooltip, false));
+
+	const std::wstring_view hoverItemName = fullNameLine.empty() ? std::wstring_view(shortName) : std::wstring_view(fullNameLine);
+
 	std::wstring baseLabel;
 	baseLabel.reserve(shortName.size() + shortTabSuffix.size());
 	baseLabel.append(shortName);
 	baseLabel.append(shortTabSuffix);
+
+	std::wstring fullHoverBase;
+	fullHoverBase.reserve(hoverItemName.size() + fullTabSuffix.size());
+	fullHoverBase.append(hoverItemName);
+	fullHoverBase.append(fullTabSuffix);
 
 	const bool displayOnly = (target == nullptr);
 	for (auto& existing : outMatches) {
@@ -1927,7 +2116,114 @@ void AddOrMergeMatch(
 						: (existing.hasTarget &&
 						   existing.target.isShared == target->isShared &&
 						   existing.target.pageIndex == target->pageIndex);
-		if (sameDestination && existing.baseLabel == baseLabel) {
+		if (sameDestination &&
+			existing.baseLabel == baseLabel &&
+			existing.tooltipLines == tooltipLines) {
+			++existing.count;
+			existing.matchedWithoutDuplicate = existing.matchedWithoutDuplicate || matchedWithoutDupe;
+			if (populateDuplicateKey) {
+				existing.matchedUnits.push_back(itemUnit);
+			}
+			const std::wstring countStr = L" \x00D7 " + std::to_wstring(existing.count);
+			existing.displayText        = shortName + countStr + std::wstring(shortTabSuffix);
+			existing.hoverText          = std::wstring(hoverItemName) + countStr + std::wstring(fullTabSuffix);
+			if (!existing.tooltipLines.empty()) {
+				existing.tooltipLines[0] = existing.hoverText;
+			}
+			return;
+		}
+	}
+
+	if (outMatches.size() < kMaxMatches) {
+		MatchEntry entry{};
+		entry.displayText             = baseLabel;
+		entry.count                   = 1;
+		if (!displayOnly) {
+			entry.target    = *target;
+			entry.hasTarget = true;
+		}
+		entry.displayOnly             = displayOnly;
+		entry.matchedWithoutDuplicate = matchedWithoutDupe;
+		if (populateDuplicateKey) {
+			entry.duplicateKey = SafeReadItemDuplicateKey(itemUnit, shortName);
+			entry.matchedUnits.push_back(itemUnit);
+		}
+		entry.shortName       = std::move(shortName);
+		entry.fullTooltip     = std::move(fullTooltip);
+		entry.baseLabel       = std::move(baseLabel);
+		entry.hoverText       = std::move(fullHoverBase);
+		entry.shortTabSuffix  = std::wstring(shortTabSuffix);
+		entry.tooltipLines    = std::move(tooltipLines);
+		entry.headerLineCount = headerLineCount;
+		outMatches.push_back(std::move(entry));
+	}
+}
+
+// 0x9A90: Walks an Inventory* item linked list (up to 2048 items), filtering for stash page (location == 4)
+void ScanInventoryItems(
+	uintptr_t                            inventoryPtr,
+	std::wstring_view                    normalizedQuery,
+	std::wstring_view                    shortTabSuffix,
+	std::wstring_view                    fullTabSuffix,
+	const StashPageTarget&               target,
+	const std::unordered_set<uintptr_t>* duplicateUnits,
+	bool                                 populateDuplicateKey,
+	std::vector<MatchEntry>&             outMatches) {
+	if (inventoryPtr == 0) {
+		return;
+	}
+	uintptr_t item = 0;
+	if (!SafeCall_PtrFromPtr(g_Native.fnInventoryGetFirstItem, inventoryPtr, &item)) {
+		return;
+	}
+	std::unordered_set<uintptr_t> visitedItems;
+	size_t                        steps = 0;
+	while (item != 0 && steps < 2048) {
+		if (!visitedItems.insert(item).second) {
+			break;
+		}
+		uint8_t locPage = 0;
+		if (!SafeCall_U8FromPtr(g_Native.fnItemGetLocationPage, item, &locPage)) {
+			break;
+		}
+		if (locPage == kItemLocationStashPage) {
+			ProcessInventoryItem(
+				item,
+				normalizedQuery,
+				shortTabSuffix,
+				fullTabSuffix,
+				&target,
+				duplicateUnits,
+				populateDuplicateKey,
+				outMatches);
+			if (outMatches.size() >= kMaxMatches) {
+				break;
+			}
+		}
+		uintptr_t nextItem = 0;
+		if (!SafeCall_PtrFromPtr(g_Native.fnItemGetNextInventoryItem, item, &nextItem)) {
+			break;
+		}
+		item = nextItem;
+		++steps;
+	}
+}
+
+// Adds a display-only row for a snapshot item (no live unit, no stash page), or bumps the
+// "x N" count of an identical display-only row.
+void AddOrMergeSnapshotMatch(
+	std::wstring_view        shortName,
+	std::wstring_view        hoverItemName,
+	std::wstring_view        shortTabSuffix,
+	std::wstring_view        fullTabSuffix,
+	std::vector<MatchEntry>& outMatches) {
+	std::wstring baseLabel;
+	baseLabel.reserve(shortName.size() + shortTabSuffix.size());
+	baseLabel.append(shortName);
+	baseLabel.append(shortTabSuffix);
+
+	for (auto& existing : outMatches) {
+		if (existing.displayOnly && existing.tooltipLines.empty() && existing.baseLabel == baseLabel) {
 			++existing.count;
 			const std::wstring countStr = L" \x00D7 " + std::to_wstring(existing.count);
 			existing.displayText        = std::wstring(shortName) + countStr + std::wstring(shortTabSuffix);
@@ -1937,46 +2233,16 @@ void AddOrMergeMatch(
 	}
 
 	if (outMatches.size() < kMaxMatches) {
-		std::wstring fullHoverBase;
-		fullHoverBase.reserve(hoverItemName.size() + fullTabSuffix.size());
-		fullHoverBase.append(hoverItemName);
-		fullHoverBase.append(fullTabSuffix);
-
 		MatchEntry entry{};
 		entry.displayText    = baseLabel;
 		entry.count          = 1;
-		if (!displayOnly) {
-			entry.target    = *target;
-			entry.hasTarget = true;
-		}
-		entry.displayOnly    = displayOnly;
+		entry.displayOnly    = true;
+		entry.shortName      = std::wstring(shortName);
 		entry.baseLabel      = std::move(baseLabel);
-		entry.hoverText      = std::move(fullHoverBase);
+		entry.hoverText      = std::wstring(hoverItemName) + std::wstring(fullTabSuffix);
 		entry.shortTabSuffix = std::wstring(shortTabSuffix);
 		outMatches.push_back(std::move(entry));
 	}
-}
-
-// 0x37E0: Inspects one stash item, deduplicating identical labels on the same tab/page
-void ProcessInventoryItem(
-	uintptr_t                itemUnit,
-	std::wstring_view        normalizedQuery,
-	std::wstring_view        shortTabSuffix,
-	std::wstring_view        fullTabSuffix,
-	const StashPageTarget*   target,
-	std::vector<MatchEntry>& outMatches) {
-	if (itemUnit == 0) {
-		return;
-	}
-	std::wstring fullTooltip;
-	std::wstring shortName;
-	std::wstring fullNameLine;
-	BuildItemFullTooltipText(itemUnit, fullTooltip, shortName, &fullNameLine);
-	if (fullTooltip.empty() || !EvaluateSearchQuery(normalizedQuery, fullTooltip)) {
-		return;
-	}
-	const std::wstring_view hoverItemName = fullNameLine.empty() ? std::wstring_view(shortName) : std::wstring_view(fullNameLine);
-	AddOrMergeMatch(shortName, hoverItemName, shortTabSuffix, fullTabSuffix, target, outMatches);
 }
 
 // Reads UnitAny::dwAnimMode (unit + 0x0C); for items this is the item mode
@@ -2271,7 +2537,7 @@ void ScanCarriedItems(uintptr_t playerInv, std::wstring_view normalizedQuery, st
 		if (source != ItemSource::PersonalStash) {
 			const std::wstring shortSuffix = L" - " + std::wstring(ItemSourceShortLabel(source));
 			const std::wstring fullSuffix  = L" - " + std::wstring(ItemSourceFullLabel(source));
-			ProcessInventoryItem(item, normalizedQuery, shortSuffix, fullSuffix, nullptr, outMatches);
+			ProcessInventoryItem(item, normalizedQuery, shortSuffix, fullSuffix, nullptr, nullptr, false, outMatches);
 		}
 		return outMatches.size() < kMaxMatches;
 	});
@@ -2308,53 +2574,67 @@ void ScanOtherCharacterSnapshots(
 				L" - " + file.snapshot.name + L" (" + std::wstring(ItemSourceShortLabel(item.source)) + L")";
 			const std::wstring fullSuffix =
 				L" - " + file.snapshot.name + L", " + std::wstring(ItemSourceFullLabel(item.source)) + L" (snapshot " + age + L")";
-			AddOrMergeMatch(shortName, hoverName, shortSuffix, fullSuffix, nullptr, outMatches);
+			AddOrMergeSnapshotMatch(shortName, hoverName, shortSuffix, fullSuffix, outMatches);
 		}
 	}
 }
 
-// 0x9A90: Walks an Inventory* item linked list (up to 2048 items), filtering for stash page (location == 4)
-void ScanInventoryItems(
-	uintptr_t                inventoryPtr,
-	std::wstring_view        normalizedQuery,
-	std::wstring_view        shortTabSuffix,
-	std::wstring_view        fullTabSuffix,
-	const StashPageTarget&   target,
-	std::vector<MatchEntry>& outMatches) {
-	if (inventoryPtr == 0) {
-		return;
-	}
-	uintptr_t item = 0;
-	if (!SafeCall_PtrFromPtr(g_Native.fnInventoryGetFirstItem, inventoryPtr, &item)) {
-		return;
-	}
-	std::unordered_set<uintptr_t> visitedItems;
-	size_t                        steps = 0;
-	while (item != 0 && steps < 2048) {
-		if (!visitedItems.insert(item).second) {
-			break;
+auto CollectDuplicateStashItemUnits(const std::vector<StashPageScanTarget>& pages) -> std::unordered_set<uintptr_t> {
+	std::unordered_set<uintptr_t>                                               duplicateUnits;
+	std::unordered_set<uintptr_t>                                               globalVisitedUnits;
+	std::unordered_map<ItemDuplicateKey, DuplicateGroupSlot, ItemDuplicateKeyHash> groups;
+
+	for (const auto& page : pages) {
+		if (page.inventoryPtr == 0) {
+			continue;
 		}
-		uint8_t locPage = 0;
-		if (!SafeCall_U8FromPtr(g_Native.fnItemGetLocationPage, item, &locPage)) {
-			break;
+		uintptr_t item = 0;
+		if (!SafeCall_PtrFromPtr(g_Native.fnInventoryGetFirstItem, page.inventoryPtr, &item)) {
+			continue;
 		}
-		if (locPage == kItemLocationStashPage) {
-			ProcessInventoryItem(item, normalizedQuery, shortTabSuffix, fullTabSuffix, &target, outMatches);
-			if (outMatches.size() >= kMaxMatches) {
+		std::unordered_set<uintptr_t> pageVisited;
+		size_t                        steps = 0;
+		while (item != 0 && steps < 2048) {
+			if (!pageVisited.insert(item).second) {
 				break;
 			}
+			uint8_t locPage = 0;
+			if (!SafeCall_U8FromPtr(g_Native.fnItemGetLocationPage, item, &locPage)) {
+				break;
+			}
+			if (locPage == kItemLocationStashPage && globalVisitedUnits.insert(item).second) {
+				ItemDuplicateKey key = SafeReadItemDuplicateKey(item);
+				if (key.IsValid()) {
+					DuplicateGroupSlot& slot = groups[std::move(key)];
+					++slot.count;
+					if (slot.count == 1) {
+						slot.firstUnit = item;
+					} else if (slot.count == 2) {
+						duplicateUnits.insert(slot.firstUnit);
+						duplicateUnits.insert(item);
+					} else {
+						duplicateUnits.insert(item);
+					}
+				}
+			}
+			uintptr_t nextItem = 0;
+			if (!SafeCall_PtrFromPtr(g_Native.fnItemGetNextInventoryItem, item, &nextItem)) {
+				break;
+			}
+			item = nextItem;
+			++steps;
 		}
-		uintptr_t nextItem = 0;
-		if (!SafeCall_PtrFromPtr(g_Native.fnItemGetNextInventoryItem, item, &nextItem)) {
-			break;
-		}
-		item = nextItem;
-		++steps;
 	}
+	return duplicateUnits;
 }
 
 // 0x3E90: Builds the full vector of MatchEntry results for the current query
-auto BuildSearchResults(std::wstring_view rawQuery) -> std::vector<MatchEntry> {
+auto BuildSearchResults(
+	std::wstring_view             rawQuery,
+	std::unordered_set<uintptr_t>* outDuplicateUnits) -> std::vector<MatchEntry> {
+	if (outDuplicateUnits != nullptr) {
+		outDuplicateUnits->clear();
+	}
 	std::vector<MatchEntry> results;
 	const std::wstring      normalizedQuery = NormalizeWideTooltipLine(rawQuery);
 	if (normalizedQuery.empty()) {
@@ -2406,12 +2686,18 @@ auto BuildSearchResults(std::wstring_view rawQuery) -> std::vector<MatchEntry> {
 		return results;
 	}
 
-	// Scan Personal Stash ("<ShortName> - P" in row, "<FullName> - Personal" in hover tooltip)
-	const std::wstring personalShortSuffix =
-		customPersonalName.empty() ? L" - P" : (L" - P (" + customPersonalName + L")");
-	const std::wstring personalFullSuffix =
-		customPersonalName.empty() ? (L" - " + personalLabel) : (L" - " + personalLabel + L" (" + customPersonalName + L")");
-	ScanInventoryItems(playerInv, normalizedQuery, personalShortSuffix, personalFullSuffix, StashPageTarget{ false, 0 }, results);
+	std::vector<StashPageScanTarget> pages;
+	pages.reserve(32);
+
+	// Personal Stash ("<ShortName> - P" in row, "<FullName> - Personal" in hover tooltip)
+	pages.push_back(StashPageScanTarget{
+		.inventoryPtr = playerInv,
+		.shortTabSuffix =
+			customPersonalName.empty() ? L" - P" : (L" - P (" + customPersonalName + L")"),
+		.fullTabSuffix =
+			customPersonalName.empty() ? (L" - " + personalLabel) : (L" - " + personalLabel + L" (" + customPersonalName + L")"),
+		.target = StashPageTarget{ false, 0 },
+	});
 
 	// Walk Shared Stash linked list at [playerInv + 0x68]
 	uint64_t sharedNode = 0;
@@ -2419,7 +2705,7 @@ auto BuildSearchResults(std::wstring_view rawQuery) -> std::vector<MatchEntry> {
 		std::unordered_set<uintptr_t> visitedNodes(512);
 		uint64_t                      sharedIndex = 0;
 		size_t                        nodeSteps   = 0;
-		while (sharedNode != 0 && nodeSteps < 256 && results.size() < kMaxMatches) {
+		while (sharedNode != 0 && nodeSteps < 256) {
 			if (!visitedNodes.insert(static_cast<uintptr_t>(sharedNode)).second) {
 				break;
 			}
@@ -2450,21 +2736,18 @@ auto BuildSearchResults(std::wstring_view rawQuery) -> std::vector<MatchEntry> {
 								break;
 							}
 						}
-						const std::wstring sharedShortSuffix =
-							customTabName.empty()
-								? (L" - Sh." + std::to_wstring(sharedIndex))
-								: (L" - Sh." + std::to_wstring(sharedIndex) + L" (" + customTabName + L")");
-						const std::wstring sharedFullSuffix =
-							customTabName.empty()
-								? (L" - " + sharedLabel + L" " + std::to_wstring(sharedIndex))
-								: (L" - " + sharedLabel + L" " + std::to_wstring(sharedIndex) + L" (" + customTabName + L")");
-						ScanInventoryItems(
-							sharedInv,
-							normalizedQuery,
-							sharedShortSuffix,
-							sharedFullSuffix,
-							StashPageTarget{ true, tabIdx0 },
-							results);
+						pages.push_back(StashPageScanTarget{
+							.inventoryPtr = sharedInv,
+							.shortTabSuffix =
+								customTabName.empty()
+									? (L" - Sh." + std::to_wstring(sharedIndex))
+									: (L" - Sh." + std::to_wstring(sharedIndex) + L" (" + customTabName + L")"),
+							.fullTabSuffix =
+								customTabName.empty()
+									? (L" - " + sharedLabel + L" " + std::to_wstring(sharedIndex))
+									: (L" - " + sharedLabel + L" " + std::to_wstring(sharedIndex) + L" (" + customTabName + L")"),
+							.target = StashPageTarget{ true, tabIdx0 },
+						});
 					}
 				}
 			}
@@ -2480,6 +2763,43 @@ auto BuildSearchResults(std::wstring_view rawQuery) -> std::vector<MatchEntry> {
 		}
 	}
 
+	const DuplicateQueryFlags     dupeFlags = InspectDuplicateQueryTerms(normalizedQuery);
+	std::unordered_set<uintptr_t> localDuplicateUnits;
+	if (dupeFlags.usesDuplicateTerm) {
+		localDuplicateUnits = CollectDuplicateStashItemUnits(pages);
+	}
+
+	const std::unordered_set<uintptr_t>* const dupeSetPtr =
+		dupeFlags.usesDuplicateTerm ? &localDuplicateUnits : nullptr;
+	for (const auto& page : pages) {
+		if (results.size() >= kMaxMatches) {
+			break;
+		}
+		ScanInventoryItems(
+			page.inventoryPtr,
+			normalizedQuery,
+			page.shortTabSuffix,
+			page.fullTabSuffix,
+			page.target,
+			dupeSetPtr,
+			dupeFlags.hasPositiveDuplicateTerm,
+			results);
+	}
+
+	if (dupeFlags.hasPositiveDuplicateTerm && !results.empty()) {
+		std::vector<uintptr_t> prunedUnits;
+		PruneSingletonDuplicateMatches(results, &prunedUnits);
+		for (const uintptr_t prunedUnit : prunedUnits) {
+			localDuplicateUnits.erase(prunedUnit);
+		}
+		for (auto& entry : results) {
+			std::vector<uintptr_t>{}.swap(entry.matchedUnits);
+		}
+		if (!results.empty()) {
+			SortDuplicateMatchEntries(results);
+		}
+	}
+
 	// Display-only rows: the logged-in character's inventory/cube/equipped/belt items,
 	// then items from other characters' snapshots. Stash rows above stay first.
 	if (g_SearchCarriedItems.load(std::memory_order_acquire) && results.size() < kMaxMatches) {
@@ -2489,6 +2809,10 @@ auto BuildSearchResults(std::wstring_view rawQuery) -> std::vector<MatchEntry> {
 		std::wstring currentName;
 		(void)ReadPlayerCharacterName(playerUnit, currentName);
 		ScanOtherCharacterSnapshots(currentName, normalizedQuery, GetTickCount64(), results);
+	}
+
+	if (outDuplicateUnits != nullptr) {
+		*outDuplicateUnits = std::move(localDuplicateUnits);
 	}
 
 	if (results.empty()) {
@@ -2502,17 +2826,38 @@ auto BuildSearchResults(std::wstring_view rawQuery) -> std::vector<MatchEntry> {
 }
 
 // 0xDD50 & 0xE460: Refreshes search results when dirty, generation changed, or 3s timer elapsed
-void CommitSearchResults(std::vector<MatchEntry>&& newMatches, uint64_t generation, uint64_t nowTickMs) {
+void CommitSearchResults(
+	std::vector<MatchEntry>&&       newMatches,
+	std::unordered_set<uintptr_t>&& newDuplicateUnits,
+	uint64_t                        generation,
+	uint64_t                        nowTickMs) {
 	std::lock_guard<std::mutex> lock(g_StateMutex);
 	if (g_QueryGeneration.load(std::memory_order_acquire) != generation) {
 		return;
 	}
 	const uint64_t prevGen = g_BuiltGeneration;
 	g_Matches              = std::move(newMatches);
+	g_DuplicateItemUnits   = std::move(newDuplicateUnits);
 	if (generation == prevGen) {
+		if (g_LockedMatchActive) {
+			bool lockedStillPresent = false;
+			for (const auto& m : g_Matches) {
+				if (m.hasTarget &&
+					m.target == g_LockedMatchTarget &&
+					m.shortName == g_LockedMatchShortName &&
+					(g_LockedMatchFullTooltip.empty() || m.fullTooltip == g_LockedMatchFullTooltip)) {
+					lockedStillPresent = true;
+					break;
+				}
+			}
+			if (!lockedStillPresent) {
+				ClearLockedMatchSelectionLocked();
+			}
+		}
 		const size_t cap = g_CurrentLayout.visibleRowCount != 0 ? g_CurrentLayout.visibleRowCount : kMaxDropdownVisibleRows;
 		AdjustDropdownSelectionAndScroll(g_Matches.size(), cap, g_SelectedIndex, g_SelectedIndex, g_ScrollOffset);
 	} else {
+		ClearLockedMatchSelectionLocked();
 		g_SelectedIndex = 0;
 		bool found      = false;
 		for (size_t i = 0; i < g_Matches.size(); ++i) {
@@ -2535,15 +2880,21 @@ void CommitSearchResults(std::vector<MatchEntry>&& newMatches, uint64_t generati
 void RefreshMatchesIfNeeded(uint64_t nowTickMs) {
 	const uint64_t gen = g_QueryGeneration.load(std::memory_order_acquire);
 	std::wstring   querySnapshot;
+	uint64_t       builtGen      = 0;
+	uint64_t       lastBuildTick = 0;
 	{
 		std::lock_guard<std::mutex> lock(g_StateMutex);
 		querySnapshot = g_QueryText;
+		builtGen      = g_BuiltGeneration;
+		lastBuildTick = g_LastBuildTickMs;
 	}
-	const bool periodicDue = !querySnapshot.empty() &&
-							 (g_LastBuildTickMs == 0 || (nowTickMs - g_LastBuildTickMs) >= kPeriodicRefreshMs);
-	if (g_MatchesDirty.load(std::memory_order_acquire) || gen != g_BuiltGeneration || periodicDue) {
-		std::vector<MatchEntry> built = BuildSearchResults(querySnapshot);
-		CommitSearchResults(std::move(built), gen, nowTickMs);
+	const bool periodicDue =
+		!querySnapshot.empty() &&
+		(lastBuildTick == 0 || nowTickMs < lastBuildTick || (nowTickMs - lastBuildTick) >= kPeriodicRefreshMs);
+	if (g_MatchesDirty.load(std::memory_order_acquire) || gen != builtGen || periodicDue) {
+		std::unordered_set<uintptr_t> duplicateUnits;
+		std::vector<MatchEntry>       built = BuildSearchResults(querySnapshot, &duplicateUnits);
+		CommitSearchResults(std::move(built), std::move(duplicateUnits), gen, nowTickMs);
 	}
 }
 
@@ -2915,6 +3266,128 @@ auto ComputeWidgetHierarchyScale(uintptr_t widget, float* outTotalScale) noexcep
 	return true;
 }
 
+// Detects item additions, removals, or in-place identification on the currently open stash page
+// so search results and duplicate highlights refresh immediately without waiting for the 3s timer.
+void InvalidateMatchesOnActiveStashChange(uintptr_t bankPanel) {
+	if (bankPanel == 0) {
+		return;
+	}
+	bool hasActiveQuery = false;
+	{
+		std::lock_guard<std::mutex> lock(g_StateMutex);
+		hasActiveQuery = !g_QueryText.empty();
+	}
+	if (!hasActiveQuery) {
+		g_HasTrackedActiveStashPage = false;
+		return;
+	}
+	if (g_Native.fnBankPanelGetSelectedTab != 0) {
+		uint8_t selectedTab = 0;
+		if (SafeCall_BoolFromPtr(g_Native.fnBankPanelGetSelectedTab, bankPanel, &selectedTab) && selectedTab > 1) {
+			return;
+		}
+	}
+
+	uint64_t sharedPageCount  = 0;
+	int64_t  activeSharedPage = -1;
+	GetSharedStashPageInfo(bankPanel, &sharedPageCount, &activeSharedPage);
+	StashPageTarget currentPage{};
+	currentPage.isShared  = (activeSharedPage >= 0);
+	currentPage.pageIndex = (activeSharedPage >= 0) ? static_cast<uint64_t>(activeSharedPage) : 0;
+
+	uintptr_t activeInv = 0;
+	if (!currentPage.isShared) {
+		uint32_t  localSlot  = 0;
+		uintptr_t playerUnit = 0;
+		if (!SafeCall_GetU32NoArg(g_Native.fnGetLocalPlayerSlot, &localSlot) ||
+			!SafeCall_PtrFromU32(g_Native.fnGetLocalPlayerUnit, localSlot, &playerUnit) ||
+			playerUnit == 0 ||
+			!SafeCall_PtrFromPtr(g_Native.fnGetUnitInventory, playerUnit, &activeInv)) {
+			return;
+		}
+	} else {
+		if (g_Native.ptrActiveSharedStashUnitId == nullptr) {
+			return;
+		}
+		uint32_t sharedUnitId = 0;
+		if (!SafeReadU32(g_Native.ptrActiveSharedStashUnitId, &sharedUnitId) ||
+			sharedUnitId == 0 ||
+			sharedUnitId == 0xFFFFFFFEu) {
+			return;
+		}
+		uintptr_t sharedUnit = 0;
+		if (!SafeCall_PtrFromU32U32(g_Native.fnFindClientUnitByIdAndType, sharedUnitId, 0, &sharedUnit) ||
+			sharedUnit == 0 ||
+			!SafeCall_PtrFromPtr(g_Native.fnGetUnitInventory, sharedUnit, &activeInv)) {
+			return;
+		}
+	}
+	if (activeInv == 0) {
+		return;
+	}
+
+	uintptr_t item = 0;
+	if (!SafeCall_PtrFromPtr(g_Native.fnInventoryGetFirstItem, activeInv, &item)) {
+		return;
+	}
+
+	size_t                        itemCount = 0;
+	uint64_t                      itemsXor  = 0;
+	uint64_t                      itemsAdd  = 0;
+	std::unordered_set<uintptr_t> visitedItems;
+	size_t                        steps = 0;
+	while (item != 0 && steps < 2048) {
+		if (!visitedItems.insert(item).second) {
+			break;
+		}
+		uint8_t locPage = 0;
+		if (!SafeCall_U8FromPtr(g_Native.fnItemGetLocationPage, item, &locPage)) {
+			break;
+		}
+		if (locPage == kItemLocationStashPage) {
+			int32_t  itemQuality   = 0;
+			uint32_t itemFlags     = 0;
+			uint32_t itemClassId   = 0;
+			uint32_t itemFileIndex = 0;
+			(void)SafeReadItemIdentity(item, &itemQuality, &itemFlags, &itemClassId, &itemFileIndex);
+			uint64_t mixed = MixItemFingerprint(static_cast<uint64_t>(item));
+			mixed ^= MixItemFingerprint(
+				(static_cast<uint64_t>(itemFlags) << 32) ^
+				static_cast<uint64_t>(itemClassId));
+			mixed ^= MixItemFingerprint(
+				(static_cast<uint64_t>(static_cast<uint32_t>(itemQuality)) << 32) ^
+				static_cast<uint64_t>(itemFileIndex));
+			++itemCount;
+			itemsXor ^= mixed;
+			itemsAdd += mixed;
+		}
+		uintptr_t nextItem = 0;
+		if (!SafeCall_PtrFromPtr(g_Native.fnItemGetNextInventoryItem, item, &nextItem)) {
+			break;
+		}
+		item = nextItem;
+		++steps;
+	}
+
+	if (g_HasTrackedActiveStashPage && currentPage == g_TrackedActiveStashPage) {
+		if (itemCount != g_TrackedActivePageItemCount ||
+			itemsXor != g_TrackedActivePageItemsXor ||
+			itemsAdd != g_TrackedActivePageItemsAdd) {
+			g_TrackedActivePageItemCount = itemCount;
+			g_TrackedActivePageItemsXor  = itemsXor;
+			g_TrackedActivePageItemsAdd  = itemsAdd;
+			g_GridTooltipCacheTickMs     = 0;
+			g_MatchesDirty.store(true, std::memory_order_release);
+		}
+	} else {
+		g_HasTrackedActiveStashPage  = true;
+		g_TrackedActiveStashPage     = currentPage;
+		g_TrackedActivePageItemCount = itemCount;
+		g_TrackedActivePageItemsXor  = itemsXor;
+		g_TrackedActivePageItemsAdd  = itemsAdd;
+	}
+}
+
 // 0x68D0: Dims non-matching stash items and highlights matching items in the "grid" child widget
 void DimNonMatchingGridItems(uintptr_t bankPanel) {
 	if (bankPanel == 0) {
@@ -2926,15 +3399,35 @@ void DimNonMatchingGridItems(uintptr_t bankPanel) {
 			return;
 		}
 	}
-	std::wstring querySnapshot;
+	std::wstring                  querySnapshot;
+	bool                          lockedMatchActive = false;
+	StashPageTarget               lockedMatchTarget{};
+	std::wstring                  lockedMatchShortName;
+	std::wstring                  lockedMatchFullTooltip;
+	std::unordered_set<uintptr_t> duplicateUnitsSnapshot;
 	{
 		std::lock_guard<std::mutex> lock(g_StateMutex);
-		querySnapshot = g_QueryText;
+		querySnapshot          = g_QueryText;
+		lockedMatchActive      = g_LockedMatchActive;
+		lockedMatchTarget      = g_LockedMatchTarget;
+		lockedMatchShortName   = g_LockedMatchShortName;
+		lockedMatchFullTooltip = g_LockedMatchFullTooltip;
+		if (!g_DuplicateItemUnits.empty()) {
+			duplicateUnitsSnapshot = g_DuplicateItemUnits;
+		}
 	}
 	const std::wstring normalizedQuery = NormalizeWideTooltipLine(querySnapshot);
 	if (normalizedQuery.empty() || ParseSlashPageCommand(querySnapshot).state != SlashCommandState::None) {
 		return;
 	}
+	const DuplicateQueryFlags dupeFlags = InspectDuplicateQueryTerms(normalizedQuery);
+
+	uint64_t sharedPageCount  = 0;
+	int64_t  activeSharedPage = -1;
+	GetSharedStashPageInfo(bankPanel, &sharedPageCount, &activeSharedPage);
+	StashPageTarget currentPage{};
+	currentPage.isShared  = (activeSharedPage >= 0);
+	currentPage.pageIndex = (activeSharedPage >= 0) ? static_cast<uint64_t>(activeSharedPage) : 0;
 
 	uintptr_t gridWidget = 0;
 	if (!SafeCall_FindChild(g_Native.fnWidgetFindChild, bankPanel, "grid", &gridWidget) || gridWidget == 0) {
@@ -2992,8 +3485,12 @@ void DimNonMatchingGridItems(uintptr_t bankPanel) {
 		return;
 	}
 
-	const uint64_t nowTickMs = GetTickCount64();
-	if (g_GridTooltipCacheTickMs == 0 || nowTickMs < g_GridTooltipCacheTickMs || (nowTickMs - g_GridTooltipCacheTickMs) > 1000) {
+	const uint64_t nowTickMs          = GetTickCount64();
+	const bool     invalidatedByState = g_GridTooltipCacheInvalidated.exchange(false, std::memory_order_acq_rel);
+	if (invalidatedByState ||
+		g_GridTooltipCacheTickMs == 0 ||
+		nowTickMs < g_GridTooltipCacheTickMs ||
+		(nowTickMs - g_GridTooltipCacheTickMs) > 1000) {
 		g_GridTooltipCache.clear();
 		g_GridTooltipCacheTickMs = nowTickMs;
 	}
@@ -3031,22 +3528,38 @@ void DimNonMatchingGridItems(uintptr_t bankPanel) {
 					}
 				}
 				if (!found) {
-					const std::wstring* cachedTooltip = nullptr;
+					const GridItemTooltipCacheEntry* cachedEntry = nullptr;
 					for (const auto& tc : g_GridTooltipCache) {
 						if (tc.itemUnit == itemUnit) {
-							cachedTooltip = &tc.fullTooltip;
+							cachedEntry = &tc;
 							break;
 						}
 					}
-					if (cachedTooltip == nullptr) {
+					if (cachedEntry == nullptr) {
 						std::wstring fullTooltip;
 						std::wstring shortName;
 						BuildItemFullTooltipText(itemUnit, fullTooltip, shortName);
-						g_GridTooltipCache.push_back({ itemUnit, std::move(fullTooltip) });
-						cachedTooltip = &g_GridTooltipCache.back().fullTooltip;
+						g_GridTooltipCache.push_back({ itemUnit, std::move(fullTooltip), std::move(shortName) });
+						cachedEntry = &g_GridTooltipCache.back();
 					}
-					if (!cachedTooltip->empty()) {
-						isMatch = DoesItemMatchQuery(itemUnit, normalizedQuery, *cachedTooltip);
+					if (!cachedEntry->fullTooltip.empty()) {
+						const bool isDuplicate =
+							dupeFlags.usesDuplicateTerm &&
+							(duplicateUnitsSnapshot.find(itemUnit) != duplicateUnitsSnapshot.end());
+						const bool queryMatched = DoesItemMatchQuery(
+							itemUnit,
+							normalizedQuery,
+							cachedEntry->fullTooltip,
+							isDuplicate);
+						isMatch = DoesItemMatchActiveFilter(
+							queryMatched,
+							cachedEntry->shortName,
+							currentPage,
+							lockedMatchActive,
+							lockedMatchTarget,
+							lockedMatchShortName,
+							cachedEntry->fullTooltip,
+							lockedMatchFullTooltip);
 					}
 					matchCache.push_back({ itemUnit, isMatch });
 				}
@@ -3131,20 +3644,37 @@ void DimNonMatchingGridItems(uintptr_t bankPanel) {
 	}
 }
 
-// Helper: Draws a crisp filled triangle chevron (down ▼ when !pointUp, up ▲ when pointUp) inside btnRect
-void DrawChevronIcon(const IntRect& btnRect, bool pointUp, const Color4f& color, float scale) noexcept {
+// Helper: Draws a crisp filled triangle chevron (right ▶ when !pointLeft, left ◀ when pointLeft) inside btnRect
+void DrawChevronIcon(const IntRect& btnRect, bool pointLeft, const Color4f& color, float scale) noexcept {
 	if (!btnRect.IsValid()) {
 		return;
 	}
-	const int halfW = std::clamp(ScaleBorderThickness(7, scale), 3, std::max(3, btnRect.width / 3));
+	const int halfH = std::clamp(ScaleBorderThickness(7, scale), 3, std::max(3, std::min(btnRect.width, btnRect.height) / 3));
 	const int cx    = btnRect.x + btnRect.width / 2;
 	const int cy    = btnRect.y + btnRect.height / 2;
-	const int topY  = cy - halfW / 2;
-	for (int i = 0; i <= halfW; ++i) {
-		const int spanHalf = halfW - i;
-		const int rowY     = pointUp ? (topY + (halfW - i)) : (topY + i);
-		const IntRect bar{ cx - spanHalf, rowY, spanHalf * 2 + 1, 1 };
+	const int leftX = cx - halfH / 2;
+	for (int i = 0; i <= halfH; ++i) {
+		const int spanHalf = halfH - i;
+		const int colX     = pointLeft ? (leftX + (halfH - i)) : (leftX + i);
+		const IntRect bar{ colX, cy - spanHalf, 1, spanHalf * 2 + 1 };
 		DrawFilledRect(bar, color);
+	}
+}
+
+// Helper: Draws a stacked Up (▲) and Down (▼) double-chevron indicator next to the controller Right Stick glyph
+void DrawUpDownChevrons(int centerX, int centerY, int halfW, int vGap, const Color4f& color) noexcept {
+	const int clampedHalfW = std::max(2, halfW);
+	const int halfGap      = std::max(1, vGap / 2);
+	const int upBaseY      = centerY - halfGap - 1;
+	const int downTopY     = centerY + (vGap - halfGap);
+	for (int i = 0; i <= clampedHalfW; ++i) {
+		// Up triangle (▲): apex at top (i = 0), widest at bottom (i = clampedHalfW)
+		const int upY = upBaseY - (clampedHalfW - i);
+		DrawFilledRect(IntRect{ centerX - i, upY, i * 2 + 1, 1 }, color);
+		// Down triangle (▼): widest at top (i = 0), apex at bottom (i = clampedHalfW)
+		const int downSpan = clampedHalfW - i;
+		const int downY    = downTopY + i;
+		DrawFilledRect(IntRect{ centerX - downSpan, downY, downSpan * 2 + 1, 1 }, color);
 	}
 }
 
@@ -3191,7 +3721,11 @@ void DrawSearchBoxWithRoundedTopRight(
 	// 3. Chevron button divider & triangle icon
 	if (btnRect.IsValid()) {
 		DrawFilledRect(IntRect{ btnRect.x, btnRect.y, T, btnRect.height }, borderColor);
-		DrawChevronIcon(btnRect, pagePickerOpen, kColorFocusedBorder, scale);
+		DrawChevronIcon(
+			btnRect,
+			ShouldPointFlyoutChevronLeft(pagePickerOpen),
+			kColorFocusedBorder,
+			scale);
 	}
 
 	// 4. Straight border edges (top-left to start of curve, bottom, left, and right below curve)
@@ -3334,11 +3868,28 @@ auto ComputeSearchBarLayout(
 		return layout;
 	}
 
-	layout.valid               = true;
-	layout.scale               = totalScale;
-	layout.searchBox           = IntRect{ boxX, boxY, boxW, boxH };
-	layout.pageButtonRect      = IntRect{ boxX + boxW - btnW, boxY, btnW, boxH };
-	layout.searchTextRect      = IntRect{ boxX + textPadX, boxY, boxW - btnW - textPadX * 2, boxH };
+	bool      stashNavInHeader = false;
+	uintptr_t stashNavWidget   = 0;
+	int32_t   stashNavPos[2]{};
+	if (anchor == 0 &&
+		SafeCall_FindChild(g_Native.fnWidgetFindChild, bankPanel, "StashNavigation", &stashNavWidget) &&
+		stashNavWidget != 0 &&
+		SafeCall_WidgetGetScreenPos(g_Native.fnWidgetGetScreenPos, stashNavWidget, stashNavPos)) {
+		stashNavInHeader = std::abs(stashNavPos[1] - screenPos[1]) <= ScaleBorderThickness(80, totalScale);
+	}
+	const bool isControllerLayout = stashNavInHeader || (anchor == 0 && SafeIsControllerMode());
+
+	layout.valid                 = true;
+	layout.collapsedToButtonOnly = isControllerLayout;
+	layout.scale                 = totalScale;
+	layout.pageButtonRect        = IntRect{ boxX + boxW - btnW, boxY, btnW, boxH };
+	if (isControllerLayout) {
+		layout.searchBox      = layout.pageButtonRect;
+		layout.searchTextRect = IntRect{};
+	} else {
+		layout.searchBox      = IntRect{ boxX, boxY, boxW, boxH };
+		layout.searchTextRect = IntRect{ boxX + textPadX, boxY, boxW - btnW - textPadX * 2, boxH };
+	}
 	layout.dropdownScale       = totalScale;
 	layout.clampedScrollOffset = scrollOffset;
 
@@ -3372,11 +3923,12 @@ auto ComputeSearchBarLayout(
 
 	// 1. PoE-style vertical side tab flyout (docked to the right outer edge of the Stash panel)
 	if (pagePickerOpen) {
-		int sideGapX    = 0;
-		int pickerW     = 0;
-		int pickerRowH  = 0;
-		int dividerGapH = 0;
-		if (ScalePositiveDimension(96, totalScale, &sideGapX) &&
+		int       sideGapX     = 0;
+		int       pickerW      = 0;
+		int       pickerRowH   = 0;
+		int       dividerGapH  = 0;
+		const int baseSideGapX = isControllerLayout ? 34 : 96;
+		if (ScalePositiveDimension(baseSideGapX, totalScale, &sideGapX) &&
 			ScalePositiveDimension(280, totalScale, &pickerW) &&
 			ScalePositiveDimension(48, totalScale, &pickerRowH) &&
 			ScalePositiveDimension(8, totalScale, &dividerGapH)) {
@@ -3555,7 +4107,7 @@ auto ComputeSearchBarLayout(
 		}
 	}
 
-	if (!showSearchDropdown) {
+	if (!showSearchDropdown || isControllerLayout) {
 		return layout;
 	}
 
@@ -3725,7 +4277,7 @@ auto FormatDropdownRowWithEllipsis(
 	return best;
 }
 
-// 0x7DE0: Draws a floating tooltip box when hovering over a truncated dropdown row
+// 0x7DE0: Draws a floating multi-line item tooltip box when hovering over a dropdown row
 void DrawHoveredDropdownTooltip(
 	const SearchBarLayout&         layout,
 	const std::vector<MatchEntry>& matches,
@@ -3763,53 +4315,193 @@ void DrawHoveredDropdownTooltip(
 		if (matchIdx >= matches.size()) {
 			return;
 		}
-		const std::wstring& fullText = !matches[matchIdx].hoverText.empty()
-										   ? matches[matchIdx].hoverText
-										   : matches[matchIdx].displayText;
-		if (fullText.empty() || (!rowTruncated[i] && fullText == matches[matchIdx].displayText)) {
-			return;
+		const MatchEntry& entry    = matches[matchIdx];
+		const std::wstring& fullText = !entry.hoverText.empty() ? entry.hoverText : entry.displayText;
+
+		std::vector<std::wstring> rawLines;
+		size_t                    headerLineCount = 1;
+		if (!entry.tooltipLines.empty()) {
+			rawLines        = entry.tooltipLines;
+			headerLineCount = std::clamp<size_t>(entry.headerLineCount, 1, rawLines.size());
+		} else {
+			if (fullText.empty() || (!rowTruncated[i] && fullText == entry.displayText)) {
+				return;
+			}
+			rawLines.push_back(fullText);
+			headerLineCount = 1;
 		}
 
-		int padX   = 0;
-		int padY   = 0;
-		int gapY   = 0;
-		int margin = 0;
-		if (!ScalePositiveDimension(10, fontScale, &padX) ||
-			!ScalePositiveDimension(6, fontScale, &padY) ||
+		int padX     = 0;
+		int padY     = 0;
+		int gapX     = 0;
+		int gapY     = 0;
+		int lineGapY = 0;
+		int divGapY  = 0;
+		int margin   = 0;
+		if (!ScalePositiveDimension(14, fontScale, &padX) ||
+			!ScalePositiveDimension(10, fontScale, &padY) ||
+			!ScalePositiveDimension(10, fontScale, &gapX) ||
 			!ScalePositiveDimension(8, fontScale, &gapY) ||
+			!ScalePositiveDimension(4, fontScale, &lineGapY) ||
+			!ScalePositiveDimension(8, fontScale, &divGapY) ||
 			!ScalePositiveDimension(8, fontScale, &margin)) {
 			return;
 		}
 
-		const IntRect screenRect{ 0, 0, clientW, clientH };
-		uint32_t      textW = 0;
-		uint32_t      textH = 0;
-		if (!MeasureNativeText(fullText, screenRect, styleBuf, fontScale, &textW, &textH) ||
-			textW == 0 || textH == 0 || textW > 0x7FFFFFFFu || textH > 0x7FFFFFFFu) {
+		const int maxAllowedTextW = std::min(
+			ScaleBorderThickness(720, fontScale),
+			std::max(120, clientW - (margin + padX) * 2));
+		const IntRect maxMeasureRect{ 0, 0, maxAllowedTextW, clientH };
+
+		struct MeasuredTooltipLine {
+			std::wstring text;
+			int          width  = 0;
+			int          height = 0;
+			float        scale  = 1.0f;
+			bool         isHeader = false;
+		};
+		std::vector<MeasuredTooltipLine> measuredLines;
+		measuredLines.reserve(rawLines.size());
+
+		int maxLineW   = 0;
+		int totalTextH = 0;
+		for (size_t lineIdx = 0; lineIdx < rawLines.size(); ++lineIdx) {
+			const bool  isHeader  = (lineIdx < headerLineCount);
+			const float lineScale = isHeader ? fontScale : (fontScale * 0.90f);
+			std::wstring fitted   = FormatDropdownRowWithEllipsis(
+				rawLines[lineIdx],
+				{},
+				maxMeasureRect,
+				styleBuf,
+				lineScale,
+				nullptr);
+			if (fitted.empty()) {
+				continue;
+			}
+			uint32_t lw = 0;
+			uint32_t lh = 0;
+			if (!MeasureNativeText(fitted, maxMeasureRect, styleBuf, lineScale, &lw, &lh) ||
+				lw == 0 || lh == 0 || lw > 0x7FFFFFFFu || lh > 0x7FFFFFFFu) {
+				continue;
+			}
+			const int w = static_cast<int>(lw);
+			const int h = static_cast<int>(lh);
+			maxLineW    = std::max(maxLineW, w);
+			totalTextH += h;
+			measuredLines.push_back({ std::move(fitted), w, h, lineScale, isHeader });
+		}
+		if (measuredLines.empty() || maxLineW <= 0 || totalTextH <= 0) {
 			return;
 		}
 
-		const int boxW = static_cast<int>(textW) + padX * 2;
-		const int boxH = static_cast<int>(textH) + padY * 2;
+		bool hasBothHeaderAndBody = false;
+		{
+			bool anyHeader = false;
+			bool anyBody   = false;
+			for (const auto& ml : measuredLines) {
+				if (ml.isHeader) {
+					anyHeader = true;
+				} else {
+					anyBody = true;
+				}
+			}
+			hasBothHeaderAndBody = anyHeader && anyBody;
+		}
+		const int divThick = ScaleBorderThickness(1, fontScale);
+		const int extraGaps = static_cast<int>(measuredLines.size() - 1) * lineGapY +
+							  (hasBothHeaderAndBody ? (divGapY * 2 + divThick - lineGapY) : 0);
+
+		const int boxW = maxLineW + padX * 2;
+		const int boxH = totalTextH + extraGaps + padY * 2;
 		if (boxW <= 0 || boxH <= 0 || clientW - margin < margin + boxW || clientH - margin < margin + boxH) {
 			return;
 		}
 
-		int boxX = std::clamp<int>(static_cast<int>(cursorPt.x), margin, clientW - margin - boxW);
-		int boxY = layout.dropdownRows[i].y - gapY - boxH;
-		if (boxY < margin) {
-			boxY = std::clamp(
-				layout.dropdownRows[i].y + layout.dropdownRows[i].height + gapY,
-				margin,
-				clientH - margin - boxH);
+		// Position preferentially to the right of the dropdown box so adjacent dropdown rows stay unobstructed
+		int boxX = 0;
+		int boxY = std::clamp(layout.dropdownRows[i].y, margin, clientH - margin - boxH);
+		const int rightCandidateX = layout.dropdownBox.x + layout.dropdownBox.width + gapX;
+		const int leftCandidateX  = layout.dropdownBox.x - gapX - boxW;
+		if (layout.dropdownBox.IsValid() && rightCandidateX + boxW <= clientW - margin) {
+			boxX = rightCandidateX;
+		} else if (layout.dropdownBox.IsValid() && leftCandidateX >= margin) {
+			boxX = leftCandidateX;
+		} else {
+			boxX = std::clamp<int>(static_cast<int>(cursorPt.x), margin, clientW - margin - boxW);
+			boxY = layout.dropdownRows[i].y - gapY - boxH;
+			if (boxY < margin) {
+				boxY = std::clamp(
+					layout.dropdownRows[i].y + layout.dropdownRows[i].height + gapY,
+					margin,
+					clientH - margin - boxH);
+			}
 		}
 
 		const IntRect tooltipBox{ boxX, boxY, boxW, boxH };
-		DrawFilledRect(tooltipBox, kColorDropdownRowBg);
-		DrawRectBorder(tooltipBox, kColorFocusedBorder, ScaleBorderThickness(2, fontScale));
+		const int     shadowPad   = ScaleBorderThickness(4, fontScale);
+		const int     borderThick = ScaleBorderThickness(2, fontScale);
+		DrawFilledRect(
+			IntRect{ boxX - shadowPad, boxY - shadowPad, boxW + shadowPad * 2, boxH + shadowPad * 2 },
+			Color4f{ 0.0f, 0.0f, 0.0f, 0.85f });
+		DrawFilledRect(tooltipBox, Color4f{ 0.024f, 0.030f, 0.046f, 1.00f });
 
-		const IntRect textRect{ boxX + padX, boxY + padY, static_cast<int>(textW), static_cast<int>(textH) };
-		DrawNativeText(fullText, textRect, styleBuf, fontScale);
+		int headerBannerH = 0;
+		if (hasBothHeaderAndBody) {
+			int hdrTextH  = 0;
+			int hdrCount  = 0;
+			for (const auto& ml : measuredLines) {
+				if (ml.isHeader) {
+					hdrTextH += ml.height;
+					++hdrCount;
+				}
+			}
+			if (hdrCount > 0) {
+				headerBannerH = padY + hdrTextH + (hdrCount - 1) * lineGapY + divGapY;
+				DrawFilledRect(
+					IntRect{ boxX + borderThick, boxY + borderThick, boxW - borderThick * 2, std::max(0, headerBannerH - borderThick) },
+					Color4f{ 0.14f, 0.105f, 0.048f, 1.00f });
+			}
+		}
+		DrawRectBorder(tooltipBox, kColorMatchEdgeOuter, borderThick);
+
+		alignas(16) uint8_t titleStyleBuf[0xB0]{};
+		alignas(16) uint8_t subHeaderStyleBuf[0xB0]{};
+		alignas(16) uint8_t affixStyleBuf[0xB0]{};
+		std::memcpy(titleStyleBuf, styleBuf, sizeof(titleStyleBuf));
+		std::memcpy(subHeaderStyleBuf, styleBuf, sizeof(subHeaderStyleBuf));
+		std::memcpy(affixStyleBuf, styleBuf, sizeof(affixStyleBuf));
+		auto setStyleRgba = [](uint8_t* buf, int32_t r, int32_t g, int32_t b, int32_t a) noexcept {
+			auto* ints = reinterpret_cast<int32_t*>(buf);
+			ints[2]    = r;
+			ints[3]    = g;
+			ints[4]    = b;
+			ints[5]    = a;
+			ints[6]    = r;
+			ints[7]    = g;
+			ints[8]    = b;
+			ints[9]    = a;
+		};
+		setStyleRgba(titleStyleBuf, 250, 224, 148, 255);     // Bright warm gold for primary item title
+		setStyleRgba(subHeaderStyleBuf, 205, 188, 148, 255); // Warm champagne/tan for base item type subtitle
+		setStyleRgba(affixStyleBuf, 128, 168, 255, 255);     // Classic Diablo II magic-stat cornflower blue for affixes
+
+		int  curY          = boxY + padY;
+		bool drewSeparator = false;
+		for (size_t mIdx = 0; mIdx < measuredLines.size(); ++mIdx) {
+			const auto& ml = measuredLines[mIdx];
+			if (hasBothHeaderAndBody && !ml.isHeader && !drewSeparator) {
+				curY += (divGapY - lineGapY);
+				const IntRect divRect{ boxX + borderThick, curY, boxW - borderThick * 2, divThick };
+				DrawFilledRect(divRect, kColorFocusedBorder);
+				curY += divThick + divGapY;
+				drewSeparator = true;
+			}
+			const int     lineX    = boxX + std::max(padX, (boxW - ml.width) / 2);
+			const IntRect textRect{ lineX, curY, ml.width, ml.height };
+			const void*   lineStyle = !ml.isHeader ? affixStyleBuf : (mIdx == 0 ? titleStyleBuf : subHeaderStyleBuf);
+			DrawNativeText(ml.text, textRect, lineStyle, ml.scale);
+			curY += ml.height + lineGapY;
+		}
 		return;
 	}
 }
@@ -3843,6 +4535,279 @@ void EnsureLocalizedSearchPlaceholder() {
 		g_TabLabelMaterials   = std::move(materialsLbl);
 		g_TabLabelRunes       = std::move(runesLbl);
 		g_PlaceholderResolved = true;
+	}
+}
+
+// Polls XInput controller state while BankPanel is open:
+// - Pressing 'A' on the collapsed arrow button or inside the open side tab flyout triggers HandleMouseClick.
+// - Tilting the Right Stick Up/Down steps the controller cursor through the open side tab flyout rows and scrolls when needed.
+void PollControllerStashInput(
+	const SearchBarLayout& layout,
+	uint8_t                activeParentTab,
+	int64_t                activeSharedPage,
+	uint64_t               nowTickMs,
+	bool                   justOpenedPanel,
+	POINT*                 inOutCursorPt) {
+	const HWND gameHwnd = FindGameWindow();
+	if (gameHwnd == nullptr || GetForegroundWindow() != gameHwnd || !layout.valid) {
+		return;
+	}
+
+	const auto moveControllerCursor = [&](POINT targetPt) noexcept {
+		if (!SafeMoveControllerCursor(targetPt.x, targetPt.y)) {
+			POINT screenPt = targetPt;
+			if (ClientToScreen(gameHwnd, &screenPt)) {
+				SetCursorPos(screenPt.x, screenPt.y);
+			}
+		}
+		if (inOutCursorPt != nullptr) {
+			*inOutCursorPt = targetPt;
+		}
+	};
+
+	if (justOpenedPanel) {
+		std::lock_guard<std::mutex> lock(g_StateMutex);
+		ResetControllerFlyoutCursorState(g_ControllerFlyoutCursor);
+		if (inOutCursorPt != nullptr) {
+			TrackControllerPreFlyoutCursor(g_ControllerFlyoutCursor, layout, *inOutCursorPt);
+		}
+	} else if (inOutCursorPt != nullptr) {
+		std::lock_guard<std::mutex> lock(g_StateMutex);
+		TrackControllerPreFlyoutCursor(g_ControllerFlyoutCursor, layout, *inOutCursorPt);
+	}
+
+	const XInputGetStateFn fnXInput = ResolveXInputGetState();
+	XInputControllerState  state{};
+	const bool             connected = PollActiveXInputState(fnXInput, nowTickMs, g_XInputPollCache, &state);
+	if (!connected) {
+		g_PrevControllerADown           = false;
+		g_ControllerLastStickStepTickMs = 0;
+		g_ControllerLastStickDir        = 0;
+		if (!justOpenedPanel) {
+			POINT pendingPt{ -1, -1 };
+			bool  doRestore = false;
+			bool  doFocus   = false;
+			{
+				std::lock_guard<std::mutex> lock(g_StateMutex);
+				(void)UpdateControllerOverlayAPressLatch(g_ControllerFlyoutCursor, false);
+				doRestore = ConsumeControllerFlyoutCursorRestore(g_ControllerFlyoutCursor, layout, &pendingPt);
+				if (!doRestore) {
+					doFocus = ConsumeControllerFlyoutFocusTarget(
+						g_ControllerFlyoutCursor,
+						layout,
+						activeParentTab,
+						activeSharedPage,
+						&pendingPt);
+				}
+			}
+			if (doRestore || doFocus) {
+				moveControllerCursor(pendingPt);
+			}
+		}
+		return;
+	}
+
+	const bool aDown        = (state.Gamepad.wButtons & kXInputGamepadA) != 0;
+	const bool modifierDown = (state.Gamepad.wButtons & (kXInputGamepadLeftShoulder | kXInputGamepadRightShoulder)) != 0 ||
+							  state.Gamepad.bLeftTrigger > kControllerTriggerThreshold ||
+							  state.Gamepad.bRightTrigger > kControllerTriggerThreshold;
+	if (justOpenedPanel) {
+		g_PrevControllerADown           = aDown;
+		g_ControllerLastStickStepTickMs = 0;
+		g_ControllerLastStickDir        = 0;
+		return;
+	}
+
+	const bool aPressed   = aDown && !g_PrevControllerADown;
+	const bool aReleased  = !aDown && g_PrevControllerADown;
+	g_PrevControllerADown = aDown;
+
+	if (aReleased) {
+		g_ScrollbarDragMode.store(static_cast<uint8_t>(ScrollbarDragMode::None), std::memory_order_release);
+	}
+
+	if (aPressed && inOutCursorPt != nullptr && inOutCursorPt->x >= 0 && inOutCursorPt->y >= 0) {
+		const int  cx          = inOutCursorPt->x;
+		const int  cy          = inOutCursorPt->y;
+		const bool overOverlay = layout.pageButtonRect.Contains(cx, cy) ||
+								 (layout.pagePickerOpen &&
+								  (layout.pagePickerBox.Contains(cx, cy) ||
+								   (layout.pagePickerHasScrollbar &&
+									HitTestScrollbarRect(layout.pagePickerScrollbarTrack, layout.scale, cx, cy))));
+		if (overOverlay) {
+			{
+				std::lock_guard<std::mutex> lock(g_StateMutex);
+				LatchControllerOverlayAPress(g_ControllerFlyoutCursor);
+			}
+			HandleMouseClick(cx, cy);
+		}
+	}
+
+	{
+		POINT restorePt{ -1, -1 };
+		bool  shouldRestore = false;
+		{
+			std::lock_guard<std::mutex> lock(g_StateMutex);
+			(void)UpdateControllerOverlayAPressLatch(g_ControllerFlyoutCursor, aDown);
+			shouldRestore = ConsumeControllerFlyoutCursorRestore(g_ControllerFlyoutCursor, layout, &restorePt);
+		}
+		if (shouldRestore) {
+			moveControllerCursor(restorePt);
+			g_ControllerLastStickStepTickMs = 0;
+			g_ControllerLastStickDir        = 0;
+			return;
+		}
+	}
+
+	{
+		POINT focusPt{ -1, -1 };
+		bool  shouldFocus = false;
+		{
+			std::lock_guard<std::mutex> lock(g_StateMutex);
+			shouldFocus = ConsumeControllerFlyoutFocusTarget(
+				g_ControllerFlyoutCursor,
+				layout,
+				activeParentTab,
+				activeSharedPage,
+				&focusPt);
+		}
+		if (shouldFocus) {
+			moveControllerCursor(focusPt);
+			return;
+		}
+	}
+
+	const int  ry         = static_cast<int>(state.Gamepad.sThumbRY);
+	const int  absRy      = std::abs(ry);
+	const bool stickMoved = (absRy > kControllerStickDeadzone) && !modifierDown;
+	if (!stickMoved) {
+		g_ControllerLastStickStepTickMs = 0;
+		g_ControllerLastStickDir        = 0;
+		return;
+	}
+
+	// If the flyout is currently collapsed, tilting the Right Stick Up/Down automatically expands it
+	if (!layout.pagePickerOpen) {
+		if (layout.pageButtonRect.IsValid() && g_ControllerLastStickStepTickMs == 0) {
+			if (inOutCursorPt != nullptr) {
+				std::lock_guard<std::mutex> lock(g_StateMutex);
+				TrackControllerPreFlyoutCursor(g_ControllerFlyoutCursor, layout, *inOutCursorPt);
+			}
+			HandleMouseClick(
+				layout.pageButtonRect.x + layout.pageButtonRect.width / 2,
+				layout.pageButtonRect.y + layout.pageButtonRect.height / 2);
+			g_ControllerLastStickStepTickMs = nowTickMs;
+			g_ControllerLastStickDir        = (ry < 0) ? 1 : -1;
+		}
+		return;
+	}
+	if (layout.pageCellCount == 0) {
+		return;
+	}
+
+	const int    dir  = (ry < 0) ? 1 : -1;
+	const double norm = std::clamp(
+		static_cast<double>(absRy - kControllerStickDeadzone) /
+			static_cast<double>(32767 - kControllerStickDeadzone),
+		0.0,
+		1.0);
+	const uint64_t repeatMs = static_cast<uint64_t>(std::llround(160.0 - norm * 105.0));
+	const bool     shouldStep =
+		(g_ControllerLastStickStepTickMs == 0) ||
+		(g_ControllerLastStickDir != dir) ||
+		(nowTickMs >= g_ControllerLastStickStepTickMs &&
+		 (nowTickMs - g_ControllerLastStickStepTickMs) >= repeatMs);
+	if (!shouldStep) {
+		return;
+	}
+	g_ControllerLastStickStepTickMs = nowTickMs;
+	g_ControllerLastStickDir        = dir;
+
+	const size_t cellCount = std::min(layout.pageCellCount, kMaxPageGridVisibleCells);
+	size_t       firstSharedCell = cellCount;
+	for (size_t i = 0; i < cellCount; ++i) {
+		if (layout.pageCellIsShared[i]) {
+			firstSharedCell = i;
+			break;
+		}
+	}
+
+	int hoveredCell = -1;
+	if (inOutCursorPt != nullptr && inOutCursorPt->x >= 0 && inOutCursorPt->y >= 0) {
+		for (size_t i = 0; i < cellCount; ++i) {
+			if (layout.pageCellRects[i].Contains(inOutCursorPt->x, inOutCursorPt->y)) {
+				hoveredCell = static_cast<int>(i);
+				break;
+			}
+		}
+	}
+
+	size_t       targetCell    = 0;
+	bool         scrollChanged = false;
+	size_t       newScrollRow  = layout.pagePickerScrollRow;
+	const size_t maxScrollRow  =
+		(layout.pagePickerTotalRows > layout.pagePickerVisRows)
+			? (layout.pagePickerTotalRows - layout.pagePickerVisRows)
+			: 0;
+
+	if (hoveredCell >= 0) {
+		const auto curIdx = static_cast<size_t>(hoveredCell);
+		if (dir > 0) {
+			if (curIdx + 1 < cellCount) {
+				targetCell = curIdx + 1;
+			} else if (layout.pageCellIsShared[curIdx] && newScrollRow < maxScrollRow) {
+				++newScrollRow;
+				scrollChanged = true;
+				targetCell    = curIdx;
+			} else {
+				targetCell = curIdx;
+			}
+		} else {
+			if (curIdx == firstSharedCell && newScrollRow > 0) {
+				--newScrollRow;
+				scrollChanged = true;
+				targetCell    = curIdx;
+			} else if (curIdx > 0) {
+				targetCell = curIdx - 1;
+			} else {
+				targetCell = 0;
+			}
+		}
+	} else {
+		int activeCell = -1;
+		for (size_t i = 0; i < cellCount; ++i) {
+			const bool     isShared = layout.pageCellIsShared[i];
+			const uint64_t idx      = layout.pageCellIndices[i];
+			if (isShared) {
+				if (activeSharedPage >= 0 && idx == static_cast<uint64_t>(activeSharedPage)) {
+					activeCell = static_cast<int>(i);
+					break;
+				}
+			} else if (activeSharedPage < 0 && idx == static_cast<uint64_t>(activeParentTab)) {
+				activeCell = static_cast<int>(i);
+				break;
+			}
+		}
+		if (activeCell >= 0) {
+			const int stepped = std::clamp(activeCell + dir, 0, static_cast<int>(cellCount) - 1);
+			targetCell        = static_cast<size_t>(stepped);
+		} else {
+			targetCell = (firstSharedCell < cellCount) ? firstSharedCell : 0;
+		}
+	}
+
+	if (scrollChanged) {
+		std::lock_guard<std::mutex> lock(g_StateMutex);
+		g_PendingCenterPagePicker = false;
+		g_PagePickerScrollRow     = newScrollRow;
+	}
+
+	if (targetCell < cellCount) {
+		const IntRect& targetRect = layout.pageCellRects[targetCell];
+		moveControllerCursor(POINT{
+			targetRect.x + targetRect.width / 2,
+			targetRect.y + targetRect.height / 2,
+		});
 	}
 }
 
@@ -3910,6 +4875,9 @@ void RenderSearchBarAndDropdown(uintptr_t bankPanel) {
 	bool                                           renamingTabIsShared  = true;
 	uint64_t                                       renamingTabPageIndex = 0;
 	std::wstring                                   tabRenameText;
+	bool                                           lockedMatchActive    = false;
+	StashPageTarget                                lockedMatchTarget{};
+	bool                                           justOpenedPanel      = false;
 	bool                                           saveClosedRename     = false;
 	StashSearchConfig                              closedRenameCfg{};
 	{
@@ -3919,6 +4887,7 @@ void RenderSearchBarAndDropdown(uintptr_t bankPanel) {
 				saveClosedRename = true;
 				closedRenameCfg  = SnapshotPersistedConfigLocked();
 			}
+			justOpenedPanel       = true;
 			g_WasPanelActive      = true;
 			g_IsFocused           = false;
 			g_IsRenamingTab       = false;
@@ -3960,6 +4929,8 @@ void RenderSearchBarAndDropdown(uintptr_t bankPanel) {
 		renamingTabIsShared  = g_RenamingTabIsShared;
 		renamingTabPageIndex = g_RenamingTabPageIndex;
 		tabRenameText        = g_TabRenameText;
+		lockedMatchActive    = g_LockedMatchActive;
+		lockedMatchTarget    = g_LockedMatchTarget;
 	}
 	if (saveClosedRename) {
 		SavePersistedConfig(g_PluginCtx, closedRenameCfg);
@@ -3988,11 +4959,11 @@ void RenderSearchBarAndDropdown(uintptr_t bankPanel) {
 		return;
 	}
 
-	const bool            hasQuery           = !query.empty();
-	const bool            searchBoxFocused   = isFocused && !isRenamingTab;
-	const bool            tabRenameFocused   = isFocused && isRenamingTab;
-	const bool            showSearchDropdown = searchBoxFocused && hasQuery;
-	const SearchBarLayout layout             = ComputeSearchBarLayout(
+	const bool      hasQuery           = !query.empty();
+	const bool      searchBoxFocused   = isFocused && !isRenamingTab;
+	const bool      tabRenameFocused   = isFocused && isRenamingTab;
+	const bool      showSearchDropdown = searchBoxFocused && hasQuery;
+	SearchBarLayout layout             = ComputeSearchBarLayout(
 		bankPanel,
 		showSearchDropdown,
 		matches.size(),
@@ -4040,6 +5011,73 @@ void RenderSearchBarAndDropdown(uintptr_t bankPanel) {
 	}
 
 	UpdateCurrentLayout(layout, true, nowTickMs);
+	if (layout.collapsedToButtonOnly) {
+		PollControllerStashInput(layout, activeParentTab, activeSharedPage, nowTickMs, justOpenedPanel, &cursorPt);
+		bool needRelayout = false;
+		{
+			std::lock_guard<std::mutex> lock(g_StateMutex);
+			if (g_PendingCenterPagePicker && sharedPageCount > 0) {
+				CenterPagePickerOnSharedPageLocked(g_PendingCenterPageIndex, static_cast<size_t>(sharedPageCount));
+				g_PendingCenterPagePicker = false;
+			}
+			if (g_PagePickerOpen != pagePickerOpen || g_PagePickerScrollRow != pagePickerScrollRow) {
+				pagePickerOpen      = g_PagePickerOpen;
+				pagePickerScrollRow = g_PagePickerScrollRow;
+				needRelayout        = true;
+			}
+		}
+		if (needRelayout) {
+			layout = ComputeSearchBarLayout(
+				bankPanel,
+				showSearchDropdown,
+				matches.size(),
+				selectedIndex,
+				scrollOffset,
+				pagePickerOpen,
+				static_cast<size_t>(sharedPageCount),
+				pagePickerScrollRow,
+				textStyleBuf,
+				personalLbl,
+				gemsLbl,
+				materialsLbl,
+				runesLbl,
+				customPersonalName,
+				customSharedNames,
+				tabRenameFocused,
+				renamingTabIsShared,
+				renamingTabPageIndex,
+				tabRenameText);
+			if (!layout.valid) {
+				ClearCurrentLayout(nowTickMs);
+				return;
+			}
+			POINT focusPt{ -1, -1 };
+			bool  shouldFocus = false;
+			{
+				std::lock_guard<std::mutex> lock(g_StateMutex);
+				if (layout.pagePickerOpen && g_PagePickerScrollRow == pagePickerScrollRow) {
+					g_PagePickerScrollRow = layout.pagePickerScrollRow;
+				}
+				shouldFocus = ConsumeControllerFlyoutFocusTarget(
+					g_ControllerFlyoutCursor,
+					layout,
+					activeParentTab,
+					activeSharedPage,
+					&focusPt);
+			}
+			UpdateCurrentLayout(layout, true, nowTickMs);
+			if (shouldFocus) {
+				const HWND gameHwnd = FindGameWindow();
+				if (!SafeMoveControllerCursor(focusPt.x, focusPt.y) && gameHwnd != nullptr) {
+					POINT screenPt = focusPt;
+					if (ClientToScreen(gameHwnd, &screenPt)) {
+						SetCursorPos(screenPt.x, screenPt.y);
+					}
+				}
+				cursorPt = focusPt;
+			}
+		}
+	}
 
 	if (!g_LoggedFirstStashFrame.exchange(true, std::memory_order_acq_rel) && g_PluginCtx != nullptr) {
 		char msg[256]{};
@@ -4071,6 +5109,28 @@ void RenderSearchBarAndDropdown(uintptr_t bankPanel) {
 			layout.pagePickerOpen,
 			borderThickness,
 			layout.scale);
+		if (layout.collapsedToButtonOnly && layout.pageButtonRect.IsValid()) {
+			constexpr std::wstring_view kR3Glyph = L"\uE00A";
+			const float                 r3Scale  = layout.scale * 0.85f;
+			const IntRect               maxMeasure{ 0, 0, 256, 256 };
+			uint32_t                    r3W = 0;
+			uint32_t                    r3H = 0;
+			if (MeasureNativeText(kR3Glyph, maxMeasure, textStyleBuf, r3Scale, &r3W, &r3H) &&
+				r3W > 0 && r3H > 0 && r3W < 256 && r3H < 256) {
+				const int halfW                = std::clamp(ScaleBorderThickness(5, layout.scale), 2, 8);
+				const int vGap                 = std::max(2, ScaleBorderThickness(5, layout.scale));
+				const int gapRight             = ScaleBorderThickness(14, layout.scale);
+				const int glyphTrailingAdvance = ScaleBorderThickness(10, layout.scale);
+				const int arrowCx              = layout.pageButtonRect.x - gapRight - halfW;
+				const int centerY              = layout.pageButtonRect.y + layout.pageButtonRect.height / 2;
+				DrawUpDownChevrons(arrowCx, centerY, halfW, vGap, kColorFocusedBorder);
+
+				const int r3X = (arrowCx - halfW) - static_cast<int>(r3W) + glyphTrailingAdvance;
+				const int r3Y = layout.pageButtonRect.y + (layout.pageButtonRect.height - static_cast<int>(r3H)) / 2;
+				const IntRect r3Rect{ r3X, r3Y, static_cast<int>(r3W), static_cast<int>(r3H) };
+				DrawNativeText(kR3Glyph, r3Rect, textStyleBuf, r3Scale);
+			}
+		}
 	}
 
 	// Draw PoE-style Side Tab Flyout (docked to the right of the Stash panel)
@@ -4102,10 +5162,14 @@ void RenderSearchBarAndDropdown(uintptr_t bankPanel) {
 												(renamingTabPageIndex == pageIdx);
 			bool           hasMatchOnPage = false;
 			if (hasQuery && (isShared || pageIdx == 0)) {
-				for (const auto& m : matches) {
-					if (m.hasTarget && m.target.isShared == isShared && m.target.pageIndex == pageIdx) {
-						hasMatchOnPage = true;
-						break;
+				if (lockedMatchActive) {
+					hasMatchOnPage = (lockedMatchTarget.isShared == isShared && lockedMatchTarget.pageIndex == pageIdx);
+				} else {
+					for (const auto& m : matches) {
+						if (m.hasTarget && m.target.isShared == isShared && m.target.pageIndex == pageIdx) {
+							hasMatchOnPage = true;
+							break;
+						}
 					}
 				}
 			}
@@ -4244,8 +5308,10 @@ void RenderSearchBarAndDropdown(uintptr_t bankPanel) {
 
 	// Build search box display string, visual text selection highlight, and blinking '|' caret
 	std::wstring displayQuery;
-	bool         shouldDrawSearchText = true;
-	if (searchBoxFocused && imeComposing && !imeComp.empty()) {
+	bool         shouldDrawSearchText = !layout.collapsedToButtonOnly;
+	if (!shouldDrawSearchText) {
+		// Controller layout collapses the search box to just the dropdown toggle button
+	} else if (searchBoxFocused && imeComposing && !imeComp.empty()) {
 		const size_t startIdx    = std::min<size_t>(imeStart, query.size());
 		const size_t endIdx      = std::clamp<size_t>(imeEnd, startIdx, query.size());
 		const size_t caretInComp = std::min<size_t>(imeCursor, imeComp.size());
@@ -4365,8 +5431,199 @@ void RenderSearchBarAndDropdown(uintptr_t bankPanel) {
 		}
 		DrawHoveredDropdownTooltip(layout, matches, rowTruncated, textStyleBuf, layout.scale);
 	}
+}
 
-	UpdateCurrentLayout(layout, true, nowTickMs);
+// Checks whether the mouse/software cursor is currently over an active, visible BankPanel search box, dropdown, or side tab flyout
+auto IsCursorOverActiveSearchOverlay(uintptr_t* outBankPanel = nullptr, bool* outOverPagePicker = nullptr) noexcept -> bool {
+	if (outBankPanel != nullptr) {
+		*outBankPanel = 0;
+	}
+	if (outOverPagePicker != nullptr) {
+		*outOverPagePicker = false;
+	}
+	const HWND gameHwnd = FindGameWindow();
+	if (gameHwnd == nullptr || GetForegroundWindow() != gameHwnd) {
+		return false;
+	}
+	POINT cursorPt{};
+	RECT  clientRc{};
+	if (!GetCursorPos(&cursorPt) ||
+		!ScreenToClient(gameHwnd, &cursorPt) ||
+		!GetClientRect(gameHwnd, &clientRc) ||
+		cursorPt.x < 0 || cursorPt.y < 0 ||
+		cursorPt.x >= clientRc.right || cursorPt.y >= clientRc.bottom) {
+		return false;
+	}
+
+	const uint64_t  nowTickMs = GetTickCount64();
+	SearchBarLayout layout{};
+	bool            showSearchDropdown = false;
+	uintptr_t       bankPanel          = 0;
+	{
+		std::lock_guard<std::mutex> lock(g_StateMutex);
+		if (!IsSearchBarActiveLocked(nowTickMs)) {
+			return false;
+		}
+		layout             = g_CurrentLayout;
+		showSearchDropdown = g_IsFocused && !g_IsRenamingTab && !g_QueryText.empty();
+		bankPanel          = g_ActiveBankPanelAddr.load(std::memory_order_acquire);
+	}
+	if (bankPanel == 0) {
+		return false;
+	}
+
+	const bool overPagePicker =
+		layout.pagePickerOpen &&
+		(layout.pagePickerBox.Contains(cursorPt.x, cursorPt.y) ||
+		 (layout.pageCellCount != 0 &&
+		  layout.pagePickerHasScrollbar &&
+		  HitTestScrollbarRect(layout.pagePickerScrollbarTrack, layout.scale, cursorPt.x, cursorPt.y)));
+
+	bool over = overPagePicker || IsPointInActiveSearchOverlay(layout, showSearchDropdown, cursorPt.x, cursorPt.y);
+	if (!over && showSearchDropdown && layout.visibleRowCount != 0 && layout.hasScrollbar &&
+		HitTestScrollbarRect(layout.scrollbarTrack, layout.scale, cursorPt.x, cursorPt.y)) {
+		over = true;
+	}
+	if (over) {
+		if (outBankPanel != nullptr) {
+			*outBankPanel = bankPanel;
+		}
+		if (outOverPagePicker != nullptr) {
+			*outOverPagePicker = overPagePicker;
+		}
+	}
+	return over;
+}
+
+auto IsControllerOverlayAPressLatched(uintptr_t* outBankPanel = nullptr) noexcept -> bool {
+	if (outBankPanel != nullptr) {
+		*outBankPanel = 0;
+	}
+	const uint64_t nowTickMs = GetTickCount64();
+	std::lock_guard<std::mutex> lock(g_StateMutex);
+	if (!IsSearchBarActiveLocked(nowTickMs) || !g_ControllerFlyoutCursor.overlayAPressLatched) {
+		return false;
+	}
+	const uintptr_t bankPanel = g_ActiveBankPanelAddr.load(std::memory_order_acquire);
+	if (bankPanel == 0) {
+		return false;
+	}
+	if (outBankPanel != nullptr) {
+		*outBankPanel = bankPanel;
+	}
+	return true;
+}
+
+auto IsCoOpenPlayerInventoryPanel(uintptr_t candidatePanel, uintptr_t bankPanel) noexcept -> bool {
+	if (candidatePanel == 0 ||
+		candidatePanel == bankPanel ||
+		g_Native.fnWidgetFindChild == 0 ||
+		!IsPanelEnabledAndVisibleAt(candidatePanel)) {
+		return false;
+	}
+	uintptr_t torsoSlot = 0;
+	return SafeCall_FindChild(g_Native.fnWidgetFindChild, candidatePanel, "slot_torso", &torsoSlot) &&
+		   torsoSlot != 0;
+}
+
+// Clears CursorWidget hover (uiManager+0x178, checked by Widget::IsHovered at 0x876180) and controller
+// focus (uiManager+0x190, checked by Widget::IsControllerFocused at 0x876160) only when their owning
+// panel slots (uiManager+0x170 and uiManager+0x188) match the active visible BankPanel (or a co-open
+// PlayerInventoryPanel specifically occluded by the right-hand pagePickerBox flyout / 'A' latch), so
+// PausePanel and unoccluded PlayerInventoryPanel controller focus are never clobbered.
+void SuppressOccludedCursorFocus(
+	uintptr_t  expectedBankPanel,
+	bool       overFlyoutOrLatched,
+	uintptr_t* outSuppressedInventoryPanel = nullptr) noexcept {
+	if (outSuppressedInventoryPanel != nullptr) {
+		*outSuppressedInventoryPanel = 0;
+	}
+	if (expectedBankPanel == 0 || g_Native.fnGetUIManager == 0) {
+		return;
+	}
+	uintptr_t uiManager = 0;
+	if (!SafeCall_GetPtrNoArg(g_Native.fnGetUIManager, &uiManager) ||
+		uiManager == 0 ||
+		uiManager > UINTPTR_MAX - 0x198) {
+		return;
+	}
+	uint64_t        hoveredPanelRaw = 0;
+	uint64_t        focusedPanelRaw = 0;
+	const bool      hasHoveredPanel = SafeReadU64(reinterpret_cast<const uint64_t*>(uiManager + 0x170), &hoveredPanelRaw);
+	const bool      hasFocusedPanel = SafeReadU64(reinterpret_cast<const uint64_t*>(uiManager + 0x188), &focusedPanelRaw);
+	const uintptr_t hoveredPanel    = hasHoveredPanel ? static_cast<uintptr_t>(hoveredPanelRaw) : 0;
+	const uintptr_t focusedPanel    = hasFocusedPanel ? static_cast<uintptr_t>(focusedPanelRaw) : 0;
+
+	uintptr_t coOpenInventoryPanel = 0;
+	if (overFlyoutOrLatched) {
+		if (IsCoOpenPlayerInventoryPanel(hoveredPanel, expectedBankPanel)) {
+			coOpenInventoryPanel = hoveredPanel;
+		} else if (focusedPanel != hoveredPanel && IsCoOpenPlayerInventoryPanel(focusedPanel, expectedBankPanel)) {
+			coOpenInventoryPanel = focusedPanel;
+		}
+	}
+
+	const OccludedCursorSuppressionDecision decision = ComputeOccludedCursorSuppression(
+		expectedBankPanel,
+		coOpenInventoryPanel,
+		overFlyoutOrLatched,
+		hoveredPanel,
+		focusedPanel);
+	if (decision.clearHoveredWidget) {
+		(void)SafeWriteU64(reinterpret_cast<uint64_t*>(uiManager + 0x178), 0);
+	}
+	if (decision.clearFocusedWidget) {
+		(void)SafeWriteU64(reinterpret_cast<uint64_t*>(uiManager + 0x190), 0);
+	}
+	if (outSuppressedInventoryPanel != nullptr &&
+		coOpenInventoryPanel != 0 &&
+		((decision.clearHoveredWidget && hoveredPanel == coOpenInventoryPanel) ||
+		 (decision.clearFocusedWidget && focusedPanel == coOpenInventoryPanel))) {
+		*outSuppressedInventoryPanel = coOpenInventoryPanel;
+	}
+}
+
+void ClearPanelGridHoveredItem(uintptr_t panel, const char* gridChildName) noexcept {
+	if (panel == 0 || g_Native.fnWidgetFindChild == 0) {
+		return;
+	}
+	uintptr_t gridWidget = 0;
+	if (SafeCall_FindChild(g_Native.fnWidgetFindChild, panel, gridChildName, &gridWidget) &&
+		gridWidget != 0 &&
+		gridWidget <= UINTPTR_MAX - 0x568) {
+		(void)SafeWriteU64(reinterpret_cast<uint64_t*>(gridWidget + 0x560), 0);
+	}
+}
+
+// Suppresses underlying stash/cube/inventory grid item tooltips (BaseInventoryGridWidget::DrawTooltip at 0x2C3C30
+// checks gridWidget+0x560 != 0), widget hover (uiManager+0x178), and controller widget focus (uiManager+0x190)
+// when the cursor is hovering over an active search overlay or while an overlay controller 'A' press is latched.
+void SuppressOccludedStashHover(uintptr_t bankPanel, bool overFlyoutOrLatched) noexcept {
+	ClearPanelGridHoveredItem(bankPanel, "grid");
+	ClearPanelGridHoveredItem(bankPanel, "horadriccube_grid");
+	uintptr_t suppressedInventoryPanel = 0;
+	SuppressOccludedCursorFocus(bankPanel, overFlyoutOrLatched, &suppressedInventoryPanel);
+	if (suppressedInventoryPanel != 0) {
+		ClearPanelGridHoveredItem(suppressedInventoryPanel, "grid");
+	}
+}
+
+auto __cdecl OnUiMessage(
+	const D2RL::PluginContext*                /*context*/,
+	const D2RL::SharedEvents::UiMessageEvent* /*event*/,
+	void*                                     /*userData*/) noexcept -> D2RL::SharedEvents::UiMessageAction {
+	if (!g_ShuttingDown.load(std::memory_order_acquire)) {
+		uintptr_t activeBankPanel = 0;
+		bool      overPagePicker  = false;
+		const bool overOverlay    = IsCursorOverActiveSearchOverlay(&activeBankPanel, &overPagePicker);
+		uintptr_t latchedPanel    = 0;
+		const bool latched        = IsControllerOverlayAPressLatched(&latchedPanel);
+		if (overOverlay || latched) {
+			const uintptr_t targetBankPanel = (activeBankPanel != 0) ? activeBankPanel : latchedPanel;
+			SuppressOccludedCursorFocus(targetBankPanel, overPagePicker || latched);
+		}
+	}
+	return D2RL::SharedEvents::UiMessageAction::Continue;
 }
 
 // 0x3E30: Detour for BankPanel::Draw (D2R.exe+0x23AA60)
@@ -4374,18 +5631,42 @@ void __fastcall Detour_BankPanelDraw(void* panel) {
 	const auto     panelAddr = reinterpret_cast<uintptr_t>(panel);
 	const uint64_t nowTickMs = GetTickCount64();
 	if (!g_ShuttingDown.load(std::memory_order_acquire) && panelAddr != 0) {
+		g_ActiveBankPanelAddr.store(panelAddr, std::memory_order_release);
 		ProcessPendingTabAndPageSwitch(panelAddr, nowTickMs);
 		ProcessPendingWheelPageStep(panelAddr, nowTickMs);
 	}
-	if (!SafeCall_VoidFromPtr(reinterpret_cast<uintptr_t>(g_Native.originalBankPanelDraw), panel)) {
+
+	if (!g_ShuttingDown.load(std::memory_order_acquire) && panelAddr != 0) {
+		bool       overPagePicker = false;
+		const bool overOverlay    = IsCursorOverActiveSearchOverlay(nullptr, &overPagePicker);
+		const bool latched        = IsControllerOverlayAPressLatched();
+		if (overOverlay || latched) {
+			SuppressOccludedStashHover(panelAddr, overPagePicker || latched);
+			g_HoverWasSuppressed.store(true, std::memory_order_release);
+		}
+	}
+
+	const bool drawOk = SafeCall_VoidFromPtr(reinterpret_cast<uintptr_t>(g_Native.originalBankPanelDraw), panel);
+	if (!drawOk) {
 		return;
 	}
 	if (g_ShuttingDown.load(std::memory_order_acquire)) {
 		return;
 	}
+	InvalidateMatchesOnActiveStashChange(panelAddr);
 	RefreshMatchesIfNeeded(nowTickMs);
 	DimNonMatchingGridItems(panelAddr);
 	RenderSearchBarAndDropdown(panelAddr);
+
+	bool       overPagePicker = false;
+	const bool overOverlay    = IsCursorOverActiveSearchOverlay(nullptr, &overPagePicker);
+	const bool latched        = IsControllerOverlayAPressLatched();
+	if (overOverlay || latched) {
+		SuppressOccludedStashHover(panelAddr, overPagePicker || latched);
+		g_HoverWasSuppressed.store(true, std::memory_order_release);
+	} else if (g_HoverWasSuppressed.exchange(false, std::memory_order_acq_rel)) {
+		(void)SafeRefreshCursorWidget();
+	}
 	CaptureLocalCharacterSnapshot(nowTickMs, false);
 }
 
@@ -4441,11 +5722,26 @@ void RegisterSnapshotLifecycleListeners(const D2RL::PluginContext* ctx) noexcept
 }
 
 // 0xC5A0: Initializes plugin state, verifies D2R.exe + D2RCore.dll signatures, starts worker thread, installs hook
+
+void UnregisterSharedUiListener() noexcept {
+	if (g_PluginCtx != nullptr &&
+		g_SharedEventService != nullptr &&
+		g_UiMessageHandle != D2RL::SharedEvents::InvalidHandle &&
+		g_SharedEventService->unregisterUiMessageListener != nullptr) {
+		(void)g_SharedEventService->unregisterUiMessageListener(g_PluginCtx, g_UiMessageHandle);
+	}
+	g_UiMessageHandle    = D2RL::SharedEvents::InvalidHandle;
+	g_SharedEventService = nullptr;
+}
+
+// 0xC5A0: Initializes plugin state, verifies D2R.exe + D2RCore.dll signatures, starts worker thread, installs hook
 auto InitializePlugin(const D2RL::PluginContext* ctx) -> bool {
 	if (!D2RL::HasContext(ctx)) {
 		return false;
 	}
 	g_PluginCtx                    = ctx;
+	g_SharedEventService           = nullptr;
+	g_UiMessageHandle              = D2RL::SharedEvents::InvalidHandle;
 	g_Native.originalBankPanelDraw = nullptr;
 	g_LoggedFirstStashFrame.store(false, std::memory_order_release);
 	ResetSearchState();
@@ -4466,6 +5762,25 @@ auto InitializePlugin(const D2RL::PluginContext* ctx) -> bool {
 		ctx->LogError("StashSearch: signature or D2RCore verification failed.");
 		ClearResolvedPointers();
 		return false;
+	}
+
+	if (ctx->QueryService(&g_SharedEventService) == D2RL::ServiceQueryResult::Success &&
+		D2RL::HasSharedEventServiceField(g_SharedEventService, D2RL::SharedEventServiceRequiredSize) &&
+		g_SharedEventService->registerUiMessageListener != nullptr) {
+		const D2RL::SharedEvents::UiMessageListener listener{
+			.structSize = D2RL::SharedEvents::UiMessageListenerSize,
+			.flags      = 0,
+			.priority   = 2000,
+			.reserved   = 0,
+			.callback   = &OnUiMessage,
+			.userData   = nullptr,
+		};
+		if (g_SharedEventService->registerUiMessageListener(ctx, &listener, &g_UiMessageHandle) != D2RL::SharedEvents::Result::Success) {
+			g_UiMessageHandle    = D2RL::SharedEvents::InvalidHandle;
+			g_SharedEventService = nullptr;
+		}
+	} else {
+		g_SharedEventService = nullptr;
 	}
 
 	if (g_WorkerThreadHandle == nullptr && g_WorkerReadyEvent == nullptr) {
@@ -4490,7 +5805,7 @@ auto InitializePlugin(const D2RL::PluginContext* ctx) -> bool {
 							static_cast<uint32_t>(sizeof(kBytes_BankPanelDraw_23AA60)),
 							&Detour_BankPanelDraw,
 							&g_Native.originalBankPanelDraw)) {
-						ctx->LogInfo("Pyre Stash Search 1.3.1+rev.1 initialized and BankPanel::Draw hook installed.");
+						ctx->LogInfo("Pyre Stash Search 1.3.1+rev.7 initialized and BankPanel::Draw hook installed.");
 						if (g_SearchOtherCharacters.load(std::memory_order_acquire)) {
 							RegisterSnapshotLifecycleListeners(ctx);
 						}
@@ -4505,6 +5820,7 @@ auto InitializePlugin(const D2RL::PluginContext* ctx) -> bool {
 		}
 	}
 
+	UnregisterSharedUiListener();
 	g_ShuttingDown.store(true, std::memory_order_release);
 	ResetSearchState();
 	ClearResolvedPointers();
@@ -4517,7 +5833,7 @@ const D2RL::PluginInfo kPluginInfo = {
 	.abiVersion  = D2RL_PLUGIN_ABI_VERSION,
 	.id          = "pyre-stashsearch",
 	.name        = "Pyre Stash Search",
-	.version     = "1.3.1+rev.1",
+	.version     = "1.3.1+rev.7",
 	.author      = "PyreFly",
 	.description = "Cross-page stash search with boolean filters, item highlighting, and an expandable tab flyout with custom tab names. Inspired by yinyin333333.",
 	.flags       = D2RL::PluginFlags::Client | D2RL::PluginFlags::NativeHooks,
@@ -4537,11 +5853,11 @@ extern "C" __declspec(dllexport) auto __cdecl D2RLoaderLoadPlugin(const D2RL::Pl
 
 extern "C" __declspec(dllexport) void __cdecl D2RLoaderUnloadPlugin() noexcept {
 	if (StashSearch::g_PluginCtx != nullptr) {
-		StashSearch::g_PluginCtx->LogInfo("Pyre Stash Search 1.3.1+rev.1 unloading.");
+		StashSearch::g_PluginCtx->LogInfo("Pyre Stash Search 1.3.1+rev.7 unloading.");
 	}
 	StashSearch::g_ShuttingDown.store(true, std::memory_order_release);
+	StashSearch::UnregisterSharedUiListener();
 	StashSearch::StopInputWorkerThread();
 	StashSearch::ResetSearchState();
-	StashSearch::ClearResolvedPointers();
 	StashSearch::g_PluginCtx = nullptr;
 }

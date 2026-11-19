@@ -38,19 +38,21 @@ template<class Read> std::optional<Snapshot> Capture(std::uintptr_t host,Read re
         seen.push_back(child);
         std::uintptr_t parent{},owner{};std::uint32_t flags{},state{};
         if (!load(child+0x78,parent) || parent!=root || !load(child+0x1c,flags) ||
-            !load(child+0x20,state) || state!=0) return {};
+            !load(child+0x20,state)) return {};
         if (flags&0x80000000u) {
             std::array<std::uint32_t,3> identity{};std::uintptr_t ownerRoot{};
-            if (owned.size()>=6 || !load(child+0xa0,owner) || owner==host ||
+            if (state!=0 || owned.size()>=6 || !load(child+0xa0,owner) || owner==host ||
                 !load(owner,identity) || identity[0]!=4 || !load(owner+0x88,ownerRoot) || ownerRoot!=child) return {};
             const auto amount=value(child,0xa8);if (!amount) return {};
             if (std::any_of(owned.begin(),owned.end(),[&](const Owned& item) {return item.unit==owner || item.item.id==identity[2];})) return {};
             owned.push_back({owner,{identity[2],identity[1],*amount}});
-        } else {
+        } else if (flags&0x40u) {
             int expires{};
-            if (!load(child,owner) || owner!=host || !load(child+0x18,expires) || expires!=-1) return {};
+            if ((flags&0x2000u) || (state!=0 && state!=171u && (state<165u || state>170u)) || !load(child,owner) || owner!=host || !load(child+0x18,expires) || expires!=-1) return {};
             const auto amount=value(child,0x30);if (!amount || result.host>1000000-*amount) return {};
             result.host+=*amount;
+        } else {
+            if ((flags&0x2000u) || !load(child,owner) || owner<0x10000 || !value(child,0x30)) return {};
         }
         if (!load(child+0x68,child)) return {};
     }

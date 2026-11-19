@@ -133,7 +133,7 @@ void __cdecl Click(const D2RL::PluginContext* ctx, void* token) noexcept {
     UpdateWidgets();
 }
 
-bool Queue(D2RL::Threads::Callback callback, bool& pending) noexcept {
+bool Queue(D2RL::Threads::Callback callback, bool& pending, bool warnOnFailure = false) noexcept {
     if (pending) return true;
     pending = true;
     const auto result = threads->runOnUiThread(context, callback, reinterpret_cast<void*>(generation));
@@ -142,7 +142,7 @@ bool Queue(D2RL::Threads::Callback callback, bool& pending) noexcept {
         return true;
     }
     pending = false;
-    if (!schedulingReported) {
+    if (warnOnFailure && !schedulingReported) {
         context->LogWarn("[InventoryDeposit] UI scheduling unavailable; button action refused.");
         schedulingReported = true;
     }
@@ -162,7 +162,7 @@ auto __cdecl OnMessage(const D2RL::PluginContext* ctx,
     std::lock_guard lock(mutex);
     if (!ready || ctx != context || reinterpret_cast<std::uintptr_t>(owner) != ownerGeneration)
         return Action::Continue;
-    (void)Queue(Click, clickQueued);
+    (void)Queue(Click, clickQueued, true);
     // This reserved payload is an action, not a panel to open. Never allow it
     // to reach native PanelManager handling, even while the action is disabled.
     return Action::Consume;

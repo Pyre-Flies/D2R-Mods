@@ -11,7 +11,9 @@ static void check(bool ok,const char* message) {
     if(!ok) {std::fprintf(stderr,"FAIL: %s (Win32=%lu)\n",message,GetLastError());std::exit(1);}
 }
 int main(int argc,char** argv) {
-    check(argc==3,"DLL path and expected version required");
+    constexpr const char* ExpectedVersion = "1.3.1+rev.100";
+    check(argc==2 || argc==3,"DLL path (and optional expected version) required");
+    const char* expectedVersion = (argc==3) ? argv[2] : ExpectedVersion;
     HMODULE dll=LoadLibraryExA(argv[1],nullptr,LOAD_WITH_ALTERED_SEARCH_PATH);
     check(dll!=nullptr,"merged DLL loads with Windows dependencies");
     using GetInfo=const D2RL::PluginInfo*(*)() noexcept;
@@ -21,7 +23,7 @@ int main(int argc,char** argv) {
     check(info && info->infoSize==D2RL::PluginInfoSize,"metadata layout matches SDK");
     check(info->abiVersion==D2RL_PLUGIN_ABI_VERSION,"metadata ABI matches SDK");
     check(std::strcmp(info->id,"controller-qol-updates")==0 && std::strcmp(info->name,"Controller QOL Updates")==0,"single QOL identity");
-    check(std::strcmp(info->version,argv[2])==0,"merged version");
+    check(std::strcmp(info->version,expectedVersion)==0,"merged version");
     check(std::strcmp(info->author,"PyreFly")==0,"release author credit");
     check(GetProcAddress(dll,"D2RLoaderLoadPlugin") && GetProcAddress(dll,"D2RLoaderUnloadPlugin"),"lifecycle exports exist");
     HRSRC manifest=FindResourceA(dll,MAKEINTRESOURCEA(D2RL_PLUGIN_MANIFEST_RESOURCE_ID),MAKEINTRESOURCEA(10));
@@ -63,7 +65,7 @@ int main(int argc,char** argv) {
     check(enabledCount==10 && !skills.Enabled(48) && !skills.Enabled(74) && !skills.Enabled(92),"only ten tested class skills default on; Nova/corpse skills stay native");
     for(const auto& skill:Aim::SkillCatalog) check(skillConfig.find("\""+std::to_string(skill.id)+"\" = ")!=config.npos,"all 240 class IDs included in embedded configuration");
     check(skills.whirlwindPassThrough && skills.whirlwindPassThroughDistance==1.5f && !aim.debugOverlay,"split aim defaults preserve reviewed behavior");
-    check(aim.reticleThickness==2 && config.find("ground_reticle_color = \"#8FE8FF\"")!=config.npos && config.find("lock_reticle_color = \"#FFD166\"")!=config.npos,"reticle color and thickness defaults included in shipped config");
+    check(aim.reticleThickness==2 && aim.reticleSizePercent==100 && config.find("ground_reticle_color = \"#8FE8FF\"")!=config.npos && config.find("lock_reticle_color = \"#FFD166\"")!=config.npos,"reticle color, size, and thickness defaults included in shipped config");
     check(aim.deadzone==0.22f && aim.initialSpeed==8 && aim.maximumSpeed==48 && aim.accelerationSeconds==0.35f,"packaged motion defaults match reviewed tuning");
     unsigned leadCount=0;
     for(const auto& skill:Aim::SkillCatalog) leadCount+=skills.LeadMillisecondsPerTile(skill.id)>0?1u:0u;

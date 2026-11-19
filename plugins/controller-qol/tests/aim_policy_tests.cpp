@@ -78,8 +78,8 @@ int main() {
     Check(ParseReticleColor("\"#AABBCC\"",rgba) && std::abs(rgba.red-170.0f/255)<0.0001f && rgba.alpha==1,"RGB hex colors parse opaque");
     Check(ParseReticleColor("\"#aabbcc80\"",rgba) && std::abs(rgba.alpha-128.0f/255)<0.0001f,"case-insensitive RGBA color parses opacity");
     Check(!ParseReticleColor("\"#GG0000\"",rgba) && !ParseReticleColor("\"#abc\"",rgba),"malformed hex colors rejected");
-    Check(ParseQolSettings("[aim]\nground_reticle_color=\"#FFFFFF\" # bright\nlock_reticle_color=\"#FFD166CC\"\nreticle_thickness=2.0",integrated,enabled) && integrated.groundReticleColor.red==1 && integrated.reticleThickness==2,"quoted hashes survive section/comment parsing with thickness");
-    Check(!ParseSettings("[aim]\nreticle_thickness=0",integrated) && !ParseSettings("[aim]\nreticle_thickness=nan",integrated),"invalid thickness rejected");
+    Check(ParseQolSettings("[aim]\nground_reticle_color=\"#FFFFFF\" # bright\nlock_reticle_color=\"#FFD166CC\"\nreticle_thickness=2.0\nreticle_size_percent=140",integrated,enabled) && integrated.groundReticleColor.red==1 && integrated.reticleThickness==2 && integrated.reticleSizePercent==140,"quoted hashes survive section/comment parsing with thickness and size");
+    Check(!ParseSettings("[aim]\nreticle_thickness=0",integrated) && !ParseSettings("[aim]\nreticle_thickness=nan",integrated) && !ParseSettings("[aim]\nreticle_size_percent=20",integrated) && !ParseSettings("[aim]\nreticle_size_percent=300",integrated),"invalid thickness or size rejected");
     Check(!ParseSettings("[aim]\nground_reticle_color=\"#FFFFFF\"\nground_reticle_color=\"#000000\"",integrated),"duplicate colors rejected");
     std::string toggled;
     const std::string original="[qol]\r\nenabled = true\r\n[aim.amazon]\r\n# Multi Shot\r\n\"12\" = true  # keep this\r\n\"22\" = true\r\n[aim]\r\nmaximum_speed=100\r\n";

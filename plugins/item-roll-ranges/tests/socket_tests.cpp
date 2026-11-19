@@ -61,6 +61,24 @@ int main() {
     m=Fixture();m.Put(RootAddress+0xb0,std::uint64_t{2049});check(!Capture(m));
     m=Fixture();m.Put(jewelRoot+0xb8,std::uint64_t{});check(!Capture(m));
     m=Fixture();m.Put(mod+0x20,12u);check(!Capture(m));
+    m=Fixture();m.Put(mod+0x20,171u);check(Capture(m).has_value());
+    m=Fixture();m.Put(mod+0x20,165u);check(Capture(m).has_value());
+    m=Fixture();m.Put(mod+0x1c,0x41u);check(Capture(m).has_value());
+    m=Fixture();m.Put(mod+0x1c,0x2040u);check(!Capture(m));
+    m=Fixture();m.Put(jewelRoot+0x1c,0xc0000000u);check(Capture(m).has_value());
+    // Auxiliary non-0x40 temporary/derived StatLists attached to RootAddress must be skipped cleanly.
+    constexpr std::uintptr_t auxChild=0xc0000;
+    auto withAux=[&](std::uint32_t flags,std::uint32_t state,std::uintptr_t owner){
+        auto s=Fixture();s.blocks[auxChild].resize(0x200);
+        s.Put(RootAddress+0x90,auxChild);
+        s.Put(auxChild,owner);s.Put(auxChild+0x1c,flags);s.Put(auxChild+0x20,state);
+        s.Put(auxChild+0x68,mod);s.Put(auxChild+0x78,RootAddress);
+        return s;
+    };
+    check(Capture(withAux(0u,5u,host)).has_value());
+    check(!Capture(withAux(0x2000u,5u,host)));
+    check(!Capture(withAux(0u,5u,std::uintptr_t{})));
+    m=withAux(0u,5u,host);m.Put(auxChild+0x38,std::uint64_t{2049});check(!Capture(m));
     m=Fixture();m.Put(mod+0x18,10);check(!Capture(m));
     m=Fixture();m.Put(totalEntry+8,std::int64_t{36});check(!Capture(m));
     m=Fixture();m.Put(jewelEntry+8,std::int64_t{-15});check(!Capture(m));

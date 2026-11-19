@@ -207,7 +207,7 @@ remain in the cited source headers instead of duplicating them here.
 | Local context/player | `0x08B2D0`, `0x09A480`; `belt_signatures.h::LocalContext/LocalPlayer` |
 | Client unit lookup / native item page | `0x09A5D0`, `0x36CFE0`; `vendor_signatures.h::ClientUnitBytes/ItemPageBytes` |
 | Item code, cursor, native mode | `0x36EF50`, `0x14F1E0`, `0x14F210`; `native_identify_profile.h::Code/Cursor/Mode` |
-| Native item blocked check | `0x1C7360`; `identify_probe_profile.h::Blocked` |
+| Native item blocked check / unit state | `0x1C7360`, `0x3351B0`; `identify_probe_profile.h::Blocked`, `materials_signatures.h::HasUnitState` |
 | UI-mode query | `0x0CE500`; `materials_signatures.h::UiMode` |
 | Top-level panel lookup | `0x846170`; `native_identify_profile.h::FindPanel` |
 | Selected stash tab | `0x23AF50`; `shared_page_signatures.h::SelectedTab` |
@@ -215,7 +215,7 @@ remain in the cited source headers instead of duplicating them here.
 | Shared owner resolver | `0x23AD80`; existing `shared_owner_compatibility.h::ValidateOwner`, including its narrowly allowed relocated call to Core `0x1C9E00` |
 | Client request dispatch | existing `client_request_profile.h::Guard`: thunk `0x3E2B73C`, slot `0x3E2AE20` to Core `0x822DD0`; existing `plugin_coexistence.h::Send` validates the known forwarding-hook alternative |
 | Deposit eligibility | `0x15A0B0`; `storage_focus_profile.h::DepositEligible` |
-| Deposit destination, previous season, finish interaction | `0x46DA50`, `0x23B980`, `0x1A0780`; `materials_signatures.h::CurrentOwner/PreviousSeason/FinishInteraction` |
+| Deposit destination, counter lookup, stack capacity, previous season, finish interaction | `0x46DA50`, `0x46D8F0`, `0x46D9A0`, `0x23B980`, `0x1A0780`, Core `0x1BB960`, Core `0x3A0F20`; `materials_signatures.h::CurrentOwner/FindCounter/HasCounter/PreviousSeason/FinishInteraction/CoreMaterialsLimit/CoreCounterFull` (`0x1A0780` `SOUND_PlayUnitSound` / `PlaySoundById` checked via `QolItemCode::Check` across both `deposit_native.cpp` and `bulk_stash.cpp`, honoring `PluginContext::CheckExpectedBytes` / `Universal Chain Hook` and structurally admitting verified `D2RLoader` ABI-v4 plugin inline detours via `item_code_compatibility.h::ValidateFinishInteractionDetour`) |
 
 Canonical native evidence remains in Controller QOL's
 `docs/REMOTE-ID-TRANSFER-TRACE.md`, `docs/BULK-STASH-REV37.md`, and the referenced
@@ -243,11 +243,15 @@ new native entry points or relaxed compatibility checks.
 The remote adapter re-resolves `expected.handle` through ItemService, checks
 the existing `QolClientTransfer::Source` identity/container rule, then checks
 native item type, class ID, runtime ID, unit mode, item code, inventory page 0,
-blocked state, cursor state, and native interaction mode. Those native identity
-fields are the inherited DWORD offsets `+0x00`, `+0x04`, `+0x08`, `+0x0C` from
-the QOL request path. It checks eligibility and resolves the destination before
-using the existing disengaged 16-byte placement state for inventory page 0 to
-stash page 4 and the existing finish call `(3, nullptr, 0, 0, false)`.
+player-wide state `0x36` (`0x3351B0`), cursor state, and native interaction mode.
+Those native identity fields are the inherited DWORD offsets `+0x00`, `+0x04`,
+`+0x08`, `+0x0C` from the QOL request path. Item-scoped `0x1C7360(item) != 0`
+(when player state `0x36` is clear), native `0x15A0B0(item)` ineligibility,
+disabled rejuvenation-potion filtering, and full destination counter capacity
+(`HasAdvancedStashCapacity`) return `Ineligible` so the item is skipped without
+stopping the batch. For eligible items with stack room, it uses the existing
+disengaged 16-byte placement state for inventory page 0 to stash page 4 and
+the existing finish call `(3, nullptr, 0, 0, false)`.
 
 As in QOL, `Submitted` includes a false native transfer return: a request may
 already have been sent, so the batch owns observation and must not submit it
@@ -460,25 +464,25 @@ session/runtime-ID/seed validation. `include/D2RLPlugin/item.h` restricts
 `editNativeItem` to the game thread, so the UI scan does not use that API.
 
 `InspectEligibilityUnsafe` reuses the existing admitted client path on D2R
-`3.3.93787` with the existing exact D2RCore profile hash. No new RVA is introduced:
+`3.3.93787` with the existing exact D2RCore profile hash:
 
 | Existing operation | Reused contract |
 | --- | --- |
 | Client item lookup | `0x09A5D0(runtimeId, 4)`; guard `QolVendor::ClientUnitBytes` |
 | Unit identity | DWORD offsets `+0x00/+0x04/+0x08/+0x0C`: type 4, class ID, runtime ID, mode 0 |
 | Item code and inventory page | `0x36EF50(item)` and `0x36CFE0(item)`; require matching code and page 0 |
-| Blocked item | `0x1C7360(item)`; existing `QolIdentifyProbe::Blocked` guard |
-| Native eligibility | `bool 0x15A0B0(item)`; full `QolStorageProfile::DepositEligible` guard |
+| Player-wide / item-scoped blocked check | `0x3351B0(player, 0x36)` (`Unavailable`) and `0x1C7360(item)` (`Ineligible` when player state `0x36` is clear) |
+| Native eligibility and stack capacity | `bool 0x15A0B0(item)` (`QolStorageProfile::DepositEligible`) and `HasAdvancedStashCapacity` (`0x46DA50`, `0x46D8F0`, `itemData+0x9C`, Core `0x1BB960` / `0x3A0F20`) |
 
 These are the same client lookup, identity and eligibility calls used by
 `BatchDepositUnsafe`; native pointers are local to one synchronous inspection.
 The eligibility predicate's existing provenance is Controller QOL
-`docs/BULK-STASH-REV37.md` and `docs/REMOTE-ID-TRANSFER-TRACE.md`: stash context,
-expansion and advanced-storage registry membership. It is not a destination
-capacity probe or proof that the subsequent transfer will succeed. Exceptions
-latch the existing adapter off; ordinary SDK read failures simply disable the
-current button check. The scan submits nothing and calls neither the transfer
-nor finish-interaction routine.
+`docs/BULK-STASH-REV37.md`, `docs/REMOTE-ID-TRANSFER-TRACE.md`, and
+`docs/MATERIALS-NATIVE-CONTRACT.md`: stash context, expansion, advanced-storage
+registry membership, and destination counter capacity below the configured
+stack limit. Exceptions latch the existing adapter off; ordinary SDK read
+failures simply disable the current button check. The scan submits nothing and
+calls neither the transfer nor finish-interaction routine.
 
 The button enabled predicate is `!Busy() && HasEligibleItems()`. Thus busy batches
 skip the scan. The bulk queue still receives strict `Available()` alone: removing

@@ -1,6 +1,6 @@
 # Pyre Performance Optimizations
 
-**1.3.1+rev.2 · by PyreFly · Windows x64 / D2RLoader 1.3.1 / plugin ABI 4**
+**1.3.1+rev.4 · by PyreFly · Windows x64 / D2RLoader 1.3.1 / plugin ABI 4**
 
 Improves frame pacing, combat simulation throughput, and audio/VFX stability during dense monster packs and heavy multi-projectile gameplay across nine individually toggleable optimization switches.
 
@@ -25,8 +25,8 @@ Switches `2` through `9` are enabled by default; Switch `1` is optional and disa
 ## Installation and updates
 
 1. **Install via D2R Reimagined Launcher or manual extraction:**
-   - **Launcher:** Use **Install Plugin/Zip** on `Pyre-Performance-Optimizations-1.3.1+rev.2-PyreFly.zip` (and `Universal-Chain-Hook-1.3.1+rev.7-PyreFly.zip` if not already installed).
-   - **Manual extraction:** Close the game and extract `Pyre-Performance-Optimizations-1.3.1+rev.2-PyreFly.zip` into your game directory (for global/Vanilla use) or your active mod directory (for example `mods/Reimagined/`), placing `pyre-perf.dll` inside `d2rloader/plugins/`.
+   - **Launcher:** Use **Install Plugin/Zip** on `Pyre-Performance-Optimizations-1.3.1+rev.4-PyreFly.zip` (and `Universal-Chain-Hook-1.3.1+rev.8-PyreFly.zip` if not already installed).
+   - **Manual extraction:** Close the game and extract `Pyre-Performance-Optimizations-1.3.1+rev.4-PyreFly.zip` into your game directory (for global/Vanilla use) or your active mod directory (for example `mods/Reimagined/`), placing `pyre-perf.dll` inside `d2rloader/plugins/`.
 2. Start the game through D2RLoader. On first launch, D2RLoader creates a minimal `d2rloader/config/pyre-perf.toml` (`enabled = true`); individual optimization switches use the built-in defaults below and are written automatically whenever you toggle them with `/pyreperf` (or you can add any key manually).
 
 ## Chat and console commands (`/pyreperf`)
@@ -78,4 +78,4 @@ freeze_shatter_fix = true
 
 - **Closed-Source Runtime Release**: Distributed as a standalone runtime DLL (`pyre-perf.dll`) with this player guide.
 - **Client vs. Host Scope**: Client-side optimizations (Switch 5 sound/VFX budgeting and Switch 9 frozen shatter restoration) apply in all modes including server-hosted multiplayer. Simulation-side optimizations (Switches 1–4 and 6–8) run wherever the `D2Game` simulation runs (offline single-player, local TCP/IP host, or dedicated server).
-- **Safe Build Guard**: Validates the active game build at startup and remains safely inert on unsupported versions.
+- **Safe Build Guard**: Validates the active game code directly in memory at startup and stays safely inert on unsupported versions.

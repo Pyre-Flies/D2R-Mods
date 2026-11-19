@@ -1,6 +1,5 @@
 #include <windows.h>
 #include <intrin.h>
-#include <bcrypt.h>
 #include <D2RLPlugin/context.h>
 #include <D2RLPlugin/api.h>
 #include <D2RLChat/native_commands.h>
@@ -57,7 +56,7 @@ std::atomic<bool> randomSkillsReady{false};
 std::atomic<bool> quantityRateReady{false};
 std::atomic<bool> alwaysReady{false};
 std::atomic<bool> levelsReady{false};
-bool alwaysConfigured{};
+std::atomic<bool> alwaysConfigured{false};
 std::atomic<bool> alwaysEnabled{false};
 D2RLChat::NativeCommands rollCommands;
 thread_local std::optional<std::uint64_t> tooltipModifiers;
@@ -92,7 +91,10 @@ TablesFn getTables{};
 EligibleFn eligibleAffix{};
 void** singleSlot{};
 std::uintptr_t singleReturn{};
-struct CapturedLine { std::string key; int stat{},layer{}; bool grouped{}; unsigned group{}; };
+struct CapturedLine {
+    std::string key; int stat{},layer{}; bool grouped{}; unsigned group{};
+    bool operator==(const CapturedLine&) const = default;
+};
 thread_local std::vector<CapturedLine>* captureLines{};
 thread_local bool rendering{};
 wchar_t diagnosticPath[MAX_PATH]{};
@@ -108,8 +110,9 @@ __declspec(noinline) std::uint64_t __fastcall AlwaysModifierAdapter() noexcept {
     const auto value=originalModifiers();
     const bool tooltipCaller=reinterpret_cast<std::uintptr_t>(_ReturnAddress())==modifierReturn;
     if(tooltipCaller)tooltipModifiers=value;
+    const bool enabled=alwaysReady.load(std::memory_order_acquire) && alwaysEnabled.load();
     return RollRanges::AlwaysKeyboard(value,tooltipCaller,
-        Allowed(),alwaysReady.load(std::memory_order_acquire) && alwaysEnabled.load());
+        tooltipCaller && enabled && Allowed(),enabled);
 }
 __declspec(noinline) std::uint64_t __fastcall AlwaysForcedButtons(void* device,unsigned user,unsigned mask) noexcept {
     // The selector already qualified this query. Preserve the predecessor call
@@ -118,19 +121,20 @@ __declspec(noinline) std::uint64_t __fastcall AlwaysForcedButtons(void* device,u
 }
 extern "C" ButtonQueryFn __fastcall SelectAlwaysButtonTarget(void* device,unsigned user,unsigned mask,
     std::uintptr_t caller) noexcept {
+    const bool tooltipCaller=caller==buttonReturn;
     const bool enabled=alwaysReady.load(std::memory_order_acquire) && alwaysEnabled.load();
-    const bool force=RollRanges::AlwaysController(0,caller==buttonReturn,
-        enabled && Allowed(),enabled,device!=nullptr,user,mask)!=0;
+    const bool force=RollRanges::AlwaysController(0,tooltipCaller,
+        tooltipCaller && enabled && Allowed(),enabled,device!=nullptr,user,mask)!=0;
     // The assembly entry tail-forwards the unmodified arguments and original
     // return address. QOL can still qualify its exact Core tooltip caller.
     return force?&AlwaysForcedButtons:originalButtons;
 }
 bool TooltipSelectorScope(const void* stack,std::uintptr_t caller,bool unique) noexcept {
-    if (!coreBase || !Readable(stack,0x138)) return false;
-    const auto* bytes=static_cast<const unsigned char*>(stack);
+    if (!coreBase) return false;
     const auto base=reinterpret_cast<std::uintptr_t>(coreBase);
-    return caller==base+(unique?0x377cfc:0x377b2e) &&
-        Affixes::Read<std::uintptr_t>(bytes,0x50)==base+(unique?0x376e3c:0x376e22) &&
+    if (caller!=base+(unique?0x377cfc:0x377b2e) || !Readable(stack,0x138)) return false;
+    const auto* bytes=static_cast<const unsigned char*>(stack);
+    return Affixes::Read<std::uintptr_t>(bytes,0x50)==base+(unique?0x376e3c:0x376e22) &&
         Affixes::Read<std::uintptr_t>(bytes,0x130)==base+0x81977c;
 }
 const unsigned char* VisibleUniqueRow(const unsigned char* row,std::array<unsigned char,0x15c>& snapshot) noexcept {
@@ -138,7 +142,15 @@ const unsigned char* VisibleUniqueRow(const unsigned char* row,std::array<unsign
     std::memcpy(snapshot.data(),row,snapshot.size());snapshot[0x2c]&=~8u;
     return snapshot.data();
 }
-struct SetVisibilityView {std::array<unsigned char,0x13b8> tables{};std::vector<unsigned char> rows;};
+struct SetVisibilityView {
+    std::array<unsigned char,0x13b8> tables{};
+    std::vector<unsigned char> rows;
+    const unsigned char* cachedTables{};
+    const unsigned char* cachedRows{};
+    std::uint64_t cachedCount{};
+    int cachedRecord{-1};
+    unsigned char cachedFlags{};
+};
 const unsigned char* VisibleSetTables(const unsigned char* tables,const unsigned char* source,SetVisibilityView& snapshot) {
     if (!Readable(tables,0x13b8) || !Readable(source,0x18) || Affixes::Read<unsigned>(source,0)!=4) return tables;
     const auto* data=Affixes::Read<const unsigned char*>(source,0x10);
@@ -149,19 +161,26 @@ const unsigned char* VisibleSetTables(const unsigned char* tables,const unsigned
     if (record<0 || count>32768 || static_cast<std::uint64_t>(record)>=count || !Readable(rows,count*0x1cc)) return tables;
     const auto* row=rows+static_cast<std::size_t>(record)*0x1cc;
     if (!(row[0x2c]&8) || (row[0x2c]&4)) return tables;
+    if (active.load(std::memory_order_relaxed) &&
+        snapshot.cachedTables==tables && snapshot.cachedRows==rows &&
+        snapshot.cachedCount==count && snapshot.cachedRecord==record &&
+        snapshot.cachedFlags==row[0x2c] && snapshot.rows.size()==static_cast<std::size_t>(count)*0x1cc)
+        return snapshot.tables.data();
     // Copy the full SetItems table so no adjacent record in the temporary view is zeroed.
     snapshot.rows.resize(static_cast<std::size_t>(count)*0x1cc);
     std::memcpy(snapshot.rows.data(),rows,snapshot.rows.size());
     snapshot.rows[static_cast<std::size_t>(record)*0x1cc+0x2c]&=~8u;
     std::memcpy(snapshot.tables.data(),tables,snapshot.tables.size());
     const auto* copied=snapshot.rows.data();std::memcpy(snapshot.tables.data()+0x13a8,&copied,sizeof(copied));
+    snapshot.cachedTables=tables;snapshot.cachedRows=rows;snapshot.cachedCount=count;
+    snapshot.cachedRecord=record;snapshot.cachedFlags=row[0x2c];
     return snapshot.tables.data();
 }
 __declspec(noinline) const unsigned char* __fastcall UniqueVisibilityAdapter(unsigned char bank,unsigned record) noexcept {
     const auto caller=reinterpret_cast<std::uintptr_t>(_ReturnAddress());
     const auto* stack=_AddressOfReturnAddress();
     const auto* row=originalUniqueRow(bank,record);
-    if (!Allowed() || !TooltipSelectorScope(stack,caller,true)) return row;
+    if (!TooltipSelectorScope(stack,caller,true) || !Allowed()) return row;
     thread_local std::array<unsigned char,0x15c> snapshot;
     return VisibleUniqueRow(row,snapshot);
 }
@@ -169,7 +188,7 @@ __declspec(noinline) const unsigned char* __fastcall SetVisibilityAdapter(unsign
     const auto caller=reinterpret_cast<std::uintptr_t>(_ReturnAddress());
     const auto* stack=static_cast<const unsigned char*>(_AddressOfReturnAddress());
     const auto* tables=getTables(bank);
-    if (!Allowed() || !TooltipSelectorScope(stack,caller,false)) return tables;
+    if (!TooltipSelectorScope(stack,caller,false) || !Allowed()) return tables;
     try {
         // Saved parent RBX is the source unit in the guarded eligibility frame.
         const auto* source=Affixes::Read<const unsigned char*>(stack,0x30);
@@ -382,7 +401,7 @@ __declspec(noinline) int __fastcall SpecialAdapter(void* context,int stat,char* 
 // Properties-table indices. Bounds and depth prevent malformed/cyclic groups.
 void AddUniqueSource(const unsigned char* spec,const unsigned char* groups,std::size_t groupCount,
                      std::size_t propertyCount,std::vector<Affixes::Rolled>& out,unsigned depth=0,bool scalarAllowed=true,const char* sourceTag="[U]",bool unconditional=true) {
-    if (depth>4 || out.size()>=128) return;
+    if (depth>4 || out.size()>128) return;
     const auto id=Affixes::Read<std::uint32_t>(spec,0);
     if (id==0xffffffffu) return;
     if ((id>>16)==1) {
@@ -390,23 +409,56 @@ void AddUniqueSource(const unsigned char* spec,const unsigned char* groups,std::
         if (index>=groupCount) return;
         const auto* row=groups+index*0xc8;
         if (row[4]>2) return;
+        const int specLow=Affixes::Read<int>(spec,8),specHigh=Affixes::Read<int>(spec,12);
+        const bool applyAll=(row[4]==0);
+        const bool singlePick=(row[4]==1||row[4]==2)&&specLow==specHigh&&specLow<=1;
         unsigned viable=0;
-        for(unsigned n=0;n<8;++n)viable+=Affixes::Read<int>(row+8+n*24,20)>0;
-        bool choice=depth==0 && scalarAllowed && row[4]==2 && viable>1 && Affixes::Read<int>(spec,8)==1 && Affixes::Read<int>(spec,12)==1;
-        for(unsigned n=0;n<8;++n){const auto* entry=row+8+n*24;if(Affixes::Read<int>(entry,20)<=0)continue;
-            choice&=Affixes::Read<int>(entry,4)==Affixes::Read<int>(entry,8) && Affixes::Read<std::uint32_t>(entry,0)<propertyCount;}
+        std::size_t expandedCount=0;
+        bool choicePossible=depth==0 && scalarAllowed && singlePick;
+        auto emptyEntry=[](const unsigned char* entry,std::uint32_t entryProp) noexcept {
+            return entryProp==0xffffffffu || std::all_of(entry,entry+24,[](unsigned char b){return b==0;});
+        };
+        for(unsigned n=0;n<8;++n){
+            const auto* entry=row+8+n*24;
+            const auto entryProp=Affixes::Read<std::uint32_t>(entry,0);
+            if(emptyEntry(entry,entryProp))continue;
+            ++viable;
+            const int parMin=Affixes::Read<int>(entry,4),parMax=Affixes::Read<int>(entry,8);
+            if(parMax<parMin || entryProp>=propertyCount){choicePossible=false;continue;}
+            if(parMin<parMax){
+                if(parMin<0 || parMax-parMin>24){choicePossible=false;continue;}
+                expandedCount+=static_cast<std::size_t>(parMax-parMin+1);
+            }else{
+                ++expandedCount;
+            }
+        }
+        const bool choice=choicePossible && expandedCount>=2 && expandedCount<=32 && out.size()+expandedCount<=128;
         const auto pool=static_cast<unsigned>(out.size()+1);
+        unsigned choiceIdx=0;
         for (unsigned n=0;n<8;++n) {
             const auto* entry=row+8+n*24;
-            if (Affixes::Read<int>(entry,20)<=0 || Affixes::Read<int>(entry,4)!=Affixes::Read<int>(entry,8)) continue;
+            const auto entryProp=Affixes::Read<std::uint32_t>(entry,0);
+            if (emptyEntry(entry,entryProp)) continue;
+            const int parMin=Affixes::Read<int>(entry,4),parMax=Affixes::Read<int>(entry,8);
+            if (choice) {
+                for (int par=parMin;par<=parMax;++par) {
+                    unsigned char child[16]{};
+                    std::memcpy(child,entry,4); std::memcpy(child+4,&par,4);
+                    std::memcpy(child+8,entry+12,8);
+                    const auto first=out.size();
+                    AddUniqueSource(child,groups,groupCount,propertyCount,out,depth+1,true,sourceTag,false);
+                    for(auto at=first;at<out.size();++at){out[at].choicePool=pool;out[at].choiceEntry=choiceIdx+1;}
+                    ++choiceIdx;
+                }
+                continue;
+            }
             unsigned char child[16]{};
             std::memcpy(child,entry,4); std::memcpy(child+4,entry+4,4);
             std::memcpy(child+8,entry+12,8);
-            const auto first=out.size();
+            const bool exactParam=(parMin==parMax);
             AddUniqueSource(child,groups,groupCount,propertyCount,out,depth+1,
-                scalarAllowed && row[4]==2 && Affixes::Read<int>(spec,8)==1 && Affixes::Read<int>(spec,12)==1,sourceTag,
-                unconditional && viable==1 && row[4]==2 && Affixes::Read<int>(spec,8)==1 && Affixes::Read<int>(spec,12)==1);
-            if(choice)for(auto at=first;at<out.size();++at){out[at].choicePool=pool;out[at].choiceEntry=n+1;}
+                scalarAllowed && exactParam && (applyAll || singlePick),sourceTag,
+                unconditional && exactParam && (applyAll || (viable==1 && singlePick)));
         }
     } else if ((id>>16)==0 && id<propertyCount) {
         Affixes::Row row{};
@@ -429,9 +481,9 @@ std::string UniqueRange(void* source,const CapturedLine& line,const std::vector<
     const auto count=Affixes::Read<std::uint64_t>(tables,0x1260);
     if (line.stat<0 || count>4096 || static_cast<std::uint64_t>(line.stat)>=count || !Readable(stats,count*0x144)) return {};
     const auto* row=stats+static_cast<std::size_t>(line.stat)*0x144;
-    // Reviewed descfunc19/20 format the supplied display-unit integer through
+    // Reviewed descfunc 1/19/20 format the supplied display-unit integer through
     // their native template (including inverted signs such as enemy resistance).
-    if (row[0x32]!=19 && row[0x32]!=20) return {};
+    if (row[0x32]!=19 && row[0x32]!=20 && (row[0x32]!=1 || row[0x50] || row[0x14])) return {};
     char lower[256]{},upper[256]{};
     if (!originalSingle(source,row,low,0,false,lower,1) || !originalSingle(source,row,high,0,false,upper,1)) return {};
     const auto ln=strnlen(lower,256),hn=strnlen(upper,256);
@@ -580,7 +632,7 @@ void AddOwnedScalarIdentities(void* source,const Contributions::Snapshot& snapsh
         if(!originalSingle)continue;
         const auto* row=metadata+stat*0x144;
         const auto desc=Affixes::Read<std::uint16_t>(row,0x32);
-        if(!desc || ((desc!=19 || layer) && !(stat==83 && desc==13 && layer<8) && !propertySourcesReady.load()))continue;
+        if(!desc || (((desc!=19 && desc!=1) || layer) && !(stat==83 && desc==13 && layer<8) && !propertySourcesReady.load()))continue;
         if(layer && (stat>=195 && stat<=204))continue;
         if(Affixes::Read<std::uint16_t>(row,0)!=stat)continue;
         const auto group=Affixes::Read<std::uint16_t>(row,0x3a);
@@ -716,7 +768,7 @@ std::vector<RangeText::Label> AffixLabels(void* source,const std::vector<Capture
             const auto word=ReadWordDefinitions(*scalingSnapshot,properties,groups);
             if(word)rolled.insert(rolled.end(),word->begin(),word->end());
         }
-        const auto gatheredSources=itemStatsValid?GatherSourceGroups(source,rolled,{rows,static_cast<std::size_t>(rowCount)},prefixIndex,autoIndex,properties):std::optional<SourceGroups>{};
+        const auto gatheredSources=itemStatsValid?GatherSourceGroups(source,rolled,{rows,static_cast<std::size_t>(rowCount)},prefixIndex,autoIndex,properties,scalingSnapshot):std::optional<SourceGroups>{};
         auto allDefinitions=rolled;
         auto identityDefinitions=rolled;
         if(gatheredSources){
@@ -738,11 +790,30 @@ std::vector<RangeText::Label> AffixLabels(void* source,const std::vector<Capture
             encoding,groups,itemStats,static_cast<std::size_t>(itemStatCount));
         std::vector<RangeText::Label> labels;
         const auto levelCap=ActiveLevelCap(tables);
+        const auto auxOverlap=[&](int stat,int layer,bool grouped,unsigned groupId,std::string_view key)->bool{
+            if(!scalingSnapshot || scalingSnapshot->auxiliary.empty() || stat<0)return false;
+            const auto& aux=scalingSnapshot->auxiliary;
+            const unsigned ustat=static_cast<unsigned>(stat),ulayer=layer>0?static_cast<unsigned>(layer):0u;
+            if(!grouped){
+                if(Contributions::Value(aux,ustat,ulayer))return true;
+                if(!ulayer && (ustat==17 || ustat==18) && (Contributions::Value(aux,17) || Contributions::Value(aux,18)))return true;
+                if(!ulayer && ((ustat>=21 && ustat<=24) || (ustat>=48 && ustat<=55)) && std::count(key.begin(),key.end(),'#')==2){
+                    const unsigned lo=(ustat>=21 && ustat<=24)?((ustat&1)?ustat:ustat-1):(ustat&~1u);
+                    if(Contributions::Value(aux,lo) || Contributions::Value(aux,lo+1))return true;
+                }
+                if(!ulayer && stat>=57 && stat<=59 && (Contributions::Value(aux,57) || Contributions::Value(aux,58) || Contributions::Value(aux,59)))return true;
+            }else if(groupId && itemStatsValid){
+                for(std::size_t n=0;n<itemStatCount;++n)
+                    if(Affixes::Read<std::uint16_t>(itemStats+n*0x144,0x3a)==groupId && Contributions::Value(aux,static_cast<unsigned>(n)))return true;
+            }
+            return false;
+        };
         for (const auto& line:observed) {
             if(line.stat==361 || line.stat==362 || (line.stat>=367 && line.stat<=376) ||
                (line.stat>=384 && line.stat<=386) || (line.stat>=392 && line.stat<=398) ||
                (line.stat>=404 && line.stat<=412) || line.stat==419 || line.stat==420 ||
-               line.stat==433 || (line.stat>=438 && line.stat<=440) || line.stat==443)continue;
+               line.stat==433 || (line.stat>=438 && line.stat<=440) || line.stat==443 ||
+               auxOverlap(line.stat,line.layer,line.grouped,line.group,line.key))continue;
             if(line.stat==204 && !line.grouped){
                 std::string key=line.key;
                 if(!actual.empty()){
@@ -866,7 +937,8 @@ std::vector<RangeText::Label> AffixLabels(void* source,const std::vector<Capture
             for(auto& label:labels){
                 if(!label.ownedParts.empty() || label.parts.empty())continue;
                 const auto found=std::find_if(observed.begin(),observed.end(),[&](const CapturedLine& line){return line.key==label.key;});
-                if(found==observed.end() || found->layer || found->grouped || found->stat<0 || static_cast<std::uint64_t>(found->stat)>=itemStatCount)continue;
+                if(found==observed.end() || found->layer || found->grouped || found->stat<0 || static_cast<std::uint64_t>(found->stat)>=itemStatCount ||
+                   auxOverlap(found->stat,found->layer,found->grouped,found->group,found->key))continue;
                 const auto stat=static_cast<unsigned>(found->stat);
                 if(stat!=16 && stat!=17 && stat!=18 && stat!=20 && !(stat>=21&&stat<=24) && stat!=31 &&
                    Contributions::Value(scalingSnapshot->own,stat)!=Contributions::Value(scalingSnapshot->total,stat))continue;
@@ -889,7 +961,7 @@ std::vector<RangeText::Label> AffixLabels(void* source,const std::vector<Capture
         if(scalingSnapshot && itemStatsValid && propertySourcesReady.load())
             AddIntrinsicUndeadLabel(source,tables,*scalingSnapshot,rolled,
                 {rows,static_cast<std::size_t>(rowCount)},prefixIndex,autoIndex,properties,
-                itemStats,static_cast<std::size_t>(itemStatCount),actual,labels);
+                itemStats,static_cast<std::size_t>(itemStatCount),actual,labels,gatheredSources);
         return labels;
     } catch (...) { return {}; }
 }
@@ -1047,9 +1119,21 @@ std::string SocketHeaderAnchorKey(const char* name) {
     }
     return count?RangeText::Analyze(pattern).key:std::string{};
 }
-unsigned char ItemSocketCapacity(void* source,std::int64_t current) {
+struct SocketCapacityCacheEntry {
+    bool valid{};
+    const void* source{};
+    std::array<unsigned char,0x18> unitHeader{};
+    unsigned char unitBank{};
+    std::array<unsigned char,0x38> itemDataBytes{};
+    std::int64_t current{};
+    SocketCapacityFn capacityFn{};
+    TablesFn tablesFn{};
+    unsigned char baseCap{};
+    unsigned char itemCap{};
+};
+thread_local std::array<SocketCapacityCacheEntry,16> socketCapacityCache{};
+unsigned char ItemSocketCapacityWithBase(void* source,std::int64_t current,unsigned char baseCap) {
     if(!nativeSocketCapacity)return 0;
-    const auto baseCap=nativeSocketCapacity(source);
     if(!baseCap || baseCap>6 || !getTables || !Readable(source,0x1be))return baseCap;
     const auto* unit=static_cast<const unsigned char*>(source);
     if(Affixes::Read<unsigned>(unit,0)!=4 || unit[0x1bd]>=4)return baseCap;
@@ -1097,6 +1181,57 @@ unsigned char ItemSocketCapacity(void* source,std::int64_t current) {
     const int floor=current>0 && current<=6?static_cast<int>(current):1;
     return static_cast<unsigned char>(std::clamp(specMax,floor,static_cast<int>(baseCap)));
 }
+std::pair<unsigned char,unsigned char> ResolveItemSocketCapacities(void* source,std::int64_t current=0) {
+    if(!nativeSocketCapacity)return {unsigned char{0},unsigned char{0}};
+    const bool useCache=active.load(std::memory_order_relaxed);
+    std::array<unsigned char,0x18> unitHeader{};
+    unsigned char unitBank{};
+    std::array<unsigned char,0x38> itemDataBytes{};
+    bool canKey=false;
+    if(useCache && Readable(source,0x1be)){
+        const auto* unit=static_cast<const unsigned char*>(source);
+        const auto* data=Affixes::Read<const unsigned char*>(unit,0x10);
+        if(Readable(data,0x38)){
+            std::memcpy(unitHeader.data(),unit,unitHeader.size());
+            unitBank=unit[0x1bd];
+            std::memcpy(itemDataBytes.data(),data,itemDataBytes.size());
+            canKey=true;
+            for(std::size_t i=0;i<socketCapacityCache.size();++i){
+                const auto& e=socketCapacityCache[i];
+                if(e.valid && e.source==source && e.unitBank==unitBank && e.current==current &&
+                   e.capacityFn==nativeSocketCapacity && e.tablesFn==getTables &&
+                   e.unitHeader==unitHeader && e.itemDataBytes==itemDataBytes)
+                    return {e.baseCap,e.itemCap};
+            }
+        }
+    }
+    const auto baseCap=nativeSocketCapacity(source);
+    const auto itemCap=ItemSocketCapacityWithBase(source,current,baseCap);
+    if(canKey){
+        std::rotate(socketCapacityCache.rbegin(),socketCapacityCache.rbegin()+1,socketCapacityCache.rend());
+        socketCapacityCache[0]={true,source,unitHeader,unitBank,itemDataBytes,current,nativeSocketCapacity,getTables,baseCap,itemCap};
+    }
+    return {baseCap,itemCap};
+}
+unsigned char ItemSocketCapacity(void* source,std::int64_t current) {
+    return ResolveItemSocketCapacities(source,current).second;
+}
+const std::vector<std::string>& SocketHeaderAnchors() {
+    struct AnchorCache { ULONGLONG tick{}; LookupFn fn{}; std::vector<std::string> anchors{}; };
+    thread_local AnchorCache cache{};
+    const bool useCache=active.load(std::memory_order_relaxed);
+    const auto now=useCache?(GetTickCount64()>>6):0ull;
+    if(useCache && cache.fn==lookupHeader && cache.tick==now && cache.anchors.size()==9)
+        return cache.anchors;
+    cache.anchors.clear();
+    cache.anchors.reserve(9);
+    for(const auto* anchorName:{"ItemStats1p","ItemStats1e","ItemStats1f","ItemStats1d","ItemStats1i",
+                         "ItemStats1h","ItemStats1l","ItemStats1m","strItemStatThrowDamageRange"})
+        cache.anchors.push_back(SocketHeaderAnchorKey(anchorName));
+    cache.fn=lookupHeader;
+    cache.tick=now;
+    return cache.anchors;
+}
 bool FormatSocketCapacityLabel(unsigned char maximum,std::string& key,std::string& label) {
     if(!lookupHeader || !maximum || maximum>6)return false;
     NativeText group{reinterpret_cast<const char*>(HeaderProfile::ResourceGroup),3},
@@ -1121,11 +1256,7 @@ std::string AnnotateSocketHeader(void* source,std::string_view text) {
     std::string key,label;
     if(!FormatSocketCapacityLabel(maximum,key,label))return std::string(text);
     for(const auto line:RangeText::Lines(text))if(RangeText::Analyze(line).key==key)return std::string(text);
-    std::vector<std::string> anchors;
-    for(const auto* anchorName:{"ItemStats1p","ItemStats1e","ItemStats1f","ItemStats1d","ItemStats1i",
-                         "ItemStats1h","ItemStats1l","ItemStats1m","strItemStatThrowDamageRange"})
-        anchors.push_back(SocketHeaderAnchorKey(anchorName));
-    return HeaderText::SocketCapacity(text,key,label,anchors);
+    return HeaderText::SocketCapacity(text,key,label,SocketHeaderAnchors());
 }
 std::string AnnotateLevelHeader(std::string_view text,const unsigned char* data,const unsigned char* row) {
     if(!levelsReady.load(std::memory_order_acquire) || !lookupHeader ||
@@ -1135,10 +1266,6 @@ std::string AnnotateLevelHeader(std::string_view text,const unsigned char* data,
     if(itemLevel<1)return std::string(text);
     const auto qualityLevel=row[LevelProfile::QualityLevelOffset];
     const auto label="(Ilvl: "+std::to_string(itemLevel)+", Qlvl: "+std::to_string(qualityLevel)+")";
-    std::vector<std::string> anchors;
-    for(const auto* name:{"ItemStats1p","ItemStats1e","ItemStats1f","ItemStats1d","ItemStats1i",
-                         "ItemStats1h","ItemStats1l","ItemStats1m","strItemStatThrowDamageRange"})
-        anchors.push_back(SocketHeaderAnchorKey(name));
     // The qualified builder's full tooltip is bottom-to-top. Normal/magic
     // titles occupy one line; verify Core's exact item-level suffix before
     // using that line when no numeric header exists. Do not guess multi-line
@@ -1154,7 +1281,7 @@ std::string AnnotateLevelHeader(std::string_view text,const unsigned char* data,
         const auto numbers=HeaderText::Numbers(candidate);
         if(plain.size()>suffix.size() && plain.ends_with(suffix) && numbers.size()==1 && numbers[0]==itemLevel)title=candidate;
     }
-    return HeaderText::LevelInfo(text,label,anchors,title);
+    return HeaderText::LevelInfo(text,label,SocketHeaderAnchors(),title);
 }
 extern "C" void ObserveHeaderRequest(std::uint64_t buttons,std::uintptr_t caller,const unsigned char* frame) noexcept {
     fixedHeaderRequested=false;
@@ -1175,22 +1302,158 @@ extern "C" void ObserveHeaderRequest(std::uint64_t buttons,std::uintptr_t caller
     fixedHeaderRequested=FixedHeaderRequest(keyboard!=0,keys,buttons);
 
 }
-extern "C" __declspec(noinline) NativeText* __fastcall HeaderBuilderAdapter(void* a,void* b,void* c,void* item,
+struct HeaderBuilderCacheKey {
+    ULONGLONG tickBucket{};
+    const void* clientContext{};
+    const void* playerUnit{};
+    const void* sourceItem{};
+    bool hasClone{};
+    int flags{};
+    unsigned char d{};
+    unsigned char e{};
+    bool hasDefinitions{};
+    bool countInputPresent{};
+    std::uint64_t countInputValue{};
+    unsigned char defenseFlag{};
+    int ownerLevel{};
+    bool hasPlayerHeader{};
+    std::array<unsigned char,0x18> playerHeader{};
+    std::array<unsigned char,0x18> unitHeader{};
+    unsigned char unitBank{};
+    std::array<unsigned char,0x64> itemDataBytes{};
+    std::optional<Contributions::Snapshot> contributions{};
+    unsigned featureFlags{};
+    LookupFn lookupFn{};
+    ArmorFn armorFn{};
+    SocketCapacityFn capacityFn{};
+    bool operator==(const HeaderBuilderCacheKey&) const = default;
+};
+struct HeaderBuilderCacheEntry {
+    bool valid{};
+    HeaderBuilderCacheKey key{};
+    std::string resultText{};
+    bool hasPendingHeader{};
+    std::string pendingActual{};
+    std::string pendingAnnotated{};
+    bool hasSocketOverride{};
+    std::string socketKey{};
+    std::string socketLabel{};
+};
+thread_local std::array<HeaderBuilderCacheEntry,16> headerBuilderCache{};
+thread_local const void* currentTooltipPlayer{};
+int PlayerUnitLevel(const void* unitPtr) noexcept {
+    const auto* unit=static_cast<const unsigned char*>(unitPtr);
+    if(!unit || !Readable(unit,0x90) || Affixes::Read<unsigned>(unit,0)!=0)return 0;
+    const auto* stats=Affixes::Read<const unsigned char*>(unit,0x88);
+    if(!stats || !Readable(stats,0xb8))return 0;
+    for(const std::size_t vecOff:{std::size_t{0xa8},std::size_t{0x30}}){
+        if(vecOff==0xa8 && !Contributions::ExtendedFlags(Affixes::Read<unsigned>(stats,0x1c)))continue;
+        const auto* entries=Affixes::Read<const unsigned char*>(stats,vecOff);
+        const auto count=Affixes::Read<std::uint64_t>(stats,vecOff+8);
+        if(!entries || !count || count>512 || !Readable(entries,static_cast<std::size_t>(count)*16))continue;
+        for(std::uint64_t i=0;i<count;++i){
+            const auto raw=Affixes::Read<std::uint64_t>(entries,static_cast<std::size_t>(i)*16);
+            if(raw==(std::uint64_t{12}<<32))
+                return Affixes::Read<int>(entries,static_cast<std::size_t>(i)*16+8);
+        }
+    }
+    return 0;
+}
+int ResolveOwnerLevel(const void* source) noexcept {
+    if(Readable(source,0x18)){
+        const auto* unit=static_cast<const unsigned char*>(source);
+        const auto* itemData=Affixes::Read<const unsigned char*>(unit,0x10);
+        if(Readable(itemData,0xa8)){
+            const auto* ctrl=Affixes::Read<const unsigned char*>(itemData,0xa0);
+            if(ctrl && Readable(ctrl,0x10) && Affixes::Read<unsigned>(ctrl,8)!=0){
+                if(const int lvl=PlayerUnitLevel(Affixes::Read<const void*>(itemData,0x98));lvl>0)return lvl;
+            }
+            if(const int lvl=PlayerUnitLevel(Affixes::Read<const void*>(itemData,0x90));lvl>0)return lvl;
+        }
+    }
+    return PlayerUnitLevel(currentTooltipPlayer);
+}
+std::optional<HeaderBuilderCacheKey> CaptureHeaderBuilderCacheKey(const void* b,const void* c,void* item,
+    int flags,unsigned char d,unsigned char e,const void* f,const void* g,const unsigned char* frame) {
+    if(!active.load(std::memory_order_acquire) || !Readable(item,0x1be) || !Readable(frame+0x18b0,1))return {};
+    const auto* unitBytes=static_cast<const unsigned char*>(item);
+    if(Affixes::Read<unsigned>(unitBytes,0)!=4 || unitBytes[0x1bd]>=4)return {};
+    const auto* itemData=Affixes::Read<const unsigned char*>(unitBytes,0x10);
+    if(reinterpret_cast<std::uintptr_t>(itemData)<0x1001c || !Readable(itemData-28,0x64))return {};
+    HeaderBuilderCacheKey key{};
+    key.tickBucket=GetTickCount64()>>8;
+    key.clientContext=b;
+    key.playerUnit=c;
+    key.sourceItem=item;
+    key.hasClone=RangeFromOverlay(NativeOverlay());
+    key.flags=flags;
+    key.d=d;
+    key.e=e;
+    key.hasDefinitions=(f!=nullptr);
+    if(g && Readable(g,16)){
+        const auto* countBytes=static_cast<const unsigned char*>(g);
+        key.countInputPresent=countBytes[8]!=0;
+        if(key.countInputPresent)key.countInputValue=Affixes::Read<std::uint64_t>(countBytes,0);
+    }
+    key.defenseFlag=frame[0x18b0];
+    key.ownerLevel=c?PlayerUnitLevel(c):ResolveOwnerLevel(item);
+    if(c && Readable(c,0x18)){
+        key.hasPlayerHeader=true;
+        std::memcpy(key.playerHeader.data(),c,key.playerHeader.size());
+    }
+    std::memcpy(key.unitHeader.data(),unitBytes,key.unitHeader.size());
+    key.unitBank=unitBytes[0x1bd];
+    std::memcpy(key.itemDataBytes.data(),itemData-28,key.itemDataBytes.size());
+    key.contributions=CaptureItemContributions(item);
+    key.featureFlags=(contributionsReady.load()?1u:0u)|(scalingReady.load()?2u:0u)|
+        (propertySourcesReady.load()?4u:0u)|(poisonDisplayReady.load()?8u:0u)|
+        (randomSkillsReady.load()?16u:0u)|(quantityRateReady.load()?32u:0u)|
+        (levelsReady.load()?64u:0u)|(alwaysEnabled.load()?128u:0u);
+    key.lookupFn=lookupHeader;
+    key.armorFn=getArmor;
+    key.capacityFn=nativeSocketCapacity;
+    return key;
+}
+NativeText* RunHeaderBuilder(bool fromBuilder,const unsigned char* frame,void* a,void* b,void* c,void* item,
     int flags,unsigned char d,unsigned char e,void* f,void* g) noexcept {
-    const bool fromBuilder=reinterpret_cast<std::uintptr_t>(_ReturnAddress())==builderReturn;
     const bool scoped=fromBuilder && (Held() || fixedHeaderRequested || AlwaysRequested());
     fixedHeaderRequested=false;
     // Properties are built later in this same qualified Core tooltip operation.
     // Keep only request/source identity, and consume it at that caller once.
     if(fromBuilder){
+        currentTooltipPlayer=c;
         BeginPropertyRequest(item,scoped);
         pendingSocketOverride={};
         pendingPropertyOverflow={};
     }
     if (scoped) pendingHeader={};
-    // Frame is qualified byte-for-byte; derive its address before the native
-    // call. No frame, item or definition memory is written by this adapter.
-    const auto* frame=static_cast<const unsigned char*>(_AddressOfReturnAddress())+8+0x80;
+    std::optional<HeaderBuilderCacheKey> headerCacheKey;
+    if(scoped && a && Readable(a,0x28) && originalAssign){
+        try {
+            headerCacheKey=CaptureHeaderBuilderCacheKey(b,c,item,flags,d,e,f,g,frame);
+            if(headerCacheKey){
+                for(std::size_t slot=0;slot<headerBuilderCache.size();++slot){
+                    auto& entry=headerBuilderCache[slot];
+                    if(entry.valid && entry.key==*headerCacheKey){
+                        auto* raw=static_cast<std::uint64_t*>(a);
+                        raw[0]=reinterpret_cast<std::uint64_t>(raw+3);
+                        raw[1]=0;
+                        raw[2]=0x800000000000000full;
+                        reinterpret_cast<char*>(raw+3)[0]=0;
+                        if(g && Readable(g,9))static_cast<unsigned char*>(g)[8]=0;
+                        auto* cachedResult=static_cast<NativeText*>(a);
+                        originalAssign(cachedResult,entry.resultText.data(),entry.resultText.size());
+                        if(entry.hasPendingHeader)
+                            pendingHeader={cachedResult,entry.pendingActual,entry.pendingAnnotated};
+                        if(entry.hasSocketOverride)
+                            pendingSocketOverride={cachedResult,entry.socketKey,entry.socketLabel};
+                        if(slot>0)std::rotate(headerBuilderCache.begin(),headerBuilderCache.begin()+slot,headerBuilderCache.begin()+slot+1);
+                        return cachedResult;
+                    }
+                }
+            }
+        } catch (...) { headerCacheKey.reset(); }
+    }
     DamageCapture damage{scoped?item:nullptr,{}};
     NativeText* result;
     {
@@ -1203,8 +1466,8 @@ extern "C" __declspec(noinline) NativeText* __fastcall HeaderBuilderAdapter(void
     }
     if(fromBuilder && result && Allowed() && nativeSocketCapacity){
         try {
-            const auto baseCap=nativeSocketCapacity(item);
-            const auto itemCap=ItemSocketCapacity(item,0);
+            const auto [baseCap,itemCap]=ResolveItemSocketCapacities(item,0);
+
             if(itemCap && itemCap!=baseCap){
                 std::string key,label;
                 if(FormatSocketCapacityLabel(itemCap,key,label))
@@ -1250,12 +1513,28 @@ extern "C" __declspec(noinline) NativeText* __fastcall HeaderBuilderAdapter(void
             // text proof and receiver identity; no item/stat/table pointers.
             if (changed.size()<=65536)
                 pendingHeader={result,std::string(actual),changed};
-            return result;
-        }
-        if (changed.size()<=65536 && changed!=actual)
+        } else if (changed.size()<=65536 && changed!=actual) {
             originalAssign(result,changed.data(),changed.size());
+        }
+        if (headerCacheKey && TextReadable(result,true)) {
+            std::rotate(headerBuilderCache.rbegin(),headerBuilderCache.rbegin()+1,headerBuilderCache.rend());
+            const bool hasPending=(pendingHeader.receiver==result);
+            const bool hasSock=(pendingSocketOverride.receiver==result);
+            headerBuilderCache[0]={true,*headerCacheKey,
+                std::string(result->size?result->data:"",result->size),
+                hasPending,hasPending?pendingHeader.actual:std::string{},hasPending?pendingHeader.annotated:std::string{},
+                hasSock,hasSock?pendingSocketOverride.key:std::string{},hasSock?pendingSocketOverride.label:std::string{}};
+        }
     } catch (...) { /* Keep native output if observation/allocation fails. */ }
     return result;
+}
+extern "C" __declspec(noinline) NativeText* __fastcall HeaderBuilderAdapter(void* a,void* b,void* c,void* item,
+    int flags,unsigned char d,unsigned char e,void* f,void* g) noexcept {
+    const bool fromBuilder=reinterpret_cast<std::uintptr_t>(_ReturnAddress())==builderReturn;
+    // Frame is qualified byte-for-byte; derive its address before the native
+    // call. No frame, item or definition memory is written by this adapter.
+    const auto* frame=static_cast<const unsigned char*>(_AddressOfReturnAddress())+8+0x80;
+    return RunHeaderBuilder(fromBuilder,frame,a,b,c,item,flags,d,e,f,g);
 }
 void* PublishHeader(bool permitted,NativeText* text,const char* data,std::size_t size) noexcept {
     if (permitted &&
@@ -1331,49 +1610,52 @@ void TraceProperties(unsigned annotated,unsigned unmatched,const char* actual,co
                      const std::vector<RangeText::Label>* sourceLabels=nullptr) noexcept {
     // Production builds keep formatter dumps disabled. A bounded, explicit
     // coverage build can enable them for deterministic Item Spawner audits.
-#ifdef ITEM_ROLL_RANGES_COVERAGE_DIAGNOSTICS
-    constexpr bool formatDiagnostics = true;
+#ifndef ITEM_ROLL_RANGES_COVERAGE_DIAGNOSTICS
+    // Preprocessed out (not if constexpr): MSVC still emits C4702/C4505 for
+    // the body and its thread_local, and /WX turns those into errors.
+    (void)annotated; (void)unmatched; (void)actual; (void)result; (void)ranged;
+    (void)labeled; (void)captured; (void)identities; (void)sourceLabels;
 #else
-    constexpr bool formatDiagnostics = false;
+    {
+        if (!diagnosticPath[0]) return;
+        // Comparison tooltips alternate every frame; deduplicate the complete set.
+        thread_local std::vector<std::string> seen;
+        for (const auto& previous:seen) if (previous==actual) return;
+        if (seen.size()>=32 || diagnostics.fetch_add(1)>=32) return;
+        try { seen.emplace_back(actual); } catch (...) { return; }
+        char message[14000]{};
+        const int n=std::snprintf(message,sizeof(message),
+            "v1.3.1+rev.61 properties annotated=%u unmatched=%u labeled=%u captured=%u\r\nACTUAL: %.4095s\r\nRANGED: %.4095s\r\nRESULT: %.4095s\r\n",annotated,unmatched,labeled,captured,actual,ranged,result);
+        if (n<=0 || n>=static_cast<int>(sizeof(message))) return;
+        HANDLE file=CreateFileW(diagnosticPath,FILE_APPEND_DATA,FILE_SHARE_READ|FILE_SHARE_WRITE,nullptr,OPEN_ALWAYS,FILE_ATTRIBUTE_NORMAL,nullptr);
+        if (file==INVALID_HANDLE_VALUE) return;
+        DWORD written{}; WriteFile(file,message,static_cast<DWORD>(n),&written,nullptr); CloseHandle(file);
+        if (identities) {
+            HANDLE details=CreateFileW(diagnosticPath,FILE_APPEND_DATA,FILE_SHARE_READ|FILE_SHARE_WRITE,nullptr,OPEN_ALWAYS,FILE_ATTRIBUTE_NORMAL,nullptr);
+            if (details!=INVALID_HANDLE_VALUE) {
+                for (const auto& line:*identities) {
+                    char entry[256]{};
+                    const int length=std::snprintf(entry,sizeof(entry),"IDENTITY stat=%d layer=%d grouped=%u key=%.160s\r\n",line.stat,line.layer,line.grouped?1u:0u,line.key.c_str());
+                    if (length>0 && length<static_cast<int>(sizeof(entry))) WriteFile(details,entry,static_cast<DWORD>(length),&written,nullptr);
+                }
+                CloseHandle(details);
+            }
+        }
+        if (sourceLabels) {
+            HANDLE details=CreateFileW(diagnosticPath,FILE_APPEND_DATA,FILE_SHARE_READ|FILE_SHARE_WRITE,nullptr,OPEN_ALWAYS,FILE_ATTRIBUTE_NORMAL,nullptr);
+            if (details!=INVALID_HANDLE_VALUE) {
+                for (const auto& label:*sourceLabels) {
+                    char entry[512]{};
+                    const int length=std::snprintf(entry,sizeof(entry),
+                        "LABEL sources=%zu parts=%zu key=%.160s text=%.220s\r\n",
+                        label.unknownSources.size(),label.parts.size(),label.key.c_str(),label.text.c_str());
+                    if (length>0 && length<static_cast<int>(sizeof(entry))) WriteFile(details,entry,static_cast<DWORD>(length),&written,nullptr);
+                }
+                CloseHandle(details);
+            }
+        }
+    }
 #endif
-    if constexpr (!formatDiagnostics) return;
-    if (!diagnosticPath[0]) return;
-    // Comparison tooltips alternate every frame; deduplicate the complete set.
-    thread_local std::vector<std::string> seen;
-    for (const auto& previous:seen) if (previous==actual) return;
-    if (seen.size()>=32 || diagnostics.fetch_add(1)>=32) return;
-    try { seen.emplace_back(actual); } catch (...) { return; }
-    char message[14000]{};
-    const int n=std::snprintf(message,sizeof(message),
-        "v1.3.1+rev.56 properties annotated=%u unmatched=%u labeled=%u captured=%u\r\nACTUAL: %.4095s\r\nRANGED: %.4095s\r\nRESULT: %.4095s\r\n",annotated,unmatched,labeled,captured,actual,ranged,result);
-    if (n<=0 || n>=static_cast<int>(sizeof(message))) return;
-    HANDLE file=CreateFileW(diagnosticPath,FILE_APPEND_DATA,FILE_SHARE_READ|FILE_SHARE_WRITE,nullptr,OPEN_ALWAYS,FILE_ATTRIBUTE_NORMAL,nullptr);
-    if (file==INVALID_HANDLE_VALUE) return;
-    DWORD written{}; WriteFile(file,message,static_cast<DWORD>(n),&written,nullptr); CloseHandle(file);
-    if (identities) {
-        HANDLE details=CreateFileW(diagnosticPath,FILE_APPEND_DATA,FILE_SHARE_READ|FILE_SHARE_WRITE,nullptr,OPEN_ALWAYS,FILE_ATTRIBUTE_NORMAL,nullptr);
-        if (details!=INVALID_HANDLE_VALUE) {
-            for (const auto& line:*identities) {
-                char entry[256]{};
-                const int length=std::snprintf(entry,sizeof(entry),"IDENTITY stat=%d layer=%d grouped=%u key=%.160s\r\n",line.stat,line.layer,line.grouped?1u:0u,line.key.c_str());
-                if (length>0 && length<static_cast<int>(sizeof(entry))) WriteFile(details,entry,static_cast<DWORD>(length),&written,nullptr);
-            }
-            CloseHandle(details);
-        }
-    }
-    if (sourceLabels) {
-        HANDLE details=CreateFileW(diagnosticPath,FILE_APPEND_DATA,FILE_SHARE_READ|FILE_SHARE_WRITE,nullptr,OPEN_ALWAYS,FILE_ATTRIBUTE_NORMAL,nullptr);
-        if (details!=INVALID_HANDLE_VALUE) {
-            for (const auto& label:*sourceLabels) {
-                char entry[512]{};
-                const int length=std::snprintf(entry,sizeof(entry),
-                    "LABEL sources=%zu parts=%zu key=%.160s text=%.220s\r\n",
-                    label.unknownSources.size(),label.parts.size(),label.key.c_str(),label.text.c_str());
-                if (length>0 && length<static_cast<int>(sizeof(entry))) WriteFile(details,entry,static_cast<DWORD>(length),&written,nullptr);
-            }
-            CloseHandle(details);
-        }
-    }
 }
 
 bool Foreground() noexcept {
@@ -1420,6 +1702,74 @@ __declspec(noinline) std::uint64_t __fastcall AlwaysWidgetAdapter(const char* te
     }
     return originalWidget(text,position,layout,footer);
 }
+struct PropertyCacheKey {
+    const void* source{};
+    bool hasClone{};
+    int capacity{};
+    int mode{};
+    int state1{};
+    int state2{};
+    int flags{};
+    int extra{};
+    int ownerLevel{};
+    bool countInputPresent{};
+    std::uint64_t countInputValue{};
+    std::string initialPrefix{};
+    std::array<unsigned char,0x18> unitHeader{};
+    unsigned char unitBank{};
+    std::array<unsigned char,0x64> itemDataBytes{};
+    std::optional<Contributions::Snapshot> contributions{};
+    unsigned featureFlags{};
+    bool operator==(const PropertyCacheKey&) const = default;
+};
+struct PropertyCacheEntry {
+    bool valid{};
+    PropertyCacheKey key{};
+    std::uint64_t completedResult{};
+    bool hasCountOutput{};
+    std::array<unsigned char,16> countOutput{};
+    std::vector<CapturedLine> captured{};
+    std::string propertyActual{},propertyRanged{};
+    std::size_t nativeBudget{};
+    bool checkOverflow{};
+    std::vector<RangeText::Label> sourceLabels{};
+    RangeText::Result merged{};
+    std::string overflowFull{};
+    bool hasOverflow{};
+};
+thread_local std::array<PropertyCacheEntry,16> propertyRenderCache{};
+std::optional<PropertyCacheKey> CaptureSourceSnapshot(void* source,void* item,std::string_view initialPrefix,
+    int capacity,int mode,int state1,int state2,int flags,int extra,const void* definitions,const void* count) {
+    if(definitions)return {};
+    if(!Readable(source,0x1be))return {};
+    const auto* unitBytes=static_cast<const unsigned char*>(source);
+    const auto* itemData=Affixes::Read<const unsigned char*>(unitBytes,0x10);
+    if(reinterpret_cast<std::uintptr_t>(itemData)<0x1001c || !Readable(itemData-28,0x64))return {};
+    PropertyCacheKey key{};
+    key.source=source;
+    key.hasClone=(source!=item);
+    key.capacity=capacity;
+    key.mode=mode;
+    key.state1=state1;
+    key.state2=state2;
+    key.flags=flags;
+    key.extra=extra;
+    key.ownerLevel=ResolveOwnerLevel(source);
+    if(count && Readable(count,16)){
+        const auto* countBytes=static_cast<const unsigned char*>(count);
+        key.countInputPresent=countBytes[8]!=0;
+        if(key.countInputPresent)key.countInputValue=Affixes::Read<std::uint64_t>(countBytes,0);
+    }
+    key.initialPrefix.assign(initialPrefix);
+    std::memcpy(key.unitHeader.data(),unitBytes,key.unitHeader.size());
+    key.unitBank=unitBytes[0x1bd];
+    std::memcpy(key.itemDataBytes.data(),itemData-28,key.itemDataBytes.size());
+    key.contributions=CaptureItemContributions(source);
+    key.featureFlags=(contributionsReady.load()?1u:0u)|(scalingReady.load()?2u:0u)|
+        (propertySourcesReady.load()?4u:0u)|(poisonDisplayReady.load()?8u:0u)|
+        (randomSkillsReady.load()?16u:0u)|(quantityRateReady.load()?32u:0u);
+    return key;
+}
 bool AdmitPropertyFormatter(const unsigned char* game,const void* target) noexcept {
     // Qualified native entry only: executable memory is not a composition contract.
     constexpr unsigned char entry[]={0x48,0x89,0x5c,0x24,0x20,0x55,0x56,0x57,
@@ -1438,6 +1788,48 @@ std::uint64_t RenderProperties(void* source,void* item,char* output,int capacity
         const auto cap=static_cast<std::size_t>(capacity);
         const auto initial=strnlen(output,cap);
         if (initial==cap) return originalProperties(item,output,capacity,mode,state1,state2,flags,extra,definitions,count);
+        const auto* earlySourceData=Readable(source,0x18)?Affixes::Read<const unsigned char*>(static_cast<const unsigned char*>(source),0x10):nullptr;
+        const bool earlySetBonus=Readable(earlySourceData,4) && Affixes::Read<unsigned>(earlySourceData,0)==5 &&
+            ((state1>=165 && state1<=170)||(state2>=165 && state2<=170));
+        const std::size_t earlyNativeBudget=(cap-initial)>16?(cap-initial-16):(cap-initial);
+        const bool earlyCheckOverflow=cap-initial<16384;
+        const auto cacheSnapshot=active.load(std::memory_order_acquire)?
+            CaptureSourceSnapshot(source,earlySetBonus?source:item,std::string_view(output,initial),capacity,mode,state1,state2,flags,extra,
+                earlySetBonus?(source==item?definitions:nullptr):definitions,
+                earlySetBonus?(source==item?count:nullptr):count):
+            std::optional<PropertyCacheKey>{};
+        if(cacheSnapshot){
+            for(std::size_t slot=0;slot<propertyRenderCache.size();++slot){
+                auto& entry=propertyRenderCache[slot];
+                if(entry.valid && entry.key==*cacheSnapshot &&
+                   entry.nativeBudget==earlyNativeBudget && entry.checkOverflow==earlyCheckOverflow &&
+                   entry.merged.text.size()<cap-initial){
+                    if(entry.hasOverflow)pendingPropertyOverflow={source,entry.merged.text,entry.overflowFull};
+                    if(count && entry.hasCountOutput && Readable(count,16))
+                        std::memcpy(count,entry.countOutput.data(),entry.countOutput.size());
+                    std::memcpy(output+initial,entry.merged.text.c_str(),entry.merged.text.size()+1);
+                    if(slot>0)std::rotate(propertyRenderCache.begin(),propertyRenderCache.begin()+slot,propertyRenderCache.begin()+slot+1);
+                    return entry.completedResult;
+                }
+            }
+        }
+        if(earlySetBonus){
+            struct OptionalCount { std::uint64_t value{}; bool present{}; unsigned char pad[7]{}; } none{};
+            const auto res=originalProperties(source,output,capacity,mode,state1,state2,flags,extra,
+                source==item?definitions:nullptr,source==item?count:&none);
+            const auto outLen=strnlen(output,cap);
+            if(cacheSnapshot && outLen>=initial && outLen<cap && std::memcmp(output,cacheSnapshot->initialPrefix.data(),initial)==0){
+                std::rotate(propertyRenderCache.rbegin(),propertyRenderCache.rbegin()+1,propertyRenderCache.rend());
+                std::array<unsigned char,16> countOutput{};
+                const bool hasCountOutput=(source==item) && count && Readable(count,16);
+                if(hasCountOutput)std::memcpy(countOutput.data(),count,countOutput.size());
+                RangeText::Result merged{};
+                merged.text.assign(output+initial,outLen-initial);
+                propertyRenderCache[0]={true,*cacheSnapshot,res,hasCountOutput,countOutput,{},{},{},
+                    earlyNativeBudget,earlyCheckOverflow,{},std::move(merged),{},false};
+            }
+            return res;
+        }
         const std::size_t internalCap=(mode==1 && state1==2 && state2==3 && flags==4 && extra==5)?cap:std::max<std::size_t>(cap,16384);
         const int internalCapacity=static_cast<int>(internalCap);
         actual.assign(internalCap,0);ranged.assign(internalCap,0);
@@ -1491,16 +1883,46 @@ std::uint64_t RenderProperties(void* source,void* item,char* output,int capacity
         if(setBonus){std::memcpy(output,actual.data(),actualLength+1);return result;}
         const auto propertyActual=std::string_view(actual.data()+initial,actualLength-initial);
         const auto propertyRanged=std::string_view(ranged.data()+initial,rangedLength-initial);
-        const auto sourceLabels=AffixLabels(source,captured,propertyActual);
         const std::size_t nativeBudget=(cap-initial)>16?(cap-initial-16):(cap-initial);
+        const bool checkOverflow=cap-initial<16384;
+        if(cacheSnapshot){
+            for(std::size_t slot=0;slot<propertyRenderCache.size();++slot){
+                auto& entry=propertyRenderCache[slot];
+                if(entry.valid && entry.key==*cacheSnapshot &&
+                   entry.captured==captured && entry.propertyActual==propertyActual &&
+                   entry.propertyRanged==propertyRanged && entry.nativeBudget==nativeBudget &&
+                   entry.checkOverflow==checkOverflow){
+                    if(entry.hasOverflow)pendingPropertyOverflow={source,entry.merged.text,entry.overflowFull};
+                    std::memcpy(output+initial,entry.merged.text.c_str(),entry.merged.text.size()+1);
+                    TraceProperties(entry.merged.annotated,entry.merged.unmatched,actual.data(),output,ranged.data(),entry.merged.labeled,
+                        static_cast<unsigned>(captured.size()),&captured,&entry.sourceLabels);
+                    if(slot>0)std::rotate(propertyRenderCache.begin(),propertyRenderCache.begin()+slot,propertyRenderCache.begin()+slot+1);
+                    return result;
+                }
+            }
+        }
+        const auto sourceLabels=AffixLabels(source,captured,propertyActual);
         auto merged=RangeText::Merge(propertyActual,propertyRanged,nativeBudget,sourceLabels);
-        if(cap-initial<16384 && !merged.text.empty()){
+        std::string overflowFull;
+        bool hasOverflow=false;
+        if(checkOverflow && !merged.text.empty()){
             auto full=RangeText::Merge(propertyActual,propertyRanged,16384,sourceLabels,
                 RangeText::Lines(propertyActual).size()>14);
             if(RangeText::Lines(full.text).size()>26)
                 full=RangeText::Merge(propertyActual,propertyRanged,16384,sourceLabels,true);
-            if(full.text!=merged.text && full.text.size()<=16384)
+            if(full.text!=merged.text && full.text.size()<=16384){
+                overflowFull= full.text;
+                hasOverflow=true;
                 pendingPropertyOverflow={source,merged.text,std::move(full.text)};
+            }
+        }
+        if(cacheSnapshot){
+            std::rotate(propertyRenderCache.rbegin(),propertyRenderCache.rbegin()+1,propertyRenderCache.rend());
+            std::array<unsigned char,16> countOutput{};
+            const bool hasCountOutput=count && Readable(count,16);
+            if(hasCountOutput)std::memcpy(countOutput.data(),count,countOutput.size());
+            propertyRenderCache[0]={true,*cacheSnapshot,result,hasCountOutput,countOutput,captured,std::string(propertyActual),std::string(propertyRanged),
+                nativeBudget,checkOverflow,sourceLabels,merged,std::move(overflowFull),hasOverflow};
         }
         std::memcpy(output+initial,merged.text.c_str(),merged.text.size()+1);
         TraceProperties(merged.annotated,merged.unmatched,actual.data(),output,ranged.data(),merged.labeled,
@@ -1515,13 +1937,87 @@ std::uint64_t RenderProperties(void* source,void* item,char* output,int capacity
         return originalProperties(item,output,capacity,mode,state1,state2,flags,extra,definitions,count);
     }
 }
-__declspec(noinline) std::uint64_t __fastcall PropertiesAdapter(void* item,char* output,int capacity,int mode,
+struct PossibleRollPropertyKey {
+    unsigned classId{};
+    unsigned char unitBank{};
+    unsigned quality{};
+    unsigned itemFlags{};
+    int ilvl{};
+    std::uint16_t version{};
+    int capacity{};
+    int mode{};
+    int state1{};
+    int state2{};
+    int flags{};
+    int extra{};
+    std::uint64_t countVal{};
+    std::array<unsigned char,48> defsBytes{};
+    bool operator==(const PossibleRollPropertyKey&) const = default;
+};
+struct PossibleRollPropertyEntry {
+    bool valid{};
+    PossibleRollPropertyKey key{};
+    std::uint64_t result{};
+    std::array<unsigned char,16> countOutput{};
+    std::string text{};
+};
+thread_local std::array<PossibleRollPropertyEntry,32> possibleRollPropertyCache{};
+std::optional<std::uint64_t> TryPossibleRollProperties(void* item,char* output,int capacity,int mode,
     int state1,int state2,int flags,int extra,const void* definitions,void* count) noexcept {
-    const bool callerMatches=reinterpret_cast<std::uintptr_t>(_ReturnAddress())==propertiesReturn;
+    try {
+        if(!output || capacity<=1 || capacity>65536 || !Readable(output,static_cast<std::size_t>(capacity)) || output[0]!=0)return {};
+        if(!definitions || !count || !Readable(count,16))return {};
+        const auto* countBytes=static_cast<const unsigned char*>(count);
+        if(!countBytes[8])return {};
+        const auto countVal=Affixes::Read<std::uint64_t>(countBytes,0);
+        if(countVal<1 || countVal>3 || !Readable(definitions,static_cast<std::size_t>(countVal)*16))return {};
+        if(!Readable(item,0x1be))return {};
+        const auto* unitBytes=static_cast<const unsigned char*>(item);
+        if(Affixes::Read<unsigned>(unitBytes,0)!=4)return {};
+        const auto* itemData=Affixes::Read<const unsigned char*>(unitBytes,0x10);
+        if(!Readable(itemData,0x44))return {};
+        PossibleRollPropertyKey key{
+            Affixes::Read<unsigned>(unitBytes,4),
+            unitBytes[0x1bd],
+            Affixes::Read<unsigned>(itemData,0),
+            Affixes::Read<unsigned>(itemData,0x18),
+            Affixes::Read<int>(itemData,0x2c),
+            Affixes::Read<std::uint16_t>(itemData,0x40),
+            capacity,mode,state1,state2,flags,extra,countVal,{}
+        };
+        std::memcpy(key.defsBytes.data(),definitions,static_cast<std::size_t>(countVal)*16);
+        for(std::size_t slot=0;slot<possibleRollPropertyCache.size();++slot){
+            auto& entry=possibleRollPropertyCache[slot];
+            if(entry.valid && entry.key==key && entry.text.size()<static_cast<std::size_t>(capacity)){
+                std::memcpy(output,entry.text.c_str(),entry.text.size()+1);
+                std::memcpy(count,entry.countOutput.data(),entry.countOutput.size());
+                if(slot>0)std::rotate(possibleRollPropertyCache.begin(),possibleRollPropertyCache.begin()+slot,possibleRollPropertyCache.begin()+slot+1);
+                return entry.result;
+            }
+        }
+        const auto res=originalProperties(item,output,capacity,mode,state1,state2,flags,extra,definitions,count);
+        const auto outLen=strnlen(output,static_cast<std::size_t>(capacity));
+        if(outLen<static_cast<std::size_t>(capacity)){
+            std::rotate(possibleRollPropertyCache.rbegin(),possibleRollPropertyCache.rbegin()+1,possibleRollPropertyCache.rend());
+            std::array<unsigned char,16> countOutput{};
+            std::memcpy(countOutput.data(),count,countOutput.size());
+            possibleRollPropertyCache[0]={true,key,res,countOutput,std::string(output,outLen)};
+        }
+        return res;
+    } catch (...) { return {}; }
+}
+std::uint64_t RunPropertiesAdapter(std::uintptr_t callerAddr,bool allowed,void* item,char* output,int capacity,int mode,
+    int state1,int state2,int flags,int extra,const void* definitions,void* count) noexcept {
+    const bool callerMatches=callerAddr==propertiesReturn;
+    if(!callerMatches && !rendering && active.load(std::memory_order_acquire) && coreBase &&
+       callerAddr==reinterpret_cast<std::uintptr_t>(coreBase)+0x379f7f){
+        if(const auto cached=TryPossibleRollProperties(item,output,capacity,mode,state1,state2,flags,extra,definitions,count))
+            return *cached;
+    }
     const auto request=TakePropertyRequest(callerMatches,rendering);
     void* rawSource=callerMatches && !rendering?SourceItem(item):nullptr;
     void* source=rawSource;
-    const bool scoped=callerMatches && !rendering && Allowed() &&
+    const bool scoped=callerMatches && !rendering && allowed &&
         (Held() || (scalingReady.load() && MatchingPropertyRequest(request,source)));
     if(!scoped)source=nullptr;
     if (scoped && !source) TraceProperties(0,0,"Overlay source unavailable; native fallback.","");
@@ -1539,6 +2035,11 @@ __declspec(noinline) std::uint64_t __fastcall PropertiesAdapter(void* item,char*
     }
     return RenderProperties(source,item,output,capacity,mode,state1,state2,flags,extra,definitions,count);
 }
+__declspec(noinline) std::uint64_t __fastcall PropertiesAdapter(void* item,char* output,int capacity,int mode,
+    int state1,int state2,int flags,int extra,const void* definitions,void* count) noexcept {
+    return RunPropertiesAdapter(reinterpret_cast<std::uintptr_t>(_ReturnAddress()),Allowed(),
+        item,output,capacity,mode,state1,state2,flags,extra,definitions,count);
+}
 bool Executable(const void* address) noexcept {
     MEMORY_BASIC_INFORMATION info{};
     if (!address || !VirtualQuery(address, &info, sizeof(info)) || info.State != MEM_COMMIT || (info.Protect & PAGE_GUARD)) return false;
@@ -1546,40 +2047,75 @@ bool Executable(const void* address) noexcept {
     return protection == PAGE_EXECUTE || protection == PAGE_EXECUTE_READ ||
         protection == PAGE_EXECUTE_READWRITE || protection == PAGE_EXECUTE_WRITECOPY;
 }
+struct ReadableRegion {
+    std::uintptr_t base{};
+    std::size_t size{};
+};
+struct ReadableRegionCache {
+    std::uint64_t tick{};
+    std::size_t count{};
+    std::size_t next{};
+    std::array<ReadableRegion,64> regions{};
+};
+thread_local ReadableRegionCache readableRegionCache{};
 bool Readable(const void* address, std::size_t length) noexcept {
+    if (!address) return false;
+    const auto addr = reinterpret_cast<std::uintptr_t>(address);
+    if (length > UINTPTR_MAX - addr) return false;
+    const bool canCache = active.load(std::memory_order_relaxed);
+    const std::uint64_t now = canCache ? (GetTickCount64() >> 6) : 0;
+    if (canCache) {
+        if (readableRegionCache.tick != now) {
+            readableRegionCache.tick = now;
+            readableRegionCache.count = 0;
+            readableRegionCache.next = 0;
+        }
+        for (std::size_t i = 0; i < readableRegionCache.count; ++i) {
+            const auto& region = readableRegionCache.regions[i];
+            if (addr >= region.base && addr - region.base <= region.size &&
+                length <= region.size - (addr - region.base)) {
+                return true;
+            }
+        }
+    }
     MEMORY_BASIC_INFORMATION info{};
     if (!address || !VirtualQuery(address, &info, sizeof(info)) || info.State != MEM_COMMIT || (info.Protect & (PAGE_NOACCESS | PAGE_GUARD))) return false;
     const auto offset = reinterpret_cast<std::uintptr_t>(address) - reinterpret_cast<std::uintptr_t>(info.BaseAddress);
-    return offset <= info.RegionSize && length <= info.RegionSize - offset;
+    if (offset > info.RegionSize || length > info.RegionSize - offset) return false;
+    if (canCache) {
+        readableRegionCache.regions[readableRegionCache.next] = {reinterpret_cast<std::uintptr_t>(info.BaseAddress), info.RegionSize};
+        readableRegionCache.next = (readableRegionCache.next + 1) % readableRegionCache.regions.size();
+        if (readableRegionCache.count < readableRegionCache.regions.size()) ++readableRegionCache.count;
+    }
+    return true;
 }
 bool Match(const unsigned char* base, std::size_t rva, const unsigned char* expected, std::size_t size) noexcept {
     return Readable(base+rva, size) && std::memcmp(base+rva, expected, size) == 0;
 }
-bool VerifyProviderFile(HMODULE module) noexcept {
-    // Same exact-provider hash already used by Controller QOL's native reader.
-    wchar_t path[32768]{};
-    const DWORD length = GetModuleFileNameW(module, path, 32768);
-    if (!length || length >= 32768) return false;
-    HANDLE file = CreateFileW(path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-        nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (file == INVALID_HANDLE_VALUE) return false;
-    BCRYPT_ALG_HANDLE algorithm{};
-    BCRYPT_HASH_HANDLE hash{};
-    unsigned char digest[32]{}, buffer[65536];
-    bool ok = BCryptOpenAlgorithmProvider(&algorithm, BCRYPT_SHA256_ALGORITHM, nullptr, 0) >= 0;
-    if (ok) ok = BCryptCreateHash(algorithm, &hash, nullptr, 0, nullptr, 0, 0) >= 0;
-    while (ok) {
-        DWORD received{};
-        if (!ReadFile(file, buffer, sizeof(buffer), &received, nullptr)) { ok = false; break; }
-        if (!received) break;
-        ok = BCryptHashData(hash, buffer, received, 0) >= 0;
+bool IsSupportedBuildVersion(const char* version) noexcept {
+    return version != nullptr &&
+           (std::strncmp(version, "3.3", 3) == 0 || std::strncmp(version, "3.4", 3) == 0) &&
+           (version[3] == '\0' || version[3] == '.');
+}
+bool VerifyProviderImage(HMODULE module) noexcept {
+    if (!module) return false;
+    const auto* base = reinterpret_cast<const unsigned char*>(module);
+    IMAGE_DOS_HEADER dos{};
+    if (!Readable(base, sizeof(dos))) return false;
+    std::memcpy(&dos, base, sizeof(dos));
+    if (dos.e_magic != IMAGE_DOS_SIGNATURE ||
+        dos.e_lfanew < static_cast<LONG>(sizeof(IMAGE_DOS_HEADER)) ||
+        dos.e_lfanew > 0x1000L) {
+        return false;
     }
-    if (ok) ok = BCryptFinishHash(hash, digest, sizeof(digest), 0) >= 0;
-    if (hash) BCryptDestroyHash(hash);
-    if (algorithm) BCryptCloseAlgorithmProvider(algorithm, 0);
-    CloseHandle(file);
-    constexpr unsigned char expected[] = {0x2a,0x86,0x8d,0x01,0x3d,0x2e,0x08,0x30,0xbd,0x2d,0x9e,0x04,0xb9,0x18,0xb1,0x9e,0x46,0xa7,0x3c,0xf7,0x26,0xc8,0x33,0xe7,0x0d,0x08,0x9b,0x94,0x8f,0xde,0xb5,0xa2};
-    return ok && std::memcmp(digest, expected, sizeof(expected)) == 0;
+    IMAGE_NT_HEADERS64 nt{};
+    if (!Readable(base + dos.e_lfanew, sizeof(nt))) return false;
+    std::memcpy(&nt, base + dos.e_lfanew, sizeof(nt));
+    return nt.Signature == IMAGE_NT_SIGNATURE &&
+           nt.FileHeader.Machine == IMAGE_FILE_MACHINE_AMD64 &&
+           nt.OptionalHeader.Magic == IMAGE_NT_OPTIONAL_HDR64_MAGIC &&
+           nt.FileHeader.TimeDateStamp == 0x6AB37824u &&
+           nt.OptionalHeader.SizeOfImage == 0x12E0000u;
 }
 bool Exchange(void** slot, void* expected, void* replacement) noexcept {
     // Aligned data pointers only; no executable bytes or game input state are patched.
@@ -1637,6 +2173,7 @@ bool InstallAlways(const unsigned char* base,const unsigned char* game,const D2R
 bool ValidRollCommand(std::string_view args) noexcept {
     return args=="on" || args=="off" || args=="status" || args=="toggle" || args.empty();
 }
+void SyncAlwaysShowSetting(bool value) noexcept;
 bool ApplyRollCommand(std::string_view args) noexcept {
     static std::mutex mutex;
     const std::lock_guard guard(mutex);
@@ -1644,7 +2181,7 @@ bool ApplyRollCommand(std::string_view args) noexcept {
     if(args=="status")return true;
     const bool next=args=="on"?true:args=="off"?false:!alwaysEnabled.load();
     if(!ChatConfig::Save(contributionContext,"display",{{"always_show_ranges",next}},65537))return false;
-    alwaysEnabled.store(next);return true;
+    alwaysConfigured.store(next,std::memory_order_release);alwaysEnabled.store(next);SyncAlwaysShowSetting(next);return true;
 }
 void RollChatCommand(const char* args,void*) noexcept {
     if(!contributionContext)return;
@@ -1662,9 +2199,8 @@ void RollChatCommand(const char* args,void*) noexcept {
     contributionContext->WriteConsoleMessage(alwaysEnabled.load()?"AlwaysShowRolls: ON (saved).":"AlwaysShowRolls: OFF (hold Ctrl/RT for ranges).");
     if(argument!="status")contributionContext->LogInfo(alwaysEnabled.load()?"AlwaysShowRolls: ON (saved).":"AlwaysShowRolls: OFF (saved).");
 }
-
 void LoadDisplaySettings(const D2RL::PluginContext* context) noexcept {
-    alwaysConfigured=false;
+    alwaysConfigured.store(false,std::memory_order_release);
     try {
         std::vector<char> text(65537,0);std::uint32_t required{};
         if(!context->ReadConfig(text.data(),65536,&required) || strnlen(text.data(),text.size())==text.size()){
@@ -1672,13 +2208,13 @@ void LoadDisplaySettings(const D2RL::PluginContext* context) noexcept {
         }
         const auto settings=RollRanges::ParseDisplayConfig(text.data());
         if(!settings.valid){context->LogWarn("Item Roll Ranges: invalid/duplicate always_show_ranges; ordinary hold mode retained.");return;}
-        alwaysConfigured=settings.alwaysShowRanges;
+        alwaysConfigured.store(settings.alwaysShowRanges,std::memory_order_release);
     }catch(...){context->LogWarn("Item Roll Ranges: display config read failed; ordinary hold mode retained.");}
 }
 void Restore() noexcept {
     RestoreAlways();
     levelsReady.store(false,std::memory_order_release);
-    nativeSocketCapacity=nullptr;socketAssignReturn=0;pendingPropertyRequest={};pendingSocketOverride={};
+    nativeSocketCapacity=nullptr;socketAssignReturn=0;currentTooltipPlayer=nullptr;pendingPropertyRequest={};pendingSocketOverride={};headerBuilderCache={};propertyRenderCache={};possibleRollPropertyCache={};socketCapacityCache={};ClearContributionSnapshotCache();readableRegionCache={};
     active.store(false, std::memory_order_release);
     contributionsReady.store(false);
     scalingReady.store(false);
@@ -1697,13 +2233,15 @@ void Restore() noexcept {
     if (propertiesSlot) Exchange(propertiesSlot,reinterpret_cast<void*>(&PropertiesAdapter),reinterpret_cast<void*>(originalProperties));
 }
 bool Install(const D2RL::PluginContext* context) noexcept {
+    if (!IsSupportedBuildVersion(context->buildVersion)) { context->LogWarn("Item Roll Ranges: unsupported D2R build version; no adapters installed."); return false; }
     const auto core = GetModuleHandleW(L"D2RCore.dll");
     if (!core) { context->LogError("Item Roll Ranges: D2RCore.dll is not loaded."); return false; }
-    if (!VerifyProviderFile(core)) { context->LogError("Item Roll Ranges: unsupported D2RCore file fingerprint; requires the qualified 1.3.1-beta build. No adapters installed."); return false; }
+    if (!VerifyProviderImage(core)) { context->LogError("Item Roll Ranges: unsupported D2RCore PE fingerprint; requires the qualified 1.3.1-beta build. No adapters installed."); return false; }
     auto* base = reinterpret_cast<unsigned char*>(core);
     // This profile is tied to the installed provider; all dependencies are
     // fingerprinted before publishing either pointer. See docs/NATIVE-CONTRACT.md.
-    if (GetProcAddress(core, "BuildItemTooltipWithStatRanges") != reinterpret_cast<FARPROC>(base+0x819530)) return false;
+    if (GetProcAddress(core, "BuildItemTooltipWithStatRanges") != reinterpret_cast<FARPROC>(base+0x819530) ||
+        GetProcAddress(core, "FormatItemPropertiesWithTooltipOverlay") != reinterpret_cast<FARPROC>(base+0x81d4b0)) return false;
     using namespace ProviderProfile;
     if (!Match(base, SelectionRva, Selection, sizeof(Selection)) ||
         !Match(base, ControllerCallRva, ControllerCall, sizeof(ControllerCall)) ||
@@ -1868,20 +2406,40 @@ bool Install(const D2RL::PluginContext* context) noexcept {
         Restore();
         return false;
     }
-    alwaysEnabled.store(alwaysConfigured);
+    alwaysEnabled.store(alwaysConfigured.load(std::memory_order_acquire));
     if(!InstallAlways(base,game,context))
         context->LogWarn("Item Roll Ranges: always-show query admission failed; ordinary hold mode retained.");
     active.store(true, std::memory_order_release);
     context->LogInfo(propertySourcesReady.load()?"Item Roll Ranges: active linked-property/runeword source model admitted.":"Item Roll Ranges: active linked-property/runeword source model unavailable.");
     context->LogInfo(alwaysReady.load() && alwaysEnabled.load()?"Item Roll Ranges display mode: always show ranges.":"Item Roll Ranges display mode: native Ctrl/controller hold.");
-    context->LogInfo("Item Roll Ranges 1.3.1+rev.56 by PyreFly: Ctrl / RT(R2), or QOL range override; inventory, stash, Cube and vendor only. Actual values, native ranges, named P/S tiers and guarded stacked-damage details. Unsupported or ambiguous provenance is omitted.");
+    context->LogInfo("Item Roll Ranges 1.3.1+rev.61 by PyreFly: Ctrl / RT(R2), or QOL range override; inventory, stash, Cube and vendor only. Actual values, native ranges, named P/S tiers and guarded stacked-damage details. Unsupported or ambiguous provenance is omitted.");
     return true;
+}
+}
+
+#include <D2RLSettings/settings.h>
+namespace {
+constexpr D2RLSettings::DropdownChoice kRollRangeChoices[] {
+    { "Hold Ctrl / RT", "false" },
+    { "Always Show", "true" },
+};
+D2RLSettings::Dropdown alwaysShowSetting;
+void OnAlwaysShowSettingChanged(int32_t selectedIndex) noexcept {
+    const bool value = (selectedIndex == 1);
+    alwaysConfigured.store(value,std::memory_order_release);
+    alwaysEnabled.store(value,std::memory_order_release);
+    if(contributionContext)
+        contributionContext->LogInfo(value?"AlwaysShowRolls: ON (saved).":"AlwaysShowRolls: OFF (saved).");
+}
+void SyncAlwaysShowSetting(bool value) noexcept {
+    (void)alwaysShowSetting.ReloadFromConfig(false);
+    alwaysShowSetting.SetValue(value ? 1 : 0,false,false);
 }
 }
 
 D2RL_PLUGIN_EXPORT const D2RL::PluginInfo* __cdecl D2RLoaderGetPluginInfo() noexcept {
     static const D2RL::PluginInfo info{sizeof(D2RL::PluginInfo), D2RL_PLUGIN_ABI_VERSION,
-        "item-roll-ranges", "Item Roll Ranges", "1.3.1+rev.56", "PyreFly",
+        "item-roll-ranges", "Item Roll Ranges", "1.3.1+rev.61", "PyreFly",
         "Hold Ctrl or RT/R2 (R1/RB with Controller QOL) for native item stat ranges in item-management screens.",
         D2RL::PluginFlags::Client | D2RL::PluginFlags::NativeHooks, {}};
     return &info;
@@ -1890,6 +2448,20 @@ D2RL_PLUGIN_EXPORT bool __cdecl D2RLoaderLoadPlugin(const D2RL::PluginContext* c
     if (!context || !context->GetApi() || loaded.exchange(true)) return false;
     LoadDisplaySettings(context);
     if (Install(context)) {
+        if (alwaysReady.load()) {
+            alwaysShowSetting.Register(context, {
+                .key          = "always_show_ranges",
+                .label        = "Item Roll Ranges",
+                .tooltip      = "Choose whether item stat roll ranges and affix tiers are shown while holding Ctrl / RT(R2) or always.",
+                .section      = D2RLSettings::Section::Ui,
+                .choices      = kRollRangeChoices,
+                .choiceCount  = 2,
+                .defaultValue = 0,
+                .onChanged    = OnAlwaysShowSettingChanged,
+                .tomlSection  = "display",
+            });
+            alwaysShowSetting.SetValue(alwaysConfigured.load(std::memory_order_acquire) ? 1 : 0, false, false);
+        }
         try {
             if(!rollCommands.Start(context) || !rollCommands.Register("alwaysshowrolls",RollChatCommand,nullptr,"Toggle always-show rolls; on, off, status."))
                 context->LogWarn("Item Roll Ranges: /AlwaysShowRolls registration unavailable; config still applies.");
@@ -1900,5 +2472,5 @@ D2RL_PLUGIN_EXPORT bool __cdecl D2RLoaderLoadPlugin(const D2RL::PluginContext* c
     context->LogError("Item Roll Ranges: unsupported/unavailable provider or slot conflict; adapters not activated. See NATIVE-CONTRACT.md.");
     return false;
 }
-D2RL_PLUGIN_EXPORT void __cdecl D2RLoaderUnloadPlugin() noexcept { rollCommands.Stop(); alwaysEnabled.store(false); Restore(); loaded.store(false); }
+D2RL_PLUGIN_EXPORT void __cdecl D2RLoaderUnloadPlugin() noexcept { alwaysShowSetting.Shutdown(); rollCommands.Stop(); alwaysEnabled.store(false); Restore(); loaded.store(false); }
 

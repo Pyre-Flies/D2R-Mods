@@ -559,7 +559,7 @@ bool IsControllerUiActive() noexcept {
 static void ResetNativeTracking() noexcept {
     std::lock_guard lock(s_InputStateMutex);
     s_NativeRaw=s_NativeDelivered=0;s_NativeIndex=~0u;
-    s_NativeSnapshot.store(0);
+    s_NativeSnapshot.store(0);s_CachedButtons.store(0);s_CachedLeftTrigger.store(0);s_CachedRightTrigger.store(0);
     ResetShortcutTracking();
 }
 static void SeedNativeTracking(unsigned index) noexcept {

@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.3.1+rev.5 - 2026-11-16
+
+- Defer Gem Bag host requests cleanly when ticking other hosted games on dedicated servers (`d2rds`) without disrupting active peer frames.
+- Add gem withdrawal and deposit sound cues when interacting with the Gem Bag picker or depositing compatible gems and clusters.
+- Replace per-frame/per-probe `ReadProcessMemory` syscalls with zero-syscall SEH `std::memcpy` helpers (`native.cpp` / `frame_bridge.h`) and add lock-free fast-path guards in `Draw` and input hooks.
+
 ## 1.3.1+rev.2 - 2026-10-22
 
 - Swap controller Gem Bag shortcuts so `LB+A` opens the gem picker and `LB+B` deposits compatible gems and clusters from the bag's current storage page.

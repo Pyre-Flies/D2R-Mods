@@ -169,3 +169,22 @@ The user subsequently confirmed the requested hosted save/leave/rejoin check
 with the shared bag expected at1515 (response: "Looks good"). Persistence is
 user-confirmed, not an independent post-rejoin memory capture. Full-inventory
 refusal and shared cluster staging remain automated-only coverage.
+
+## Client audio cues (`1.3.1+rev.4`)
+
+On the client UI thread (`HostResult`), `GemBag::Native::PlaySound` invokes
+`D2R.exe+0x1A0780` (`SOUND_PlayUnitSound`, guarded on demand via
+`CheckExpectedBytes(0x1a0780, QolMaterials::Signatures::FinishInteraction)`
+without inline-hooking `0x1A0780`) when a host reply confirms a credit change:
+- **Deposit (`Action::Deposit`, `currentCredits > previousCredits`):** plays
+  `cursor_convert_item` (`11`, `cursor\convert.flac` -> `cursor_convert_item_hd_1`).
+  (Note: in `D2R.exe` `0x16C570` at `0x16C9AC`, server `SCMD 0x2C` subpacket `0x20`
+  for Horadric Cube Transmute completion plays `0xD9 = 217` `item_gem`; `11`
+  provides a distinct conversion cue when pulling gems/clusters into the bag.)
+  No-op deposits (`currentCredits == previousCredits`, e.g. no eligible gems on
+  the page or capacity skip) remain silent.
+- **Withdrawal (`Action::Withdraw`, `ok && currentCredits < previousCredits`):**
+  plays the normal inventory placement sound resolved by `0x1C3420`
+  (`ItemsTxt+0x134` `dropsound`): `item_gem` (`217` / `0xD9`, `item_gem_hd`) for
+  the seven gem families and `item_monsterbone` (`232` / `0xE8`,
+  `item_monsterbone_hd`) for `Skull` (`gmk`).

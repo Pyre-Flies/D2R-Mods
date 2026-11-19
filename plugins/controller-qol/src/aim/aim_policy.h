@@ -82,11 +82,11 @@ struct MotionSettings {
     bool verbose=false;
     bool skillTreeToggle=true;
     ReticleColor groundReticleColor{143.0f/255,232.0f/255,1,1},lockReticleColor{1,209.0f/255,102.0f/255,1};
-    float reticleThickness=2.0f;
+    float reticleThickness=2.0f, reticleSizePercent=100.0f;
     float whirlwindPassThroughDistance=1.5f;
     float snapRadius=6, switchAdvantage=1.5f, projectionHz=60, overlaySmoothingMs=60;
     bool Valid() const noexcept {
-        return std::isfinite(reticleThickness) && reticleThickness>=0.5f && reticleThickness<=4 &&
+        return std::isfinite(reticleThickness) && reticleThickness>=0.5f && reticleThickness<=4 && std::isfinite(reticleSizePercent) && reticleSizePercent>=50.0f && reticleSizePercent<=250.0f &&
             std::isfinite(whirlwindPassThroughDistance) && whirlwindPassThroughDistance>=0 && whirlwindPassThroughDistance<=15 &&
             std::isfinite(deadzone) && deadzone>=0 && deadzone<=0.9f &&
             std::isfinite(initialSpeed) && initialSpeed>=0.1f && initialSpeed<=100 &&

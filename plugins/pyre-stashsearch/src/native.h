@@ -30,11 +30,17 @@ inline constexpr uintptr_t InventoryGetFirstItem        = 0x0388C10;
 inline constexpr uintptr_t ItemGetNextInventoryItem     = 0x038ABA0;
 inline constexpr uintptr_t GetLocalizedStringByKey      = 0x05F4B90;
 inline constexpr uintptr_t DrawFilledRect               = 0x0657B90;
+inline constexpr uintptr_t SetSoftwareCursorPos         = 0x014F690;
+inline constexpr uintptr_t GetUIManager                 = 0x0846020;
+inline constexpr uintptr_t IsControllerMode             = 0x0077E10;
 inline constexpr uintptr_t WidgetFindChild              = 0x0855C90;
 inline constexpr uintptr_t WidgetGetSize                = 0x08562A0;
 inline constexpr uintptr_t WidgetGetScreenPos           = 0x08562F0;
+inline constexpr uintptr_t UpdateCursorWidget           = 0x08676E0;
 inline constexpr uintptr_t InitTextStyle                = 0x086D1B0;
 inline constexpr uintptr_t TextStyleCallSite            = 0x086D489;
+inline constexpr uintptr_t WidgetIsControllerFocused    = 0x0876160;
+inline constexpr uintptr_t WidgetIsHovered              = 0x0876180;
 inline constexpr uintptr_t TabBarSelectTab              = 0x0878FB0;
 inline constexpr uintptr_t DrawTextCallSite             = 0x0888B8D;
 inline constexpr uintptr_t DrawStyledText               = 0x0902E20;
@@ -152,6 +158,24 @@ inline constexpr uint8_t kBytes_GetUnitStatTail_2F502A[22] = {
 	0x48, 0x89, 0x74, 0x24, 0x20, 0x57, 0x48, 0x83, 0xEC, 0x20, 0x41, 0x0F, 0xB7, 0xE8, 0x8B, 0xFA,
 	0x48, 0x8B, 0xD9, 0x48, 0x85, 0xC9
 };
+inline constexpr uint8_t kBytes_GetUIManager_846020[16] = {
+	0x48, 0x83, 0xEC, 0x28, 0x48, 0x8B, 0x05, 0x45, 0xA1, 0xBF, 0x02, 0x48, 0x85, 0xC0, 0x75, 0x1A
+};
+inline constexpr uint8_t kBytes_WidgetIsControllerFocused_876160[16] = {
+	0x40, 0x53, 0x48, 0x83, 0xEC, 0x20, 0x48, 0x8B, 0xD9, 0xE8, 0xB2, 0xFE, 0xFC, 0xFF, 0x48, 0x39
+};
+inline constexpr uint8_t kBytes_WidgetIsHovered_876180[16] = {
+	0x40, 0x53, 0x48, 0x83, 0xEC, 0x20, 0x48, 0x8B, 0xD9, 0xE8, 0x92, 0xFE, 0xFC, 0xFF, 0x48, 0x39
+};
+inline constexpr uint8_t kBytes_SetSoftwareCursorPos_14F690[16] = {
+	0x48, 0x89, 0x4C, 0x24, 0x08, 0x53, 0x48, 0x83, 0xEC, 0x20, 0x48, 0x8B, 0xD9, 0xE8, 0x6E, 0x87
+};
+inline constexpr uint8_t kBytes_IsControllerMode_077E10[16] = {
+	0x48, 0x83, 0xEC, 0x28, 0xE8, 0xF7, 0xE1, 0xFF, 0xFF, 0x80, 0xB8, 0xC8, 0x0D, 0x00, 0x00, 0x00
+};
+inline constexpr uint8_t kBytes_UpdateCursorWidget_8676E0[16] = {
+	0x40, 0x55, 0x41, 0x57, 0x48, 0x8D, 0xAC, 0x24, 0x38, 0xFD, 0xFF, 0xFF, 0x48, 0x81, 0xEC, 0xC8
+};
 
 using BankPanelDrawFn = void(__fastcall*)(void* panel);
 
@@ -189,6 +213,10 @@ struct ResolvedNativePointers {
 	uintptr_t       fnBuildItemStatsString       = 0;       // (0x2DA0E0)
 	uintptr_t       fnBuildSocketableStatsString = 0;       // (0x2DA310)
 	uintptr_t       fnGetUnitStat                = 0;       // (0x2F5020)
+	uintptr_t       fnGetUIManager               = 0;       // (0x846020)
+	uintptr_t       fnSetSoftwareCursorPos       = 0;       // (0x14F690)
+	uintptr_t       fnIsControllerMode           = 0;       // (0x077E10)
+	uintptr_t       fnUpdateCursorWidget         = 0;       // (0x8676E0)
 };
 
 extern ResolvedNativePointers g_Native;
@@ -208,6 +236,7 @@ auto SafeWriteU64(uint64_t* addr, uint64_t val) noexcept -> bool;
 auto SafeCopyCStringBounded(const char* src, char* dst, size_t capacity, size_t* outLen) noexcept -> bool;
 
 auto SafeCall_GetU32NoArg(uintptr_t fn, uint32_t* outVal) noexcept -> bool;
+auto SafeCall_GetPtrNoArg(uintptr_t fn, uintptr_t* outVal) noexcept -> bool;
 auto SafeCall_PtrFromU32(uintptr_t fn, uint32_t arg1, uintptr_t* outVal) noexcept -> bool;
 auto SafeCall_PtrFromU32U32(uintptr_t fn, uint32_t arg1, uint32_t arg2, uintptr_t* outVal) noexcept -> bool;
 auto SafeCall_PtrFromPtr(uintptr_t fn, uintptr_t arg1, uintptr_t* outVal) noexcept -> bool;
@@ -248,15 +277,33 @@ auto SafeCall_DrawFilledRect(
 	const float* color4f) noexcept -> bool;
 auto SafeCall_GetLocalizedStringByKey(uintptr_t fn, const void* keyStruct, const char** outStr) noexcept -> bool;
 auto SafeGetItemBaseDisplayName(uintptr_t itemUnit, char* outBuf, size_t capacity, size_t* outLen) noexcept -> bool;
+auto SafeReadItemFlags(uintptr_t itemUnit, uint32_t* outFlags) noexcept -> bool;
+auto SafeReadItemIdentity(
+	uintptr_t itemUnit,
+	int32_t*  outQuality,
+	uint32_t* outFlags,
+	uint32_t* outClassId,
+	uint32_t* outFileIndex) noexcept -> bool;
+auto SafeReadItemDuplicateKey(uintptr_t itemUnit, std::wstring_view knownShortName = {}) -> ItemDuplicateKey;
+auto SafeIsControllerMode() noexcept -> bool;
+auto SafeMoveControllerCursor(int clientX, int clientY) noexcept -> bool;
+auto SafeRefreshCursorWidget() noexcept -> bool;
 
 // High-level native UI & item helpers
 auto LookupLocalizedString(const char* key, size_t keyLen, std::wstring& outText) -> bool;
 void BuildItemFullTooltipText(
-	uintptr_t     itemUnit,
-	std::wstring& outFullTooltip,
-	std::wstring& outShortName,
-	std::wstring* outFullNameLine = nullptr);
-auto DoesItemMatchQuery(uintptr_t itemUnit, std::wstring_view normalizedQuery, std::wstring_view fullTooltip) -> bool;
+	uintptr_t                  itemUnit,
+	std::wstring&              outFullTooltip,
+	std::wstring&              outShortName,
+	std::wstring*              outFullNameLine    = nullptr,
+	std::wstring_view          fullTabSuffix      = {},
+	std::vector<std::wstring>* outTooltipLines    = nullptr,
+	size_t*                    outHeaderLineCount = nullptr);
+auto DoesItemMatchQuery(
+	uintptr_t         itemUnit,
+	std::wstring_view normalizedQuery,
+	std::wstring_view fullTooltip,
+	bool              isDuplicate = false) -> bool;
 auto MeasureNativeText(
 	std::wstring_view text,
 	const IntRect&    rect,

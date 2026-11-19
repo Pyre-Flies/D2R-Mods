@@ -17,8 +17,11 @@
   `PlayerData + 0x00`. Both fail closed (no snapshot is written when the name
   is unreadable). Both were verified live on vanilla D2R 3.3.94995; see
   [the reverse-engineering notes](../../docs/reverse-engineering/stash-search-1.10.12-decompilation.md#cross-character-search-additions).
-- Fixed runeword and Horadric Cube names showing a stray color character in
-  results (`4Spirit`, `>Horadric Cube`). The newer D2R color code (U+E07E plus
-  one character) is now stripped like the `ÿc` codes, in stash rows too.
+- Current-character rows get the same multi-line item hover tooltip as stash
+  rows; other characters' rows show a one-line hover. Only stash items count
+  for the duplicate search term, so carried and snapshot rows never match it.
+- The U+E07E color-code stripping (also fixed in `1.3.1+rev.7`) now
+  also drops a code cut off at the end of a line instead of leaving its bytes
+  in the result.
 - Automated checks: new platform-independent `character_cache_tests`, plus
   config-key tests in `unit_tests`. Mercenary items are not covered.

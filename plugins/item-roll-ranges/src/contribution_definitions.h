@@ -109,11 +109,11 @@ inline std::optional<std::vector<EnchantmentCandidate>> ResolveEnchantmentCandid
     unsigned classId,unsigned quality,unsigned upgradeStat,int qualityRecord=-1,long long upgradeCount=1) {
     if(cube.stride!=364||items.stride!=448||types.stride!=232||upgradeCount<1)return {};
     const bool multiStep=upgradeCount>1;
-    if(multiStep && (upgradeCount>5 || (upgradeStat!=419 && upgradeStat!=420)))return {};
+    if(multiStep && (upgradeCount>10 || (upgradeStat!=419 && upgradeStat!=420)))return {};
     const auto* host=items.Row(classId);if(!host)return {};
     const int first=Affixes::Read<std::int16_t>(host,0x12e),second=Affixes::Read<std::int16_t>(host,0x130);
     std::vector<EnchantmentCandidate> out;
-    std::array<std::vector<std::vector<Spec>>,5> stepSpecs;
+    std::array<std::vector<std::vector<Spec>>,10> stepSpecs;
     for(std::size_t n=0;n<cube.count;++n){
         const auto* row=cube.Row(n);
         if(row[0]!=1||row[1]||(row[2]!=0xff&&row[2]>=8)||row[0x67]!=0xfe||row[0x64]||row[12]<2)continue;

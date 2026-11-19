@@ -67,6 +67,7 @@ inline bool ParseSettings(std::string_view text,MotionSettings& output,bool* ena
         else if(key=="projection_hz") { destination=&parsed.projectionHz; bit=512; }
         else if(key=="overlay_smoothing_ms") { destination=&parsed.overlaySmoothingMs; bit=1024; }
         else if(key=="reticle_thickness") { destination=&parsed.reticleThickness; bit=262144; }
+        else if(key=="reticle_size_percent") { destination=&parsed.reticleSizePercent; bit=1048576; }
         else if(key=="whirlwind_pass_through_distance") { destination=&parsed.whirlwindPassThroughDistance; bit=4096; }
         else return false;
         if(seen&bit) return false;

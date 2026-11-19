@@ -44,12 +44,16 @@ int wmain(int argc, wchar_t** argv) {
     Check(cfg.find("[pyre-lootfilter]") != std::string_view::npos, "embedded section header");
     Check(cfg.find("enabled = true") != std::string_view::npos, "embedded enabled default");
     Check(cfg.find("auto_reload = true") != std::string_view::npos, "embedded auto_reload default");
+    Check(cfg.find("auto_show_items_on_join = true") != std::string_view::npos,
+          "embedded auto_show_items_on_join default");
     Check(cfg.find("alt_pickup_override = true") != std::string_view::npos,
           "embedded alt_pickup_override default");
     Check(cfg.find("minimap_icons = true") != std::string_view::npos,
           "embedded minimap_icons default");
     Check(cfg.find("drop_sounds = true") != std::string_view::npos,
           "embedded drop_sounds default");
+    Check(cfg.find("drop_sound_3d_attenuation = false") != std::string_view::npos,
+          "embedded drop_sound_3d_attenuation default");
     FreeLibrary(module);
 
     module = LoadLibraryExW(
@@ -68,7 +72,7 @@ int wmain(int argc, wchar_t** argv) {
     Check(info && info->infoSize == D2RL::PluginInfoSize &&
               info->abiVersion == D2RL_PLUGIN_ABI_VERSION &&
               std::strcmp(info->id, "pyre-lootfilter") == 0 &&
-              std::strcmp(info->version, "1.3.1+rev.3") == 0 &&
+              std::strcmp(info->version, "1.3.1+rev.7") == 0 &&
               D2RL::HasValidPluginRole(info->flags) &&
               D2RL::HasFlag(info->flags, D2RL::PluginFlags::NativeHooks),
           "PluginInfo identity, version, role, and native-hook capability");

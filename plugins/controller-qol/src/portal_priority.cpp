@@ -32,11 +32,11 @@ const D2RL::PluginContext* context = nullptr;
 std::atomic<bool> active{false};
 bool trace = false;
 bool directLoot = false;
-bool portals = true;
-bool stash = true;
-bool waypoints = true;
-bool shrines = true;
-bool chests = true;
+std::atomic<bool> portals{true};
+std::atomic<bool> stash{true};
+std::atomic<bool> waypoints{true};
+std::atomic<bool> shrines{true};
+std::atomic<bool> chests{true};
 char modifier[16] = "bumper";
 uint32_t range = 10;
 using UnitScoreFn = float(__fastcall*)(void*, void*, void*, int);
@@ -89,7 +89,7 @@ PriorityKind ReadPriorityObjectDistance(void* player, void* candidate, int& meas
         const auto record = getObject(getVersion(candidate), classId);
         if (!record) return PriorityKind::None;
         const auto kind = ClassifyPriorityObject(classId, record[0x127], static_cast<const uint32_t*>(candidate)[3]);
-        if (!KindEnabled(kind, portals, stash, waypoints, shrines, chests)) return PriorityKind::None;
+        if (!KindEnabled(kind, portals.load(), stash.load(), waypoints.load(), shrines.load(), chests.load())) return PriorityKind::None;
         measured = distance(player, candidate);
         return measured >= 0 ? kind : PriorityKind::None;
     } __except(EXCEPTION_EXECUTE_HANDLER) { return PriorityKind::None; }
@@ -364,11 +364,11 @@ void Initialize(const D2RL::PluginContext* ctx, bool enabled, bool directLootEna
     context = ctx;
     trace = debug;
     directLoot = directLootEnabled;
-    portals = prioritizePortals;
-    stash = prioritizeStash;
-    waypoints = prioritizeWaypoints;
-    shrines = prioritizeShrines;
-    chests = prioritizeChests;
+    portals.store(prioritizePortals);
+    stash.store(prioritizeStash);
+    waypoints.store(prioritizeWaypoints);
+    shrines.store(prioritizeShrines);
+    chests.store(prioritizeChests);
     if (sharedClassDetour)
         ctx->LogInfo("[QOL/Priority] Shared class getter E9 detour admitted; current entry retained and called, reviewed tail unchanged.");
     range = radius;
@@ -399,11 +399,12 @@ void Initialize(const D2RL::PluginContext* ctx, bool enabled, bool directLootEna
     else
         ctx->LogWarn("[QOL/Priority] Combat arbitration recovery unavailable; existing object/loot priority retained.");
     char message[160];
-    std::snprintf(message, sizeof(message), "[QOL/Priority] portal=%d stash=%d waypoint=%d shrine=%d chest=%d; contact/scoring/range enabled within %u native units; diagnostics=%d.", portals, stash, waypoints, shrines, chests, range, trace);
+    std::snprintf(message, sizeof(message), "[QOL/Priority] portal=%d stash=%d waypoint=%d shrine=%d chest=%d; contact/scoring/range enabled within %u native units; diagnostics=%d.", portals.load(), stash.load(), waypoints.load(), shrines.load(), chests.load(), range, trace);
     ctx->LogInfo(message);
 }
 bool OwnsContactDestination(std::uintptr_t destination) noexcept {
     return originalContact && destination==reinterpret_cast<std::uintptr_t>(&CandidateContact);
 }
+void UpdatePriorities(bool p, bool s, bool w, bool sh, bool c) noexcept { portals.store(p); stash.store(s); waypoints.store(w); shrines.store(sh); chests.store(c); }
 void Shutdown() noexcept { active.store(false); }
 }

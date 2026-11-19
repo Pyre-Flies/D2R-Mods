@@ -1,4 +1,5 @@
 #pragma once
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <cstring>
@@ -14,7 +15,23 @@ struct Property { std::array<unsigned char,0x30> bytes{}; };
 struct Row {
     std::array<unsigned char,0x8c> bytes{};
     int Number(std::size_t offset) const { return Read<int>(bytes.data(),offset); }
+    std::string Name() const {
+        const auto* p=reinterpret_cast<const char*>(bytes.data());
+        return std::string(p,strnlen(p,32));
+    }
+    std::uint16_t NameStringIndex() const { return Read<std::uint16_t>(bytes.data(),0x20); }
     unsigned Version() const { return Read<std::uint16_t>(bytes.data(),0x22); }
+    bool Spawnable() const { return bytes[0x54]!=0; }
+    int Level() const { return Number(0x58); }
+    int Group() const { return Number(0x5c); }
+    int MaxLevel() const { return Number(0x60); }
+    bool RareAllowed() const { return bytes[0x64]!=0; }
+    int LevelReq() const { return static_cast<int>(bytes[0x65]); }
+    unsigned ClassSpecific() const { return bytes[0x66]; }
+    unsigned Frequency() const { return bytes[0x82]; }
+    bool SameTypeRestrictions(const Row& other) const {
+        return std::memcmp(bytes.data()+0x6a,other.bytes.data()+0x6a,0x18)==0;
+    }
     bool SameFamily(const Row& other,std::span<const Property> properties={}) const {
         if (Number(0x5c)!=other.Number(0x5c) || bytes[0x66]!=other.bytes[0x66]) return false;
         for (unsigned n=0;n<3;++n) {
@@ -55,25 +72,111 @@ struct Row {
 };
 struct PropertyGroup { std::array<unsigned char,0xc8> bytes{}; };
 static_assert(sizeof(Row)==0x8c && sizeof(Property)==0x30 && sizeof(PropertyGroup)==0xc8);
+
+// Native D2RCore.dll+0x813FE0 affix level (alvl) calculation.
+inline int CalculateAffixLevel(int ilvl,int qlvl,int magicLvl=0) {
+    const int clampedIlvl=ilvl<1?1:(ilvl>99?99:ilvl);
+    const int base=qlvl>clampedIlvl?qlvl:clampedIlvl;
+    if (magicLvl>0) {
+        const int alvl=base+magicLvl;
+        return alvl<1?1:(alvl>99?99:alvl);
+    }
+    const int threshold=99-(qlvl/2);
+    const int alvl=(base<threshold)?(base-(qlvl/2)):(2*base-99);
+    return alvl<1?1:(alvl>99?99:alvl);
+}
+
+// Native D2RCore.dll+0x815400 affix pool weight at a given alvl.
+inline unsigned AffixSpawnWeight(const Row& row,int alvl,int magicLvl=0) {
+    if (!row.Spawnable() || !row.Frequency() || alvl<=0) return 0;
+    if (row.Level()>alvl) return 0;
+    if (row.MaxLevel()>0 && alvl>row.MaxLevel()) return 0;
+    if (magicLvl>0) {
+        const unsigned lvl=row.Level()>0?static_cast<unsigned>(row.Level()):1u;
+        return row.Frequency()*lvl;
+    }
+    return row.Frequency();
+}
+
+struct TierSummary {
+    unsigned tier{};
+    unsigned totalTiers{};
+    unsigned bestTierAtAlvl{};
+    unsigned spawnWeight{};
+};
+
 // Distinct affix levels within the applicable family; duplicate levels share
 // a tier. Current item level does not hide stronger tiers.
 template<class Eligible> unsigned Tier(const Row& rolled,std::span<const Row> family,
                                      bool rare,unsigned itemVersion,Eligible eligible,
                                      std::span<const Property> properties={}) {
     std::set<int> higher;
+    const auto rolledLevel=rolled.Number(0x58);
     for (const auto& row:family) {
-        if (!row.bytes[0x54] || !row.bytes[0x82] || (rare && !row.bytes[0x64]) ||
-            (itemVersion<100 && row.Version()>=100) || !rolled.SameFamily(row,properties) ||
-            row.Number(0x58)<=rolled.Number(0x58) || !eligible(row)) continue;
-        higher.insert(row.Number(0x58));
+        const auto rowLevel=row.Number(0x58);
+        if (rowLevel<=rolledLevel || !row.bytes[0x54] || !row.bytes[0x82] || (rare && !row.bytes[0x64]) ||
+            (itemVersion<100 && row.Version()>=100) || higher.contains(rowLevel) ||
+            !rolled.SameFamily(row,properties) || !eligible(row)) continue;
+        higher.insert(rowLevel);
     }
     return 1+static_cast<unsigned>(higher.size());
 }
-struct LayerEncoding { unsigned skillBits{6}, skillMask{63}; bool randomSkills{}; bool chargeSourcesOnly{}; };
-inline bool RandomLayerSpec(int param,int low,int high,unsigned layer) {
-    return param>0 && param<=1000000 && low>=0 && low<=high && high<=65535 &&
-        layer>=static_cast<unsigned>(low) && layer<=static_cast<unsigned>(high);
+
+template<class Eligible>
+inline TierSummary EvaluateTier(const Row& rolled,std::span<const Row> family,
+                                bool rare,unsigned itemVersion,int alvl,int magicLvl,
+                                Eligible eligible,std::span<const Property> properties={}) {
+    std::set<int> allLevels;
+    std::set<int> higherLevels;
+    int bestAlvlLevel=-1;
+    allLevels.insert(rolled.Level());
+    for (const auto& row:family) {
+        if (!row.Spawnable() || !row.Frequency() || (rare && !row.RareAllowed()) ||
+            (itemVersion<100 && row.Version()>=100) || !rolled.SameFamily(row,properties) ||
+            !eligible(row)) continue;
+        const int lvl=row.Level();
+        allLevels.insert(lvl);
+        if (lvl>rolled.Level()) higherLevels.insert(lvl);
+        if (alvl>0 && lvl<=alvl && (row.MaxLevel()<=0 || alvl<=row.MaxLevel())) {
+            if (lvl>bestAlvlLevel) bestAlvlLevel=lvl;
+        }
+    }
+    if (alvl>0 && rolled.Spawnable() && rolled.Frequency() && (!rare || rolled.RareAllowed()) &&
+        !(itemVersion<100 && rolled.Version()>=100) && eligible(rolled) &&
+        rolled.Level()<=alvl && (rolled.MaxLevel()<=0 || alvl<=rolled.MaxLevel())) {
+        if (rolled.Level()>bestAlvlLevel) bestAlvlLevel=rolled.Level();
+    }
+    unsigned bestTierAtAlvl=0;
+    if (bestAlvlLevel>=0) {
+        unsigned higherThanBest=0;
+        for (int lvl:allLevels) if (lvl>bestAlvlLevel) ++higherThanBest;
+        bestTierAtAlvl=1+higherThanBest;
+    }
+    return {
+        1+static_cast<unsigned>(higherLevels.size()),
+        static_cast<unsigned>(allLevels.size()),
+        bestTierAtAlvl,
+        alvl>0?AffixSpawnWeight(rolled,alvl,magicLvl):0
+    };
 }
+
+struct LayerEncoding { unsigned skillBits{6}, skillMask{63}; bool randomSkills{}; bool chargeSourcesOnly{}; };
+inline bool RandomLayerSpec(int param,int low,int high,unsigned layer,int stat=0) {
+    if (param<=0 || param>1000000 || low<0 || low>high || high>65535) return false;
+    if (stat==188 && (layer%8)>=3) return false;
+    if (layer>=static_cast<unsigned>(low) && layer<=static_cast<unsigned>(high) &&
+        !(stat==188 && high<24 && (low%3)==0 && !(low>=8 && (low%8)==0))) return true;
+    // item_addskill_tab (stat 188) encodes runtime layer as 8*class + tree,
+    // while properties fn=12 may use either 8*class + tree or linear 3*class + tree (0..23) in low..high.
+    if (stat==188 && high<24 && (layer%8)<3 && !(low>=8 && (low%8)==0 && high==low+2)) {
+        const unsigned linear=(layer/8)*3+(layer%8);
+        return linear>=static_cast<unsigned>(low) && linear<=static_cast<unsigned>(high);
+    }
+    return false;
+}
+#if defined(_MSC_VER)
+__declspec(noinline)
+#endif
 inline bool PropertyContributes(const Property& property,int param,int low,int level,int stat,int layer,
                                 LayerEncoding encoding={}) {
     const auto* p=property.bytes.data();
@@ -93,10 +196,10 @@ inline bool PropertyContributes(const Property& property,int param,int low,int l
             if (Read<std::uint16_t>(p,0x0a+slot*2)==layer) return true;
         } else if (fn==10) { // tab = 3*class+tree, encoded as 8*class+tree
             if (param>=0 && param<24 && (param/3*8+param%3)==layer) return true;
-        } else if (fn==22 || fn==24) {
+        } else if (fn==9 || fn==22 || fn==24) { // single skill / oskill / state / monster param
             if (param>=0 && param==layer) return true;
         } else if(fn==12) {
-            if(encoding.randomSkills && layer>=0 && RandomLayerSpec(param,low,level,static_cast<unsigned>(layer)))return true;
+            if(encoding.randomSkills && layer>=0 && RandomLayerSpec(param,low,level,static_cast<unsigned>(layer),stat))return true;
         } else if (fn==19 && encoding.chargeSourcesOnly && stat==204 && level<0) {
             // Source identity only: negative level operands are calculated by
             // the game. The saved affix/property still identifies its skill.
@@ -130,7 +233,7 @@ inline bool SpecContributes(std::uint32_t id,int param,int low,int level,
     const unsigned char* selected=nullptr;
     for (unsigned n=0;n<8;++n) {
         const auto* entry=group+8+n*24;
-        if (Read<int>(entry,20)<=0) continue;
+        if (Read<std::uint32_t>(entry,0)==0xffffffffu || std::all_of(entry,entry+24,[](unsigned char b){return b==0;})) continue;
         if (selected || Read<int>(entry,4)!=Read<int>(entry,8)) return false;
         selected=entry;
     }
@@ -189,7 +292,7 @@ inline std::string NamedLabel(const Rolled& affix) {
 // verified transformation; Contributes alone does not establish numeric bounds.
 inline bool ScalarBounds(const Rolled& affix,std::span<const Property> properties,
                          int stat,int layer,int& low,int& high) {
-    if (affix.source || (layer && stat!=83)) return false;
+    if (affix.source) return false;
     bool found=false; low=high=0;
     for (unsigned n=0;n<3;++n) {
         const int id=affix.row.Number(0x24+16*n);
@@ -205,20 +308,44 @@ inline bool ScalarBounds(const Rolled& affix,std::span<const Property> propertie
             for(unsigned slot=0;slot<7;++slot){minimum|=p[0x18+slot]==5;maximum|=p[0x18+slot]==6;}
             if(minimum&&maximum)return false;
         }
+        const int param=one.Number(0x28+16*n);
         unsigned matches=0;
         for (unsigned slot=0;slot<7;++slot) {
             const auto fn=p[0x18+slot];
+            const int target=Read<std::uint16_t>(p,0x20+slot*2);
             if ((fn==5 && (stat==21 || stat==23)) || (fn==6 && (stat==22 || stat==24)) ||
                 (fn==7 && (stat==17 || stat==18)) ||
-                ((!layer && (fn==1 || fn==3 || fn==8 || (fn==2 && stat==16) || (fn==13 && stat==75 && !p[2+slot])) && Read<std::uint16_t>(p,0x20+slot*2)==stat) ||
-                 (fn==21 && stat==83 && Read<std::uint16_t>(p,0x20+slot*2)==83 &&
-                  layer>=0 && layer<8 && Read<std::uint16_t>(p,0x0a+slot*2)==layer))) ++matches;
+                (!layer && (fn==1 || fn==3 || fn==4 || fn==8 || (fn==2 && stat==16) || (fn==13 && stat==75 && !p[2+slot])) && target==stat) ||
+                (fn==21 && target==stat && layer>=0 && Read<std::uint16_t>(p,0x0a+slot*2)==layer) ||
+                (fn==10 && target==stat && param>=0 && param<24 && (param/3*8+param%3)==layer) ||
+                ((fn==9 || fn==22 || fn==24) && target==stat && param>=0 && param==layer)) ++matches;
         }
         const int lo=one.Number(0x2c+16*n),hi=one.Number(0x30+16*n);
         if (matches!=1 || found || lo>hi || lo< -1000000 || hi>1000000) return false;
         low=lo; high=hi; found=true;
     }
     return found;
+}
+template<class Eligible>
+inline bool FamilyScalarBounds(const Rolled& rolled,std::span<const Row> family,
+                               std::span<const Property> properties,bool rare,
+                               unsigned itemVersion,int stat,int layer,
+                               int& familyLow,int& familyHigh,Eligible eligible) {
+    int low=0,high=0;
+    if (!ScalarBounds(rolled,properties,stat,layer,low,high)) return false;
+    familyLow=low;
+    familyHigh=high;
+    for (const auto& row:family) {
+        if (!row.Spawnable() || !row.Frequency() || (rare && !row.RareAllowed()) ||
+            (itemVersion<100 && row.Version()>=100) || !rolled.row.SameFamily(row,properties) ||
+            !eligible(row)) continue;
+        Rolled candidate{0,row,rolled.prefix,0,rolled.source};
+        int cLow=0,cHigh=0;
+        if (!ScalarBounds(candidate,properties,stat,layer,cLow,cHigh)) continue;
+        if (cLow<familyLow) familyLow=cLow;
+        if (cHigh>familyHigh) familyHigh=cHigh;
+    }
+    return true;
 }
 // Resolve the two independently displayed endpoints of an elemental damage
 // family. Function 1 rolls the named endpoint within mod min/max; paired

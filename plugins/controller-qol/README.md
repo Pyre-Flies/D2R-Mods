@@ -1,6 +1,6 @@
 # Controller QOL Updates
 
-**1.3.1+rev.95 · by PyreFly · Windows x64 / D2RLoader 1.3.1 / plugin ABI 4**
+**1.3.1+rev.100 · by PyreFly · Windows x64 / D2RLoader 1.3.1 / plugin ABI 4**
 
 Controller item shortcuts, direct ground looting, menu navigation and optional
 right-stick skill aiming. This README covers the default button combinations,
@@ -184,8 +184,8 @@ No additional configuration file is introduced.
 
 | Applies during play | Requires a game restart |
 | --- | --- |
-| `quick_identify`, `identify_all`, `quick_move`, `quick_deposit`, identify supply rules, `require_modifier`, `ground_pickup_distance`, `trigger_threshold`, item `debug_logging` | `[qol] enabled`, `native_identify`, Cube control switches, `ground_pickup`, `block_filtered_pickup`, both modifier/button bindings, all portal priority options and their diagnostics/radius |
-| Aim speed, deadzone, acceleration, snapping, reticle colors/opacity/thickness, overlay visibility/smoothing, projection rate, `verbose`, `debug_overlay` | `[aim] enabled`, `cast_observer_enabled`, `skill_tree_toggle_enabled`; activating aim that failed startup admission |
+| `quick_identify`, `identify_all`, `quick_move`, `quick_deposit`, identify supply rules, `require_modifier`, `ground_pickup_distance`, `trigger_threshold`, portal priority toggles, item `debug_logging` | `[qol] enabled`, `native_identify`, Cube control switches, `ground_pickup`, `block_filtered_pickup`, both modifier/button bindings, `portal_priority_distance`, `portal_diagnostics` |
+| Aim speed, deadzone, acceleration, snapping, reticle colors/opacity/thickness/size, overlay visibility/smoothing, projection rate, `verbose`, `debug_overlay` | `[aim] enabled`, `cast_observer_enabled`, `skill_tree_toggle_enabled`; activating aim that failed startup admission |
 | Active skill profile enable/lock states, targeting, leading/limits and Whirlwind options | Mod identity/source discovery, first-time profile creation and legacy migration |
 
 The log reports applied settings and any restart-required keys. A missing,
@@ -266,6 +266,7 @@ block_filtered_pickup = true
 | `ground_reticle_color` | `"#8FE8FF"` | Cursor color, quoted #RRGGBB or #RRGGBBAA. |
 | `lock_reticle_color` | `"#FFD166"` | Enemy-lock color with optional alpha. |
 | `reticle_thickness` | `2.0` | Colored stroke multiplier, 0.5-4; does not change targeting radius. |
+| `reticle_size_percent` | `100` | Overall reticle size percentage, 50-250%. |
 | `debug_overlay` | `false` | Show the diagnostic HUD and extra aim indicators. |
 | `cast_observer_enabled` | `true` | Enable optional cast diagnostics/reset observation. Can be disabled for compatibility while keeping ordinary aim. |
 | `skill_tree_toggle_enabled` | `true` | Allow R3 on a supported skill to change and save its aim preference. |

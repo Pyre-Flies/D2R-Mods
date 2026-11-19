@@ -33,12 +33,16 @@ bool Resolve(const PluginContext* context,const InventoryService* inventory,Play
 }
 }
 uint64_t Service::Now() const {return clock?clock():GetTickCount64();}
+void Service::RefreshFastFlagsLocked() noexcept {
+    clientWork.store(!stopping&&(!replies.empty()||(phase!=Phase::Idle&&phase!=Phase::Uncertain)),std::memory_order_release);
+    scopedJobs.store(!stopping&&scopedPump&&std::any_of(jobs.begin(),jobs.end(),[](const Job& job){return job.scoped;}),std::memory_order_release);
+}
 bool Service::Start(const PluginContext* c,const NetworkService* n,const ThreadService* t,const InventoryService* inv,const ItemService* it,ResultCallback result) {
     if(!c||!HasNetworkServiceField(n,NetworkServiceRequiredSize)||!n->registerChannel||!n->unregisterChannel||!n->getChannelInfo||
         !n->connectToHost||!n->sendToHost||!n->sendToClient||!n->getPeerPlayer||!t||!t->runOnGameThread||!t->runOnUiThread||
         !inv||!inv->getCursorItem||!inv->forEachInventoryItem)return false;
     context=c;network=n;threads=t;inventory=inv;items=it;callback=result;
-    {std::lock_guard lock(guard);stopping=false;}
+    {std::lock_guard lock(guard);stopping=false;RefreshFastFlagsLocked();}
     const Network::ChannelRegistration registration{.structSize=Network::ChannelRegistrationSize,.localChannelId=1,.compatibilityToken=Compatibility,
         .hostMessage=Host,.clientMessage=Client,.connectionState=Connection,.userData=this};
     if(network->registerChannel(context,&registration,&channel)!=Network::Result::Success||!channel){Stop();return false;}
@@ -47,7 +51,7 @@ bool Service::Start(const PluginContext* c,const NetworkService* n,const ThreadS
 }
 void Service::Stop() {
     Network::ChannelHandle old{};
-    {std::lock_guard lock(guard);stopping=true;old=channel;channel=0;++epoch;phase=Phase::Idle;jobs.clear();replies.clear();}
+    {std::lock_guard lock(guard);stopping=true;old=channel;channel=0;++epoch;phase=Phase::Idle;jobs.clear();replies.clear();RefreshFastFlagsLocked();}
     if(old&&network)network->unregisterChannel(context,old);
     std::lock_guard running(execution);
     std::lock_guard lock(guard);peers.clear();haltedOwners.clear();
@@ -55,13 +59,14 @@ void Service::Stop() {
 void Service::ResetClient() {
     const auto nonce=Token();
     std::lock_guard lock(guard);clientSession=nonce;serverSession=sequence=lease=0;
-    phase=Phase::Idle;pending={};intent={};uncertain=false;replies.clear();nextConnect=0;
+    phase=Phase::Idle;pending={};intent={};uncertain=false;replies.clear();nextConnect=0;RefreshFastFlagsLocked();
 }
 bool Service::Pending() {std::lock_guard lock(guard);return phase!=Phase::Idle||uncertain;}
-void Service::EnableScopedPump(bool available) {std::lock_guard lock(guard);scopedPump=available;}
+void Service::EnableScopedPump(bool available) {std::lock_guard lock(guard);scopedPump=available;RefreshFastFlagsLocked();}
 void Service::PumpScopedGame() {
+    if(!scopedJobs.load(std::memory_order_acquire))return;
     size_t count{};
-    {std::lock_guard lock(guard);if(stopping||!scopedPump)return;count=static_cast<size_t>(std::count_if(jobs.begin(),jobs.end(),[](const Job& job){return job.scoped;}));}
+    {std::lock_guard lock(guard);if(stopping||!scopedPump){RefreshFastFlagsLocked();return;}count=static_cast<size_t>(std::count_if(jobs.begin(),jobs.end(),[](const Job& job){return job.scoped;}));if(!count){RefreshFastFlagsLocked();return;}}
     // A peer in another hosted game stays queued for its own frame. Do not
     // repeatedly take the same deferred job during this game's update.
     for(size_t index=0;index<count;++index)Execute(true);
@@ -71,7 +76,7 @@ bool Service::Begin(const Info& bag,unsigned gem,bool withdraw,Ticket ticket,boo
         std::lock_guard lock(guard);
         if(stopping||!channel||!callback||!clientSession||phase!=Phase::Idle||uncertain||!Valid(Identify(bag))||gem>=Gems.size()||(withdraw&&!lease))return false;
         if(deposit&&(!withdraw||gem))return false;
-        intent={bag,gem,withdraw,ticket,deposit};phase=Phase::Connect;started=Now();pending={};
+        intent={bag,gem,withdraw,ticket,deposit};phase=Phase::Connect;started=Now();pending={};RefreshFastFlagsLocked();
     }
     Tick();return true;
 }
@@ -82,6 +87,7 @@ void Service::Fail(const char* text,bool unknown) {
         result.ticket=intent.ticket;result.reply=Refusal(pending,unknown?Status::Halted:Status::Unavailable,text);
         if(unknown){uncertain=true;result.reply.flags=Halted;phase=Phase::Uncertain;}
         else {phase=Phase::Idle;serverSession=lease=0;}
+        RefreshFastFlagsLocked();
         notify=callback;
     }
     if(notify)notify(result);
@@ -89,11 +95,11 @@ void Service::Fail(const char* text,bool unknown) {
 void Service::Tick() {
     for(;;) {
         Reply reply{};
-        {std::lock_guard lock(guard);if(stopping)return;if(replies.empty())break;reply=replies.front();replies.pop_front();}
+        {std::lock_guard lock(guard);if(stopping){RefreshFastFlagsLocked();return;}if(replies.empty())break;reply=replies.front();replies.pop_front();RefreshFastFlagsLocked();}
         Deliver(reply);
     }
     Phase current{};uint64_t age{};
-    {std::lock_guard lock(guard);if(stopping||phase==Phase::Idle||phase==Phase::Uncertain)return;current=phase;age=Now()-started;}
+    {std::lock_guard lock(guard);if(stopping||phase==Phase::Idle||phase==Phase::Uncertain){RefreshFastFlagsLocked();return;}current=phase;age=Now()-started;}
     if(age>8000) {bool mutation{};{std::lock_guard lock(guard);mutation=phase==Phase::Action&&intent.withdraw;}
         Fail(mutation?"Server reply delayed; withdrawal outcome is uncertain. Do not retry in this session.":"Gem Bag host did not respond. Reopen the picker to reconnect.",mutation);return;}
     Network::ChannelInfo info{.structSize=Network::ChannelInfoSize};
@@ -139,6 +145,7 @@ void Service::Deliver(Reply reply) {
             lease=(reply.flags&HasSnapshot)?reply.lease:0;
             uncertain|=(reply.flags&Halted)!=0;phase=Phase::Idle;
         }
+        RefreshFastFlagsLocked();
     }
     if(notify)notify(result);
     if(hello)Tick();
@@ -150,7 +157,7 @@ void __cdecl Service::Client(const PluginContext*,Network::ChannelHandle handle,
     try {
         auto& self=*static_cast<Service*>(opaque);Reply reply{};
         if(message!=ReplyMessage||!Copy(data,size,reply))return;
-        {std::lock_guard lock(self.guard);if(self.stopping||handle!=self.channel||!self.callback||self.replies.size()>=16)return;self.replies.push_back(reply);}
+        {std::lock_guard lock(self.guard);if(self.stopping||handle!=self.channel||!self.callback||self.replies.size()>=16)return;self.replies.push_back(reply);self.RefreshFastFlagsLocked();}
         self.threads->runOnUiThread(self.context,Ui,&self);
     }catch(...){ }
 }
@@ -164,6 +171,7 @@ void __cdecl Service::Connection(const PluginContext*,const Network::ConnectionE
             if(event->state==Network::ConnectionState::Disconnected&&event->peer) {
                 self.peers.erase(event->peer);
                 std::erase_if(self.jobs,[&](const Job& job){return job.peer==event->peer;});
+                self.RefreshFastFlagsLocked();
             }
             client=self.callback!=nullptr;
         }
@@ -216,9 +224,9 @@ void Service::Receive(Network::PeerHandle handle,const Request& request) {
         if(queue) {
         const auto scheduled=threads->runOnGameThread(context,Game,this);
         if(scheduled!=Threads::Result::Success) {
-            if(scheduled==Threads::Result::Unavailable&&scopedPump)jobs.back().scoped=true;
+            if(scheduled==Threads::Result::Unavailable&&scopedPump){jobs.back().scoped=true;RefreshFastFlagsLocked();}
             else {
-                jobs.pop_back();scheduleFailed=true;
+                jobs.pop_back();scheduleFailed=true;RefreshFastFlagsLocked();
                 char reason[96];std::snprintf(reason,sizeof(reason),"Host game queue refused (%u); no qualified frame bridge is available.",static_cast<unsigned>(scheduled));
                 reply=Refusal(request,Status::Unavailable,reason);reply.serverSession=peers.at(job.peer).serverSession;
             }
@@ -245,17 +253,17 @@ void Service::Execute(bool scoped) {
     {
         std::lock_guard running(execution);
         Peer state{};
-        {std::lock_guard lock(guard);if(stopping||jobs.empty())return;
+        {std::lock_guard lock(guard);if(stopping||jobs.empty()){RefreshFastFlagsLocked();return;}
             const auto queued=std::find_if(jobs.begin(),jobs.end(),[&](const Job& entry){return entry.scoped==scoped;});
-            if(queued==jobs.end())return;job=*queued;jobs.erase(queued);
+            if(queued==jobs.end()){RefreshFastFlagsLocked();return;}job=*queued;jobs.erase(queued);RefreshFastFlagsLocked();
             const auto found=peers.find(job.peer);if(found==peers.end()||found->second.epoch!=job.epoch)return;state=found->second;}
         reply=Refusal(job.request,Status::Refused,"The bag, cursor or destination changed.");reply.serverSession=state.serverSession;
         try {
             const auto& request=job.request;
             const auto resolved=network->getPeerPlayer(context,channel,job.peer,&owner);
-            if(scoped&&resolved==Network::Result::NotFound&&Now()-job.queuedAt<7000) {
+            if(scoped&&(resolved==Network::Result::NotFound||resolved==Network::Result::NotConnected)&&Now()-job.queuedAt<7000) {
                 std::lock_guard lock(guard);const auto found=peers.find(job.peer);
-                if(!stopping&&found!=peers.end()&&found->second.epoch==job.epoch)jobs.push_back(job);
+                if(!stopping&&found!=peers.end()&&found->second.epoch==job.epoch){jobs.push_back(job);RefreshFastFlagsLocked();}
                 return;
             }
             if(resolved!=Network::Result::Success||!owner) {

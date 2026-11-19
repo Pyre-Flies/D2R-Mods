@@ -55,7 +55,8 @@ int main(int argc,char** argv){
     auto data=static_cast<const char*>(LockResource(LoadResource(image,config)));
     Check(data!=nullptr,"embedded config readable");
     std::string_view text(data,SizeofResource(image,config));
-    Check(text.find("[inventory_deposit]")!=text.npos && text.find("enabled = true")!=text.npos,"independent defaults");
+    Check(text.find("[inventory_deposit]")!=text.npos && text.find("enabled = true")!=text.npos &&
+        text.find("deposit_rejuvenation_potions = true")!=text.npos,"independent defaults");
     CheckSprite(image,INVENTORY_DEPOSIT_BUTTON_SPRITE_RESOURCE_ID,144,136);
     CheckSprite(image,INVENTORY_DEPOSIT_BUTTON_LOWEND_RESOURCE_ID,72,68);
     FreeLibrary(image);
@@ -66,7 +67,7 @@ int main(int argc,char** argv){
     Check(getInfo && GetProcAddress(module,"D2RLoaderLoadPlugin") && GetProcAddress(module,"D2RLoaderUnloadPlugin"),"three lifecycle exports");
     const auto* info=getInfo();
     Check(info && info->infoSize==D2RL::PluginInfoSize && info->abiVersion==D2RL_PLUGIN_ABI_VERSION,"SDK metadata ABI");
-    Check(!std::strcmp(info->id,"inventory-deposit") && !std::strcmp(info->version,"1.3.1+rev.13"),"standalone identity and stable version");
+    Check(!std::strcmp(info->id,"inventory-deposit") && !std::strcmp(info->version,"1.3.1+rev.16"),"standalone identity and stable version");
     Check((static_cast<unsigned>(info->flags)&static_cast<unsigned>(D2RL::PluginFlags::Shared))!=0,"valid shared plugin role");
     // No load callback invocation outside the actual game/loader host.
     FreeLibrary(module);std::puts("Standalone DLL ABI and custom art resource admission, metadata, dependencies and exports passed.");

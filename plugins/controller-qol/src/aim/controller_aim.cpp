@@ -796,7 +796,7 @@ void GroundReticle(D2RL::Overlay::CanvasHandle canvas,const Aim::Projection& pro
         for(unsigned segment=0;segment<=8;++segment) {
             const float angle=static_cast<float>(quadrant)*1.5707963f+0.20f+static_cast<float>(segment)*1.17f/8;
             Aim::Point point{};
-            const bool valid=projection.Project({world.x+0.65f*std::cos(angle),world.y+0.65f*std::sin(angle)},point);
+            const bool valid=projection.Project({world.x+0.65f*(settings.reticleSizePercent/100.0f)*std::cos(angle),world.y+0.65f*(settings.reticleSizePercent/100.0f)*std::sin(angle)},point);
             point.x+=correction.x;point.y+=correction.y;
             if(valid && havePrevious)segments[count++]={previous,point};
             previous=point; havePrevious=valid;
@@ -812,10 +812,10 @@ void EnemyReticle(D2RL::Overlay::CanvasHandle canvas,Aim::Point point,float scal
     // Four open diamond corners around the enemy's ground position.
     for(unsigned corner=0;corner<4;++corner) {
         const float angle=static_cast<float>(corner)*1.5707963f;
-        const Aim::Point tip{point.x+18*scale*std::cos(angle),point.y+12*scale*std::sin(angle)};
+        const Aim::Point tip{point.x+18*scale*(settings.reticleSizePercent/100.0f)*std::cos(angle),point.y+12*scale*(settings.reticleSizePercent/100.0f)*std::sin(angle)};
         const float previous=angle-1.5707963f,next=angle+1.5707963f;
-        const Aim::Point a{point.x+18*scale*std::cos(previous),point.y+12*scale*std::sin(previous)};
-        const Aim::Point b{point.x+18*scale*std::cos(next),point.y+12*scale*std::sin(next)};
+        const Aim::Point a{point.x+18*scale*(settings.reticleSizePercent/100.0f)*std::cos(previous),point.y+12*scale*(settings.reticleSizePercent/100.0f)*std::sin(previous)};
+        const Aim::Point b{point.x+18*scale*(settings.reticleSizePercent/100.0f)*std::cos(next),point.y+12*scale*(settings.reticleSizePercent/100.0f)*std::sin(next)};
         segments[count++]={{tip.x+(a.x-tip.x)*0.34f,tip.y+(a.y-tip.y)*0.34f},tip};
         segments[count++]={tip,{tip.x+(b.x-tip.x)*0.34f,tip.y+(b.y-tip.y)*0.34f}};
     }

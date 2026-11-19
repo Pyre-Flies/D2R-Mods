@@ -17,8 +17,10 @@
 #include <fstream>
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
@@ -414,6 +416,9 @@ enum class NextProperty : std::uint8_t {
 struct FilterRuleTable {
     std::uint64_t generation{};
     std::uint32_t schema{1};
+    std::string filterName;
+    std::string season;
+    std::string modVersion;
     std::size_t backgroundRules{};
     std::size_t textColorRules{};
     std::size_t borderColorRules{};
@@ -730,6 +735,7 @@ using LogFn = std::function<void(const char*)>;
 
 struct TableCacheState {
     std::filesystem::path configPath;
+    std::filesystem::path modRootHint;
     std::filesystem::path excelDir;
     bool baseNamesLoaded{};
     Tables::BaseNameCatalog baseNames;
@@ -742,7 +748,7 @@ struct TableCacheState {
 
     bool EnsureExcel(std::string& error) {
         if (!excelDir.empty()) return true;
-        excelDir = Tables::DiscoverExcel(configPath);
+        excelDir = Tables::DiscoverExcel(configPath, modRootHint);
         if (excelDir.empty()) {
             error = "excel-directory-not-found";
             return false;
@@ -769,7 +775,7 @@ struct TableCacheState {
     bool EnsureStatCosts(std::string& error) {
         if (statCostsLoaded) return true;
         if (excelDir.empty()) {
-            excelDir = Tables::DiscoverExcel(configPath);
+            excelDir = Tables::DiscoverExcel(configPath, modRootHint);
         }
         if (!excelDir.empty()) {
             if (!Tables::LoadStatCosts(excelDir, statCosts, error)) return false;
@@ -781,7 +787,7 @@ struct TableCacheState {
     bool EnsureSkills(std::string& error) {
         if (skillsLoaded) return true;
         if (excelDir.empty()) {
-            excelDir = Tables::DiscoverExcel(configPath);
+            excelDir = Tables::DiscoverExcel(configPath, modRootHint);
         }
         if (!excelDir.empty()) {
             if (!Tables::LoadSkills(excelDir, skills, error)) return false;
@@ -1341,27 +1347,70 @@ inline bool ParseConditions(const Json::Value& value, Conditions& dest,
     return true;
 }
 
+[[nodiscard]] inline std::string FormatHumanConditionError(std::string_view condErr,
+                                                           std::size_t entryIdx) {
+    char prefix[64]{};
+    std::snprintf(prefix, sizeof(prefix), "Rule #%zu: ", entryIdx);
+    if (condErr.starts_with("unknown-baseName-in-weapons-or-armor:")) {
+        const auto name = condErr.substr(std::strlen("unknown-baseName-in-weapons-or-armor:"));
+        return std::string("Mod/Season mismatch (") + prefix + "base item '" +
+               std::string(name) + "' does not exist in your installed mod)";
+    }
+    if (condErr.starts_with("unknown-stat-name:")) {
+        const auto stat = condErr.substr(std::strlen("unknown-stat-name:"));
+        return std::string("Mod/Season mismatch (") + prefix + "stat '" +
+               std::string(stat) + "' does not exist in your installed mod)";
+    }
+    if (condErr.starts_with("unknown-stat-param:") ||
+        condErr.starts_with("unknown-class-param:") ||
+        condErr.starts_with("unknown-skillTab-param:")) {
+        const auto colon = condErr.find(':');
+        const auto param = (colon != std::string_view::npos) ? condErr.substr(colon + 1) : condErr;
+        return std::string("Mod/Season mismatch (") + prefix + "skill/class '" +
+               std::string(param) + "' does not exist in your installed mod)";
+    }
+    if (condErr == "excel-directory-not-found") {
+        return std::string(prefix) +
+               "Mod data tables (data/global/excel) could not be found to resolve item names/types";
+    }
+    return std::string(prefix) + std::string(condErr);
+}
+
 inline std::shared_ptr<FilterRuleTable> LoadFilterRuleTable(
     const std::filesystem::path& configPath, std::uint64_t nextGeneration,
-    const LogFn& logWarn) {
+    const LogFn& logWarn, const std::filesystem::path& modRootHint = {},
+    std::string* outHumanError = nullptr) {
+    const auto setErr = [&](std::string msg) {
+        if (outHumanError) *outHumanError = std::move(msg);
+    };
     if (configPath.empty()) {
+        setErr("No filter file path specified.");
         if (logWarn) logWarn("LOOT_RULES_REFUSED path-unavailable");
         return nullptr;
     }
     std::error_code ec;
     const auto length = std::filesystem::file_size(configPath, ec);
     if (ec || length == 0 || length > MaximumFilterFileBytes) {
+        if (ec) {
+            setErr("Filter file is missing or cannot be accessed.");
+        } else if (length == 0) {
+            setErr("Filter file is empty (0 bytes).");
+        } else {
+            setErr("Filter file exceeds the 4 MB size limit.");
+        }
         if (logWarn)
             logWarn("LOOT_RULES_REFUSED config-missing-empty-or-over-4MiB last-valid-rules-preserved=1");
         return nullptr;
     }
     std::ifstream file(configPath, std::ios::binary);
     if (!file) {
+        setErr("Filter file could not be opened for reading.");
         if (logWarn) logWarn("LOOT_RULES_REFUSED config-open-failed last-valid-rules-preserved=1");
         return nullptr;
     }
     std::string raw(static_cast<std::size_t>(length), '\0');
     if (!file.read(raw.data(), static_cast<std::streamsize>(length))) {
+        setErr("Failed while reading filter file from disk.");
         if (logWarn) logWarn("LOOT_RULES_REFUSED config-read-failed last-valid-rules-preserved=1");
         return nullptr;
     }
@@ -1369,6 +1418,10 @@ inline std::shared_ptr<FilterRuleTable> LoadFilterRuleTable(
     std::size_t parseLine{};
     std::string parseError;
     if (!Json::Parse(raw, config, &parseLine, &parseError)) {
+        char human[280]{};
+        std::snprintf(human, sizeof(human), "Invalid JSON syntax on line %zu (%s).",
+                      parseLine, parseError.c_str());
+        setErr(human);
         if (logWarn) {
             char msg[280]{};
             std::snprintf(msg, sizeof(msg),
@@ -1383,12 +1436,39 @@ inline std::shared_ptr<FilterRuleTable> LoadFilterRuleTable(
         (config["version"].as_int64() != 1 && config["version"].as_int64() != 2 &&
          config["version"].as_int64() != 3) ||
         !config.contains("rules") || !config["rules"].is_array()) {
+        if (!config.is_object()) {
+            setErr("Invalid filter format: top-level JSON value must be an object.");
+        } else if (!config.contains("rules") &&
+                   ((config.contains("entries") && config["entries"].is_array()) ||
+                    (config.contains("presets") && config["presets"].is_array()) ||
+                    (config.contains("format") && config["format"].is_string() &&
+                     config["format"].as_string() == "pyre-lootfilter-library"))) {
+            setErr("Wrong file type: this is a website browser-library backup, not an exported game filter.");
+        } else if (!config.contains("rules") &&
+                   (config.contains("strictness") ||
+                    (config.contains("format") && config["format"].is_string() &&
+                     config["format"].as_string() == "pyre-lootfilter-v2"))) {
+            setErr("Wrong file type: this is an uncompiled V2 editor preset, not an exported filter.json.");
+        } else if (!config.contains("version") || !config["version"].is_number_integer()) {
+            setErr("Version mismatch: missing integer 'version' field (expected schema v1, v2, or v3).");
+        } else if (config["version"].as_int64() != 1 && config["version"].as_int64() != 2 &&
+                   config["version"].as_int64() != 3) {
+            char human[220]{};
+            std::snprintf(
+                human, sizeof(human),
+                "Version mismatch: filter requires schema v%lld, but this plugin supports v1-v3.",
+                static_cast<long long>(config["version"].as_int64()));
+            setErr(human);
+        } else {
+            setErr("Invalid filter format: missing 'rules' array.");
+        }
         if (logWarn)
             logWarn("LOOT_RULES_REFUSED required-schema={version:1|2|3,rules:array} last-valid-rules-preserved=1");
         return nullptr;
     }
     const auto& entries = config["rules"].arrayValues;
     if (entries.size() > MaximumFilterRules) {
+        setErr("Filter exceeds the maximum limit of 4,096 rules.");
         if (logWarn) logWarn("LOOT_RULES_REFUSED over-4096-rules last-valid-rules-preserved=1");
         return nullptr;
     }
@@ -1396,15 +1476,25 @@ inline std::shared_ptr<FilterRuleTable> LoadFilterRuleTable(
     auto fresh = std::make_shared<FilterRuleTable>();
     fresh->generation = nextGeneration;
     fresh->schema = static_cast<std::uint32_t>(config["version"].as_int64());
+    if (config.contains("name") && config["name"].is_string()) {
+        fresh->filterName = config["name"].as_string();
+    }
+    if (config.contains("season") && config["season"].is_string()) {
+        fresh->season = config["season"].as_string();
+    }
+    if (config.contains("modVersion") && config["modVersion"].is_string()) {
+        fresh->modVersion = config["modVersion"].as_string();
+    }
     fresh->rules.reserve(entries.size());
 
     std::unordered_set<std::uint32_t> seenV1Codes;
-    TableCacheState tables{configPath};
+    TableCacheState tables{configPath, modRootHint};
     std::size_t entryIdx = 0;
 
     for (const auto& entry : entries) {
         ++entryIdx;
         if (!entry.is_object()) {
+            setErr("Rule #" + std::to_string(entryIdx) + " must be a JSON object.");
             if (logWarn) {
                 char msg[220]{};
                 std::snprintf(msg, sizeof(msg),
@@ -1422,6 +1512,8 @@ inline std::shared_ptr<FilterRuleTable> LoadFilterRuleTable(
             if (entry.size() != 1U || hasShow == hasHide ||
                 (hasShow && !entry["show"].is_object()) ||
                 (hasHide && !entry["hide"].is_object())) {
+                setErr("Rule #" + std::to_string(entryIdx) +
+                       ": schema v3 rules require a single 'show' or 'hide' object.");
                 if (logWarn) {
                     char msg[280]{};
                     std::snprintf(
@@ -1458,6 +1550,8 @@ inline std::shared_ptr<FilterRuleTable> LoadFilterRuleTable(
              !block->contains("tooltip") && !block->contains("backgroundColor") &&
              !block->contains("textColor") && !block->contains("borderColor") &&
              !block->contains("dropSound") && !block->contains("minimapIcon"))) {
+            setErr("Rule #" + std::to_string(entryIdx) +
+                   ": invalid rule fields for schema v" + std::to_string(fresh->schema) + ".");
             if (logWarn) {
                 char msg[320]{};
                 std::snprintf(
@@ -1472,6 +1566,8 @@ inline std::shared_ptr<FilterRuleTable> LoadFilterRuleTable(
         if (fresh->schema == 3 &&
             (block->contains("backgroundColor") || block->contains("textColor") ||
              block->contains("borderColor"))) {
+            setErr("Rule #" + std::to_string(entryIdx) +
+                   ": schema v3 colors must be nested inside 'tooltip'.");
             if (logWarn)
                 logWarn("LOOT_RULES_REFUSED schema3-flat-colors-unsupported use-tooltip-object last-valid-rules-preserved=1");
             return nullptr;
@@ -1480,6 +1576,8 @@ inline std::shared_ptr<FilterRuleTable> LoadFilterRuleTable(
             const auto& tooltip = (*block)["tooltip"];
             if (block->contains("backgroundColor") || block->contains("textColor") ||
                 block->contains("borderColor")) {
+                setErr("Rule #" + std::to_string(entryIdx) +
+                       ": 'tooltip' cannot be mixed with top-level color fields.");
                 if (logWarn)
                     logWarn("LOOT_RULES_REFUSED tooltip-cannot-be-mixed-with-flat-colors last-valid-rules-preserved=1");
                 return nullptr;
@@ -1490,12 +1588,15 @@ inline std::shared_ptr<FilterRuleTable> LoadFilterRuleTable(
                 (tooltip.contains("borderColor") && !tooltip["borderColor"].is_string()) ||
                 (!tooltip.contains("backgroundColor") && !tooltip.contains("textColor") &&
                  !tooltip.contains("borderColor"))) {
+                setErr("Rule #" + std::to_string(entryIdx) + ": invalid 'tooltip' color object.");
                 if (logWarn)
                     logWarn("LOOT_RULES_REFUSED invalid-tooltip last-valid-rules-preserved=1");
                 return nullptr;
             }
             for (const auto& [k, v] : tooltip.objectValues) {
                 if (k != "backgroundColor" && k != "textColor" && k != "borderColor") {
+                    setErr("Rule #" + std::to_string(entryIdx) +
+                           ": unexpected field '" + k + "' inside 'tooltip'.");
                     if (logWarn)
                         logWarn("LOOT_RULES_REFUSED invalid-tooltip unexpected-field last-valid-rules-preserved=1");
                     return nullptr;
@@ -1508,6 +1609,8 @@ inline std::shared_ptr<FilterRuleTable> LoadFilterRuleTable(
                 if (k != "conditions" && k != "show" && k != "name" && k != "tooltip" &&
                     k != "textColor" && k != "backgroundColor" && k != "borderColor" &&
                     k != "dropSound" && k != "minimapIcon") {
+                    setErr("Rule #" + std::to_string(entryIdx) +
+                           ": unsupported schema v2 field '" + k + "'.");
                     if (logWarn)
                         logWarn("LOOT_RULES_REFUSED unexpected-v2-action-or-field last-valid-rules-preserved=1");
                     return nullptr;
@@ -1517,6 +1620,8 @@ inline std::shared_ptr<FilterRuleTable> LoadFilterRuleTable(
             for (const auto& [k, v] : block->objectValues) {
                 if (k != "ruleName" && k != "conditions" && k != "continue" && k != "name" &&
                     k != "tooltip" && k != "dropSound" && k != "minimapIcon") {
+                    setErr("Rule #" + std::to_string(entryIdx) +
+                           ": unsupported schema v3 field '" + k + "'.");
                     if (logWarn)
                         logWarn("LOOT_RULES_REFUSED unexpected-v3-block-field last-valid-rules-preserved=1");
                     return nullptr;
@@ -1535,6 +1640,7 @@ inline std::shared_ptr<FilterRuleTable> LoadFilterRuleTable(
                  return ch >= 0x20U && ch <= 0x7EU;
              }) ||
              !Tables::PrintableItemCode(Tables::PackCode(codeStr)))) {
+            setErr("Rule #" + std::to_string(entryIdx) + ": invalid v1 item code '" + codeStr + "'.");
             if (logWarn)
                 logWarn("LOOT_RULES_REFUSED invalid-v1-code last-valid-rules-preserved=1");
             return nullptr;
@@ -1557,6 +1663,8 @@ inline std::shared_ptr<FilterRuleTable> LoadFilterRuleTable(
         }
         if (hasName && (currentLineLen == 0 || lineCount > 3U)) safeName = false;
         if (!safeName) {
+            setErr("Rule #" + std::to_string(entryIdx) +
+                   ": custom item name exceeds length or line limits.");
             if (logWarn)
                 logWarn("LOOT_RULES_REFUSED invalid-rule-name last-valid-rules-preserved=1");
             return nullptr;
@@ -1564,6 +1672,8 @@ inline std::shared_ptr<FilterRuleTable> LoadFilterRuleTable(
 
         const auto packedCode = Tables::PackCode(codeStr);
         if (fresh->schema == 1 && !seenV1Codes.insert(packedCode).second) {
+            setErr("Rule #" + std::to_string(entryIdx) +
+                   ": duplicate v1 item code '" + codeStr + "'.");
             if (logWarn)
                 logWarn("LOOT_RULES_REFUSED duplicate-v1-code last-valid-rules-preserved=1");
             return nullptr;
@@ -1584,6 +1694,7 @@ inline std::shared_ptr<FilterRuleTable> LoadFilterRuleTable(
             if (block->contains("conditions")) {
                 if (!ParseConditions((*block)["conditions"], rule.conditions, tables, logWarn,
                                      condErr)) {
+                    setErr(FormatHumanConditionError(condErr, entryIdx));
                     if (logWarn) {
                         char msg[300]{};
                         std::snprintf(msg, sizeof(msg),
@@ -1628,6 +1739,7 @@ inline std::shared_ptr<FilterRuleTable> LoadFilterRuleTable(
 
         if (bgVal) {
             if (!ParseFilterRgba(bgVal->as_string(), rule.background)) {
+                setErr("Rule #" + std::to_string(entryIdx) + ": invalid 'backgroundColor' value.");
                 if (logWarn)
                     logWarn("LOOT_RULES_REFUSED invalid-backgroundColor last-valid-rules-preserved=1");
                 return nullptr;
@@ -1637,6 +1749,7 @@ inline std::shared_ptr<FilterRuleTable> LoadFilterRuleTable(
         }
         if (fgVal) {
             if (!ParseFilterRgba(fgVal->as_string(), rule.textColor)) {
+                setErr("Rule #" + std::to_string(entryIdx) + ": invalid 'textColor' value.");
                 if (logWarn)
                     logWarn("LOOT_RULES_REFUSED invalid-textColor last-valid-rules-preserved=1");
                 return nullptr;
@@ -1646,6 +1759,7 @@ inline std::shared_ptr<FilterRuleTable> LoadFilterRuleTable(
         }
         if (bdVal) {
             if (!ParseFilterRgba(bdVal->as_string(), rule.borderColor)) {
+                setErr("Rule #" + std::to_string(entryIdx) + ": invalid 'borderColor' value.");
                 if (logWarn)
                     logWarn("LOOT_RULES_REFUSED invalid-borderColor last-valid-rules-preserved=1");
                 return nullptr;
@@ -1662,6 +1776,7 @@ inline std::shared_ptr<FilterRuleTable> LoadFilterRuleTable(
             };
             if (sound.empty() || sound.size() >= rule.dropSound.size() ||
                 !std::all_of(sound.begin(), sound.end(), validSoundChar)) {
+                setErr("Rule #" + std::to_string(entryIdx) + ": invalid 'dropSound' name.");
                 if (logWarn)
                     logWarn("LOOT_RULES_REFUSED invalid-dropSound last-valid-rules-preserved=1");
                 return nullptr;
@@ -1671,7 +1786,7 @@ inline std::shared_ptr<FilterRuleTable> LoadFilterRuleTable(
                 if (sound.size() == 8 && sound.starts_with("Filter")) {
                     const auto soundExcel = !tables.excelDir.empty()
                                                 ? tables.excelDir
-                                                : Tables::DiscoverExcel(configPath);
+                                                : Tables::DiscoverExcel(configPath, modRootHint);
                     if (!soundExcel.empty()) {
                         std::error_code sfxEc;
                         const auto flacPath = soundExcel.parent_path().parent_path() / L"hd" /
@@ -1705,12 +1820,15 @@ inline std::shared_ptr<FilterRuleTable> LoadFilterRuleTable(
                 !icon["shape"].is_string() || !icon["borderColor"].is_string() ||
                 !icon["fillColor"].is_string() ||
                 (hasSize && !icon["size"].is_number())) {
+                setErr("Rule #" + std::to_string(entryIdx) + ": invalid 'minimapIcon' object.");
                 if (logWarn)
                     logWarn("LOOT_RULES_REFUSED invalid-minimapIcon last-valid-rules-preserved=1");
                 return nullptr;
             }
             for (const auto& [k, v] : icon.objectValues) {
                 if (k != "shape" && k != "borderColor" && k != "fillColor" && k != "size") {
+                    setErr("Rule #" + std::to_string(entryIdx) +
+                           ": unsupported field '" + k + "' in 'minimapIcon'.");
                     if (logWarn)
                         logWarn("LOOT_RULES_REFUSED invalid-minimapIcon-field last-valid-rules-preserved=1");
                     return nullptr;
@@ -1737,12 +1855,15 @@ inline std::shared_ptr<FilterRuleTable> LoadFilterRuleTable(
             else if (shape == "bullseye" || shape == "ring")
                 rule.minimapShape = MinimapShape::Bullseye;
             else {
+                setErr("Rule #" + std::to_string(entryIdx) +
+                       ": unsupported minimapIcon shape '" + shape + "'.");
                 if (logWarn)
                     logWarn("LOOT_RULES_REFUSED invalid-minimapIcon-shape last-valid-rules-preserved=1");
                 return nullptr;
             }
             if (!ParseFilterRgba(icon["borderColor"].as_string(), rule.minimapBorderColor) ||
                 !ParseFilterRgba(icon["fillColor"].as_string(), rule.minimapFillColor)) {
+                setErr("Rule #" + std::to_string(entryIdx) + ": invalid 'minimapIcon' color.");
                 if (logWarn)
                     logWarn("LOOT_RULES_REFUSED invalid-minimapIcon-color last-valid-rules-preserved=1");
                 return nullptr;
@@ -1750,6 +1871,7 @@ inline std::shared_ptr<FilterRuleTable> LoadFilterRuleTable(
             if (hasSize) {
                 const double rawSize = icon["size"].as_double();
                 if (!std::isfinite(rawSize)) {
+                    setErr("Rule #" + std::to_string(entryIdx) + ": invalid 'minimapIcon' size.");
                     if (logWarn)
                         logWarn("LOOT_RULES_REFUSED invalid-minimapIcon-size last-valid-rules-preserved=1");
                     return nullptr;
@@ -1830,5 +1952,703 @@ struct LiveReloadWatcher {
         return true;
     }
 };
+
+struct FilterPathInputs {
+    std::filesystem::path modDirectory;
+    std::filesystem::path modSupportDirectory;
+    std::filesystem::path pluginConfigPath;
+    std::filesystem::path scopeRootDirectory;
+    std::filesystem::path gameDirectory;
+    std::string activeMod;
+};
+
+[[nodiscard]] inline std::filesystem::path NormalizeDirectoryPath(
+    const std::filesystem::path& p) {
+    if (p.empty()) return {};
+    auto norm = p.lexically_normal();
+    if (norm.filename().empty() && norm.has_parent_path()) {
+        norm = norm.parent_path();
+    }
+    return norm;
+}
+
+[[nodiscard]] inline std::filesystem::path InferGameDirectoryFromSubpath(
+    const std::filesystem::path& start) {
+    for (auto cur = NormalizeDirectoryPath(start); !cur.empty();) {
+        const auto parent = cur.parent_path();
+        if (parent.empty() || parent == cur) break;
+        if (Tables::EqualsIgnoreCase(parent.filename().wstring(), L"mods")) {
+            return NormalizeDirectoryPath(parent.parent_path());
+        }
+        if (Tables::EqualsIgnoreCase(cur.filename().wstring(), L"d2rloader") &&
+            !Tables::EqualsIgnoreCase(parent.parent_path().filename().wstring(), L"mods")) {
+            return NormalizeDirectoryPath(parent);
+        }
+        cur = parent;
+    }
+    return {};
+}
+
+[[nodiscard]] inline std::filesystem::path InferGameDirectory(const FilterPathInputs& in) {
+    if (!in.gameDirectory.empty()) {
+        return NormalizeDirectoryPath(in.gameDirectory);
+    }
+    for (const auto* candidate : {&in.modDirectory, &in.modSupportDirectory,
+                                  &in.scopeRootDirectory, &in.pluginConfigPath}) {
+        const auto inferred = InferGameDirectoryFromSubpath(*candidate);
+        if (!inferred.empty()) return inferred;
+    }
+    return {};
+}
+
+[[nodiscard]] inline std::filesystem::path ResolveActiveModRoot(const FilterPathInputs& in) {
+    if (!in.modDirectory.empty()) {
+        auto d = NormalizeDirectoryPath(in.modDirectory);
+        if (Tables::EqualsIgnoreCase(d.extension().wstring(), L".mpq")) {
+            d = NormalizeDirectoryPath(d.parent_path());
+        }
+        if (!d.empty()) return d;
+    }
+    if (!in.modSupportDirectory.empty()) {
+        auto d = NormalizeDirectoryPath(in.modSupportDirectory);
+        if (Tables::EqualsIgnoreCase(d.filename().wstring(), L"d2rloader")) {
+            d = NormalizeDirectoryPath(d.parent_path());
+        }
+        if (!d.empty()) return d;
+    }
+    if (!in.activeMod.empty()) {
+        const auto gameDir = InferGameDirectory(in);
+        if (!gameDir.empty()) {
+            return NormalizeDirectoryPath(gameDir / L"mods" / std::filesystem::path(in.activeMod));
+        }
+    }
+    for (const auto* candidate : {&in.scopeRootDirectory, &in.pluginConfigPath}) {
+        for (auto cur = NormalizeDirectoryPath(*candidate); !cur.empty();) {
+            const auto parent = cur.parent_path();
+            if (parent.empty() || parent == cur) break;
+            if (Tables::EqualsIgnoreCase(parent.filename().wstring(), L"mods")) {
+                return cur;
+            }
+            cur = parent;
+        }
+    }
+    return {};
+}
+
+[[nodiscard]] inline std::vector<std::filesystem::path> BuildFilterDirectoryCandidates(
+    const FilterPathInputs& in) {
+    std::vector<std::filesystem::path> out;
+    const auto addUnique = [&](const std::filesystem::path& raw) {
+        if (raw.empty()) return;
+        const auto norm = NormalizeDirectoryPath(raw);
+        if (norm.empty()) return;
+        const auto normW = norm.wstring();
+        for (const auto& existing : out) {
+            if (Tables::EqualsIgnoreCase(existing.wstring(), normW)) return;
+        }
+        out.push_back(norm);
+    };
+
+    // 1. Active mod's d2rloader/config/filter/
+    if (!in.modSupportDirectory.empty()) {
+        addUnique(NormalizeDirectoryPath(in.modSupportDirectory) / L"config" / L"filter");
+    }
+    const auto modRoot = ResolveActiveModRoot(in);
+    if (!modRoot.empty()) {
+        addUnique(modRoot / L"d2rloader" / L"config" / L"filter");
+    }
+
+    // 2. Plugin's own scope config/filter/
+    if (!in.pluginConfigPath.empty()) {
+        addUnique(in.pluginConfigPath.parent_path() / L"filter");
+    }
+    if (!in.scopeRootDirectory.empty()) {
+        addUnique(NormalizeDirectoryPath(in.scopeRootDirectory) / L"config" / L"filter");
+    }
+
+    // 3. Global <GameDir>/d2rloader/config/filter/
+    const auto gameDir = InferGameDirectory(in);
+    if (!gameDir.empty()) {
+        addUnique(gameDir / L"d2rloader" / L"config" / L"filter");
+    }
+
+    return out;
+}
+
+inline void EnsureFilterDirectoriesExist(const FilterPathInputs& in) noexcept {
+    try {
+        for (const auto& filterDir : BuildFilterDirectoryCandidates(in)) {
+            const auto parentConfigDir = filterDir.parent_path();
+            if (parentConfigDir.empty()) continue;
+            std::error_code ec;
+            if (std::filesystem::is_directory(parentConfigDir, ec) && !ec) {
+                std::filesystem::create_directories(filterDir, ec);
+            }
+        }
+    } catch (...) {
+    }
+}
+
+struct FilterProfileDescriptor {
+    std::filesystem::path path;
+    std::string displayName;
+    std::string shortPath;
+    bool isGlobalScope{};
+    bool isLegacySingleFile{};
+};
+
+[[nodiscard]] inline bool PathEquivalent(const std::filesystem::path& a,
+                                         const std::filesystem::path& b) noexcept {
+    if (a.empty() || b.empty()) return false;
+    return Tables::EqualsIgnoreCase(a.lexically_normal().wstring(),
+                                    b.lexically_normal().wstring());
+}
+
+[[nodiscard]] inline std::string SanitizeDisplayAscii(std::string_view raw,
+                                                      std::size_t maxLen = 48U) {
+    std::string out;
+    out.reserve(std::min(raw.size(), maxLen));
+    for (const unsigned char ch : raw) {
+        if (ch >= 0x20U && ch <= 0x7EU) {
+            out.push_back(static_cast<char>(ch));
+            if (out.size() >= maxLen) break;
+        }
+    }
+    while (!out.empty() && out.front() == ' ') out.erase(out.begin());
+    while (!out.empty() && out.back() == ' ') out.pop_back();
+    return out;
+}
+
+// Scans a JSON prefix (up to 4 KiB) for a top-level `"name": "..."` property at object depth 1.
+[[nodiscard]] inline bool TryExtractTopLevelJsonNamePrefix(std::string_view text,
+                                                           std::string& outName) noexcept {
+    outName.clear();
+    std::size_t i = 0;
+    if (text.size() >= 3 &&
+        static_cast<unsigned char>(text[0]) == 0xEFU &&
+        static_cast<unsigned char>(text[1]) == 0xBBU &&
+        static_cast<unsigned char>(text[2]) == 0xBFU) {
+        i = 3;
+    }
+
+    const auto skipWsAndComments = [&]() noexcept {
+        while (i < text.size()) {
+            const char c = text[i];
+            if (c == ' ' || c == '\t' || c == '\r' || c == '\n') {
+                ++i;
+            } else if (c == '/' && i + 1 < text.size() && text[i + 1] == '/') {
+                i += 2;
+                while (i < text.size() && text[i] != '\n') ++i;
+            } else if (c == '/' && i + 1 < text.size() && text[i + 1] == '*') {
+                i += 2;
+                while (i + 1 < text.size() && !(text[i] == '*' && text[i + 1] == '/')) ++i;
+                if (i + 1 < text.size()) i += 2;
+                else i = text.size();
+            } else {
+                break;
+            }
+        }
+    };
+
+    const auto parseStringLiteral = [&](std::string& decoded) noexcept -> bool {
+        decoded.clear();
+        if (i >= text.size() || text[i] != '"') return false;
+        const std::size_t startQuote = i;
+        ++i;
+        while (i < text.size()) {
+            const char c = text[i++];
+            if (c == '\\') {
+                if (i >= text.size()) return false;
+                ++i;
+            } else if (c == '"') {
+                Json::Value strVal;
+                if (Json::Parse(text.substr(startQuote, i - startQuote), strVal) &&
+                    strVal.is_string()) {
+                    decoded = strVal.as_string();
+                    return true;
+                }
+                return false;
+            }
+        }
+        return false;
+    };
+
+    skipWsAndComments();
+    if (i >= text.size() || text[i] != '{') return false;
+    int depth = 0;
+    bool expectingKey = false;
+    while (i < text.size()) {
+        skipWsAndComments();
+        if (i >= text.size()) break;
+        const char c = text[i];
+        if (c == '{') {
+            ++depth;
+            expectingKey = (depth == 1);
+            ++i;
+        } else if (c == '}') {
+            --depth;
+            expectingKey = false;
+            ++i;
+            if (depth <= 0) break;
+        } else if (c == '[') {
+            ++depth;
+            expectingKey = false;
+            ++i;
+        } else if (c == ']') {
+            --depth;
+            expectingKey = false;
+            ++i;
+        } else if (c == ',') {
+            expectingKey = (depth == 1);
+            ++i;
+        } else if (c == '"') {
+            std::string str;
+            if (!parseStringLiteral(str)) return false;
+            if (depth == 1 && expectingKey) {
+                expectingKey = false;
+                skipWsAndComments();
+                if (i < text.size() && text[i] == ':') {
+                    ++i;
+                    skipWsAndComments();
+                    if (str == "name") {
+                        std::string valStr;
+                        if (i < text.size() && text[i] == '"' && parseStringLiteral(valStr)) {
+                            outName = SanitizeDisplayAscii(valStr);
+                            return true;
+                        }
+                        return false;
+                    }
+                }
+            }
+        } else {
+            expectingKey = false;
+            ++i;
+        }
+    }
+    return false;
+}
+
+[[nodiscard]] inline std::wstring NormalizePathCacheKey(const std::filesystem::path& path) {
+    std::wstring key = path.lexically_normal().wstring();
+    for (auto& ch : key) {
+        if (ch >= L'A' && ch <= L'Z') {
+            ch = static_cast<wchar_t>(ch - L'A' + L'a');
+        } else if (ch == L'\\') {
+            ch = L'/';
+        }
+    }
+    return key;
+}
+
+[[nodiscard]] inline std::string PeekFilterJsonDisplayName(
+    const std::filesystem::path& path,
+    const FileStamp& precomputedStamp = {}) noexcept {
+    try {
+        const FileStamp stamp =
+            precomputedStamp.exists ? precomputedStamp : ReadFilterFileStamp(path);
+        if (!stamp.exists || stamp.size == 0 || stamp.size > MaximumFilterFileBytes) {
+            return {};
+        }
+
+        struct CachedDisplayName {
+            FileStamp stamp{};
+            std::string displayName{};
+        };
+        static std::mutex s_cacheMutex;
+        static std::unordered_map<std::wstring, CachedDisplayName> s_cache;
+
+        const std::wstring cacheKey = NormalizePathCacheKey(path);
+        {
+            std::lock_guard lock(s_cacheMutex);
+            const auto it = s_cache.find(cacheKey);
+            if (it != s_cache.end() &&
+                it->second.stamp.exists &&
+                it->second.stamp.size == stamp.size &&
+                it->second.stamp.modified == stamp.modified) {
+                return it->second.displayName;
+            }
+        }
+
+        std::ifstream f(path, std::ios::binary);
+        if (!f) return {};
+
+        // Scan only the first 4 KiB for a top-level "name" string; fall back to full parse
+        // only when "name" was not found in the prefix and the file is larger than 4 KiB.
+        constexpr std::size_t kPrefixBytes = 4096U;
+        const std::size_t prefixLen = static_cast<std::size_t>(
+            std::min<std::uintmax_t>(stamp.size, kPrefixBytes));
+        std::string buf(prefixLen, '\0');
+        f.read(buf.data(), static_cast<std::streamsize>(prefixLen));
+        const auto got = static_cast<std::size_t>(f.gcount());
+        if (got == 0) return {};
+        buf.resize(got);
+
+        std::string extracted;
+        if (!TryExtractTopLevelJsonNamePrefix(buf, extracted)) {
+            if (stamp.size > kPrefixBytes) {
+                const auto fullLen = static_cast<std::size_t>(stamp.size);
+                buf.resize(fullLen, '\0');
+                f.read(buf.data() + got, static_cast<std::streamsize>(fullLen - got));
+                const auto extra = static_cast<std::size_t>(f.gcount());
+                buf.resize(got + extra);
+            }
+            Json::Value val;
+            if (Json::Parse(buf, val) && val.is_object() && val.contains("name") &&
+                val["name"].is_string()) {
+                extracted = SanitizeDisplayAscii(val["name"].as_string());
+            }
+        }
+
+        {
+            std::lock_guard lock(s_cacheMutex);
+            s_cache[cacheKey] = CachedDisplayName{
+                .stamp = stamp,
+                .displayName = extracted,
+            };
+        }
+        return extracted;
+    } catch (...) {
+    }
+    return {};
+}
+
+[[nodiscard]] inline std::string FormatFilterShortPath(const std::filesystem::path& path,
+                                                       const FilterPathInputs& in) {
+    try {
+        const auto gameDir = InferGameDirectory(in);
+        if (!gameDir.empty()) {
+            std::error_code ec;
+            const auto rel = std::filesystem::proximate(path, gameDir, ec);
+            if (!ec && !rel.empty()) {
+                auto s = rel.generic_string();
+                if (!s.starts_with("..")) return s;
+            }
+        }
+        return path.filename().generic_string();
+    } catch (...) {
+        return {};
+    }
+}
+
+[[nodiscard]] inline std::vector<FilterProfileDescriptor> DiscoverFilterProfiles(
+    const FilterPathInputs& in) {
+    std::vector<FilterProfileDescriptor> out;
+    const auto gameDir = InferGameDirectory(in);
+    const auto globalLoaderDir =
+        gameDir.empty() ? std::filesystem::path{} : NormalizeDirectoryPath(gameDir / L"d2rloader");
+
+    const auto isUnderGlobal = [&](const std::filesystem::path& p) {
+        if (globalLoaderDir.empty()) return false;
+        const auto pw = p.lexically_normal().wstring();
+        const auto gw = globalLoaderDir.wstring();
+        return pw.size() > gw.size() &&
+               Tables::EqualsIgnoreCase(std::wstring_view(pw).substr(0, gw.size()), gw);
+    };
+
+    const auto addFile = [&](const std::filesystem::path& rawPath, bool isLegacySingle) {
+        if (rawPath.empty()) return;
+        const FileStamp stamp = ReadFilterFileStamp(rawPath);
+        if (!stamp.exists) return;
+        const auto norm = rawPath.lexically_normal();
+        const auto normW = norm.wstring();
+        const bool globalScope = isUnderGlobal(norm);
+        for (const auto& existing : out) {
+            if (Tables::EqualsIgnoreCase(existing.path.wstring(), normW)) return;
+            // If a legacy single-file filter.json has the exact same filename and byte size as an
+            // already-discovered config/filter/filter.json in the same scope, skip the redundant copy.
+            if (isLegacySingle && !existing.isLegacySingleFile &&
+                existing.isGlobalScope == globalScope &&
+                Tables::EqualsIgnoreCase(existing.path.filename().wstring(),
+                                         norm.filename().wstring())) {
+                std::error_code szEc1;
+                const auto sz1 = std::filesystem::file_size(existing.path, szEc1);
+                if (!szEc1 && sz1 == stamp.size) {
+                    return;
+                }
+            }
+        }
+        std::string label = PeekFilterJsonDisplayName(norm, stamp);
+        if (label.empty()) {
+            label = SanitizeDisplayAscii(norm.stem().string(), 24);
+        } else {
+            label = SanitizeDisplayAscii(label, 24);
+        }
+        if (label.empty()) {
+            label = "filter";
+        }
+        out.push_back(FilterProfileDescriptor{
+            .path = norm,
+            .displayName = std::move(label),
+            .shortPath = FormatFilterShortPath(norm, in),
+            .isGlobalScope = globalScope,
+            .isLegacySingleFile = isLegacySingle,
+        });
+    };
+
+    // 1. Scan dedicated config/filter/*.json folders (Mod first, then Global)
+    for (const auto& dir : BuildFilterDirectoryCandidates(in)) {
+        std::error_code ec;
+        if (!std::filesystem::is_directory(dir, ec) || ec) continue;
+        std::vector<std::filesystem::path> dirJsonFiles;
+        for (const auto& entry : std::filesystem::directory_iterator(dir, ec)) {
+            if (ec) break;
+            std::error_code fEc;
+            if (!entry.is_regular_file(fEc) || fEc) continue;
+            const auto& p = entry.path();
+            if (Tables::EqualsIgnoreCase(p.extension().wstring(), L".json")) {
+                dirJsonFiles.push_back(p);
+            }
+        }
+        std::sort(dirJsonFiles.begin(), dirJsonFiles.end(),
+                  [](const std::filesystem::path& a, const std::filesystem::path& b) {
+                      return a.filename().wstring() < b.filename().wstring();
+                  });
+        for (const auto& f : dirJsonFiles) {
+            addFile(f, false);
+        }
+    }
+
+    // 2. Scan backwards-compatible config/filter.json locations (Mod, PluginScope, Global)
+    if (!in.modSupportDirectory.empty()) {
+        addFile(NormalizeDirectoryPath(in.modSupportDirectory) / L"config" / L"filter.json", true);
+    }
+    const auto modRoot = ResolveActiveModRoot(in);
+    if (!modRoot.empty()) {
+        addFile(modRoot / L"d2rloader" / L"config" / L"filter.json", true);
+    }
+    if (!in.pluginConfigPath.empty()) {
+        addFile(in.pluginConfigPath.parent_path() / L"filter.json", true);
+    }
+    if (!in.scopeRootDirectory.empty()) {
+        addFile(NormalizeDirectoryPath(in.scopeRootDirectory) / L"config" / L"filter.json", true);
+    }
+    if (!gameDir.empty()) {
+        addFile(gameDir / L"d2rloader" / L"config" / L"filter.json", true);
+    }
+
+    // 3. Misplaced user fallback: d2rloader/plugins/filter.json
+    if (!modRoot.empty()) {
+        addFile(modRoot / L"d2rloader" / L"plugins" / L"filter.json", true);
+    }
+    if (!gameDir.empty()) {
+        addFile(gameDir / L"d2rloader" / L"plugins" / L"filter.json", true);
+    }
+
+    // Disambiguate duplicate display names in a single non-repeating pass
+    std::vector<bool> visited(out.size(), false);
+    for (std::size_t i = 0; i < out.size(); ++i) {
+        if (visited[i]) continue;
+        std::vector<std::size_t> group = {i};
+        for (std::size_t j = i + 1; j < out.size(); ++j) {
+            if (!visited[j] && out[j].displayName == out[i].displayName) {
+                group.push_back(j);
+            }
+        }
+        for (const auto idx : group) {
+            visited[idx] = true;
+        }
+        if (group.size() <= 1) continue;
+
+        bool hasModNonLegacy = false;
+        bool hasGlobalNonLegacy = false;
+        std::size_t modCount = 0;
+        std::size_t globalCount = 0;
+        for (const auto idx : group) {
+            if (out[idx].isGlobalScope) {
+                ++globalCount;
+                if (!out[idx].isLegacySingleFile) hasGlobalNonLegacy = true;
+            } else {
+                ++modCount;
+                if (!out[idx].isLegacySingleFile) hasModNonLegacy = true;
+            }
+        }
+
+        for (const auto idx : group) {
+            auto& d = out[idx];
+            if (d.isLegacySingleFile &&
+                ((d.isGlobalScope && hasGlobalNonLegacy) || (!d.isGlobalScope && hasModNonLegacy))) {
+                d.displayName += d.isGlobalScope ? " (Global Legacy)" : " (Legacy)";
+            } else if (d.isGlobalScope) {
+                if (globalCount > 1 && !hasGlobalNonLegacy) {
+                    d.displayName += " (Global " + SanitizeDisplayAscii(d.path.stem().string(), 12) + ")";
+                } else {
+                    d.displayName += " (Global)";
+                }
+            } else if (modCount > 1 && (!hasModNonLegacy || !d.isLegacySingleFile)) {
+                // Two non-legacy Mod files share the same JSON "name" field
+                const auto stem = SanitizeDisplayAscii(d.path.stem().string(), 14);
+                if (!stem.empty() && stem != d.displayName) {
+                    d.displayName += " (" + stem + ")";
+                }
+            }
+        }
+    }
+
+    return out;
+}
+
+[[nodiscard]] inline std::vector<std::filesystem::path> BuildFilterJsonCandidates(
+    const FilterPathInputs& in,
+    const std::vector<FilterProfileDescriptor>* prediscoveredProfiles = nullptr) {
+    std::vector<FilterProfileDescriptor> localDiscovered;
+    if (!prediscoveredProfiles) {
+        localDiscovered = DiscoverFilterProfiles(in);
+        prediscoveredProfiles = &localDiscovered;
+    }
+
+    std::vector<std::filesystem::path> out;
+    const auto addUnique = [&](const std::filesystem::path& raw) {
+        if (raw.empty()) return;
+        const auto norm = raw.lexically_normal();
+        const auto normW = norm.wstring();
+        for (const auto& existing : out) {
+            if (Tables::EqualsIgnoreCase(existing.wstring(), normW)) return;
+        }
+        out.push_back(norm);
+    };
+
+    // 0. Any existing .json files in dedicated config/filter/ directories
+    for (const auto& prof : *prediscoveredProfiles) {
+        if (!prof.isLegacySingleFile) {
+            addUnique(prof.path);
+        }
+    }
+
+    // 1. Active mod's d2rloader/config/filter.json
+    if (!in.modSupportDirectory.empty()) {
+        addUnique(NormalizeDirectoryPath(in.modSupportDirectory) / L"config" / L"filter.json");
+    }
+    const auto modRoot = ResolveActiveModRoot(in);
+    if (!modRoot.empty()) {
+        addUnique(modRoot / L"d2rloader" / L"config" / L"filter.json");
+    }
+
+    // 2. Plugin's own scope config/filter.json
+    if (!in.pluginConfigPath.empty()) {
+        addUnique(in.pluginConfigPath.parent_path() / L"filter.json");
+    }
+    if (!in.scopeRootDirectory.empty()) {
+        addUnique(NormalizeDirectoryPath(in.scopeRootDirectory) / L"config" / L"filter.json");
+    }
+
+    // 3. Global <GameDir>/d2rloader/config/filter.json
+    const auto gameDir = InferGameDirectory(in);
+    if (!gameDir.empty()) {
+        addUnique(gameDir / L"d2rloader" / L"config" / L"filter.json");
+    }
+
+    // 4. Any remaining discovered profiles (including misplaced plugins/filter.json)
+    for (const auto& prof : *prediscoveredProfiles) {
+        addUnique(prof.path);
+    }
+
+    return out;
+}
+
+[[nodiscard]] inline std::filesystem::path ResolveConfiguredProfilePath(
+    std::string_view selectedFilter,
+    const std::vector<FilterProfileDescriptor>& discoveredProfiles) {
+    if (selectedFilter.empty()) return {};
+    for (const auto& prof : discoveredProfiles) {
+        if (prof.shortPath == selectedFilter ||
+            prof.path.filename().generic_string() == selectedFilter ||
+            prof.path.generic_string() == selectedFilter) {
+            return prof.path;
+        }
+    }
+    const auto selectedFilename =
+        std::filesystem::path(selectedFilter).filename().wstring();
+    if (!selectedFilename.empty() &&
+        std::filesystem::path(selectedFilter).filename().generic_string() != selectedFilter) {
+        for (const auto& prof : discoveredProfiles) {
+            if (Tables::EqualsIgnoreCase(prof.path.filename().wstring(),
+                                         selectedFilename)) {
+                return prof.path;
+            }
+        }
+    }
+    return {};
+}
+
+[[nodiscard]] inline std::vector<std::filesystem::path> OrderFilterCandidatesForLoad(
+    const std::vector<std::filesystem::path>& candidates,
+    const std::filesystem::path& preferredPath = {}) {
+    std::vector<std::filesystem::path> ordered;
+    ordered.reserve(candidates.size());
+
+    const auto normPref = preferredPath.empty() ? std::wstring{} : preferredPath.lexically_normal().wstring();
+    if (!normPref.empty()) {
+        for (const auto& c : candidates) {
+            if (Tables::EqualsIgnoreCase(c.wstring(), normPref) && ReadFilterFileStamp(c).exists) {
+                ordered.push_back(c);
+                break;
+            }
+        }
+    }
+
+    struct ExistingCandidate {
+        std::filesystem::path path;
+        FileStamp stamp;
+        std::size_t priorityIndex{};
+    };
+    std::vector<ExistingCandidate> existing;
+    std::vector<std::filesystem::path> missing;
+    for (std::size_t i = 0; i < candidates.size(); ++i) {
+        const auto& c = candidates[i];
+        if (!normPref.empty() && !ordered.empty() &&
+            Tables::EqualsIgnoreCase(c.wstring(), normPref)) {
+            continue;
+        }
+        const auto stamp = ReadFilterFileStamp(c);
+        if (stamp.exists) {
+            existing.push_back({c, stamp, i});
+        } else {
+            missing.push_back(c);
+        }
+    }
+
+    // When filter.json exists in both Mod and Global folders, prefer the more recently
+    // modified file; break ties using the original candidate priority (Mod before Global).
+    std::stable_sort(existing.begin(), existing.end(),
+                     [](const ExistingCandidate& a, const ExistingCandidate& b) {
+                         if (a.stamp.modified != b.stamp.modified) {
+                             return a.stamp.modified > b.stamp.modified;
+                         }
+                         return a.priorityIndex < b.priorityIndex;
+                     });
+
+    for (auto& e : existing) ordered.push_back(std::move(e.path));
+    for (auto& m : missing) ordered.push_back(std::move(m));
+    return ordered;
+}
+
+// Determines which filter candidate(s) a reload should attempt.
+// When a specific profile is requested (`preferredPath`), configured (`selectedFilter`),
+// or already active (`lastSelectedProfilePath` / `activeFilterPath`), only that single
+// profile is returned so a syntax error in the active filter preserves previous rules
+// and surfaces the error instead of silently swapping to another candidate file.
+// Falling back across all discovered candidates occurs only when no profile is selected yet.
+[[nodiscard]] inline std::vector<std::filesystem::path> SelectReloadTargetCandidates(
+    const FilterPathInputs& in,
+    const std::vector<FilterProfileDescriptor>& discoveredProfiles,
+    std::string_view selectedFilter,
+    const std::filesystem::path& lastSelectedProfilePath,
+    const std::filesystem::path& activeFilterPath,
+    const std::filesystem::path& preferredPath = {}) {
+    if (!preferredPath.empty()) {
+        return {preferredPath.lexically_normal()};
+    }
+    if (const auto configured = ResolveConfiguredProfilePath(selectedFilter, discoveredProfiles);
+        !configured.empty()) {
+        return {configured.lexically_normal()};
+    }
+    if (!lastSelectedProfilePath.empty()) {
+        return {lastSelectedProfilePath.lexically_normal()};
+    }
+    if (!activeFilterPath.empty()) {
+        return {activeFilterPath.lexically_normal()};
+    }
+    return OrderFilterCandidatesForLoad(BuildFilterJsonCandidates(in, &discoveredProfiles));
+}
 
 } // namespace PyreLootFilter::Schema

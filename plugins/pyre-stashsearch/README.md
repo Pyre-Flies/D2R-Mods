@@ -1,12 +1,14 @@
 # Pyre Stash Search (`pyre-stashsearch`)
 
+**Version:** `1.3.1+rev.7`
+
 Instant cross-page stash search, boolean stat filtering, active-page item highlighting, and an expandable Side Tab Flyout with custom tab names for `D2RLoader`.
 
 ## Installation
 
 Copy `pyre-stashsearch.dll` into your `d2rloader/plugins/` directory (for example, `mods/Reimagined/d2rloader/plugins/pyre-stashsearch.dll` or a global `d2rloader/plugins/pyre-stashsearch.dll`).
 
-No UI layout (`bankexpansionlayouthd.json`) edits or extra `.mpq` files are required—the search bar anchors automatically to the stash tab strip.
+No UI layout (`bankexpansionlayouthd.json`) edits or extra `.mpq` files are required - the search bar anchors automatically to the stash tab strip.
 
 ## Features
 
@@ -26,7 +28,8 @@ No UI layout (`bankexpansionlayouthd.json`) edits or extra `.mpq` files are requ
   - **AND (`&` or space):** `monarch 4os`, `ring & fcr & allres`
   - **OR (`|`):** `shako | griffon`
   - **NOT (`-` or `!`):** `monarch 4os -eth`, `ring & fcr & !cold` (hyphenated item names like `Bul-Kathos` and negative stat rolls like `-15%` are matched literally).
-  - **Quality & Flag Shorthands:** `unique` (`uni`), `set`, `rare`, `magic` (`mag`), `crafted` (`craft`), `runeword` (`rw`), `ethereal` (`eth`).
+  - **Quality & Flag Shorthands:** `unique` (`uni`), `set`, `rare`, `magic` (`mag`), `crafted` (`craft`), `runeword` (`rw`), `ethereal` (`eth`), `duplicate` (`dupe`, `dupes`).
+  - **Duplicate Filter (`dupe` / `dupes`):** Matches identified non-charm, non-jewel items you own 2+ copies of across your Personal and Shared stash pages (for example, `dupe`, `dupe uni`, `dupe set`, `dupe uni | dupe set`, or `dupe uni -ring -amulet`), grouping matching copies side-by-side in the dropdown for easy roll comparison.
   - **Socket Shorthands:** `0os`–`6os`, `os`, `sockets`.
   - **Stat Shorthands:** `fcr`, `ias`, `fhr`, `frw`, `mf`, `gf`, `ll`, `ml`, `cb`, `ds`, `ow`, `allres`, `fres`, `cres`, `lres`, `pres`, `dr`, `mdr`, `pdr`, `cbf`, `tele`, `bo`, `ed`, `ar`.
 - **Expandable Side Tab Flyout & Custom Tab Names**

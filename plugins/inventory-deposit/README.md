@@ -1,9 +1,11 @@
 # Inventory Deposit
 
-**1.3.1+rev.13 · by PyreFly · Windows x64 / D2RLoader 1.3.1 / plugin ABI 4**
+**1.3.1+rev.16 · by PyreFly · Windows x64 / D2RLoader 1.3.1 / plugin ABI 4**
 
 Adds a **Deposit All Gems, Materials and Runes** button beside inventory gold
-while the HD advanced stash is open in keyboard/mouse mode. No chat commands.
+while the HD advanced stash is open in keyboard/mouse mode, with an **Options >
+Gameplay > UI > Deposit Rejuvenation Potions** toggle and `/autodeposit` chat
+command to toggle rejuvenation potion depositing.
 
 ## Installation and updates
 
@@ -30,8 +32,12 @@ then restart. Hot reload is unsupported.
 Open the stash and click Deposit All. Eligible gems, runes, materials and
 rejuvenation potions in main inventory move into advanced storage. Equipment,
 belt, Cube and Charm Inventory contents are excluded. Native eligibility rules
-apply. The button is disabled while holding an item, while busy, or when nothing
-qualifies. It highlights on hover when available.
+and advanced-stash stack capacity apply: materials whose stash counter is already
+at max stack size (or that reach max stack size mid-batch) are skipped so the
+remaining eligible items still deposit, and the button greys out when all
+remaining candidates belong to full stacks. The button is also disabled while
+holding an item, while busy, or when nothing qualifies. It highlights on hover
+when available.
 
 Batches can stop partway through after a failed or unconfirmed move. Check the
 inventory and destination before repeating. Avoid starting Controller QOL's
@@ -46,6 +52,7 @@ then restart. All keys belong under `[inventory_deposit]`:
 | Setting | Default | Meaning / accepted values |
 | --- | --- | --- |
 | `enabled` | `true` | Show/enable the optional button; false disables it. |
+| `deposit_rejuvenation_potions` | `true` | Deposit rejuvenation and full rejuvenation potions (`rvs`, `rvl`) when clicking Deposit All. Can also be changed in game via **Options > Gameplay > UI > Deposit Rejuvenation Potions** or `/autodeposit rejuv [on\|off\|toggle\|status]`. |
 | `anchor_to_gold` | `true` | Follow the inventory gold display. False uses manual button_x/button_y. |
 | `gold_gap` | `85` | Gap after the gold amount, integer 0-4096 inventory UI units. |
 | `gold_offset_y` | `1` | Vertical offset from gold-centered placement, integer -4096 to 4096 UI units. |
@@ -64,12 +71,22 @@ Default gold-relative placement:
 ```toml
 [inventory_deposit]
 enabled = true
+deposit_rejuvenation_potions = true
 anchor_to_gold = true
 gold_gap = 85
 gold_offset_y = 1
 button_x = 860
 button_y = 1620
 ```
+
+## In-game chat commands
+
+| Command | Effect |
+| --- | --- |
+| `/autodeposit rejuv` or `/autodeposit rejuv toggle` | Toggle rejuvenation potion (`rvs`, `rvl`) depositing and save to `inventory-deposit.toml`. |
+| `/autodeposit rejuv on` / `/autodeposit rejuv off` | Explicitly enable or disable rejuvenation potion depositing and save to `inventory-deposit.toml`. |
+| `/autodeposit` or `/autodeposit status` | Print current rejuvenation potion deposit status without modifying `inventory-deposit.toml`. |
+| `/autodeposit help` | Print command usage. |
 
 Example manual placement, slightly left of the shipped manual position:
 

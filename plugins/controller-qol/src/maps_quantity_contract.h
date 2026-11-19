@@ -29,7 +29,7 @@ inline bool Ref(uintptr_t address,const unsigned char* bytes,size_t operand,size
 // exact arguments. This does NOT qualify arbitrary Maps stats or hook chains.
 // The installed hook is still called; we prove its reachable quantity path
 // preserves all arguments and returns the original Core result unchanged.
-inline bool Validate(const Memory& memory,uintptr_t imageBase,uintptr_t hook,uintptr_t original) noexcept {
+inline bool ValidateDebug(const Memory& memory,uintptr_t imageBase,uintptr_t hook,uintptr_t original) noexcept {
     if(!memory.read || !imageBase || !hook || !original)return false;
     unsigned char head[sizeof(Profile::Head)]{},gate[sizeof(Profile::Gate)]{},index[sizeof(Profile::Index)]{};
     const auto gateAddress=Plus(hook,0x83);
@@ -59,5 +59,36 @@ inline bool Validate(const Memory& memory,uintptr_t imageBase,uintptr_t hook,uin
        !memory.read(memory.user,Plus(jumpTable,4*choice),&leafRva,4,Kind::Code))return false;
     unsigned char negative[sizeof(Profile::Negative)]{};
     return Block(memory,Plus(imageBase,leafRva),Profile::Negative,negative);
+}
+inline bool ValidateRelease(const Memory& memory,uintptr_t imageBase,uintptr_t hook,uintptr_t original) noexcept {
+    if(!memory.read || !imageBase || !hook || !original)return false;
+    unsigned char head[sizeof(ReleaseProfile::Head)]{},gate[sizeof(ReleaseProfile::Gate)]{};
+    const auto gateAddress=Plus(hook,0x3b);
+    if(!Block(memory,hook,ReleaseProfile::Head,head,{0x0f}) ||
+       !Block(memory,gateAddress,ReleaseProfile::Gate,gate,{0x0a,0x13,0x1a,0x23,0x2f,0x36,0x41,0x49}))return false;
+    uintptr_t originalSlot{},levelSlot{},continuation{},level{},exit1{},exit2{},exit3{},exit4{},tableBase{};
+    if(!Ref(hook,head,0x0f,0x13,originalSlot) ||
+       !Ref(gateAddress,gate,0x0a,0x0e,exit1) ||
+       !Ref(gateAddress,gate,0x13,0x17,exit2) || exit1!=exit2 ||
+       !Ref(gateAddress,gate,0x1a,0x1e,levelSlot) ||
+       !Ref(gateAddress,gate,0x23,0x27,exit3) || exit1!=exit3 ||
+       !Ref(gateAddress,gate,0x2f,0x33,exit4) || exit1!=exit4 ||
+       !Ref(gateAddress,gate,0x36,0x3a,tableBase) || tableBase!=imageBase ||
+       (originalSlot&7) || (levelSlot&7) || originalSlot==levelSlot ||
+       !memory.read(memory.user,originalSlot,&continuation,8,Kind::Data) || continuation!=original ||
+       !memory.read(memory.user,levelSlot,&level,8,Kind::Data))return false;
+    int32_t byteTableRva{},jumpTableRva{};
+    std::memcpy(&byteTableRva,gate+0x41,4);std::memcpy(&jumpTableRva,gate+0x49,4);
+    uintptr_t byteTable{},jumpTable{};unsigned char choice{};uint32_t leafRva{};
+    if(!Relative(imageBase,byteTableRva,byteTable) || !Relative(imageBase,jumpTableRva,jumpTable) ||
+       !memory.read(memory.user,Plus(byteTable,70-17),&choice,1,Kind::Code) || choice>8 ||
+       !memory.read(memory.user,Plus(jumpTable,4*choice),&leafRva,4,Kind::Code) ||
+       Plus(imageBase,leafRva)!=exit1)return false;
+    unsigned char returnBytes[sizeof(ReleaseProfile::Return)]{};
+    return Block(memory,exit1,ReleaseProfile::Return,returnBytes);
+}
+inline bool Validate(const Memory& memory,uintptr_t imageBase,uintptr_t hook,uintptr_t original) noexcept {
+    return ValidateDebug(memory,imageBase,hook,original) ||
+        ValidateRelease(memory,imageBase,hook,original);
 }
 }

@@ -1,6 +1,9 @@
 # Standalone mouse Deposit All button; restart the game after editing.
 [inventory_deposit]
 enabled = true
+# Deposit rejuvenation and full rejuvenation potions (`rvs`, `rvl`).
+# Can also be changed in game with `/autodeposit rejuv [on|off|toggle|status]`.
+deposit_rejuvenation_potions = true
 # Follow the current gold display in the HD inventory panel.
 anchor_to_gold = true
 # Space after the gold amount's right edge; vertical offset from centered.

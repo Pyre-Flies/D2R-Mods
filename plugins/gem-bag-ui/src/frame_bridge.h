@@ -12,7 +12,9 @@ using Call=void(__fastcall*)(void*,void*) noexcept;
 struct alignas(16) State {void* volatile target{};Call original{};volatile LONG active{};LONG reserved[3]{};};
 static_assert(offsetof(State,original)==8&&offsetof(State,active)==16);
 inline bool Read(uintptr_t address,void* data,size_t size) noexcept {
-    SIZE_T got{};return address>=0x10000&&ReadProcessMemory(GetCurrentProcess(),reinterpret_cast<void*>(address),data,size,&got)&&got==size;
+    if(address<0x10000||!data)return false;
+    __try {std::memcpy(data,reinterpret_cast<const void*>(address),size);return true;}
+    __except(EXCEPTION_EXECUTE_HANDLER){return false;}
 }
 struct Exchange {bool changed{},protectionRestored{};};
 inline Exchange Swap(uintptr_t address,const std::array<unsigned char,16>& expected,const std::array<unsigned char,16>& desired) noexcept {

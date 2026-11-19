@@ -79,6 +79,58 @@ struct ChatFixture {
         return QolChatForwarding::Validate(memory,addresses[0],entry.data(),QolClientRequest::CoreEntry,entry.size(),core+14);
     }
 };
+struct ReleaseChatFixture {
+    uintptr_t base=0x20000000,core=0x10000000,trampoline=0x50000000;
+    std::vector<unsigned char> image=std::vector<unsigned char>(0x20000);
+    std::array<uintptr_t,static_cast<size_t>(ReleaseNode::Count)> addresses{};
+    std::array<unsigned char,sizeof(QolClientRequest::CoreEntry)> entry{};
+    std::array<unsigned char,28> relocated{};
+    bool readable=true,codeOwner=true,dataOwner=true,trampolineExecutable=true;
+    unsigned char* At(uintptr_t address) {return image.data()+address-base;}
+    explicit ReleaseChatFixture(bool moved=false,uintptr_t mappedBase=0) {
+        if(mappedBase)base=mappedBase;
+        else if(moved){base+=0x1000000;trampoline+=0x2000000;}
+        for(size_t i=0;i<std::size(ReleaseProfile::Blocks);++i)addresses[i]=base+0x1000+(moved?(3-i):i)*512;
+        const uintptr_t object=base+(moved?0x18000:0x16000);
+        addresses[static_cast<size_t>(ReleaseNode::Continuation)]=object+8;
+        addresses[static_cast<size_t>(ReleaseNode::Counter)]=object+64;
+        addresses[static_cast<size_t>(ReleaseNode::Cookie)]=base+(moved?0x17000:0x19000);
+        for(size_t i=0;i<std::size(ReleaseProfile::Blocks);++i) {
+            const auto& block=ReleaseProfile::Blocks[i];auto* bytes=At(addresses[i]);
+            std::memcpy(bytes,block.bytes,block.size);
+            for(size_t r=0;r<block.count;++r) {
+                const auto& ref=block.refs[r];
+                const auto delta=static_cast<int64_t>(addresses[static_cast<size_t>(ref.target)])-
+                    static_cast<int64_t>(addresses[i]+ref.displacement+4);
+                Check(delta>=INT32_MIN && delta<=INT32_MAX,"release fixture relative reference fits");
+                const auto displacement=static_cast<int32_t>(delta);std::memcpy(bytes+ref.displacement,&displacement,4);
+            }
+        }
+        const uintptr_t cookie=0x123456789abc;
+        std::memcpy(At(addresses[static_cast<size_t>(ReleaseNode::Cookie)]),&cookie,8);
+        std::memcpy(At(addresses[static_cast<size_t>(ReleaseNode::Continuation)]),&trampoline,8);
+        std::memcpy(entry.data(),QolClientRequest::CoreEntry,entry.size());
+        ChatFixture::Jump(entry.data(),addresses[0]);
+        std::memcpy(relocated.data(),QolClientRequest::CoreEntry,14);ChatFixture::Jump(relocated.data()+14,core+14);
+    }
+    bool Read(uintptr_t address,void* output,size_t size,Kind kind) noexcept {
+        if(!readable)return false;
+        if(kind==Kind::Trampoline) {
+            if(!trampolineExecutable || address!=trampoline || size!=relocated.size())return false;
+            std::memcpy(output,relocated.data(),size);return true;
+        }
+        if(address<base || address-base>image.size() || size>image.size()-(address-base))return false;
+        const auto offset=address-base;
+        if(kind==Kind::Code?(!codeOwner || offset<256 || offset+size>0x10000):(!dataOwner || offset<0x10000))return false;
+        std::memcpy(output,At(address),size);return true;
+    }
+    Result Validate() noexcept {
+        const Memory memory{this,[](void* user,uintptr_t address,void* output,size_t size,Kind kind) noexcept {
+            return static_cast<ReleaseChatFixture*>(user)->Read(address,output,size,kind);
+        }};
+        return QolChatForwarding::Validate(memory,addresses[0],entry.data(),QolClientRequest::CoreEntry,entry.size(),core+14);
+    }
+};
 const unsigned char* expectedPacket{};
 int32_t expectedLength{};
 uint32_t* inFlight{};
@@ -133,6 +185,36 @@ void ExecuteForwarding() {
         Check(!std::memcmp(saved.data(),packet,sizeof(packet)),"forwarder preserves packet contents");++cases;
     }
     inFlight=nullptr;VirtualFree(pages,0,MEM_RELEASE);
+    auto* relPages=static_cast<unsigned char*>(VirtualAlloc(nullptr,0x20000,MEM_RESERVE|MEM_COMMIT,PAGE_READWRITE));
+    Check(relPages!=nullptr,"allocate private executable release forwarding fixture");
+    ReleaseChatFixture relFixture(false,reinterpret_cast<uintptr_t>(relPages));
+    relFixture.core=relFixture.base+0x10000;relFixture.trampoline=relFixture.base+0x1c000;
+    relFixture.entry=original;ChatFixture::Jump(relFixture.entry.data(),relFixture.addresses[0]);
+    std::memcpy(relFixture.relocated.data(),original.data(),14);ChatFixture::Jump(relFixture.relocated.data()+14,relFixture.core+14);
+    std::memcpy(relFixture.At(relFixture.addresses[static_cast<size_t>(ReleaseNode::Continuation)]),&relFixture.trampoline,8);
+    const Memory relReader{&relFixture,[](void* user,uintptr_t address,void* output,size_t size,Kind kind) noexcept {
+        return static_cast<ReleaseChatFixture*>(user)->Read(address,output,size,kind);
+    }};
+    Check(static_cast<bool>(QolChatForwarding::Validate(relReader,relFixture.addresses[0],relFixture.entry.data(),original.data(),original.size(),relFixture.core+14)),
+        "executable Release fixture meets same forwarding proof");
+    std::memcpy(relPages,relFixture.image.data(),relFixture.image.size());
+    std::memcpy(reinterpret_cast<void*>(relFixture.core),original.data(),original.size());
+    std::memcpy(reinterpret_cast<void*>(relFixture.trampoline),relFixture.relocated.data(),relFixture.relocated.size());
+    Check(VirtualProtect(relPages,0x11000,PAGE_EXECUTE_READ,&previous)!=0 &&
+        VirtualProtect(reinterpret_cast<void*>(relFixture.trampoline),4096,PAGE_EXECUTE_READ,&previous)!=0,"execute private release fixture code");
+    FlushInstructionCache(GetCurrentProcess(),relPages,relFixture.image.size());
+    inFlight=reinterpret_cast<uint32_t*>(relFixture.addresses[static_cast<size_t>(ReleaseNode::Counter)]);
+    auto relSend=reinterpret_cast<uint64_t(__fastcall*)(const unsigned char*,int32_t)>(relFixture.addresses[0]);
+    for(const int32_t length:{-1,0,1,24,512}) for(unsigned opcode=0;opcode<256;++opcode) {
+        if(opcode==0x15)continue;
+        unsigned char packet[512]={static_cast<unsigned char>(opcode),0x12,0x34,0x56};
+        const unsigned char* request=length<=0?nullptr:packet;
+        expectedPacket=request;expectedLength=length;const auto before=forwarded;
+        Check(relSend(request,expectedLength)==0xfedcba9876543210ULL,"release original 64-bit return preserved");
+        Check(forwarded==before+1 && *inFlight==0,"release item request forwarded once; counter restored");
+        ++cases;
+    }
+    inFlight=nullptr;VirtualFree(relPages,0,MEM_RELEASE);
     std::printf("Synthetic forwarding: %u opcode/length cases passed.\n",cases);
 }
 void ChatContracts() {
@@ -140,6 +222,19 @@ void ChatContracts() {
     Check(static_cast<bool>(fixture.Validate()),"complete non-chat forwarding graph admitted");
     ChatFixture moved(true);
     Check(static_cast<bool>(moved.Validate()),"independently relocated and reordered helpers/data admitted");
+    ReleaseChatFixture relFixture;
+    Check(static_cast<bool>(relFixture.Validate()),"complete Release (/O2) non-chat forwarding graph admitted");
+    ReleaseChatFixture relMoved(true);
+    Check(static_cast<bool>(relMoved.Validate()),"relocated Release (/O2) forwarding graph admitted");
+    for(size_t i=0;i<std::size(ReleaseProfile::Blocks);++i) {
+        const auto& block=ReleaseProfile::Blocks[i];auto* bytes=relFixture.At(relFixture.addresses[i]);
+        for(size_t byte=0;byte<block.size;++byte) {
+            const auto origByte=bytes[byte];
+            bytes[byte]=static_cast<unsigned char>(origByte^1u);
+            Check(!relFixture.Validate(),"changed Release forwarding instruction/reference refused");
+            bytes[byte]=origByte;
+        }
+    }
     // Every instruction byte and every resolved operand is covered. Relocation
     // fields are constrained graph edges, never unchecked wildcard bytes.
     size_t mutations=0;
@@ -249,10 +344,38 @@ void RealChatImage(const char* path,const char* hookRva) {
     auto module=LoadLibraryExA(path,nullptr,DONT_RESOLVE_DLL_REFERENCES);
     Check(module!=nullptr,"map current Chat image without executing plugin code");
     const auto base=reinterpret_cast<uintptr_t>(module);
-    const auto hook=base+std::strtoull(hookRva,nullptr,16);
+    uintptr_t hook{};
+    if(std::strcmp(hookRva,"auto")==0) {
+        const auto* dos=reinterpret_cast<const IMAGE_DOS_HEADER*>(base);
+        const auto* nt=reinterpret_cast<const IMAGE_NT_HEADERS64*>(base+dos->e_lfanew);
+        const auto* sec=IMAGE_FIRST_SECTION(nt);
+        for(unsigned s=0;s<nt->FileHeader.NumberOfSections && !hook;++s) {
+            if(!(sec[s].Characteristics&IMAGE_SCN_MEM_EXECUTE))continue;
+            const auto* start=reinterpret_cast<const unsigned char*>(base+sec[s].VirtualAddress);
+            const size_t len=sec[s].Misc.VirtualSize;
+            for(size_t off=0;off+32<=len;++off) {
+                if(std::memcmp(start+off,Profile::Hook,16)==0 || std::memcmp(start+off,ReleaseProfile::Hook,18)==0) {
+                    hook=reinterpret_cast<uintptr_t>(start+off);
+                    break;
+                }
+            }
+        }
+        Check(hook!=0,"auto-discover Global Chat sender hook in mapped image");
+    } else {
+        hook=base+std::strtoull(hookRva,nullptr,16);
+    }
     QolChatForwarding::ImageMemory image{};Check(image.Open(module),"real companion PE section layout");
-    int32_t delta{};Check(image.Read(hook+0x10,&delta,4,Kind::Code),"read reviewed object operand");
-    uintptr_t object{};Check(Relative(hook+0x14,delta,object),"resolve companion object");
+    unsigned char firstByte{};
+    Check(image.Read(hook,&firstByte,1,Kind::Code),"read Chat hook entry byte");
+    uintptr_t continuationSlot{};
+    if(firstByte==ReleaseProfile::Hook[0]) {
+        int32_t delta{};Check(image.Read(hook+0x37,&delta,4,Kind::Code),"read Release continuation operand");
+        Check(Relative(hook+0x3b,delta,continuationSlot),"resolve Release continuation slot");
+    } else {
+        int32_t delta{};Check(image.Read(hook+0x10,&delta,4,Kind::Code),"read Debug object operand");
+        uintptr_t object{};Check(Relative(hook+0x14,delta,object),"resolve Debug companion object");
+        continuationSlot=object+8;
+    }
     auto* core=static_cast<unsigned char*>(VirtualAlloc(nullptr,0x900000,MEM_RESERVE|MEM_COMMIT,PAGE_READWRITE));
     auto* trampoline=static_cast<unsigned char*>(VirtualAlloc(nullptr,4096,MEM_RESERVE|MEM_COMMIT,PAGE_READWRITE));
     Check(core && trampoline,"allocate private Core/trampoline fixtures");
@@ -260,15 +383,17 @@ void RealChatImage(const char* path,const char* hookRva) {
     std::memcpy(sender,QolClientRequest::CoreEntry,sizeof(QolClientRequest::CoreEntry));ChatFixture::Jump(sender,hook);
     std::memcpy(trampoline,QolClientRequest::CoreEntry,14);ChatFixture::Jump(trampoline+14,reinterpret_cast<uintptr_t>(sender)+14);
     DWORD previous{};Check(VirtualProtect(trampoline,4096,PAGE_EXECUTE_READ,&previous)!=0,"private trampoline executable");
-    uintptr_t saved{};std::memcpy(&saved,reinterpret_cast<void*>(object+8),8);
-    std::memcpy(reinterpret_cast<void*>(object+8),&trampoline,8);
+    uintptr_t saved{};std::memcpy(&saved,reinterpret_cast<void*>(continuationSlot),8);
+    std::memcpy(reinterpret_cast<void*>(continuationSlot),&trampoline,8);
+    testCompanion=module;
     const char* reason{};
     const auto admitted=QolCoexistence::Send(reinterpret_cast<uintptr_t>(core),QolClientRequest::CoreEntry,sizeof(QolClientRequest::CoreEntry),&reason);
-    if(!admitted)std::fprintf(stderr,"Real image refused: %s\n",reason?reason:"unknown");
+    testCompanion=nullptr;
+    if(!admitted)std::fprintf(stderr,"Real image (%s) refused: %s\n",path,reason?reason:"unknown");
     Check(admitted,"production Send accepts the current actual Chat image forwarding contract");
-    std::memcpy(reinterpret_cast<void*>(object+8),&saved,8);
+    std::memcpy(reinterpret_cast<void*>(continuationSlot),&saved,8);
     VirtualFree(core,0,MEM_RELEASE);VirtualFree(trampoline,0,MEM_RELEASE);FreeLibrary(module);
-    std::puts("Current companion mapped-image production guard passed; no companion code executed.");
+    std::printf("Current companion mapped-image production guard passed (%s); no companion code executed.\n",path);
 }
 }
 int main(int argc,char** argv) {

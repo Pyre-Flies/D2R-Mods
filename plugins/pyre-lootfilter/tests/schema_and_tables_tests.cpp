@@ -1,4 +1,5 @@
 #include "filter_schema.h"
+#include "profile_dropdown.h"
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
@@ -682,6 +683,344 @@ int main() {
             Check(Schema::ResolveDecision(hideActionTable.get(), reshownMonarch, dec) &&
                       dec.show && !dec.hasDropSound && !dec.hasMinimapIcon,
                   "Earlier continue:true Hide rule does not leak preserved dropSound or minimapIcon into later Show rule");
+        }
+
+        // Category F: Global vs Mod folder placement for both pyre-lootfilter.dll and filter.json.
+        {
+            const auto gameRoot = tempRoot / L"game_install";
+            const auto globalLoader = gameRoot / L"d2rloader";
+            const auto globalConfig = globalLoader / L"config";
+            const auto modRoot = gameRoot / L"mods" / L"Reimagined";
+            const auto modLoader = modRoot / L"d2rloader";
+            const auto modConfig = modLoader / L"config";
+            const auto modMpqExcel = modRoot / L"Reimagined.mpq" / L"data" / L"global" / L"excel";
+            std::filesystem::create_directories(globalConfig);
+            std::filesystem::create_directories(modConfig);
+            std::filesystem::create_directories(modMpqExcel);
+
+            for (const auto* tbl : {L"itemtypes.txt", L"weapons.txt", L"armor.txt", L"misc.txt"}) {
+                std::filesystem::copy_file(
+                    excelDir / tbl, modMpqExcel / tbl,
+                    std::filesystem::copy_options::overwrite_existing, ec);
+            }
+            WriteTextFile(
+                modRoot / L"Reimagined.mpq" / L"data" / L"hd" / L"global" / L"sfx" / L"item" / L"Filter01.flac",
+                "fLaC");
+            WriteTextFile(
+                modMpqExcel / L"sounds.txt",
+                "Sound\t*Index\tRedirect\tChannel\tFileName\r\n"
+                "shockwavedust_hd3\t11991\t\tmaster\tmonster\\golemclay\\spawnclay3_hd.flac\r\n"
+                "Filter01\t11992\t\tsfx/items_hd\titem\\Filter01.flac\r\n");
+
+            // Global plugin context: scopeRootDirectory = <GameDir>/d2rloader, activeMod = "Reimagined"
+            const Schema::FilterPathInputs globalPluginInputs{
+                .modDirectory = modRoot / L"Reimagined.mpq",
+                .modSupportDirectory = modLoader,
+                .pluginConfigPath = globalConfig / L"pyre-lootfilter.toml",
+                .scopeRootDirectory = globalLoader,
+                .gameDirectory = gameRoot,
+                .activeMod = "Reimagined",
+            };
+
+            Check(Schema::ResolveActiveModRoot(globalPluginInputs) == modRoot.lexically_normal(),
+                  "ResolveActiveModRoot resolves mods/Reimagined from global plugin context");
+
+            const auto candidates = Schema::BuildFilterJsonCandidates(globalPluginInputs);
+            Check(candidates.size() == 2 &&
+                      candidates[0] == (modConfig / L"filter.json").lexically_normal() &&
+                      candidates[1] == (globalConfig / L"filter.json").lexically_normal(),
+                  "BuildFilterJsonCandidates includes both Mod and Global config/filter.json paths");
+
+            // F.1: Global DLL + Mod filter.json (with baseName, itemType, tier, and migrated Filter01 dropSound)
+            const auto modFilterPath = modConfig / L"filter.json";
+            const auto globalFilterPath = globalConfig / L"filter.json";
+            WriteTextFile(
+                modFilterPath,
+                R"json({
+  "version": 3,
+  "rules": [
+    {
+      "show": {
+        "ruleName": "Mod-folder filter loaded from Global DLL",
+        "conditions": {
+          "baseName": "Phase Blade",
+          "itemType": "Sword",
+          "tier": "elite"
+        },
+        "name": "Mod Scope PB",
+        "dropSound": "Filter01"
+      }
+    }
+  ]
+})json");
+
+            const auto orderedModOnly = Schema::OrderFilterCandidatesForLoad(candidates);
+            Check(!orderedModOnly.empty() && orderedModOnly.front() == modFilterPath.lexically_normal(),
+                  "OrderFilterCandidatesForLoad selects existing Mod filter.json when Global filter.json is absent");
+            const auto modLoaded = Schema::LoadFilterRuleTable(
+                orderedModOnly.front(), 201, nullptr, Schema::ResolveActiveModRoot(globalPluginInputs));
+            Check(modLoaded != nullptr && modLoaded->rules.size() == 1 && modLoaded->soundRules == 1,
+                  "Global DLL loads Mod filter.json with baseName/itemType/tier and migrated Filter01.flac");
+
+            // F.2: Global filter.json only (both with and without modRootHint)
+            std::filesystem::remove(modFilterPath, ec);
+            WriteTextFile(
+                globalFilterPath,
+                R"json({
+  "version": 3,
+  "rules": [
+    {
+      "show": {
+        "ruleName": "Global-folder filter discovering Mod Excel tables",
+        "conditions": {
+          "baseName": "Monarch",
+          "itemType": "Shield",
+          "tier": "elite"
+        },
+        "name": "Global Scope Monarch",
+        "dropSound": "Filter01"
+      }
+    }
+  ]
+})json");
+
+            const auto orderedGlobalOnly = Schema::OrderFilterCandidatesForLoad(candidates);
+            Check(!orderedGlobalOnly.empty() &&
+                      orderedGlobalOnly.front() == globalFilterPath.lexically_normal(),
+                  "OrderFilterCandidatesForLoad falls back to Global filter.json when Mod filter.json is absent");
+            const auto globalLoadedWithHint = Schema::LoadFilterRuleTable(
+                orderedGlobalOnly.front(), 202, nullptr, Schema::ResolveActiveModRoot(globalPluginInputs));
+            const auto globalLoadedWithoutHint = Schema::LoadFilterRuleTable(
+                orderedGlobalOnly.front(), 203, nullptr);
+            Check(globalLoadedWithHint != nullptr && globalLoadedWithHint->rules.size() == 1 &&
+                      globalLoadedWithHint->soundRules == 1 &&
+                      globalLoadedWithoutHint != nullptr && globalLoadedWithoutHint->rules.size() == 1 &&
+                      globalLoadedWithoutHint->soundRules == 1,
+                  "Global filter.json discovers mods/Reimagined Excel tables and sound assets with or without modRootHint");
+
+            // F.3: Both Mod and Global filter.json exist -> most recently modified wins
+            WriteTextFile(
+                modFilterPath,
+                R"json({
+  "version": 3,
+  "rules": [
+    { "show": { "conditions": { "code": "7cr" }, "name": "Newer Mod Filter" } }
+  ]
+})json");
+            const auto nowTime = std::filesystem::last_write_time(modFilterPath, ec);
+            std::filesystem::last_write_time(
+                globalFilterPath, nowTime - std::chrono::seconds(60), ec);
+            const auto orderedModNewer = Schema::OrderFilterCandidatesForLoad(candidates);
+            Check(orderedModNewer.front() == modFilterPath.lexically_normal(),
+                  "When both exist, newer Mod filter.json is ordered before older Global filter.json");
+
+            std::filesystem::last_write_time(
+                globalFilterPath, nowTime + std::chrono::seconds(60), ec);
+            const auto orderedGlobalNewer = Schema::OrderFilterCandidatesForLoad(candidates);
+            Check(orderedGlobalNewer.front() == globalFilterPath.lexically_normal(),
+                  "When both exist, newer Global filter.json is ordered before older Mod filter.json");
+
+            // G. Dedicated config/filter/ directory discovery & human-readable error diagnostics
+            Schema::EnsureFilterDirectoriesExist(globalPluginInputs);
+            Check(std::filesystem::is_directory(modConfig / L"filter", ec) &&
+                      std::filesystem::is_directory(globalConfig / L"filter", ec),
+                  "EnsureFilterDirectoriesExist creates d2rloader/config/filter in Mod and Global folders");
+
+            const auto modStrictPath = modConfig / L"filter" / L"strict.json";
+            const auto globalLevelingPath = globalConfig / L"filter" / L"leveling.json";
+            WriteTextFile(
+                modStrictPath,
+                R"json({
+  "name": "Reimagined Strict S2",
+  "season": "2",
+  "modVersion": "2.1.0",
+  "version": 3,
+  "rules": [
+    { "show": { "conditions": { "code": "7cr" }, "name": "Strict PB" } }
+  ]
+})json");
+            WriteTextFile(
+                globalLevelingPath,
+                R"json({
+  "version": 3,
+  "rules": [
+    { "show": { "conditions": { "code": "hpo" }, "name": "HP" } }
+  ]
+})json");
+
+            const auto profiles = Schema::DiscoverFilterProfiles(globalPluginInputs);
+            Check(profiles.size() == 4,
+                  "DiscoverFilterProfiles finds config/filter/*.json and legacy config/filter.json across Mod and Global");
+            Check(profiles[0].path == modStrictPath.lexically_normal() &&
+                      profiles[0].shortPath == "mods/Reimagined/d2rloader/config/filter/strict.json" &&
+                      !profiles[0].isGlobalScope,
+                  "First discovered profile is Mod config/filter/strict.json");
+            Check(profiles[2].displayName == "filter" &&
+                      profiles[3].displayName == "filter (Global)",
+                  "DiscoverFilterProfiles disambiguates Mod vs Global filter.json cleanly in a single pass");
+
+            // G.0b: Identical config/filter/filter.json skips redundant legacy config/filter.json
+            const auto modFolderFilterPath = modConfig / L"filter" / L"filter.json";
+            std::filesystem::copy_file(modFilterPath, modFolderFilterPath,
+                                       std::filesystem::copy_options::overwrite_existing, ec);
+            const auto dedupedProfiles = Schema::DiscoverFilterProfiles(globalPluginInputs);
+            Check(dedupedProfiles.size() == 4 &&
+                      dedupedProfiles[0].path == modFolderFilterPath.lexically_normal() &&
+                      dedupedProfiles[0].displayName == "filter",
+                  "DiscoverFilterProfiles skips redundant legacy config/filter.json when identical to config/filter/filter.json");
+
+            // G.0c: Distinct config/filter/filter.json vs legacy config/filter.json labels legacy as 'filter (Legacy)'
+            WriteTextFile(
+                modFolderFilterPath,
+                R"json({
+  "version": 3,
+  "rules": [
+    { "show": { "conditions": { "code": "7cr" }, "name": "Distinct Folder Filter" } },
+    { "show": { "conditions": { "code": "hpo" }, "name": "Second Rule" } }
+  ]
+})json");
+            const auto distinctProfiles = Schema::DiscoverFilterProfiles(globalPluginInputs);
+            Check(distinctProfiles.size() == 5 &&
+                      distinctProfiles[0].displayName == "filter" &&
+                      distinctProfiles[3].displayName == "filter (Legacy)" &&
+                      distinctProfiles[4].displayName == "filter (Global)",
+                  "DiscoverFilterProfiles labels distinct legacy config/filter.json as 'filter (Legacy)' without repeating suffixes");
+            std::filesystem::remove(modFolderFilterPath, ec);
+
+            std::string strictErr;
+            const auto strictTable = Schema::LoadFilterRuleTable(
+                modStrictPath, 301, nullptr, Schema::ResolveActiveModRoot(globalPluginInputs),
+                &strictErr);
+            Check(strictTable != nullptr && strictErr.empty() &&
+                      strictTable->filterName == "Reimagined Strict S2" &&
+                      strictTable->season == "2" &&
+                      strictTable->modVersion == "2.1.0",
+                  "LoadFilterRuleTable parses optional name, season, and modVersion metadata");
+
+            // G.1: Version mismatch human error
+            const auto badVerPath = modConfig / L"filter" / L"bad_version.json";
+            WriteTextFile(badVerPath, R"json({ "version": 99, "rules": [] })json");
+            std::string humanErr;
+            Check(Schema::LoadFilterRuleTable(badVerPath, 302, nullptr, {}, &humanErr) == nullptr &&
+                      humanErr.find("Version mismatch") != std::string::npos &&
+                      humanErr.find("v99") != std::string::npos,
+                  "LoadFilterRuleTable reports human-readable Version mismatch error");
+
+            // G.2: Browser library backup human error
+            const auto backupPath = modConfig / L"filter" / L"library_backup.json";
+            WriteTextFile(backupPath,
+                          R"json({ "format": "pyre-lootfilter-library", "presets": [] })json");
+            humanErr.clear();
+            Check(Schema::LoadFilterRuleTable(backupPath, 303, nullptr, {}, &humanErr) == nullptr &&
+                      humanErr.find("browser-library backup") != std::string::npos,
+                  "LoadFilterRuleTable reports human-readable browser-library backup error");
+
+            // G.3: Wrong season / mod version unknown baseName human error
+            const auto wrongSeasonPath = modConfig / L"filter" / L"wrong_season.json";
+            WriteTextFile(
+                wrongSeasonPath,
+                R"json({
+  "version": 3,
+  "rules": [
+    {
+      "show": {
+        "ruleName": "Season 99 Mythic Rule",
+        "conditions": { "baseName": "Season99 Mythic Blade" }
+      }
+    }
+  ]
+})json");
+            humanErr.clear();
+            Check(Schema::LoadFilterRuleTable(
+                      wrongSeasonPath, 304, nullptr,
+                      Schema::ResolveActiveModRoot(globalPluginInputs), &humanErr) == nullptr &&
+                      humanErr.find("Season99 Mythic Blade") != std::string::npos &&
+                      humanErr.find("Mod/Season mismatch") != std::string::npos,
+                  "LoadFilterRuleTable explains when baseName is missing due to wrong season or mod version");
+
+            // G.4: JSON syntax error human error
+            const auto syntaxErrPath = modConfig / L"filter" / L"syntax_error.json";
+            WriteTextFile(syntaxErrPath, "{\n  \"version\": 3,\n  \"rules\": [\n    broken\n  ]\n}");
+            humanErr.clear();
+            Check(Schema::LoadFilterRuleTable(syntaxErrPath, 305, nullptr, {}, &humanErr) == nullptr &&
+                      humanErr.find("Invalid JSON syntax on line 4") != std::string::npos,
+                  "LoadFilterRuleTable reports human-readable JSON syntax error with line number");
+
+            // G.5: Reloading a selected/active filter with a syntax error targets ONLY the selected
+            // filter (never falling back to other candidates) and preserves the last valid rules.
+            std::filesystem::remove(badVerPath, ec);
+            std::filesystem::remove(backupPath, ec);
+            std::filesystem::remove(wrongSeasonPath, ec);
+            std::filesystem::remove(syntaxErrPath, ec);
+            const auto refreshedProfiles = Schema::DiscoverFilterProfiles(globalPluginInputs);
+            const std::string selectedFilter = "mods/Reimagined/d2rloader/config/filter/strict.json";
+            const auto selectedTargets = Schema::SelectReloadTargetCandidates(
+                globalPluginInputs, refreshedProfiles, selectedFilter,
+                modStrictPath, modStrictPath);
+            Check(selectedTargets.size() == 1U &&
+                      selectedTargets.front() == modStrictPath.lexically_normal(),
+                  "SelectReloadTargetCandidates targets only the selected profile and does not include fallback candidates");
+
+            // Introduce a syntax error into the active profile (modStrictPath) while other valid
+            // candidate profiles (globalLevelingPath, modFilterPath) exist on disk:
+            auto activeRules = strictTable;
+            WriteTextFile(modStrictPath, "{\n  \"name\": \"Reimagined Strict S2\",\n  \"version\": 3,\n  \"rules\": [\n    typo_here\n  ]\n}");
+            const auto targetsAfterTypo = Schema::SelectReloadTargetCandidates(
+                globalPluginInputs, Schema::DiscoverFilterProfiles(globalPluginInputs),
+                selectedFilter, modStrictPath, modStrictPath);
+            Check(targetsAfterTypo.size() == 1U &&
+                      targetsAfterTypo.front() == modStrictPath.lexically_normal(),
+                  "After saving a syntax error in the selected filter, reload still targets only that filter");
+            std::string reloadErr;
+            const auto failedReloadTable = Schema::LoadFilterRuleTable(
+                targetsAfterTypo.front(), 306, nullptr,
+                Schema::ResolveActiveModRoot(globalPluginInputs), &reloadErr);
+            if (failedReloadTable) {
+                activeRules = failedReloadTable;
+            }
+            Check(failedReloadTable == nullptr &&
+                      !reloadErr.empty() &&
+                      reloadErr.find("Invalid JSON syntax") != std::string::npos &&
+                      activeRules == strictTable &&
+                      activeRules->filterName == "Reimagined Strict S2" &&
+                      activeRules->rules.size() == 1U,
+                  "Syntax error on reload of selected profile preserves previous rules and records error without switching to another candidate");
+
+            // G.6: Modifying or creating a non-selected candidate profile does not switch the active profile
+            const auto nonSelectedPath = modConfig / L"filter" / L"other_downloaded.json";
+            WriteTextFile(
+                nonSelectedPath,
+                R"json({
+  "name": "Downloaded Other Filter",
+  "version": 3,
+  "rules": [
+    { "show": { "conditions": { "code": "mp5" }, "name": "Other Rule" } }
+  ]
+})json");
+            const auto profilesWithOther = Schema::DiscoverFilterProfiles(globalPluginInputs);
+            const auto targetsAfterOtherEdit = Schema::SelectReloadTargetCandidates(
+                globalPluginInputs, profilesWithOther, selectedFilter,
+                modStrictPath, modStrictPath);
+            Check(targetsAfterOtherEdit.size() == 1U &&
+                      targetsAfterOtherEdit.front() == modStrictPath.lexically_normal() &&
+                      targetsAfterOtherEdit.front() != nonSelectedPath.lexically_normal(),
+                  "Modifying or adding a non-selected candidate file does not switch the active profile");
+            std::filesystem::remove(nonSelectedPath, ec);
+
+            // G.7: Cross-mod selected_filter path (e.g. ReimaginedLadder vs Reimagined) resolves by filename fallback
+            const auto crossModResolved = Schema::ResolveConfiguredProfilePath(
+                "mods/ReimaginedLadder/d2rloader/config/filter/strict.json", refreshedProfiles);
+            Check(crossModResolved == modStrictPath.lexically_normal(),
+                  "ResolveConfiguredProfilePath falls back to matching profile filename across mod folders");
+
+            // G.8: BuildPanelStatusText reports active in-game loot filter when disabled
+            Check(ProfileDropdown::BuildPanelStatusText(false, nullptr, "", "", "") ==
+                      "Loot Filter Disabled",
+                  "BuildPanelStatusText reports Loot Filter Disabled when no in-game filter is active");
+            Check(ProfileDropdown::BuildPanelStatusText(
+                      false, nullptr, "", "", "", "My Built-In Filter") ==
+                      "Disabled (In-Game: My Built-In Filter)",
+                  "BuildPanelStatusText reports active in-game loot filter name when disabled");
         }
     }
 

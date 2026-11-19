@@ -1,6 +1,6 @@
 # Advanced-stash withdrawals — QOL 1.5.3-materials
 
-Reviewed 2026-09-23. This extends the 1.5.1 potion work with **LB+X to withdraw one advanced-stash item to inventory**, and **LB+R3 to refill rejuvenations directly from the Materials tab**. New runtime qualification is pending; automated native-call/policy tests do not execute D2R.
+Reviewed 2026-09-23; updated 2026-11-02 with advanced-stash stack capacity and item-scoped pending-transaction contracts. This extends the 1.5.1 potion work with **LB+X to withdraw one advanced-stash item to inventory**, **LB+R3 to refill rejuvenations directly from the Materials tab**, and **full-stack capacity preflight for single and batch advanced-stash deposits**. New runtime qualification is pending; automated native-call/policy tests do not execute D2R.
 
 ## 1.5.2 failure and 1.5.3 correction
 
@@ -47,7 +47,11 @@ Supporting local sources:
 | 0x2CE900..0x2CE908 | `void*(AdvancedStashSlotWidget*)` | Loads widget+0x608 and returns; vtable +0xC8 binding also checked |
 | widget+0x608 | Bound advanced-stash item/counter representation | Used by native inventory, cursor and belt withdrawal branches |
 | widget+0x600 | Display item pointer | Native 0x2CF4A0..0x2CF508 reads it at 0x2CF4BA; accepted only for matching tooltip runtime ID/code, never as the withdrawal item |
-| 0x46D9A0..0x46D9B4 | `uint8(item*)` counter availability | Null→0; otherwise reads pointer item+0x10, then byte +0x9C. Follow the native nonzero predicate; do not reinterpret this as a full-width stored quantity |
+| 0x46D8F0..0x46D993 | `void*(stashOwner*, uint32 classId)` | Resolves the advanced-stash counter unit matching `classId` in `stashOwner`'s inventory (`0x34A360` -> `0x388C10` -> `0x349860` -> `0x38ABA0`), or `nullptr` when stored count is 0. Used by client `AdvancedStashSlotWidget::Refresh` (`0x2CFA20`) and server `0x4F9887`. Guarded by 32-byte `QolMaterials::Signatures::FindCounter` |
+| 0x46D9A0..0x46D9B4 | `uint8(item*)` counter availability | Null→0; otherwise reads pointer `item+0x10`, then `+0x9C`. Under `D2RCore.dll` (`0x26BAC5`, `0x3A0F4F`, `0x3A0FBD`), `*(uint32*)(itemData+0x9C)` stores the full 32-bit counter quantity on both client and server |
+| 0x3351B0..0x3351CF | `int32(unit*, uint32 state)` | Queries unit state flag (called with `(localPlayer, 0x36)` inside `0x1C7360`). Used to separate player-wide pending state `0x36` (`Refused`/`Unavailable`) from item-scoped `0x1C7360(item) != 0` (`Ineligible`). Guarded by 32-byte `QolMaterials::Signatures::HasUnitState` |
+| `D2RCore.dll+0x1BB960` | `uint32()` `get_materials_limit` | 7-byte getter (`8B 05 BA 20 54 00 C3`) returning `*(uint32*)(coreBase+0x6FDA20)` (default `99`, or custom `set_materials_limit`). Guarded by `QolMaterials::Signatures::CoreMaterialsLimit` |
+| `D2RCore.dll+0x3A0F20` | `uint8(counterItem*)` (export ord 109) | 70-byte helper hooked into `D2R.exe+0x4F9898` and `0x4F9DBC`. Compares `*(uint32*)(itemData+0x9C)` against `*(uint32*)(coreBase+0x6FDA20)`, returning `0` when room remains and `0x63` (`99`) when full. Guarded by `QolMaterials::Signatures::CoreCounterFull` |
 | 0x23B980 | `bool()` previous-season selection | Both native withdrawal paths use it before choosing the stash owner |
 | 0x46D9C0 / 0x46DA50 | `void*(localPlayer*)` previous/current owner | Resolve the correct owner, rather than passing the player as the stash owner |
 | 0x846170 | Find top-level panel by name | Resolve `BankExpansionLayout` afresh on each UI callback |
@@ -60,6 +64,20 @@ Supporting local sources:
 | 0x1C3420 / 0x1A0780 | Item interaction mode / finish UI interaction | Follow native belt branch completion; inventory widget wrapper already handles its own completion |
 
 The profiles also admit the display-item witness `[0x2CF4A0,0x2CF508)` and belt-withdraw witness `[0x2CF88B,0x2CF8FD)`. These support the field/argument interpretation; they are not installed hooks or callable function entries.
+
+## Advanced-stash stack capacity and full-stack deposit preflight
+
+Native `CanDepositToAdvancedStash` (`D2R.exe+0x15A0B0`) checks only stash UI mode `0x18`, expansion mode, and whether the item's `classId` belongs to the advanced-stash category hash map (`0x15F320`). It does **not** check whether the destination counter in `0x46DA50(localPlayer)` has already reached the configured stack limit.
+
+When `TransferItemToInventoryPage` (`0x15F8B0`) submits an item to page 4 (`dest == 0x46DA50(localPlayer)`):
+1. At `0x15FAE1..0x15FB61`, the client sends packet `0x63` sub-op `0`.
+2. At `0x160177`, the client calls `0x1C6AC0(item)`, which attaches a type-2 pending-transaction node (`state 0x36`, subtype `0xC`) to that client item.
+3. On the server (`0x4F9850`), `0x4F9887` resolves the counter via `0x46D8F0(owner, classId)` and calls `0x4F9898` (hooked by `D2RCore.dll+0x3A0F20` `ord_109`). When `*(uint32*)(itemData+0x9C) >= *(uint32*)(coreBase+0x6FDA20)`, `ord_109` returns `0x63` (`al >= 0x63`), and `0x4F98A5..0x4F98B2` sends speech error `0x14` ("I can't carry any more") via `0x491960` without moving the item or clearing the client item's type-2 pending node.
+
+To prevent full-stack counters from aborting single or batch deposits or locking client items:
+- `D2R::Native::ReadAdvancedStashCounterCount` and `HasAdvancedStashCapacity` (`include/native_d2r.h`) query `0x46D8F0(owner, classId)`, read `*(uint32*)(itemData+0x9C)`, and compare against `D2RCore.dll+0x1BB960` (plus `D2RCore.dll+0x3A0F20` when loaded).
+- `QolBulkStash::Plan` (`src/bulk_stash_policy.h`) tracks `SubmittedForClass(classId)` and `EffectiveCount(classId, liveCount) = max(liveCount, baselineCount + SubmittedForClass(classId))` so synchronous single-tick `Game()` loops and remote `Remote()` loops skip excess copies of a material once in-flight submissions reach the stack limit.
+- When `0x3351B0(localPlayer, 0x36) == 0` (no player-wide pending transaction) and `0x1C7360(item) != 0` (item-scoped type-2 pending node from an earlier rejected manual click), `InspectEligibilityUnsafe`, `BatchDepositUnsafe`, and `bulk_stash.cpp::Native` classify that item as `Ineligible` (skip) rather than batch-wide `Refused`/`Unavailable`.
 
 Other discovered paths retained for future work, **not newly called by this change**:
 

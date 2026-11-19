@@ -111,11 +111,6 @@ inline Settings LiveSettings(const Settings& requested,const Settings& startup,s
     QOL_STARTUP(cubeTransmuteShortcut,"cube_transmute_shortcut")
     QOL_STARTUP(groundPickup,"ground_pickup")
     QOL_STARTUP(blockFilteredPickup,"block_filtered_pickup")
-    QOL_STARTUP(prioritizePortals,"prioritize_portals")
-    QOL_STARTUP(prioritizeStashBoxes,"prioritize_stash_boxes")
-    QOL_STARTUP(prioritizeWaypoints,"prioritize_waypoints")
-    QOL_STARTUP(prioritizeShrines,"prioritize_shrines")
-    QOL_STARTUP(prioritizeChests,"prioritize_chests")
     QOL_STARTUP(portalDiagnostics,"portal_diagnostics")
     QOL_STARTUP(portalPriorityDistance,"portal_priority_distance")
 #undef QOL_STARTUP
@@ -139,6 +134,7 @@ class Watcher {
     Files pending{};std::uint64_t changed{};bool seeded{},unsettled{};
 public:
     void Resync(const Files& files) noexcept {pending=files;seeded=true;unsettled=false;changed=0;}
+    void Touch(const Files& files,std::uint64_t now) noexcept {pending=files;seeded=true;unsettled=true;changed=now;}
     bool Observe(const Files& files,std::uint64_t now) noexcept {
         if(!seeded){Resync(files);return false;}
         if(!(files==pending)){pending=files;changed=now;unsettled=true;return false;}

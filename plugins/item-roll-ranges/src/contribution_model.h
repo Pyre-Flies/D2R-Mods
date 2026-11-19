@@ -5,12 +5,13 @@
 namespace ContributionModel {
 struct Group {Contributions::Stats values;std::vector<Affixes::Rolled> definitions;std::string prefix;};
 inline bool Supported(unsigned stat) {
-    switch(stat){case 0:case 1:case 2:case 3:case 7:case 9:case 16:case 17:case 18:case 19:
-    case 20:case 21:case 22:case 23:case 24:case 27:case 31:case 34:case 35:case 36:case 37:case 39:case 40:case 41:case 42:case 43:case 44:case 45:case 46:
+    switch(stat){case 0:case 1:case 2:case 3:case 7:case 9:case 11:case 16:case 17:case 18:case 19:
+    case 20:case 21:case 22:case 23:case 24:case 27:case 28:case 31:case 32:case 33:case 34:case 35:case 36:case 37:case 38:case 39:case 40:case 41:case 42:case 43:case 44:case 45:case 46:
     case 48:case 49:case 50:case 51:case 52:case 53:case 54:case 55:case 57:case 60:case 62:case 74:case 75:case 76:case 77:
-    case 78:case 79:case 80:case 85:case 86:case 89:case 93:case 96:case 99:case 102:case 105:case 110:case 114:case 116:case 122:case 127:case 135:case 136:case 138:case 141:case 149:case 156:
-    case 329:case 330:case 331:case 332:case 333:case 334:case 335:case 336:case 357:case 358:case 366:
-    case 399:case 400:case 401:case 402:case 403:case 413:case 414:case 415:case 416:return true;
+    case 78:case 79:case 80:case 85:case 86:case 87:case 89:case 91:case 93:case 96:case 99:case 102:case 105:case 109:case 110:case 111:case 114:case 116:case 118:case 119:case 120:case 121:case 122:case 123:case 124:case 127:case 128:case 134:case 135:case 136:case 137:case 138:case 139:case 140:case 141:case 142:case 143:case 144:case 145:case 146:case 147:case 148:case 149:case 150:case 153:case 154:case 156:case 157:case 158:
+    case 200:case 205:case 305:case 306:case 307:case 308:case 329:case 330:case 331:case 332:case 333:case 334:case 335:case 336:case 357:case 358:case 366:
+    case 377:case 378:case 382:case 389:case 399:case 400:case 401:case 402:case 403:case 413:case 414:case 415:case 416:
+    case 421:case 422:case 423:case 424:case 425:case 426:case 434:case 435:case 436:case 441:return true;
 
     default:return false;}
 }
