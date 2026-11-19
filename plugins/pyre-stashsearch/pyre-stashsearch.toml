@@ -7,3 +7,11 @@ tab_flyout_expanded = false
 # tab_name_personal = "Personal"
 # tab_name_shared_1 = "Runes"
 # tab_name_shared_2 = "Bases"
+
+# Also list matches from the current character's inventory, Horadric Cube, equipped gear and belt.
+search_carried_items = true
+
+# Remember every character's items (saved when a character enters a game, changes area,
+# or opens the stash) and include them in search results. Snapshots live next to this
+# config in pyre-stashsearch-characters/<mod>/<character>.txt; delete a file to forget a character.
+search_other_characters = true

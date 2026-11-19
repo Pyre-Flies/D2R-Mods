@@ -14,6 +14,7 @@ add_subdirectory("${PLUGIN_SDK}" "${CMAKE_CURRENT_BINARY_DIR}/sdk" EXCLUDE_FROM_
 add_library(pyre-stashsearch SHARED
     src/plugin.cpp
     src/native.cpp
+    src/character_cache.cpp
     src/version.rc
 )
 
@@ -32,12 +33,17 @@ set_target_properties(pyre-stashsearch PROPERTIES OUTPUT_NAME "pyre-stashsearch"
 
 enable_testing()
 
-add_executable(pyre-stashsearch-unit-tests tests/unit_tests.cpp src/native.cpp)
+add_executable(pyre-stashsearch-unit-tests tests/unit_tests.cpp src/native.cpp src/character_cache.cpp)
 target_include_directories(pyre-stashsearch-unit-tests PRIVATE src "${PLUGIN_SDK}/include")
 target_compile_definitions(pyre-stashsearch-unit-tests PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX UNICODE _UNICODE _CRT_SECURE_NO_WARNINGS)
 target_compile_options(pyre-stashsearch-unit-tests PRIVATE /W4 /WX /EHa)
 target_link_libraries(pyre-stashsearch-unit-tests PRIVATE D2RLPlugin::D2RLPlugin user32 imm32)
 add_test(NAME pyre-stashsearch-unit COMMAND pyre-stashsearch-unit-tests)
+
+add_executable(pyre-stashsearch-character-cache-tests tests/character_cache_tests.cpp src/character_cache.cpp)
+target_include_directories(pyre-stashsearch-character-cache-tests PRIVATE src)
+target_compile_options(pyre-stashsearch-character-cache-tests PRIVATE /W4 /WX /EHsc /utf-8)
+add_test(NAME pyre-stashsearch-character-cache COMMAND pyre-stashsearch-character-cache-tests)
 
 add_executable(pyre-stashsearch-artifact-tests tests/artifact_tests.cpp)
 target_include_directories(pyre-stashsearch-artifact-tests PRIVATE src "${PLUGIN_SDK}/include")

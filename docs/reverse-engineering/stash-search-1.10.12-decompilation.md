@@ -296,3 +296,27 @@ A complete, buildable C++20 implementation (`pyre-stashsearch.dll` `1.0.0`) resi
 
 
 
+
+## Cross-character search additions
+
+Added after the 1.10.12 reconstruction (Pyre Stash Search, unreleased). These
+paths are not from `StashSearch.dll`; they extend the scanner beyond page 4.
+
+| Path | Use | Evidence | Status |
+| --- | --- | --- | --- |
+| `Item_GetLocationPage` (`0x36CFE0`) | Classify stored items: page `0` inventory, `3` cube, `4` stash, `5..254` D2RLoader custom pages, `255` not in a grid. | Existing guarded getter; page mapping matches Controller QOL `client_transfer_policy.h::NativePage` and the live census in `plugins/item-roll-ranges/docs/EQUIPPED-GAPS-20261018.md`. | Reused, unchanged. |
+| `UnitAny::dwAnimMode` (`unit + 0x0C`, `uint32_t`) | Item mode: `0` stored, `1` equipped, `2` belt, `3` ground, `4` cursor, `5` dropping, `6` socketed. Ground, dropping and socketed items are skipped (socket stats already appear on the host item). | Layout from `plugins/controller-qol/include/d2r_defs.h`; mode/page pairs observed live in the Item Roll Ranges census above. | Read through `SafeReadU32`. Live-verified 2026-11-14 (vanilla D2R 3.3.94995, D2RLoader 1.3.1): inventory, cube, worn and belt rows classified correctly; socketed runes/jewels skipped. |
+| `UnitAny::pUnitData` (`unit + 0x10`) -> `PlayerData + 0x00` (`char[16]`) | Character name used as the snapshot file stem. Requires `unit + 0x00 == 0` (player), a NUL within 16 bytes, and a valid file-safe name; otherwise no snapshot is written. | `unit + 0x10` is the same unit-data slot the item path already uses (`Item_GetNextInventoryItem`, `SafeAppendItemQualityAndFlagTags`). The name offset is the long-standing D2 `PlayerData` layout, not yet re-verified on this build. | New; fails closed. Live-verified 2026-11-14 on vanilla D2R 3.3.94995 (two characters, correct names). |
+| D2RLoader Lifecycle service, `GameplayEventKind::LocalPlayerReady` / `LevelChanged` | Trigger snapshots (throttled to one per 30 s, forced on `LocalPlayerReady`) on the game/UI thread. | SDK `lifecycle_events.h`. | Optional; registration failure only limits snapshots to stash opens. |
+
+Snapshots reuse `BuildItemFullTooltipText` (same text the stash search matches),
+so cached results behave exactly like live ones for boolean queries and shorthands.
+Mercenary inventory is not scanned: no verified path to the hireling unit exists
+in this repository yet.
+
+The item description text uses two color-code forms. Uniques and sets use
+`ÿc` + one character (`0xFF 'c' X`, or UTF-8 `C3 BF 'c' X`). Runeword names and the
+Horadric Cube use private-use U+E07E + one character (UTF-8 `EE 81 BE X`, e.g.
+`EE 81 BE '4'` before `Spirit`, `EE 81 BE '>'` before `Horadric Cube`), the same
+4-byte form Item Roll Ranges documents at `D2R.exe+0x0CD6E0`. Observed live on
+2026-11-14 in snapshot text; the normalizers in `src/native.cpp` strip both.

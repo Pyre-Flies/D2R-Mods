@@ -2,6 +2,7 @@
 #include "stash_search.h"
 #include <cstdio>
 #include <cstdlib>
+#include <string>
 #include <string_view>
 
 namespace {
@@ -39,6 +40,24 @@ void TestTooltipNormalization() {
 		"short item display name preserves base item name when no unique name follows [N]");
 	Check(ExtractShortItemDisplayName("Monarch [E] (4)") == L"Monarch",
 		"short item display name strips both [E] and (4) on normal/socketed base item");
+
+	// Newer U+E07E color code (UTF-8 EE 81 BE) + one color character, seen live on runewords and the Horadric Cube
+	Check(NormalizeNarrowTooltipLine("Crystal Sword\n\xEE\x81\xBE" "4Spirit") == "Crystal Sword Spirit",
+		"narrow U+E07E runeword color code stripping");
+	Check(NormalizeNarrowTooltipLine("\xEE\x81\xBE" ">Horadric Cube") == "Horadric Cube",
+		"narrow U+E07E color code with non-digit color character");
+	Check(NormalizeNarrowTooltipLine("Shako\xEE\x81\xBE") == "Shako",
+		"narrow U+E07E color code truncated at end of string");
+	Check(NormalizeNarrowAffixText("\xEE\x81\xBE" "3+2 To All Skills") == "+2 To All Skills",
+		"affix text strips U+E07E color code");
+	Check(NormalizeWideTooltipLine(L"\xE07E" L"4Enigma") == L"Enigma",
+		"wide U+E07E color code stripping");
+	Check(ExtractShortItemDisplayName("Sacred Targe\n\xEE\x81\xBE" "4Spirit") == L"Spirit",
+		"short item display name strips U+E07E runeword color code");
+	Check(ExtractShortItemDisplayName("\xEE\x81\xBE" ">Horadric Cube") == L"Horadric Cube",
+		"short item display name strips U+E07E color code on Horadric Cube");
+	Check(NormalizeNarrowTooltipLine("Caf\xC3\xA9 \xEE\x80\x80" "x") == "Caf\xC3\xA9 \xEE\x80\x80" "x",
+		"other UTF-8 multi-byte sequences are preserved");
 }
 
 void TestCaseInsensitiveMatching() {
@@ -854,6 +873,26 @@ void TestOccludedCursorSuppressionPanelScoping() {
 
 } // namespace
 
+void TestCrossCharacterConfigKeys() {
+	using namespace StashSearch;
+	const StashSearchConfig defaults = ParseStashSearchConfig("[pyre-stashsearch]\ntab_flyout_expanded = false\n", false);
+	Check(defaults.searchCarriedItems && defaults.searchOtherCharacters, "cross-character search defaults on");
+
+	const std::string_view toml =
+		"[pyre-stashsearch]\n"
+		"tab_flyout_expanded = true\n"
+		"search_carried_items = false # only stash\n"
+		"search_other_characters = 0\n";
+	const StashSearchConfig parsed = ParseStashSearchConfig(toml, false);
+	Check(!parsed.searchCarriedItems, "search_carried_items = false parsed");
+	Check(!parsed.searchOtherCharacters, "search_other_characters = 0 parsed");
+
+	// Saving tab names/flyout state must keep the user's cross-character settings verbatim.
+	const std::string saved = SerializeStashSearchConfig(toml, parsed);
+	Check(saved.find("search_carried_items = false # only stash") != std::string::npos, "search_carried_items line preserved on save");
+	Check(saved.find("search_other_characters = 0") != std::string::npos, "search_other_characters line preserved on save");
+}
+
 int main() {
 	TestTooltipNormalization();
 	TestCaseInsensitiveMatching();
@@ -870,6 +909,7 @@ int main() {
 	TestXInputPollCacheAndActivePad();
 	TestDuplicateSearchAndGrouping();
 	TestOccludedCursorSuppressionPanelScoping();
-	std::puts("PASS: Stash Search unit tests (tooltip normalization, case folding, boolean/shorthand queries, slash commands, scroll math, scaling, config persistence, isolated dropdown match filter, multi-line item tooltip builder, overlay hit test, flyout chevron direction, controller cursor snap/restore, XInput poll cache, duplicate search & grouping, panel-scoped cursor suppression).");
+	TestCrossCharacterConfigKeys();
+	std::puts("PASS: Stash Search unit tests (tooltip normalization, case folding, boolean/shorthand queries, slash commands, scroll math, scaling, config persistence, isolated dropdown match filter, multi-line item tooltip builder, overlay hit test, flyout chevron direction, controller cursor snap/restore, XInput poll cache, duplicate search & grouping, panel-scoped cursor suppression, cross-character config keys).");
 	return 0;
 }

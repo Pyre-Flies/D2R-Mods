@@ -137,6 +137,8 @@ struct MatchEntry {
 	ItemDuplicateKey          duplicateKey{};
 	bool                      matchedWithoutDuplicate = false;
 	std::vector<uintptr_t>    matchedUnits;
+	bool                      displayOnly             = false; // Item row with no stash page to jump to (inventory, cube, worn, other characters)
+	bool                      snapshotRow             = false; // Display-only row read from another character's snapshot file
 	uint64_t                  reserved = 0;
 };
 
@@ -222,6 +224,8 @@ void AdjustDropdownSelectionAndScroll(
 	size_t& inOutScrollOffset) noexcept;
 struct StashSearchConfig {
 	bool                                           tabFlyoutExpanded = false;
+	bool                                           searchCarriedItems    = true; // search_carried_items (read-only key)
+	bool                                           searchOtherCharacters = true; // search_other_characters (read-only key)
 	std::wstring                                   personalTabName;
 	std::vector<std::pair<uint64_t, std::wstring>> sharedTabNames; // (0-based shared page index, custom label)
 };
